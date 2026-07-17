@@ -2,7 +2,7 @@ import type { MonsterDef } from '../core/types'
 
 const goldSmall = { kind: 'gold', chance: 1, min: 2, max: 6 } as const
 const goldMid = { kind: 'gold', chance: 1, min: 5, max: 12 } as const
-const potion = { kind: 'potion', chance: 0.15, min: 1, max: 1 } as const
+const potion = { kind: 'potion', chance: 0.25, min: 1, max: 1 } as const
 
 const list: MonsterDef[] = [
   // Zone 1 — plaine / forêt
@@ -18,7 +18,7 @@ const list: MonsterDef[] = [
   { id: 'chauve-souris', name: 'Chauve-souris', color: 0x6b4f9e, hp: 70, atk: 85, def: 8, xp: 600, speed: 120, behavior: 'charge', drops: [goldMid, potion] },
   // Boss
   {
-    id: 'roi-gloopy', name: 'Roi Gloopy', color: 0xff5fa8, hp: 500, atk: 22, def: 5, xp: 3200, speed: 55, behavior: 'charge', boss: true,
+    id: 'roi-gloopy', name: 'Roi Gloopy', color: 0xff5fa8, hp: 380, atk: 18, def: 5, xp: 3200, speed: 55, behavior: 'charge', boss: true,
     drops: [
       { kind: 'gold', chance: 1, min: 60, max: 100 },
       { kind: 'item', itemId: 'epee-bambou', chance: 1, min: 1, max: 1 },
