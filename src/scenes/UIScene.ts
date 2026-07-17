@@ -18,6 +18,13 @@ export class UIScene extends Phaser.Scene {
   constructor() { super('UI') }
 
   create() {
+    // Scène réutilisée à chaque niveau (launch depuis LevelScene) : ces tableaux sont des
+    // class fields initialisés une seule fois à l'instanciation, pas à chaque create().
+    // Sans reset, refresh()/update() continuent de cibler les objets détruits du niveau précédent.
+    this.slotLabels = []
+    this.slotCooldownOverlays = []
+    this.cooldownUntil = [0, 0, 0, 0]
+
     this.input.addPointer(3)
     this.joystick = new VirtualJoystick(this, new Phaser.Geom.Rectangle(0, 100, 400, 440))
 

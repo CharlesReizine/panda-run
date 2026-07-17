@@ -42,6 +42,10 @@ export class LevelScene extends Phaser.Scene {
   }
 
   create() {
+    // this.time.now est monotone sur toute la durée du jeu (partagé entre scènes) : sans reset,
+    // les cooldowns de compétences posés dans un niveau précédent restent actifs dans le suivant.
+    this.cooldowns = new CooldownTracker()
+
     const widthPx = this.levelDef.widthTiles * TILE
     this.physics.world.setBounds(0, 0, widthPx, 540)
 

@@ -1,10 +1,20 @@
 import Phaser from 'phaser'
 import { load, serialize, deserialize, save } from '../core/save'
-import { newPlayer } from '../core/player-state'
+import { newPlayer, type PlayerState } from '../core/player-state'
 import { setPlayer } from '../state'
 
 export class TitleScene extends Phaser.Scene {
   constructor() { super('Title') }
+
+  // Une sauvegarde corrompue ou d'une version future ferait planter load() (JSON.parse ou check
+  // de version) ; on la traite comme "pas de sauvegarde" plutôt que de bloquer le jeu au démarrage.
+  private safeLoad(): PlayerState | null {
+    try {
+      return load()
+    } catch {
+      return null
+    }
+  }
 
   create() {
     this.add.text(480, 140, 'Panda-Run', { fontSize: '64px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
@@ -23,7 +33,7 @@ export class TitleScene extends Phaser.Scene {
       this.scene.start('WorldMap')
     })
 
-    const existing = load()
+    const existing = this.safeLoad()
     if (existing) {
       mkButton(440, 'Continuer', () => {
         setPlayer(existing)
@@ -33,7 +43,7 @@ export class TitleScene extends Phaser.Scene {
 
     this.add.text(20, 500, 'Exporter la sauvegarde', { fontSize: '14px', color: '#b0bec5' })
       .setInteractive().on('pointerdown', async () => {
-        const p = load()
+        const p = this.safeLoad()
         if (!p) return
         await navigator.clipboard.writeText(serialize(p))
         this.add.text(20, 480, 'Copié !', { fontSize: '14px', color: '#66bb6a' })
