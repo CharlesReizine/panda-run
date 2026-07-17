@@ -3,6 +3,7 @@ import type { StatBlock } from '../core/types'
 import type { ControlsState } from '../core/controls'
 import { computeStats } from '../core/stats'
 import { getPlayer } from '../state'
+import { PANDA_BODY } from './player-body'
 
 const RUN_SPEED = 220
 const JUMP_VELOCITY = -560
@@ -23,6 +24,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     super(scene, x, y, `panda-${getPlayer().classId}`)
     scene.add.existing(this)
     scene.physics.add.existing(this)
+    // hitbox calée sur le panda visible (pas la texture entière qui a de la marge)
+    this.setSize(PANDA_BODY.w, PANDA_BODY.h)
+    this.setOffset(PANDA_BODY.offsetX, PANDA_BODY.offsetY)
     this.setCollideWorldBounds(true)
     this.stats = computeStats(getPlayer())
     this.hp = this.stats.maxHp

@@ -21,6 +21,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     super(scene, x, y, `monster-${def.id}`)
     scene.add.existing(this)
     scene.physics.add.existing(this)
+    // hitbox = la créature seule (la texture a de la marge : ombre au sol + place au-dessus),
+    // pour qu'elle repose au sol au même niveau que le panda
+    const bw = this.width * 0.8
+    const bh = this.height - 8
+    this.setSize(bw, bh)
+    this.setOffset((this.width - bw) / 2, 2)
     this.levelScene = scene
     this.monster = def
     this.hp = def.hp
