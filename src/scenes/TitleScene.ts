@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import { load } from '../core/save'
+import { load, serialize, deserialize, save } from '../core/save'
 import { newPlayer } from '../core/player-state'
 import { setPlayer } from '../state'
 
@@ -30,5 +30,26 @@ export class TitleScene extends Phaser.Scene {
         this.scene.start('WorldMap')
       })
     }
+
+    this.add.text(20, 500, 'Exporter la sauvegarde', { fontSize: '14px', color: '#b0bec5' })
+      .setInteractive().on('pointerdown', async () => {
+        const p = load()
+        if (!p) return
+        await navigator.clipboard.writeText(serialize(p))
+        this.add.text(20, 480, 'Copié !', { fontSize: '14px', color: '#66bb6a' })
+      })
+
+    this.add.text(760, 500, 'Importer une sauvegarde', { fontSize: '14px', color: '#b0bec5' })
+      .setInteractive().on('pointerdown', () => {
+        const json = window.prompt('Colle ta sauvegarde :')
+        if (!json) return
+        try {
+          const p = deserialize(json)
+          save(p)
+          this.scene.restart()
+        } catch {
+          window.alert('Sauvegarde invalide')
+        }
+      })
   }
 }
