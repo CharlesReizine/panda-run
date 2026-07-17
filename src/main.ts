@@ -10,6 +10,7 @@ import { ClassChangeScene } from './scenes/ClassChangeScene'
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
+  parent: 'game',
   width: 960,
   height: 540,
   pixelArt: true,
@@ -19,18 +20,24 @@ const game = new Phaser.Game({
   scene: [BootScene, PreloadScene, TitleScene, WorldMapScene, LevelScene, UIScene, MenuScene, ClassChangeScene],
 })
 
-// iOS Safari : les barres d'outils/onglets rognent la zone visible et bougent après coup,
-// ce qui coupait le bas du jeu (le perso) en paysage. window.visualViewport.height donne
-// la hauteur RÉELLEMENT visible (hors barres), contrairement à innerHeight qui inclut
-// parfois la zone sous les barres. On dimensionne le body dessus puis on recalcule le FIT.
+// On dimensionne le conteneur #game EXACTEMENT sur la zone visible (visualViewport, qui
+// exclut les barres Safari et suit l'encoche en paysage), et on le positionne à son
+// offset. Phaser (Scale.FIT) rentre alors toujours dans du visible → jamais coupé.
 function fitViewport() {
-  const vh = window.visualViewport?.height ?? window.innerHeight
-  const vw = window.visualViewport?.width ?? window.innerWidth
-  document.body.style.height = `${vh}px`
-  document.body.style.width = `${vw}px`
+  const vv = window.visualViewport
+  const w = Math.round(vv?.width ?? window.innerWidth)
+  const h = Math.round(vv?.height ?? window.innerHeight)
+  const el = document.getElementById('game')
+  if (el) {
+    el.style.width = `${w}px`
+    el.style.height = `${h}px`
+    el.style.left = `${Math.round(vv?.offsetLeft ?? 0)}px`
+    el.style.top = `${Math.round(vv?.offsetTop ?? 0)}px`
+  }
   game.scale.refresh()
 }
 window.visualViewport?.addEventListener('resize', fitViewport)
+window.visualViewport?.addEventListener('scroll', fitViewport)
 window.addEventListener('resize', () => setTimeout(fitViewport, 150))
 window.addEventListener('orientationchange', () => setTimeout(fitViewport, 300))
 fitViewport()
