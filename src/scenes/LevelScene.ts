@@ -7,7 +7,7 @@ import { Prop } from '../entities/Prop'
 import { MONSTERS } from '../data/monsters'
 import { PROPS } from '../data/props'
 import { MATERIALS } from '../data/materials'
-import { physicalDamage } from '../core/combat'
+import { physicalDamage, inMeleeReach } from '../core/combat'
 import { grantXp } from '../core/progression'
 import { emptyControls, mergeControls, type ControlsState } from '../core/controls'
 import { getPlayer } from '../state'
@@ -258,7 +258,7 @@ export class LevelScene extends Phaser.Scene {
     this.player.playAttack()
     this.player.gainEnergy(ENERGY_ON_BASIC_HIT) // frapper recharge un peu l'énergie
     this.slashFx(this.player.x + this.player.facing * 30, this.player.y, 60, 0xffffff)
-    this.damageEnemiesInRect(this.player.x + this.player.facing * 30, this.player.y, 60, 50, 1)
+    this.meleeHit(70, 1)
   }
 
   // croissant de coup visible même dans le vide + petit élan du panda
@@ -313,7 +313,7 @@ export class LevelScene extends Phaser.Scene {
     if (skill.kind === 'melee') {
       this.player.playAttack()
       this.slashFx(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, color)
-      this.damageEnemiesInRect(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, 60, skill.multiplier)
+      this.meleeHit(skill.range, skill.multiplier)
     } else if (skill.kind === 'aoe') {
       for (const obj of this.enemies.getChildren()) {
         const e = obj as Enemy
@@ -344,15 +344,20 @@ export class LevelScene extends Phaser.Scene {
     }
   }
 
-  damageEnemiesInRect(cx: number, cy: number, w: number, h: number, multiplier: number) {
-    const rect = new Phaser.Geom.Rectangle(cx - w / 2, cy - h / 2, w, h)
+  // Touche les ennemis/props devant le panda (ou pile sur lui), avec grande tolérance
+  // verticale : le centre du grand sprite panda est plus haut que celui des monstres.
+  meleeHit(reach: number, multiplier: number) {
+    const px = this.player.x, py = this.player.y, f = this.player.facing
+    const atk = this.player.stats.atk
     for (const obj of this.enemies.getChildren()) {
       const e = obj as Enemy
-      if (rect.contains(e.x, e.y)) e.takeDamage(physicalDamage(this.player.stats.atk, e.monster.def, multiplier))
+      if (e.active && inMeleeReach((e.x - px) * f, Math.abs(e.y - py), reach)) {
+        e.takeDamage(physicalDamage(atk, e.monster.def, multiplier))
+      }
     }
     for (const obj of this.props.getChildren()) {
       const prop = obj as Prop
-      if (rect.contains(prop.x, prop.y)) prop.takeDamage(1)
+      if (prop.active && inMeleeReach((prop.x - px) * f, Math.abs(prop.y - py), reach)) prop.takeDamage(1)
     }
   }
 

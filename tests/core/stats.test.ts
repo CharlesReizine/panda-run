@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { newPlayer } from '../../src/core/player-state'
 import { computeStats } from '../../src/core/stats'
-import { physicalDamage } from '../../src/core/combat'
+import { physicalDamage, inMeleeReach } from '../../src/core/combat'
 import { CLASSES } from '../../src/data/classes'
 
 describe('stats & combat', () => {
@@ -25,5 +25,13 @@ describe('stats & combat', () => {
     expect(physicalDamage(20, 5)).toBe(15)
     expect(physicalDamage(20, 5, 2)).toBe(35)
     expect(physicalDamage(3, 100)).toBe(1)
+  })
+
+  it('portée de mêlée : touche un ennemi pile sur soi et devant, pas derrière ni trop haut', () => {
+    expect(inMeleeReach(0, 20, 70)).toBe(true)   // pile sur le perso
+    expect(inMeleeReach(50, 10, 70)).toBe(true)  // devant, dans la portée
+    expect(inMeleeReach(-50, 10, 70)).toBe(false) // derrière
+    expect(inMeleeReach(120, 10, 70)).toBe(false) // trop loin devant
+    expect(inMeleeReach(30, 120, 70)).toBe(false) // décalé verticalement
   })
 })
