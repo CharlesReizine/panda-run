@@ -32,6 +32,9 @@ export class LevelScene extends Phaser.Scene {
   props!: Phaser.Physics.Arcade.Group
   private platforms!: Phaser.Physics.Arcade.StaticGroup
   levelDef!: LevelDef
+  private fromNode: string | null = null
+  private targetNode: string | null = null
+  private dir: 'forward' | 'backward' = 'forward'
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private jumpHeld = false
   private invulnUntil = 0
@@ -48,8 +51,12 @@ export class LevelScene extends Phaser.Scene {
 
   constructor() { super('Level') }
 
-  init(data: { levelId: string }) {
+  init(data: { levelId: string; fromNode?: string; targetNode?: string; dir?: 'forward' | 'backward' }) {
     this.levelDef = LEVELS[data.levelId]!
+    // fromNode/dir absents (ancienne save, accès direct) : entrée par défaut gauche→droite
+    this.fromNode = data.fromNode ?? null
+    this.targetNode = data.targetNode ?? null
+    this.dir = data.dir ?? 'forward'
   }
 
   create() {
@@ -80,7 +87,7 @@ export class LevelScene extends Phaser.Scene {
       }
     }
 
-    this.player = new Player(this, 2 * TILE, GROUND_ROW * TILE - 40)
+    this.player = new Player(this, this.spawnX(), GROUND_ROW * TILE - 40)
     this.physics.add.collider(this.player, platforms)
 
     this.enemies = this.physics.add.group()
@@ -243,7 +250,11 @@ export class LevelScene extends Phaser.Scene {
   private onJumpDown() { this.jumpHeld = true }
   private onJumpUp() { this.jumpHeld = false }
 
-  private exitX(): number { return this.levelDef.widthTiles * TILE - 2 * TILE }
+  // apparition à gauche + sortie à droite en 'forward' (comportement historique) ;
+  // en 'backward' (retour en arrière depuis la carte), on entre par la droite et on
+  // ressort à gauche, vers le nœud d'où l'on vient
+  private spawnX(): number { return this.dir === 'backward' ? (this.levelDef.widthTiles - 3) * TILE : 2 * TILE }
+  private exitX(): number { return this.dir === 'backward' ? 2 * TILE : this.levelDef.widthTiles * TILE - 2 * TILE }
 
   createExit() {
     const exit = this.physics.add.staticImage(this.exitX(), GROUND_ROW * TILE - 24 + TILE, 'exit')
@@ -279,6 +290,8 @@ export class LevelScene extends Phaser.Scene {
     if (this.player.hp <= 0) return
     const p = getPlayer()
     if (!p.completedLevels.includes(this.levelDef.id)) p.completedLevels.push(this.levelDef.id)
+    // avance le marqueur vers le nœud visé ; si absent (accès direct/ancienne save), on ne le déplace pas
+    if (this.targetNode) p.currentNode = this.targetNode
     save(p)
     this.scene.start('WorldMap')
   }

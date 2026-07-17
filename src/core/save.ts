@@ -1,7 +1,8 @@
 import type { PlayerState } from './player-state'
+import { START_NODE } from '../data/worldmap'
 
 export const SAVE_KEY = 'panda-run-save'
-const VERSION = 4
+const VERSION = 5
 
 interface SaveFile { version: number; player: PlayerState }
 
@@ -14,7 +15,7 @@ export function deserialize(json: string): PlayerState {
   const file = JSON.parse(json) as SaveFile
   if (file.version < 1 || file.version > VERSION) throw new Error(`version de sauvegarde inconnue : ${file.version}`)
   // migrations cumulatives vers la version courante
-  const raw = file.player as PlayerState & { unlockedSkills?: string[]; monstersKilled?: number; quests?: PlayerState['quests'] }
+  const raw = file.player as PlayerState & { unlockedSkills?: string[]; monstersKilled?: number; quests?: PlayerState['quests']; currentNode?: string }
   let pl: PlayerState = raw
   if (file.version === 1) pl = { ...pl, materials: {} } // v1 → v2 : collection de matériaux
   if (file.version <= 2) {
@@ -27,6 +28,10 @@ export function deserialize(json: string): PlayerState {
   if (file.version <= 3) {
     // v3 → v4 : quêtes de ville (compteur de kills + suivi de progression)
     pl = { ...pl, monstersKilled: raw.monstersKilled ?? 0, quests: raw.quests ?? {} }
+  }
+  if (file.version <= 4) {
+    // v4 → v5 : position courante sur la carte du monde
+    pl = { ...pl, currentNode: raw.currentNode ?? START_NODE }
   }
   return pl
 }

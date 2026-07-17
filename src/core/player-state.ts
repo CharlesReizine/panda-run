@@ -1,4 +1,5 @@
 import type { ClassId, EquipSlot } from './types'
+import { START_NODE } from '../data/worldmap'
 
 export const MAX_SKILL_RANK = 5
 
@@ -28,6 +29,7 @@ export interface PlayerState {
   materials: Record<string, number> // matériaux collectés (id → quantité) — collection pure, craft à venir
   monstersKilled: number // compteur global, incrémenté dans LevelScene.onEnemyDied
   quests: Record<string, QuestState> // quêtes acceptées en ville (id → progression)
+  currentNode: string // nœud courant sur la carte du monde (id dans WORLD_NODES)
 }
 
 export function newPlayer(name: string): PlayerState {
@@ -47,5 +49,6 @@ export function newPlayer(name: string): PlayerState {
     materials: {},
     monstersKilled: 0,
     quests: {},
+    currentNode: START_NODE,
   }
 }

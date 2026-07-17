@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { newPlayer } from '../../src/core/player-state'
 import { serialize, deserialize, save, load } from '../../src/core/save'
+import { START_NODE } from '../../src/data/worldmap'
 
 function fakeStorage(): Storage {
   const m = new Map<string, string>()
@@ -52,6 +53,14 @@ describe('save', () => {
     const loaded = deserialize(JSON.stringify({ version: 3, player: legacy }))
     expect(loaded.monstersKilled).toBe(0)
     expect(loaded.quests).toEqual({})
+  })
+
+  it('migre une save v4 → v5 (currentNode par défaut)', () => {
+    const p = newPlayer('Panda')
+    const legacy: Record<string, unknown> = { ...p }
+    delete legacy.currentNode
+    const loaded = deserialize(JSON.stringify({ version: 4, player: legacy }))
+    expect(loaded.currentNode).toBe(START_NODE)
   })
 
   it('save/load via storage', () => {

@@ -1,7 +1,8 @@
 import Phaser from 'phaser'
-import { WORLD_NODES, WORLD_EDGES, isNodeUnlocked } from '../data/worldmap'
+import { WORLD_NODES, WORLD_EDGES, isNodeUnlocked, neighborsOf } from '../data/worldmap'
 import { getPlayer } from '../state'
 import { canChangeClass } from '../core/progression'
+import { save } from '../core/save'
 
 const NODE_COLORS = { town: 0xffd700, level: 0x66bb6a, boss: 0xef5350 } as const
 
@@ -14,6 +15,8 @@ export class WorldMapScene extends Phaser.Scene {
 
     const p = getPlayer()
     const byId = new Map(WORLD_NODES.map((n) => [n.id, n]))
+    const current = byId.get(p.currentNode)!
+    const neighbors = new Set(neighborsOf(p.currentNode))
 
     const g = this.add.graphics().lineStyle(3, 0xffffff, 0.35)
     for (const [a, b] of WORLD_EDGES) {
@@ -24,12 +27,24 @@ export class WorldMapScene extends Phaser.Scene {
     for (const n of WORLD_NODES) {
       const unlocked = isNodeUnlocked(n.id, p.completedLevels)
       const done = n.levelId ? p.completedLevels.includes(n.levelId) : false
-      const color = unlocked ? NODE_COLORS[n.type] : 0x555555
-      const c = this.add.circle(n.x, n.y, n.type === 'boss' ? 18 : 14, color).setStrokeStyle(2, 0xffffff, 0.8)
-      this.add.text(n.x, n.y + 26, n.name, { fontSize: '12px', color: unlocked ? '#ffffff' : '#888888' }).setOrigin(0.5)
+      const isCurrent = n.id === p.currentNode
+      // seuls les voisins débloqués du nœud courant sont tapables ; tout le reste (dont le
+      // nœud courant lui-même) est visible mais grisé/non-interactif — le voyage ne se fait
+      // que de proche en proche sur le graphe
+      const travelable = unlocked && neighbors.has(n.id) && !isCurrent
+      const color = travelable ? NODE_COLORS[n.type] : 0x555555
+      const c = this.add.circle(n.x, n.y, n.type === 'boss' ? 18 : 14, color).setStrokeStyle(2, travelable ? 0xffeb3b : 0xffffff, travelable ? 1 : 0.8)
+      this.add.text(n.x, n.y + 26, n.name, { fontSize: '12px', color: travelable ? '#ffffff' : '#888888' }).setOrigin(0.5)
       if (done) this.add.text(n.x, n.y, '✓', { fontSize: '16px', color: '#ffffff' }).setOrigin(0.5)
-      if (unlocked && n.levelId) c.setInteractive().on('pointerdown', () => this.scene.start('Level', { levelId: n.levelId }))
+      if (travelable) {
+        c.setInteractive().on('pointerdown', () => this.travelTo(n.id))
+        this.tweens.add({ targets: c, scale: 1.15, yoyo: true, repeat: -1, duration: 500 })
+      }
     }
+
+    // marqueur du panda sur le nœud courant
+    const marker = this.add.image(current.x, current.y - 24, `panda-${p.classId}`).setDisplaySize(24, 24).setDepth(1)
+    this.tweens.add({ targets: marker, y: marker.y - 4, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.inOut' })
 
     this.add.text(30, 495, 'Menu', { fontSize: '20px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 14, y: 6 } })
       .setInteractive().on('pointerdown', () => this.scene.start('Menu'))
@@ -46,5 +61,24 @@ export class WorldMapScene extends Phaser.Scene {
         .setOrigin(0.5).setInteractive().on('pointerdown', () => this.scene.start('ClassChange'))
       this.tweens.add({ targets: t, scale: 1.08, yoyo: true, repeat: -1, duration: 500 })
     }
+  }
+
+  // voyage vers un nœud voisin débloqué : ville → déplace le marqueur et va en ville,
+  // niveau/boss → entre dans le niveau avec la direction déduite de la position relative
+  private travelTo(targetId: string) {
+    const p = getPlayer()
+    const byId = new Map(WORLD_NODES.map((n) => [n.id, n]))
+    const currentNode = byId.get(p.currentNode)!
+    const target = byId.get(targetId)!
+
+    if (target.type === 'town') {
+      p.currentNode = targetId
+      save(p)
+      this.scene.start('Town')
+      return
+    }
+
+    const dir: 'forward' | 'backward' = target.x > currentNode.x ? 'forward' : 'backward'
+    this.scene.start('Level', { levelId: target.levelId, fromNode: p.currentNode, targetNode: targetId, dir })
   }
 }
