@@ -4,9 +4,10 @@ import type { ControlsState } from '../core/controls'
 import { computeStats } from '../core/stats'
 import { getPlayer } from '../state'
 import { PANDA_BODY } from './player-body'
+import { JUMP_SPEED } from '../core/platforming'
 
 const RUN_SPEED = 220
-const JUMP_VELOCITY = -680 // assez haut pour atteindre les plateformes
+const JUMP_VELOCITY = -JUMP_SPEED // source unique (partagée avec le test d'atteignabilité)
 const MAX_ENERGY = 100
 const ENERGY_REGEN_PER_SEC = 22
 const ENERGY_PER_BASIC_HIT = 6

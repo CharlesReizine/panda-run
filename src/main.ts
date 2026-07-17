@@ -17,6 +17,7 @@ import { UIScene } from './scenes/UIScene'
 import { MenuScene } from './scenes/MenuScene'
 import { ClassChangeScene } from './scenes/ClassChangeScene'
 import { SkillEquipScene } from './scenes/SkillEquipScene'
+import { GRAVITY } from './core/platforming'
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -27,7 +28,7 @@ const game = new Phaser.Game({
   roundPixels: false,
   backgroundColor: '#87ceeb',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  physics: { default: 'arcade', arcade: { gravity: { x: 0, y: 1200 } } },
+  physics: { default: 'arcade', arcade: { gravity: { x: 0, y: GRAVITY } } },
   scene: [BootScene, PreloadScene, TitleScene, WorldMapScene, LevelScene, UIScene, MenuScene, ClassChangeScene, SkillEquipScene],
 })
 

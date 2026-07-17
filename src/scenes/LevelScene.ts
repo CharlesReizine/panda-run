@@ -18,9 +18,9 @@ import { SKILLS } from '../data/skills'
 import { rollDrops } from '../core/loot'
 import type { DropEntry } from '../core/types'
 import type { UIScene } from './UIScene'
+import { TILE, GROUND_ROW } from '../core/platforming'
 
-export const TILE = 32
-const GROUND_ROW = 14 // sol sur les 2 dernières lignes (480 → 540 px)
+export { TILE }
 
 export class LevelScene extends Phaser.Scene {
   player!: Player

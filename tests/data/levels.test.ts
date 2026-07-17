@@ -3,12 +3,21 @@ import { LEVELS } from '../../src/data/levels'
 import { MONSTERS } from '../../src/data/monsters'
 import { PROPS } from '../../src/data/props'
 import { WORLD_NODES, WORLD_EDGES, START_NODE, isNodeUnlocked } from '../../src/data/worldmap'
+import { unreachablePlatforms, maxJumpTiles } from '../../src/core/platforming'
 
 describe('niveaux et carte', () => {
   it('10 niveaux dont 2 boss', () => {
     const all = Object.values(LEVELS)
     expect(all).toHaveLength(10)
     expect(all.filter((l) => l.boss)).toHaveLength(2)
+  })
+
+  it('aucune plateforme inatteignable (écart vertical toujours < saut max)', () => {
+    expect(maxJumpTiles()).toBeGreaterThan(3) // le saut couvre au moins 3 tuiles
+    for (const l of Object.values(LEVELS)) {
+      const bad = unreachablePlatforms(l.platforms, l.widthTiles)
+      expect(bad, `${l.id}: plateformes inatteignables → ${JSON.stringify(bad)}`).toEqual([])
+    }
   })
 
   it('spawns et boss pointent des monstres existants', () => {
