@@ -205,7 +205,22 @@ export class LevelScene extends Phaser.Scene {
     if (this.player.hp <= 0) return
     if (this.time.now < this.nextBasicAttackAt) return
     this.nextBasicAttackAt = this.time.now + 1000 / this.player.stats.attackSpeed
+    this.slashFx(this.player.x + this.player.facing * 30, this.player.y, 60, 0xffffff)
     this.damageEnemiesInRect(this.player.x + this.player.facing * 30, this.player.y, 60, 50, 1)
+  }
+
+  // arc de coup visible même dans le vide + petit élan du panda
+  private slashFx(cx: number, cy: number, w: number, color: number) {
+    const fx = this.add.ellipse(cx, cy, w, 44, color, 0.45)
+    this.tweens.add({ targets: fx, scaleX: 1.3, alpha: 0, duration: 150, onComplete: () => fx.destroy() })
+    this.tweens.add({ targets: this.player, x: this.player.x + this.player.facing * 6, duration: 60, yoyo: true })
+  }
+
+  private announceSkill(name: string) {
+    const txt = this.add.text(this.player.x, this.player.y - 55, name + ' !', {
+      fontSize: '16px', color: '#ffd700', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(0.5)
+    this.tweens.add({ targets: txt, y: txt.y - 25, alpha: 0, duration: 700, onComplete: () => txt.destroy() })
   }
 
   castSkill(slot: number) {
@@ -216,9 +231,11 @@ export class LevelScene extends Phaser.Scene {
     const skill = SKILLS[skillId]!
     this.cooldowns.use(slot, this.time.now, skill.cooldownMs)
     this.game.events.emit('skill-cooldown', slot, this.time.now + skill.cooldownMs)
+    this.announceSkill(skill.name)
 
     const { atk, maxHp } = this.player.stats
     if (skill.kind === 'melee') {
+      this.slashFx(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, 0xffd54f)
       this.damageEnemiesInRect(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, 60, skill.multiplier)
     } else if (skill.kind === 'aoe') {
       for (const obj of this.enemies.getChildren()) {

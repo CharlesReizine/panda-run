@@ -8,7 +8,7 @@ import { UIScene } from './scenes/UIScene'
 import { MenuScene } from './scenes/MenuScene'
 import { ClassChangeScene } from './scenes/ClassChangeScene'
 
-new Phaser.Game({
+const game = new Phaser.Game({
   type: Phaser.AUTO,
   width: 960,
   height: 540,
@@ -18,3 +18,8 @@ new Phaser.Game({
   physics: { default: 'arcade', arcade: { gravity: { x: 0, y: 1200 } } },
   scene: [BootScene, PreloadScene, TitleScene, WorldMapScene, LevelScene, UIScene, MenuScene, ClassChangeScene],
 })
+
+// iOS Safari : la barre d'outils apparaît/disparaît et change le viewport après coup ;
+// on force le recalcul du FIT un tick après chaque resize/rotation.
+window.addEventListener('resize', () => setTimeout(() => game.scale.refresh(), 100))
+window.addEventListener('orientationchange', () => setTimeout(() => game.scale.refresh(), 300))

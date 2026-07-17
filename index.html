@@ -4,9 +4,14 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="apple-touch-icon" href="./icon-192.png" />
     <title>Panda-Run</title>
-    <style>html,body{margin:0;padding:0;background:#000;height:100%;overflow:hidden}</style>
+    <style>
+      /* 100dvh : suit la barre d'outils dynamique d'iOS Safari (100% déborde dessous) */
+      html, body { margin: 0; padding: 0; background: #000; height: 100dvh; overflow: hidden; }
+      canvas { display: block; margin: 0 auto; }
+    </style>
   </head>
   <body>
     <script type="module" src="/src/main.ts"></script>

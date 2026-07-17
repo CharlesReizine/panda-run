@@ -36,21 +36,24 @@ export class UIScene extends Phaser.Scene {
     this.levelText = this.add.text(232, 20, '', { fontSize: '16px', color: '#ffffff' })
     this.goldText = this.add.text(232, 40, '', { fontSize: '14px', color: '#ffd700' })
 
-    // Boutons A (saut) / B (attaque)
+    // Boutons saut / attaque
     const jump = this.add.circle(880, 470, 36, 0x1e88e5, 0.6).setInteractive()
-    this.add.text(880, 470, 'A', { fontSize: '24px', color: '#fff' }).setOrigin(0.5)
-    jump.on('pointerdown', () => this.game.events.emit('input-jump-down'))
+    this.add.text(880, 470, '⬆', { fontSize: '28px', color: '#fff' }).setOrigin(0.5)
+    this.add.text(880, 512, 'SAUT', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
+    jump.on('pointerdown', () => { this.pressFx(jump); this.game.events.emit('input-jump-down') })
     jump.on('pointerup', () => this.game.events.emit('input-jump-up'))
     jump.on('pointerout', () => this.game.events.emit('input-jump-up'))
     const atk = this.add.circle(795, 495, 32, 0xfb8c00, 0.7).setInteractive()
-    this.add.text(795, 495, 'B', { fontSize: '22px', color: '#fff' }).setOrigin(0.5)
-    atk.on('pointerdown', () => this.game.events.emit('input-attack'))
+    this.add.text(795, 495, '⚔', { fontSize: '26px', color: '#fff' }).setOrigin(0.5)
+    this.add.text(795, 533, 'ATTAQUE', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
+    atk.on('pointerdown', () => { this.pressFx(atk); this.game.events.emit('input-attack') })
 
     // 4 slots de skills
     for (let i = 0; i < 4; i++) {
       const x = 700 + i * 62
-      this.add.rectangle(x, 410, 52, 52, 0x000000, 0.5).setStrokeStyle(2, 0xffffff, 0.6)
-        .setInteractive().on('pointerdown', () => this.game.events.emit('input-skill', i))
+      const slot = this.add.rectangle(x, 410, 52, 52, 0x000000, 0.5).setStrokeStyle(2, 0xffffff, 0.6)
+        .setInteractive()
+      slot.on('pointerdown', () => { this.pressFx(slot); this.game.events.emit('input-skill', i) })
       this.slotLabels.push(this.add.text(x, 410, '', { fontSize: '10px', color: '#fff', align: 'center', wordWrap: { width: 48 } }).setOrigin(0.5))
       const ov = this.add.rectangle(x, 410, 52, 52, 0x000000, 0.7).setVisible(false)
       this.slotCooldownOverlays.push(ov)
@@ -58,7 +61,7 @@ export class UIScene extends Phaser.Scene {
 
     // Potion
     const potion = this.add.image(60, 480, 'potion-drop').setScale(2.5).setInteractive()
-    potion.on('pointerdown', () => this.game.events.emit('input-potion'))
+    potion.on('pointerdown', () => { this.pressFx(potion); this.game.events.emit('input-potion') })
     this.potionText = this.add.text(78, 470, '', { fontSize: '16px', color: '#ffffff' })
 
     // Écoute des mises à jour émises par LevelScene
@@ -72,6 +75,11 @@ export class UIScene extends Phaser.Scene {
       this.game.events.off('skill-cooldown', this.onCooldown, this)
     })
     this.refresh()
+  }
+
+  // pulse visuel au tap pour que chaque bouton réponde sous le doigt
+  private pressFx(target: Phaser.GameObjects.Shape | Phaser.GameObjects.Image) {
+    this.tweens.add({ targets: target, scale: target.scale * 0.85, duration: 60, yoyo: true })
   }
 
   private onPlayerHp = (hp: number, max: number) => this.hpBar.setDisplaySize(200 * (hp / max), 14)
