@@ -1,7 +1,7 @@
 import type { PlayerState } from './player-state'
 
 export const SAVE_KEY = 'panda-run-save'
-const VERSION = 1
+const VERSION = 2
 
 interface SaveFile { version: number; player: PlayerState }
 
@@ -12,8 +12,9 @@ export function serialize(p: PlayerState): string {
 
 export function deserialize(json: string): PlayerState {
   const file = JSON.parse(json) as SaveFile
-  if (file.version !== VERSION) throw new Error(`version de sauvegarde inconnue : ${file.version}`)
-  return file.player
+  if (file.version === 1) return { ...file.player, materials: {} } // v1 → v2 : ajout de la collection de matériaux
+  if (file.version === 2) return file.player
+  throw new Error(`version de sauvegarde inconnue : ${file.version}`)
 }
 
 export function save(p: PlayerState, storage: Storage = localStorage): void {

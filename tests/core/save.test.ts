@@ -32,6 +32,15 @@ describe('save', () => {
     expect(() => deserialize('{"version":99,"player":{}}')).toThrow(/version/i)
   })
 
+  it('migre une save v1 (sans materials) vers v2', () => {
+    const p = newPlayer('Panda')
+    const legacyPlayer: Record<string, unknown> = { ...p }
+    delete legacyPlayer.materials
+    const loaded = deserialize(JSON.stringify({ version: 1, player: legacyPlayer }))
+    expect(loaded.materials).toEqual({})
+    expect(loaded.gold).toBe(p.gold)
+  })
+
   it('save/load via storage', () => {
     const s = fakeStorage()
     const p = newPlayer('Panda')

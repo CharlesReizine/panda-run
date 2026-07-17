@@ -13,6 +13,7 @@ export interface PlayerState {
   inventory: string[] // itemIds non équipés
   equipment: Partial<Record<EquipSlot, string>>
   completedLevels: string[]
+  materials: Record<string, number> // matériaux collectés (id → quantité) — collection pure, craft à venir
 }
 
 export function newPlayer(name: string): PlayerState {
@@ -29,5 +30,6 @@ export function newPlayer(name: string): PlayerState {
     inventory: [],
     equipment: {},
     completedLevels: [],
+    materials: {},
   }
 }

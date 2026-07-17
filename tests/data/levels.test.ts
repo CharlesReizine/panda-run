@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { LEVELS } from '../../src/data/levels'
 import { MONSTERS } from '../../src/data/monsters'
+import { PROPS } from '../../src/data/props'
 import { WORLD_NODES, WORLD_EDGES, START_NODE, isNodeUnlocked } from '../../src/data/worldmap'
 
 describe('niveaux et carte', () => {
@@ -14,6 +15,32 @@ describe('niveaux et carte', () => {
     for (const l of Object.values(LEVELS)) {
       for (const s of l.spawns) expect(MONSTERS[s.monsterId], `${l.id}:${s.monsterId}`).toBeDefined()
       if (l.boss) expect(MONSTERS[l.boss]!.boss).toBe(true)
+    }
+  })
+
+  it('pas de props sur les niveaux boss ; 2-4 props au sol + ~1 coffre ailleurs, kinds connus', () => {
+    for (const l of Object.values(LEVELS)) {
+      if (l.boss) {
+        expect(l.props ?? []).toHaveLength(0)
+        continue
+      }
+      expect(l.props, l.id).toBeDefined()
+      const ground = l.props!.filter((p) => p.kind !== 'coffre')
+      const chests = l.props!.filter((p) => p.kind === 'coffre')
+      expect(ground.length, l.id).toBeGreaterThanOrEqual(2)
+      expect(ground.length, l.id).toBeLessThanOrEqual(4)
+      expect(chests.length, l.id).toBe(1)
+      for (const p of l.props!) expect(PROPS[p.kind], `${l.id}:${p.kind}`).toBeDefined()
+    }
+  })
+
+  it('les coffres sont posés sur une plateforme existante (x dans [p.x, p.x+p.w), y = p.y - 1)', () => {
+    for (const l of Object.values(LEVELS)) {
+      const chests = (l.props ?? []).filter((p) => p.kind === 'coffre')
+      for (const c of chests) {
+        const onPlatform = l.platforms.some((p) => c.x >= p.x && c.x < p.x + p.w && c.y === p.y - 1)
+        expect(onPlatform, `${l.id}: coffre x=${c.x} y=${c.y}`).toBe(true)
+      }
     }
   })
 

@@ -37,10 +37,11 @@ export interface ItemDef {
 }
 
 export interface DropEntry {
-  kind: 'gold' | 'potion' | 'item'
+  kind: 'gold' | 'potion' | 'item' | 'material'
   itemId?: string
+  materialId?: string
   chance: number // 0..1
-  min: number // quantité min (gold) ; 1 pour potion/item
+  min: number // quantité min (gold) ; 1 pour potion/item/material
   max: number
 }
 

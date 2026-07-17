@@ -8,9 +8,9 @@ const list: MonsterDef[] = [
   // Zone 1 — plaine / forêt
   { id: 'gloopy', name: 'Gloopy', color: 0xff9ecb, hp: 30, atk: 6, def: 0, xp: 220, speed: 40, behavior: 'contact', drops: [goldSmall, potion] },
   { id: 'mandragore', name: 'Mandragore', color: 0x7bc86c, hp: 45, atk: 9, def: 2, xp: 380, speed: 0, behavior: 'projectile', drops: [goldSmall, potion] },
-  { id: 'louveteau', name: 'Louveteau', color: 0x9a9a9a, hp: 55, atk: 12, def: 2, xp: 520, speed: 90, behavior: 'charge', drops: [goldMid, potion] },
+  { id: 'louveteau', name: 'Louveteau', color: 0x9a9a9a, hp: 55, atk: 12, def: 2, xp: 520, speed: 90, behavior: 'charge', drops: [goldMid, potion, { kind: 'material', materialId: 'croc-de-loup', chance: 0.05, min: 1, max: 1 }] },
   // Zone 2 — désert
-  { id: 'scorpion', name: 'Scorpion', color: 0xd98e32, hp: 100, atk: 70, def: 15, xp: 650, speed: 60, behavior: 'contact', drops: [goldMid, potion] },
+  { id: 'scorpion', name: 'Scorpion', color: 0xd98e32, hp: 100, atk: 70, def: 15, xp: 650, speed: 60, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'dard-de-scorpion', chance: 0.05, min: 1, max: 1 }] },
   { id: 'momie', name: 'Momie', color: 0xd8cfae, hp: 150, atk: 60, def: 18, xp: 950, speed: 30, behavior: 'contact', drops: [goldMid, potion, { kind: 'item', itemId: 'plastron-feuilles', chance: 0.05, min: 1, max: 1 }, { kind: 'item', itemId: 'baton-feuillu', chance: 0.05, min: 1, max: 1 }] },
   { id: 'vautour', name: 'Vautour', color: 0x8a6f5c, hp: 90, atk: 80, def: 10, xp: 750, speed: 110, behavior: 'charge', drops: [goldMid, potion, { kind: 'item', itemId: 'arc-souple', chance: 0.05, min: 1, max: 1 }] },
   // Route alternative — cave
