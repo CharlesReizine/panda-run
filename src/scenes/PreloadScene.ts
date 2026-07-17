@@ -11,38 +11,66 @@ const TILE_PALETTES: Record<string, { soil: number; top: number; speck: number }
 export class PreloadScene extends Phaser.Scene {
   constructor() { super('Preload') }
 
-  // Panda mignon, formes lisses et ombrées (rendu antialiasé → aspect illustré)
-  private drawPanda() {
+  // Une frame du panda. bx/by décalent le corps+tête ; lf/rf les pieds ; la/ra les bras.
+  // paw = patte avant tendue (attaque). Toutes les frames font 64×80 → même ancrage.
+  private pandaFrame(key: string, o: {
+    bx?: number; by?: number
+    lf?: [number, number]; rf?: [number, number]
+    la?: [number, number]; ra?: [number, number]
+    paw?: boolean
+  }) {
     const g = this.add.graphics()
     const W = 0xf7f7f7, K = 0x2b2b2b, PINK = 0xff9ab0, DARK = 0x3a2f2f
-    // corps
-    g.fillStyle(K).fillEllipse(32, 54, 46, 40)
-    g.fillStyle(W).fillEllipse(32, 53, 40, 33)
-    g.fillStyle(0xe4e4e4).fillEllipse(32, 61, 26, 14)
-    // bras
-    g.fillStyle(K).fillEllipse(12, 50, 13, 22).fillEllipse(52, 50, 13, 22)
+    const bx = o.bx ?? 0, by = o.by ?? 0
+    const [lfx, lfy] = o.lf ?? [0, 0], [rfx, rfy] = o.rf ?? [0, 0]
+    const [lax, lay] = o.la ?? [0, 0], [rax, ray] = o.ra ?? [0, 0]
     // pieds
-    g.fillStyle(K).fillEllipse(24, 72, 15, 11).fillEllipse(40, 72, 15, 11)
-    // oreilles
-    g.fillStyle(K).fillCircle(15, 9, 9).fillCircle(49, 9, 9)
-    // tête
-    g.fillStyle(K).fillCircle(32, 25, 23)
-    g.fillStyle(W).fillCircle(32, 25, 20)
-    // taches des yeux
-    g.fillStyle(K).fillEllipse(24, 25, 13, 17).fillEllipse(40, 25, 13, 17)
-    // yeux + reflets
-    g.fillStyle(0xffffff).fillCircle(24, 26, 5).fillCircle(40, 26, 5)
-    g.fillStyle(0x222222).fillCircle(25, 27, 3).fillCircle(41, 27, 3)
-    g.fillStyle(0xffffff).fillCircle(23, 25, 1.5).fillCircle(39, 25, 1.5)
-    // joues
-    g.fillStyle(PINK, 0.7).fillCircle(16, 32, 4).fillCircle(48, 32, 4)
-    // museau + sourire
-    g.fillStyle(0x333333).fillEllipse(32, 32, 6, 4)
+    g.fillStyle(K).fillEllipse(24 + lfx, 72 + lfy, 15, 11).fillEllipse(40 + rfx, 72 + rfy, 15, 11)
+    // corps
+    g.fillStyle(K).fillEllipse(32 + bx, 54 + by, 46, 40)
+    g.fillStyle(W).fillEllipse(32 + bx, 53 + by, 40, 33)
+    g.fillStyle(0xe4e4e4).fillEllipse(32 + bx, 61 + by, 26, 14)
+    // bras
+    g.fillStyle(K).fillEllipse(12 + bx + lax, 50 + by + lay, 13, 22).fillEllipse(52 + bx + rax, 50 + by + ray, 13, 22)
+    if (o.paw) g.fillStyle(K).fillCircle(57 + rax, 46 + ray, 7)
+    // oreilles + tête
+    g.fillStyle(K).fillCircle(15 + bx, 9 + by, 9).fillCircle(49 + bx, 9 + by, 9)
+    g.fillStyle(K).fillCircle(32 + bx, 25 + by, 23)
+    g.fillStyle(W).fillCircle(32 + bx, 25 + by, 20)
+    g.fillStyle(K).fillEllipse(24 + bx, 25 + by, 13, 17).fillEllipse(40 + bx, 25 + by, 13, 17)
+    g.fillStyle(0xffffff).fillCircle(24 + bx, 26 + by, 5).fillCircle(40 + bx, 26 + by, 5)
+    g.fillStyle(0x222222).fillCircle(25 + bx, 27 + by, 3).fillCircle(41 + bx, 27 + by, 3)
+    g.fillStyle(0xffffff).fillCircle(23 + bx, 25 + by, 1.5).fillCircle(39 + bx, 25 + by, 1.5)
+    g.fillStyle(PINK, 0.7).fillCircle(16 + bx, 32 + by, 4).fillCircle(48 + bx, 32 + by, 4)
+    g.fillStyle(0x333333).fillEllipse(32 + bx, 32 + by, 6, 4)
     g.lineStyle(2, DARK).beginPath()
-    g.arc(32, 34, 5, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false)
+    g.arc(32 + bx, 34 + by, 5, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false)
     g.strokePath()
-    g.generateTexture('panda', 64, 80)
+    g.generateTexture(key, 64, 80)
     g.destroy()
+  }
+
+  private drawPanda() {
+    this.pandaFrame('panda', {})
+    this.pandaFrame('panda-run-0', { lf: [-3, -1], rf: [3, 1], la: [0, -2], ra: [0, 2] })
+    this.pandaFrame('panda-run-1', { by: -3, lf: [1, -2], rf: [-1, -2] })
+    this.pandaFrame('panda-run-2', { lf: [3, 1], rf: [-3, -1], la: [0, 2], ra: [0, -2] })
+    this.pandaFrame('panda-attack-0', { bx: -2, ra: [-3, -2] })
+    this.pandaFrame('panda-attack-1', { bx: 3, ra: [7, -4], paw: true })
+
+    if (!this.anims.exists('panda-run')) {
+      this.anims.create({ key: 'panda-idle', frames: [{ key: 'panda' }], frameRate: 1, repeat: -1 })
+      this.anims.create({
+        key: 'panda-run',
+        frames: [{ key: 'panda-run-0' }, { key: 'panda-run-1' }, { key: 'panda-run-2' }, { key: 'panda-run-1' }],
+        frameRate: 12, repeat: -1,
+      })
+      this.anims.create({
+        key: 'panda-attack',
+        frames: [{ key: 'panda-attack-0' }, { key: 'panda-attack-1' }],
+        frameRate: 14, repeat: 0,
+      })
+    }
   }
 
   private drawDecor() {

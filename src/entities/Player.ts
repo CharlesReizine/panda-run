@@ -18,6 +18,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   readonly maxEnergy = MAX_ENERGY
   facing: 1 | -1 = 1
   private wasGrounded = true
+  private attacking = false
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'panda')
@@ -27,7 +28,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.stats = computeStats(getPlayer())
     this.hp = this.stats.maxHp
     this.setTint(CLASSES[getPlayer().classId].tint)
+    this.play('panda-idle')
     this.emitHp()
+  }
+
+  // joue l'animation d'attaque ; pendant ce temps run/idle sont suspendus
+  playAttack() {
+    this.attacking = true
+    this.play('panda-attack', true)
+    this.scene.time.delayedCall(160, () => { this.attacking = false })
   }
 
   refreshStats() {
@@ -50,6 +59,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.scene.time.delayedCall(100, () => this.setScale(1, 1))
     }
     this.wasGrounded = body.blocked.down
+
+    // animations : l'attaque a la priorité, sinon course au sol / idle
+    if (!this.attacking) {
+      if (body.blocked.down && (c.left || c.right)) this.play('panda-run', true)
+      else this.play('panda-idle', true)
+    }
   }
 
   takeDamage(amount: number) {

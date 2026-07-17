@@ -255,6 +255,7 @@ export class LevelScene extends Phaser.Scene {
     if (this.player.hp <= 0) return
     if (this.time.now < this.nextBasicAttackAt) return
     this.nextBasicAttackAt = this.time.now + 1000 / this.player.stats.attackSpeed
+    this.player.playAttack()
     this.player.gainEnergy(ENERGY_ON_BASIC_HIT) // frapper recharge un peu l'énergie
     this.slashFx(this.player.x + this.player.facing * 30, this.player.y, 60, 0xffffff)
     this.damageEnemiesInRect(this.player.x + this.player.facing * 30, this.player.y, 60, 50, 1)
@@ -291,6 +292,7 @@ export class LevelScene extends Phaser.Scene {
 
     const { atk, maxHp } = this.player.stats
     if (skill.kind === 'melee') {
+      this.player.playAttack()
       this.slashFx(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, 0xffd54f)
       this.damageEnemiesInRect(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, 60, skill.multiplier)
     } else if (skill.kind === 'aoe') {
