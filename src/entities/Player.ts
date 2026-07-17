@@ -67,9 +67,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
     this.wasGrounded = body.blocked.down
 
-    // animations : l'attaque a la priorité, sinon course au sol / idle
+    // animations : attaque > saut (en l'air) > course > idle
     if (!this.attacking) {
-      if (body.blocked.down && (c.left || c.right)) this.play(this.anim('run'), true)
+      if (!body.blocked.down) this.play(this.anim('jump'), true)
+      else if (c.left || c.right) this.play(this.anim('run'), true)
       else this.play(this.anim('idle'), true)
     }
   }

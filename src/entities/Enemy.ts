@@ -72,8 +72,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.setVelocityX(0)
     }
 
-    // respiration du blob (suspendue pendant une charge)
-    if (!this.isCharging) this.setScale(1, 1 + 0.05 * Math.sin(t / 300))
+    // marche : dandinement + regarde dans son sens de déplacement ; sinon respiration
+    const vx = (this.body as Phaser.Physics.Arcade.Body).velocity.x
+    if (Math.abs(vx) > 5) {
+      this.setFlipX(vx < 0)
+      this.setRotation(Math.sin(t / 70) * 0.12)
+      this.setScale(1, 1 + 0.04 * Math.sin(t / 70))
+    } else {
+      this.setRotation(0)
+      if (!this.isCharging) this.setScale(1, 1 + 0.05 * Math.sin(t / 300))
+    }
 
     // "zzz" hors aggro, caché dès que le monstre repère le joueur
     if (dist >= AGGRO_RANGE) {

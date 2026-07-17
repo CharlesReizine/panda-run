@@ -44,6 +44,7 @@ const POSES: Record<string, Pose> = {
   'run-2': { lf: [3, 1], rf: [-3, -1], la: [0, 2], ra: [0, -2] },
   'attack-0': { bx: -2, ra: [-3, -2] },
   'attack-1': { bx: 3, ra: [7, -4], paw: true },
+  'jump': { lf: [3, -8], rf: [-3, -8], la: [0, -5], ra: [0, -5] }, // jambes repliées, bras levés
 }
 
 const TILE_PALETTES: Record<string, { soil: number; top: number; speck: number }> = {
@@ -125,6 +126,7 @@ export class PreloadScene extends Phaser.Scene {
           frames: [{ key: `panda-${cls}-attack-0` }, { key: `panda-${cls}-attack-1` }],
           frameRate: 14, repeat: 0,
         })
+        this.anims.create({ key: `panda-${cls}-jump`, frames: [{ key: `panda-${cls}-jump` }], frameRate: 1, repeat: -1 })
       }
     }
     // alias pour les menus (écran titre) : le panda novice
@@ -357,6 +359,12 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0x8d6e63).fillEllipse(17, 6, 30, 10)
     g.fillStyle(0xffd54f).fillRect(0, 15, 34, 3).fillRect(15, 4, 4, 22)
     g.fillStyle(0xfff176).fillCircle(17, 16, 3); g.generateTexture('prop-coffre', 34, 30); g.clear()
+    // coffre ouvert (couvercle relevé + lueur dorée)
+    g.fillStyle(0x4e342e).fillRoundedRect(0, 12, 34, 18, 3)
+    g.fillStyle(0x6d4c41).fillRect(2, 14, 30, 14)
+    g.fillStyle(0xfff59d).fillRect(3, 11, 28, 5)
+    g.fillStyle(0x4e342e).fillRect(1, 0, 32, 8)
+    g.fillStyle(0x8d6e63).fillRect(3, 1, 28, 6); g.generateTexture('chest-open', 34, 32); g.clear()
     g.fillStyle(0xffffff).fillEllipse(7, 7, 12, 12); g.generateTexture('material-drop', 14, 14); g.clear()
 
     g.fillStyle(0xffffff).fillEllipse(120, 120, 260, 180); g.generateTexture('hill', 240, 130); g.clear()

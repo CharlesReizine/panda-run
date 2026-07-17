@@ -362,7 +362,15 @@ export class LevelScene extends Phaser.Scene {
   }
 
   onEnemyLoot(e: Enemy) { this.spawnDrops(e.x, e.y, e.monster.drops) }
-  onPropBroken(prop: Prop) { this.spawnDrops(prop.x, prop.y, prop.def.drops) }
+
+  onPropBroken(prop: Prop) {
+    if (prop.def.id === 'coffre') {
+      const open = this.add.image(prop.x, prop.y, 'chest-open').setDepth(4)
+      this.aoeRing(prop.x, prop.y, 40, 0xffd54f)
+      this.tweens.add({ targets: open, y: open.y - 8, scale: 1.15, duration: 160, yoyo: true, onComplete: () => open.destroy() })
+    }
+    this.spawnDrops(prop.x, prop.y, prop.def.drops)
+  }
 
   spawnDrops(x: number, y: number, drops: DropEntry[]) {
     const result = rollDrops(drops)
