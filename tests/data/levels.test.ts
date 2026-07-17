@@ -29,4 +29,10 @@ describe('niveaux et carte', () => {
     expect(isNodeUnlocked('plaine-2', [])).toBe(false)
     expect(isNodeUnlocked('plaine-2', ['zone1-1'])).toBe(true)
   })
+
+  it('déblocage multi-hop : plaine-1 → plaine-2 → foret-2 → boss-1 → morroc → desert-1', () => {
+    const chain = ['zone1-1', 'zone1-2', 'zone1-4', 'zone1-boss']
+    expect(isNodeUnlocked('desert-1', chain)).toBe(true)
+    expect(isNodeUnlocked('desert-1', ['zone1-1', 'zone1-2', 'zone1-4'])).toBe(false) // sans zone1-boss, morroc inatteignable
+  })
 })

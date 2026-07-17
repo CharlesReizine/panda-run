@@ -183,6 +183,7 @@ export class LevelScene extends Phaser.Scene {
   }
 
   completeLevel() {
+    if (this.player.hp <= 0) return
     const p = getPlayer()
     if (!p.completedLevels.includes(this.levelDef.id)) p.completedLevels.push(this.levelDef.id)
     save(p)
@@ -201,12 +202,14 @@ export class LevelScene extends Phaser.Scene {
   }
 
   basicAttack() {
+    if (this.player.hp <= 0) return
     if (this.time.now < this.nextBasicAttackAt) return
     this.nextBasicAttackAt = this.time.now + 1000 / this.player.stats.attackSpeed
     this.damageEnemiesInRect(this.player.x + this.player.facing * 30, this.player.y, 60, 50, 1)
   }
 
   castSkill(slot: number) {
+    if (this.player.hp <= 0) return
     const p = getPlayer()
     const skillId = p.equippedSkills[slot]
     if (!skillId || !this.cooldowns.canUse(slot, this.time.now)) return
@@ -317,6 +320,7 @@ export class LevelScene extends Phaser.Scene {
   }
 
   update() {
+    if (this.player.hp <= 0) return
     const ui = this.scene.get('UI') as UIScene
     const joy = ui.joystick?.state ?? emptyControls()
     const touch: ControlsState = { ...joy, jump: this.jumpHeld }
