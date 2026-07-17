@@ -7,10 +7,15 @@ import { CLASSES } from '../data/classes'
 
 const RUN_SPEED = 220
 const JUMP_VELOCITY = -560
+const MAX_ENERGY = 100
+const ENERGY_REGEN_PER_SEC = 22
+const ENERGY_PER_BASIC_HIT = 6
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   stats: StatBlock
   hp: number
+  energy = MAX_ENERGY
+  readonly maxEnergy = MAX_ENERGY
   facing: 1 | -1 = 1
   private wasGrounded = true
 
@@ -59,7 +64,24 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.emitHp()
   }
 
+  // true si l'énergie suffisait (et a été dépensée), false sinon
+  spendEnergy(amount: number): boolean {
+    if (this.energy < amount) return false
+    this.energy -= amount
+    return true
+  }
+
+  gainEnergy(amount: number) {
+    this.energy = Math.min(this.maxEnergy, this.energy + amount)
+  }
+
+  regenEnergy(deltaMs: number) {
+    this.gainEnergy((ENERGY_REGEN_PER_SEC * deltaMs) / 1000)
+  }
+
   private emitHp() {
     this.scene.events.emit('player-hp', this.hp, this.stats.maxHp)
   }
 }
+
+export const ENERGY_ON_BASIC_HIT = ENERGY_PER_BASIC_HIT

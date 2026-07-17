@@ -1,3 +1,9 @@
+// Coût en énergie d'un skill, dérivé de sa puissance (multiplicateur).
+// Borné à [10, 45] pour rester lançable avec 100 d'énergie max.
+export function energyCostOf(skill: { multiplier: number }): number {
+  return Math.round(Math.min(45, Math.max(10, skill.multiplier * 12)))
+}
+
 export class CooldownTracker {
   private until: number[] = [0, 0, 0, 0]
 

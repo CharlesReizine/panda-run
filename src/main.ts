@@ -19,14 +19,18 @@ const game = new Phaser.Game({
   scene: [BootScene, PreloadScene, TitleScene, WorldMapScene, LevelScene, UIScene, MenuScene, ClassChangeScene],
 })
 
-// iOS Safari : les barres d'outils/onglets rognent le viewport et bougent après coup.
-// innerHeight est la seule mesure fiable sur tous les iOS : on dimensionne le body
-// dessus puis on recalcule le FIT, à chaque resize/rotation (avec un tick de retard,
-// iOS met à jour innerHeight après l'événement).
+// iOS Safari : les barres d'outils/onglets rognent la zone visible et bougent après coup,
+// ce qui coupait le bas du jeu (le perso) en paysage. window.visualViewport.height donne
+// la hauteur RÉELLEMENT visible (hors barres), contrairement à innerHeight qui inclut
+// parfois la zone sous les barres. On dimensionne le body dessus puis on recalcule le FIT.
 function fitViewport() {
-  document.body.style.height = `${window.innerHeight}px`
+  const vh = window.visualViewport?.height ?? window.innerHeight
+  const vw = window.visualViewport?.width ?? window.innerWidth
+  document.body.style.height = `${vh}px`
+  document.body.style.width = `${vw}px`
   game.scale.refresh()
 }
+window.visualViewport?.addEventListener('resize', fitViewport)
 window.addEventListener('resize', () => setTimeout(fitViewport, 150))
 window.addEventListener('orientationchange', () => setTimeout(fitViewport, 300))
 fitViewport()

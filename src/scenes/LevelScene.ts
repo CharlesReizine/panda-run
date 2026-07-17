@@ -12,7 +12,8 @@ import { grantXp } from '../core/progression'
 import { emptyControls, mergeControls, type ControlsState } from '../core/controls'
 import { getPlayer } from '../state'
 import { save } from '../core/save'
-import { CooldownTracker } from '../core/skill-executor'
+import { CooldownTracker, energyCostOf } from '../core/skill-executor'
+import { ENERGY_ON_BASIC_HIT } from '../entities/Player'
 import { SKILLS } from '../data/skills'
 import { rollDrops } from '../core/loot'
 import type { DropEntry } from '../core/types'
@@ -134,7 +135,7 @@ export class LevelScene extends Phaser.Scene {
 
     this.cursors = this.input.keyboard!.createCursorKeys()
 
-    this.add.text(8, 8, this.levelDef.name, { fontSize: '16px', color: '#ffffff' }).setScrollFactor(0)
+    this.add.text(480, 8, this.levelDef.name, { fontSize: '15px', color: '#ffffff' }).setOrigin(0.5, 0).setScrollFactor(0)
 
     this.scene.launch('UI')
     this.jumpHeld = false
@@ -222,6 +223,7 @@ export class LevelScene extends Phaser.Scene {
     if (this.player.hp <= 0) return
     if (this.time.now < this.nextBasicAttackAt) return
     this.nextBasicAttackAt = this.time.now + 1000 / this.player.stats.attackSpeed
+    this.player.gainEnergy(ENERGY_ON_BASIC_HIT) // frapper recharge un peu l'énergie
     this.slashFx(this.player.x + this.player.facing * 30, this.player.y, 60, 0xffffff)
     this.damageEnemiesInRect(this.player.x + this.player.facing * 30, this.player.y, 60, 50, 1)
   }
@@ -233,9 +235,10 @@ export class LevelScene extends Phaser.Scene {
     this.tweens.add({ targets: this.player, x: this.player.x + this.player.facing * 6, duration: 60, yoyo: true })
   }
 
-  private announceSkill(name: string) {
+  private announceSkill(name: string, color = 0xffd700) {
+    const hex = `#${color.toString(16).padStart(6, '0')}`
     const txt = this.add.text(this.player.x, this.player.y - 55, name + ' !', {
-      fontSize: '16px', color: '#ffd700', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3,
+      fontSize: '16px', color: hex, fontStyle: 'bold', stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5)
     this.tweens.add({ targets: txt, y: txt.y - 25, alpha: 0, duration: 700, onComplete: () => txt.destroy() })
   }
@@ -246,6 +249,10 @@ export class LevelScene extends Phaser.Scene {
     const skillId = p.equippedSkills[slot]
     if (!skillId || !this.cooldowns.canUse(slot, this.time.now)) return
     const skill = SKILLS[skillId]!
+    if (!this.player.spendEnergy(energyCostOf(skill))) {
+      this.announceSkill('Pas assez d\'énergie', 0x4dd0e1)
+      return
+    }
     this.cooldowns.use(slot, this.time.now, skill.cooldownMs)
     this.game.events.emit('skill-cooldown', slot, this.time.now + skill.cooldownMs)
     this.announceSkill(skill.name)
@@ -377,8 +384,9 @@ export class LevelScene extends Phaser.Scene {
     this.createExit()
   }
 
-  update() {
+  update(_time: number, delta: number) {
     if (this.player.hp <= 0) return
+    this.player.regenEnergy(delta)
     const ui = this.scene.get('UI') as UIScene
     const joy = ui.joystick?.state ?? emptyControls()
     const touch: ControlsState = { ...joy, jump: this.jumpHeld }

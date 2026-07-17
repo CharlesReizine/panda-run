@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { CooldownTracker } from '../../src/core/skill-executor'
+import { CooldownTracker, energyCostOf } from '../../src/core/skill-executor'
+
+describe('energyCostOf', () => {
+  it('croît avec le multiplicateur, borné à [10, 45]', () => {
+    expect(energyCostOf({ multiplier: 0.3 })).toBe(10) // plancher
+    expect(energyCostOf({ multiplier: 1.5 })).toBe(18)
+    expect(energyCostOf({ multiplier: 3.5 })).toBe(42)
+    expect(energyCostOf({ multiplier: 10 })).toBe(45) // plafond
+  })
+})
 
 describe('CooldownTracker', () => {
   it('slot dispo puis en cooldown puis re-dispo', () => {
