@@ -13,12 +13,11 @@ export class MenuScene extends Phaser.Scene {
   constructor() { super('Menu') }
 
   create() {
-    this.add.rectangle(480, 270, 960, 540, 0x1b2631, 0.95)
     this.render()
   }
 
   private render() {
-    this.children.removeAll()
+    for (const child of [...this.children.list]) child.destroy()
     this.add.rectangle(480, 270, 960, 540, 0x1b2631, 0.95)
     const p = getPlayer()
     const stats = computeStats(p)
