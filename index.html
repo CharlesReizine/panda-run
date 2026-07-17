@@ -8,25 +8,17 @@
     <link rel="apple-touch-icon" href="./icon-192.png" />
     <title>Panda-Run</title>
     <style>
-      /* body fixé + hauteur pilotée en JS (main.ts) : innerHeight suit la barre Safari
-         sur tous les iOS, contrairement à 100% (déborde) et 100dvh (iOS 16.4+ only).
-         Le padding safe-area repousse le canvas hors de l'encoche et de la barre home
-         en paysage (sinon le bas/les côtés du jeu sont rognés). */
       html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
-      body {
-        position: fixed;
-        inset: 0;
-        box-sizing: border-box;
-        padding:
-          calc(env(safe-area-inset-top) + 4px)
-          env(safe-area-inset-right)
-          calc(env(safe-area-inset-bottom) + 4px)
-          env(safe-area-inset-left);
-      }
-      canvas { display: block; margin: 0 auto; }
+      html, body { position: fixed; inset: 0; width: 100%; height: 100%; }
+      /* #game : conteneur dont main.ts fixe la taille EXACTE de la zone visible
+         (window.visualViewport, qui exclut les barres Safari). Phaser (Scale.FIT)
+         insère le jeu dedans → il rentre toujours en entier, jamais coupé. */
+      #game { position: absolute; top: 0; left: 0; }
+      canvas { display: block; }
     </style>
-    <script type="module" crossorigin src="./assets/index-VuMEVSd6.js"></script>
+    <script type="module" crossorigin src="./assets/index-C1dZgA5v.js"></script>
   <link rel="manifest" href="./manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="./registerSW.js"></script></head>
   <body>
+    <div id="game"></div>
   </body>
 </html>
