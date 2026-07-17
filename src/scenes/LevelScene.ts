@@ -29,6 +29,7 @@ export class LevelScene extends Phaser.Scene {
   playerProjectiles!: Phaser.Physics.Arcade.Group
   pickups!: Phaser.Physics.Arcade.Group
   props!: Phaser.Physics.Arcade.Group
+  private platforms!: Phaser.Physics.Arcade.StaticGroup
   levelDef!: LevelDef
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private jumpHeld = false
@@ -60,7 +61,7 @@ export class LevelScene extends Phaser.Scene {
 
     this.addBackground()
 
-    const platforms = this.physics.add.staticGroup()
+    const platforms = (this.platforms = this.physics.add.staticGroup())
     const tileKey = `tile-${this.levelDef.biome}`
     for (let x = 0; x < this.levelDef.widthTiles; x++) {
       platforms.create(x * TILE + TILE / 2, GROUND_ROW * TILE + TILE, tileKey)
@@ -375,7 +376,15 @@ export class LevelScene extends Phaser.Scene {
       this.aoeRing(this.player.x, this.player.y, skill.range, color)
     } else if (skill.kind === 'projectile') {
       const proj = this.spawnPlayerProjectile(atk * mult, skill.range)
-      if (skill.pierce) {
+      if (skill.arc) {
+        // lancé en cloche : gravité + rebond + rotation (bambou)
+        const b = proj.body as Phaser.Physics.Arcade.Body
+        b.setAllowGravity(true)
+        b.setVelocity(this.player.facing * 340, -430)
+        b.setBounce(0.45)
+        proj.setTexture('bamboo').setScale(1).setAngularVelocity(this.player.facing * 480)
+        this.physics.add.collider(proj, this.platforms)
+      } else if (skill.pierce) {
         // gros faisceau qui transperce tout sur son trajet
         proj.pierce = true
         proj.setTexture('beam').setTint(color).setDisplaySize(52, 16)
@@ -409,6 +418,21 @@ export class LevelScene extends Phaser.Scene {
       const prop = obj as Prop
       if (prop.active && inMeleeReach((prop.x - px) * f, Math.abs(prop.y - py), reach)) prop.takeDamage(1)
     }
+  }
+
+  // effet "level up" façon RO : rayons dorés + anneau + texte sur le perso
+  private levelUpFx() {
+    const x = this.player.x, y = this.player.y
+    this.aoeRing(x, y, 90, 0xffd54f)
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2
+      const ray = this.add.rectangle(x, y, 4, 26, 0xfff176).setDepth(6).setRotation(a)
+      this.tweens.add({ targets: ray, x: x + Math.cos(a) * 60, y: y + Math.sin(a) * 60, alpha: 0, duration: 500, onComplete: () => ray.destroy() })
+    }
+    const txt = this.add.text(x, y - 70, 'LEVEL UP !', { fontSize: '26px', color: '#ffd700', fontStyle: 'bold', stroke: '#5d3a00', strokeThickness: 4 }).setOrigin(0.5).setDepth(7)
+    txt.setScale(0.4)
+    this.tweens.add({ targets: txt, scale: 1, duration: 250, ease: 'Back.out' })
+    this.tweens.add({ targets: txt, y: txt.y - 30, alpha: 0, delay: 900, duration: 600, onComplete: () => txt.destroy() })
   }
 
   onEnemyLoot(e: Enemy) { this.spawnDrops(e.x, e.y, e.monster.drops) }
@@ -482,8 +506,7 @@ export class LevelScene extends Phaser.Scene {
     if (levelsGained > 0) {
       this.player.refreshStats()
       this.game.events.emit('player-level-up', p.level)
-      const txt = this.add.text(this.player.x, this.player.y - 60, 'NIVEAU +1 !', { fontSize: '20px', color: '#ffd700' }).setOrigin(0.5)
-      this.tweens.add({ targets: txt, y: txt.y - 40, alpha: 0, duration: 1200, onComplete: () => txt.destroy() })
+      this.levelUpFx()
     }
     save(p)
     this.game.events.emit('hud-refresh')

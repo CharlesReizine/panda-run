@@ -109,12 +109,15 @@ export class UIScene extends Phaser.Scene {
     this.cooldownUntil[slot] = untilMs
   }
 
-  // notif de passage de niveau, affichée sous les barres (haut-gauche)
+  // notif de passage de niveau : grosse, au niveau des PV (haut-gauche), façon RO
   private onLevelUp(level: number) {
-    const txt = this.add.text(14, 70, `Niveau ${level} ! +1 point de skill`, {
-      fontSize: '15px', color: '#ffd54f', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3,
-    })
-    this.tweens.add({ targets: txt, y: 64, alpha: 0, duration: 2500, ease: 'Cubic.in', onComplete: () => txt.destroy() })
+    const bg = this.add.rectangle(14, 66, 250, 30, 0xffb300, 0.95).setOrigin(0)
+    const txt = this.add.text(24, 71, `⭐ NIVEAU ${level} !  +1 point`, {
+      fontSize: '18px', color: '#3a2600', fontStyle: 'bold',
+    }).setOrigin(0, 0)
+    bg.setScale(0.2, 1)
+    this.tweens.add({ targets: bg, scaleX: 1, duration: 200, ease: 'Back.out' })
+    this.tweens.add({ targets: [bg, txt], alpha: 0, delay: 2200, duration: 700, onComplete: () => { bg.destroy(); txt.destroy() } })
   }
 
   refresh() {

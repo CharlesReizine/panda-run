@@ -28,6 +28,7 @@ export interface SkillDef {
   cooldownMs: number
   range: number // px (melee: portée hitbox, aoe: rayon, projectile: durée de vie en px)
   pierce?: boolean // projectile qui traverse tout (ne s'arrête pas au premier impact)
+  arc?: boolean // projectile lancé en cloche (soumis à la gravité, rebondit)
 }
 
 export interface ItemDef {

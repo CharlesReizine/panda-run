@@ -4,7 +4,7 @@ import { CLASSES } from './classes'
 const list: SkillDef[] = [
   // Novice
   { id: 'calin-brutal', name: 'Câlin brutal', classId: 'novice', kind: 'melee', multiplier: 1.5, cooldownMs: 2000, range: 50 },
-  { id: 'bambou-jete', name: 'Bambou jeté', classId: 'novice', kind: 'projectile', multiplier: 1.2, cooldownMs: 3000, range: 400 },
+  { id: 'bambou-jete', name: 'Bambou jeté', classId: 'novice', kind: 'projectile', multiplier: 1.2, cooldownMs: 3000, range: 520, arc: true },
   // Sabreur
   { id: 'taillade', name: 'Taillade', classId: 'swordsman', kind: 'melee', multiplier: 1.8, cooldownMs: 2000, range: 60 },
   { id: 'tourbillon', name: 'Tourbillon', classId: 'swordsman', kind: 'aoe', multiplier: 1.3, cooldownMs: 6000, range: 110 },

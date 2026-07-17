@@ -6,7 +6,7 @@ import { getPlayer } from '../state'
 import { PANDA_BODY } from './player-body'
 
 const RUN_SPEED = 220
-const JUMP_VELOCITY = -560
+const JUMP_VELOCITY = -680 // assez haut pour atteindre les plateformes
 const MAX_ENERGY = 100
 const ENERGY_REGEN_PER_SEC = 22
 const ENERGY_PER_BASIC_HIT = 6

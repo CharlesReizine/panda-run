@@ -354,6 +354,10 @@ export class PreloadScene extends Phaser.Scene {
     // faisceau (flèche perçante / laser) : capsule allongée lumineuse
     g.fillStyle(0xffffff).fillRoundedRect(0, 5, 48, 8, 4)
     g.fillStyle(0xfff176).fillRoundedRect(2, 6, 44, 6, 3); g.generateTexture('beam', 48, 18); g.clear()
+    // bambou lancé (bâton vert à nœuds)
+    g.fillStyle(0x33691e).fillRoundedRect(0, 3, 26, 8, 3)
+    g.fillStyle(0x7cb342).fillRoundedRect(1, 4, 24, 5, 2)
+    g.fillStyle(0x33691e).fillRect(8, 3, 2, 8).fillRect(17, 3, 2, 8); g.generateTexture('bamboo', 26, 14); g.clear()
     // sortie : portail lumineux
     g.fillStyle(0x00695c).fillRoundedRect(0, 4, 32, 44, 10)
     g.fillStyle(0x4db6ac).fillRoundedRect(4, 8, 24, 38, 8)
