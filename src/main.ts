@@ -6,6 +6,7 @@ import { WorldMapScene } from './scenes/WorldMapScene'
 import { LevelScene } from './scenes/LevelScene'
 import { UIScene } from './scenes/UIScene'
 import { MenuScene } from './scenes/MenuScene'
+import { ClassChangeScene } from './scenes/ClassChangeScene'
 
 new Phaser.Game({
   type: Phaser.AUTO,
@@ -15,5 +16,5 @@ new Phaser.Game({
   backgroundColor: '#87ceeb',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   physics: { default: 'arcade', arcade: { gravity: { x: 0, y: 1200 } } },
-  scene: [BootScene, PreloadScene, TitleScene, WorldMapScene, LevelScene, UIScene, MenuScene],
+  scene: [BootScene, PreloadScene, TitleScene, WorldMapScene, LevelScene, UIScene, MenuScene, ClassChangeScene],
 })
