@@ -79,6 +79,22 @@ export class PreloadScene extends Phaser.Scene {
     }
   }
 
+  // arme tenue dans la patte droite (hx,hy = position de la patte)
+  private drawClassWeapon(g: Phaser.GameObjects.Graphics, cls: ClassId, hx: number, hy: number) {
+    if (cls === 'swordsman') {
+      g.lineStyle(3, 0xcfd8dc).beginPath(); g.moveTo(hx, hy + 4); g.lineTo(hx + 5, hy - 20); g.strokePath()
+      g.fillStyle(0x9e9e9e).fillRect(hx - 3, hy + 1, 10, 3)
+    } else if (cls === 'archer') {
+      g.lineStyle(3, 0x8d6e63).beginPath(); g.arc(hx - 1, hy - 2, 9, Phaser.Math.DegToRad(-75), Phaser.Math.DegToRad(75), false); g.strokePath()
+      const c = Phaser.Math.DegToRad(-75), d = Phaser.Math.DegToRad(75)
+      g.lineStyle(1, 0xeeeeee).beginPath()
+      g.moveTo(hx - 1 + 9 * Math.cos(c), hy - 2 + 9 * Math.sin(c)); g.lineTo(hx - 1 + 9 * Math.cos(d), hy - 2 + 9 * Math.sin(d)); g.strokePath()
+    } else if (cls === 'mage') {
+      g.lineStyle(3, 0x8d6e63).beginPath(); g.moveTo(hx, hy - 16); g.lineTo(hx + 1, hy + 6); g.strokePath()
+      g.fillStyle(0x64b5f6).fillCircle(hx, hy - 19, 4); g.fillStyle(0xbbdefb).fillCircle(hx - 1, hy - 20, 1.5)
+    }
+  }
+
   private pandaFrame(key: string, o: Pose, cls: ClassId) {
     const g = this.add.graphics()
     const W = 0xf7f7f7, K = 0x2b2b2b, PINK = 0xff9ab0, DARK = 0x3a2f2f
@@ -91,6 +107,7 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0xe4e4e4).fillEllipse(32 + bx, 61 + by, 26, 14)
     g.fillStyle(K).fillEllipse(12 + bx + lax, 50 + by + lay, 13, 22).fillEllipse(52 + bx + rax, 50 + by + ray, 13, 22)
     if (o.paw) g.fillStyle(K).fillCircle(57 + rax, 46 + ray + OY, 7)
+    this.drawClassWeapon(g, cls, 52 + bx + rax, 50 + by + ray)
     g.fillStyle(K).fillCircle(15 + bx, 9 + by, 9).fillCircle(49 + bx, 9 + by, 9)
     g.fillStyle(K).fillCircle(32 + bx, 25 + by, 23)
     g.fillStyle(W).fillCircle(32 + bx, 25 + by, 20)
@@ -334,9 +351,17 @@ export class PreloadScene extends Phaser.Scene {
 
     const g = this.add.graphics()
     g.fillStyle(0xffee58).fillCircle(6, 6, 6); g.fillStyle(0xfff59d).fillCircle(4, 4, 2); g.generateTexture('projectile', 12, 12); g.clear()
-    g.fillStyle(0x5d4037).fillRect(0, 0, 32, 48)
-    g.fillStyle(0x8d6e63).fillRect(2, 2, 28, 44)
-    g.fillStyle(0xffd54f).fillCircle(26, 24, 3); g.generateTexture('exit', 32, 48); g.clear()
+    // faisceau (flèche perçante / laser) : capsule allongée lumineuse
+    g.fillStyle(0xffffff).fillRoundedRect(0, 5, 48, 8, 4)
+    g.fillStyle(0xfff176).fillRoundedRect(2, 6, 44, 6, 3); g.generateTexture('beam', 48, 18); g.clear()
+    // sortie : portail lumineux
+    g.fillStyle(0x00695c).fillRoundedRect(0, 4, 32, 44, 10)
+    g.fillStyle(0x4db6ac).fillRoundedRect(4, 8, 24, 38, 8)
+    g.fillStyle(0xb2dfdb).fillEllipse(16, 26, 14, 26)
+    g.fillStyle(0xffffff, 0.85).fillCircle(12, 18, 2).fillCircle(20, 32, 2).fillCircle(17, 24, 1.5); g.generateTexture('exit', 32, 48); g.clear()
+    // icônes de boutons
+    g.fillStyle(0xffffff).fillCircle(16, 19, 8).fillCircle(9, 10, 3).fillCircle(16, 8, 3).fillCircle(23, 10, 3); g.generateTexture('ui-attack', 32, 32); g.clear()
+    g.lineStyle(4, 0xffffff).beginPath(); g.moveTo(6, 19); g.lineTo(16, 9); g.lineTo(26, 19); g.moveTo(6, 26); g.lineTo(16, 16); g.lineTo(26, 26); g.strokePath(); g.generateTexture('ui-jump', 32, 32); g.clear()
     g.fillStyle(0xb71c1c).fillRoundedRect(0, 4, 16, 12, 4)
     g.fillStyle(0xef5350).fillRoundedRect(1, 5, 14, 8, 3)
     g.fillStyle(0xffffff).fillRect(6, 0, 4, 6); g.generateTexture('potion-drop', 16, 16); g.clear()

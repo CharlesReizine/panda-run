@@ -58,13 +58,13 @@ export class UIScene extends Phaser.Scene {
 
     // Bas-droite : contrôles saut / attaque
     const jump = this.add.circle(884, 468, 36, 0x1e88e5, 0.6).setInteractive()
-    this.add.text(884, 468, '⬆', { fontSize: '28px', color: '#fff' }).setOrigin(0.5)
+    this.add.image(884, 468, 'ui-jump').setDisplaySize(34, 34)
     this.add.text(884, 510, 'SAUT', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
     jump.on('pointerdown', () => { this.pressFx(jump); this.game.events.emit('input-jump-down') })
     jump.on('pointerup', () => this.game.events.emit('input-jump-up'))
     jump.on('pointerout', () => this.game.events.emit('input-jump-up'))
     const atk = this.add.circle(792, 496, 32, 0xfb8c00, 0.7).setInteractive()
-    this.add.text(792, 496, '⚔', { fontSize: '26px', color: '#fff' }).setOrigin(0.5)
+    this.add.image(792, 496, 'ui-attack').setDisplaySize(30, 30)
     this.add.text(792, 534, 'ATTAQUE', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
     atk.on('pointerdown', () => { this.pressFx(atk); this.game.events.emit('input-attack') })
 

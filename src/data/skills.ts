@@ -20,10 +20,10 @@ const list: SkillDef[] = [
   { id: 'soin-du-panda', name: 'Soin du panda', classId: 'mage', kind: 'heal', multiplier: 0.3, cooldownMs: 10000, range: 0 },
   { id: 'tempete-arcanique', name: 'Tempête arcanique', classId: 'mage', kind: 'aoe', multiplier: 3.0, cooldownMs: 18000, range: 160 },
   // Archer
-  { id: 'fleche-percante', name: 'Flèche perçante', classId: 'archer', kind: 'projectile', multiplier: 1.6, cooldownMs: 2500, range: 500 },
+  { id: 'fleche-percante', name: 'Flèche perçante', classId: 'archer', kind: 'projectile', multiplier: 2.0, cooldownMs: 2500, range: 700, pierce: true },
   { id: 'double-tir', name: 'Double tir', classId: 'archer', kind: 'projectile', multiplier: 1.0, cooldownMs: 2000, range: 450 },
   { id: 'pluie-de-fleches', name: 'Pluie de flèches', classId: 'archer', kind: 'aoe', multiplier: 1.4, cooldownMs: 8000, range: 140 },
-  { id: 'tir-charge', name: 'Tir chargé', classId: 'archer', kind: 'projectile', multiplier: 2.8, cooldownMs: 10000, range: 550 },
+  { id: 'tir-charge', name: 'Tir chargé', classId: 'archer', kind: 'projectile', multiplier: 2.8, cooldownMs: 10000, range: 650, pierce: true },
   { id: 'fleche-de-bambou', name: 'Flèche de bambou', classId: 'archer', kind: 'projectile', multiplier: 1.3, cooldownMs: 3000, range: 400 },
   { id: 'salve-ultime', name: 'Salve ultime', classId: 'archer', kind: 'aoe', multiplier: 3.2, cooldownMs: 16000, range: 180 },
 ]

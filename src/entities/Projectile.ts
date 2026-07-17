@@ -3,6 +3,8 @@ import Phaser from 'phaser'
 export class Projectile extends Phaser.Physics.Arcade.Sprite {
   damage: number
   fromPlayer: boolean
+  pierce = false // traverse tout : ne se détruit pas au 1er impact
+  readonly hitEnemies = new Set<object>() // pour ne toucher chaque cible qu'une fois
   private startX: number
   private startY: number
   private rangePx: number

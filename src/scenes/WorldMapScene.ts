@@ -33,6 +33,11 @@ export class WorldMapScene extends Phaser.Scene {
 
     this.add.text(30, 495, 'Menu', { fontSize: '20px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 14, y: 6 } })
       .setInteractive().on('pointerdown', () => this.scene.start('Menu'))
+    // pastille : points de skill à dépenser
+    if (p.skillPoints > 0) {
+      const b = this.add.text(96, 488, `${p.skillPoints}`, { fontSize: '14px', color: '#ffffff', backgroundColor: '#e53935', padding: { x: 6, y: 3 } }).setOrigin(0.5)
+      this.tweens.add({ targets: b, scale: 1.2, yoyo: true, repeat: -1, duration: 500 })
+    }
 
     if (canChangeClass(p)) {
       const t = this.add.text(480, 495, '★ Changer de classe ! ★', { fontSize: '22px', color: '#000000', backgroundColor: '#ffd700', padding: { x: 18, y: 8 } })

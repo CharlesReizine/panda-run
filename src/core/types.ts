@@ -27,6 +27,7 @@ export interface SkillDef {
   multiplier: number // × ATK (heal : fraction de maxHp)
   cooldownMs: number
   range: number // px (melee: portée hitbox, aoe: rayon, projectile: durée de vie en px)
+  pierce?: boolean // projectile qui traverse tout (ne s'arrête pas au premier impact)
 }
 
 export interface ItemDef {

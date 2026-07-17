@@ -101,13 +101,27 @@ export class LevelScene extends Phaser.Scene {
       this.hitPlayer((proj as Projectile).damage)
       ;(proj as Projectile).destroy()
     })
-    this.physics.add.overlap(this.playerProjectiles, this.enemies, (proj, e) => {
-      ;(e as Enemy).takeDamage(physicalDamage((proj as Projectile).damage, (e as Enemy).monster.def))
-      ;(proj as Projectile).destroy()
+    this.physics.add.overlap(this.playerProjectiles, this.enemies, (projObj, eObj) => {
+      const proj = projObj as Projectile, e = eObj as Enemy
+      if (proj.pierce) {
+        if (proj.hitEnemies.has(e)) return
+        proj.hitEnemies.add(e)
+        e.takeDamage(physicalDamage(proj.damage, e.monster.def))
+      } else {
+        e.takeDamage(physicalDamage(proj.damage, e.monster.def))
+        proj.destroy()
+      }
     })
-    this.physics.add.overlap(this.playerProjectiles, this.props, (proj, prop) => {
-      ;(prop as Prop).takeDamage(1)
-      ;(proj as Projectile).destroy()
+    this.physics.add.overlap(this.playerProjectiles, this.props, (projObj, propObj) => {
+      const proj = projObj as Projectile, prop = propObj as Prop
+      if (proj.pierce) {
+        if (proj.hitEnemies.has(prop)) return
+        proj.hitEnemies.add(prop)
+        prop.takeDamage(1)
+      } else {
+        prop.takeDamage(1)
+        proj.destroy()
+      }
     })
 
     this.events.on('enemy-died', this.onEnemyDied, this)
@@ -247,7 +261,11 @@ export class LevelScene extends Phaser.Scene {
     this.player.setVelocity(-this.player.facing * 200, -200)
     if (this.player.hp <= 0) {
       save(getPlayer())
-      this.time.delayedCall(600, () => this.scene.start('WorldMap'))
+      // écran K.O. clair avant de renvoyer à la carte
+      this.add.rectangle(480, 270, 960, 540, 0x000000, 0.55).setScrollFactor(0).setDepth(20)
+      this.add.text(480, 250, 'K.O. !', { fontSize: '64px', color: '#ff5252', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
+      this.add.text(480, 310, 'Retour à la carte…', { fontSize: '20px', color: '#ffffff' }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
+      this.time.delayedCall(1400, () => this.scene.start('WorldMap'))
     }
   }
 
@@ -257,8 +275,23 @@ export class LevelScene extends Phaser.Scene {
     this.nextBasicAttackAt = this.time.now + 1000 / this.player.stats.attackSpeed
     this.player.playAttack()
     this.player.gainEnergy(ENERGY_ON_BASIC_HIT) // frapper recharge un peu l'énergie
-    this.slashFx(this.player.x + this.player.facing * 30, this.player.y, 60, 0xffffff)
-    this.meleeHit(70, 1)
+
+    const cls = getPlayer().classId
+    if (cls === 'archer' || cls === 'mage') {
+      // attaque de base à distance : flèche (archer) ou orbe (mage)
+      const proj = this.spawnPlayerProjectile(this.player.stats.atk, 420)
+      proj.setTint(cls === 'archer' ? 0xd7a86e : 0x64b5f6)
+    } else {
+      this.slashFx(this.player.x + this.player.facing * 30, this.player.y, 60, 0xffffff)
+      this.meleeHit(70, 1)
+    }
+  }
+
+  // projectile allié tiré depuis la main, à hauteur des monstres
+  private spawnPlayerProjectile(damage: number, rangePx: number): Projectile {
+    const proj = new Projectile(this, this.player.x + this.player.facing * 22, this.player.y + 16, this.player.facing, 0, damage, true, rangePx)
+    this.playerProjectiles.add(proj)
+    return proj
   }
 
   // croissant de coup visible même dans le vide + petit élan du panda
@@ -329,11 +362,16 @@ export class LevelScene extends Phaser.Scene {
       }
       this.aoeRing(this.player.x, this.player.y, skill.range, color)
     } else if (skill.kind === 'projectile') {
-      const proj = new Projectile(this, this.player.x, this.player.y - 6, this.player.facing, 0, atk * skill.multiplier, true, skill.range)
-      proj.setTint(color)
-      if (skill.multiplier >= 2.5) proj.setScale(1.8)
-      else if (skill.multiplier >= 1.6) proj.setScale(1.3)
-      this.playerProjectiles.add(proj)
+      const proj = this.spawnPlayerProjectile(atk * skill.multiplier, skill.range)
+      if (skill.pierce) {
+        // gros faisceau qui transperce tout sur son trajet
+        proj.pierce = true
+        proj.setTexture('beam').setTint(color).setDisplaySize(52, 16)
+      } else {
+        proj.setTint(color)
+        if (skill.multiplier >= 2.5) proj.setScale(1.8)
+        else if (skill.multiplier >= 1.6) proj.setScale(1.3)
+      }
     } else if (skill.kind === 'heal') {
       this.player.heal(Math.round(maxHp * skill.multiplier))
       this.aoeRing(this.player.x, this.player.y, 70, 0x66bb6a)
