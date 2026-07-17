@@ -44,6 +44,16 @@ describe('save', () => {
     expect((loaded as unknown as Record<string, unknown>).unlockedSkills).toBeUndefined()
   })
 
+  it('migre une save v3 → v4 (monstersKilled + quests par défaut)', () => {
+    const p = newPlayer('Panda')
+    const legacy: Record<string, unknown> = { ...p }
+    delete legacy.monstersKilled
+    delete legacy.quests
+    const loaded = deserialize(JSON.stringify({ version: 3, player: legacy }))
+    expect(loaded.monstersKilled).toBe(0)
+    expect(loaded.quests).toEqual({})
+  })
+
   it('save/load via storage', () => {
     const s = fakeStorage()
     const p = newPlayer('Panda')

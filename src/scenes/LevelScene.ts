@@ -517,6 +517,7 @@ export class LevelScene extends Phaser.Scene {
 
   onEnemyDied(e: Enemy) {
     const p = getPlayer()
+    p.monstersKilled += 1
     const { levelsGained } = grantXp(p, e.monster.xp)
     this.events.emit('enemy-loot', e) // consommé en Task 13
     if (levelsGained > 0) {

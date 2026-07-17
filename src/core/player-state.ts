@@ -2,6 +2,16 @@ import type { ClassId, EquipSlot } from './types'
 
 export const MAX_SKILL_RANK = 5
 
+// Suivi d'une quête acceptée en ville : startCount capture le compteur de départ (ex.
+// monstersKilled au moment de l'acceptation) pour calculer une progression relative, sans
+// que des kills antérieurs à l'acceptation ne comptent.
+export interface QuestState {
+  startCount: number
+  progress: number
+  done: boolean
+  claimed: boolean
+}
+
 export interface PlayerState {
   name: string
   classId: ClassId
@@ -16,6 +26,8 @@ export interface PlayerState {
   equipment: Partial<Record<EquipSlot, string>>
   completedLevels: string[]
   materials: Record<string, number> // matériaux collectés (id → quantité) — collection pure, craft à venir
+  monstersKilled: number // compteur global, incrémenté dans LevelScene.onEnemyDied
+  quests: Record<string, QuestState> // quêtes acceptées en ville (id → progression)
 }
 
 export function newPlayer(name: string): PlayerState {
@@ -33,5 +45,7 @@ export function newPlayer(name: string): PlayerState {
     equipment: {},
     completedLevels: [],
     materials: {},
+    monstersKilled: 0,
+    quests: {},
   }
 }
