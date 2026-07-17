@@ -256,8 +256,16 @@ export class LevelScene extends Phaser.Scene {
     const gold = s.getData('gold') as number | undefined
     const potion = s.getData('potion') as number | undefined
     const itemId = s.getData('itemId') as string | undefined
-    if (gold) p.gold += gold
-    if (potion) p.potions += potion
+    if (gold) {
+      p.gold += gold
+      const txt = this.add.text(s.x, s.y - 10, `+${gold} or`, { fontSize: '16px', color: '#ffd700' }).setOrigin(0.5)
+      this.tweens.add({ targets: txt, y: txt.y - 30, alpha: 0, duration: 600, onComplete: () => txt.destroy() })
+    }
+    if (potion) {
+      p.potions += potion
+      const txt = this.add.text(s.x, s.y - 10, '♥', { fontSize: '20px', color: '#ff6b81' }).setOrigin(0.5)
+      this.tweens.add({ targets: txt, y: txt.y - 30, alpha: 0, duration: 600, onComplete: () => txt.destroy() })
+    }
     if (itemId) p.inventory.push(itemId)
     s.destroy()
     save(p)

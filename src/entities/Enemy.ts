@@ -13,6 +13,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private levelScene: LevelScene
   private nextActionAt = 0
   private bar: Phaser.GameObjects.Graphics
+  private isCharging = false
+  private zzz: Phaser.GameObjects.Text | null = null
+  private nextZzzToggleAt = 0
 
   constructor(scene: LevelScene, x: number, y: number, def: MonsterDef) {
     super(scene, x, y, `monster-${def.id}`)
@@ -35,6 +38,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this.hp <= 0) {
       this.scene.events.emit('enemy-died', this)
       this.bar.destroy()
+      this.zzz?.destroy()
       this.destroy()
     }
   }
@@ -51,6 +55,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       } else if (this.monster.behavior === 'charge' && t > this.nextActionAt) {
         this.setVelocityX(dir * this.monster.speed * 3)
         this.nextActionAt = t + CHARGE_COOLDOWN
+        this.isCharging = true
+        this.scene.time.delayedCall(400, () => { this.isCharging = false })
       } else if (this.monster.behavior === 'projectile' && t > this.nextActionAt) {
         const p = new Projectile(this.scene, this.x, this.y - 10, player.x - this.x, player.y - this.y, this.monster.atk, false, 500)
         this.levelScene.enemyProjectiles.add(p)
@@ -58,6 +64,22 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       }
     } else if (this.monster.behavior !== 'charge') {
       this.setVelocityX(0)
+    }
+
+    // respiration du blob (suspendue pendant une charge)
+    if (!this.isCharging) this.setScale(1, 1 + 0.05 * Math.sin(t / 300))
+
+    // "zzz" hors aggro, caché dès que le monstre repère le joueur
+    if (dist >= AGGRO_RANGE) {
+      if (!this.zzz) this.zzz = this.scene.add.text(this.x, this.y - this.height / 2 - 24, 'zzz', { fontSize: '14px', color: '#ffffff' }).setOrigin(0.5)
+      this.zzz.setPosition(this.x, this.y - this.height / 2 - 24)
+      if (t > this.nextZzzToggleAt) {
+        this.zzz.setVisible(!this.zzz.visible)
+        this.nextZzzToggleAt = t + 2000
+      }
+    } else if (this.zzz) {
+      this.zzz.destroy()
+      this.zzz = null
     }
 
     // barre de vie flottante

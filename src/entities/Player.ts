@@ -12,6 +12,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   stats: StatBlock
   hp: number
   facing: 1 | -1 = 1
+  private wasGrounded = true
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'panda')
@@ -38,6 +39,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     else if (c.right) { this.setVelocityX(RUN_SPEED); this.facing = 1; this.setFlipX(false) }
     else this.setVelocityX(0)
     if (c.jump && body.blocked.down) this.setVelocityY(JUMP_VELOCITY)
+
+    if (body.blocked.down && !this.wasGrounded) {
+      this.setScale(1.1, 0.9)
+      this.scene.time.delayedCall(100, () => this.setScale(1, 1))
+    }
+    this.wasGrounded = body.blocked.down
   }
 
   takeDamage(amount: number) {
