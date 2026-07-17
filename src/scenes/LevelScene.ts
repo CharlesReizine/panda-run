@@ -1,9 +1,10 @@
 import Phaser from 'phaser'
 import { LEVELS, type LevelDef } from '../data/levels'
 import { Player } from '../entities/Player'
-import { emptyControls, mergeControls, type ControlsState } from '../core/controls'
+import { mergeControls, type ControlsState } from '../core/controls'
 import { getPlayer } from '../state'
 import { save } from '../core/save'
+import type { UIScene } from './UIScene'
 
 export const TILE = 32
 const GROUND_ROW = 14 // sol sur les 2 dernières lignes (480 → 540 px)
@@ -12,8 +13,8 @@ export class LevelScene extends Phaser.Scene {
   player!: Player
   enemies!: Phaser.Physics.Arcade.Group
   levelDef!: LevelDef
-  touchControls: ControlsState = emptyControls()
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
+  private jumpHeld = false
 
   constructor() { super('Level') }
 
@@ -53,6 +54,17 @@ export class LevelScene extends Phaser.Scene {
     this.cursors = this.input.keyboard!.createCursorKeys()
 
     this.add.text(8, 8, this.levelDef.name, { fontSize: '16px', color: '#ffffff' }).setScrollFactor(0)
+
+    this.scene.launch('UI')
+    this.jumpHeld = false
+    this.game.events.on('input-jump-down', this.onJumpDown, this)
+    this.game.events.on('input-jump-up', this.onJumpUp, this)
+    this.events.on('shutdown', () => {
+      this.game.events.off('input-jump-down', this.onJumpDown, this)
+      this.game.events.off('input-jump-up', this.onJumpUp, this)
+      this.scene.stop('UI')
+    })
+    this.game.events.emit('hud-refresh')
   }
 
   private keyboardControls(): ControlsState {
@@ -63,6 +75,9 @@ export class LevelScene extends Phaser.Scene {
     }
   }
 
+  private onJumpDown() { this.jumpHeld = true }
+  private onJumpUp() { this.jumpHeld = false }
+
   completeLevel() {
     const p = getPlayer()
     if (!p.completedLevels.includes(this.levelDef.id)) p.completedLevels.push(this.levelDef.id)
@@ -71,6 +86,8 @@ export class LevelScene extends Phaser.Scene {
   }
 
   update() {
-    this.player.updateFromControls(mergeControls(this.keyboardControls(), this.touchControls))
+    const ui = this.scene.get('UI') as UIScene
+    const touch: ControlsState = { ...ui.joystick.state, jump: this.jumpHeld }
+    this.player.updateFromControls(mergeControls(this.keyboardControls(), touch))
   }
 }
