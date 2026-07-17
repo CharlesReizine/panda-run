@@ -179,6 +179,37 @@ export class PreloadScene extends Phaser.Scene {
         body(); eyes(); mouth()
         g.fillStyle(0xffffff, 0.5).fillCircle(r - r / 2, r - r / 2, r / 6) // brillance slime
         break
+      case 'angeling':
+        body(); eyes(); mouth()
+        g.lineStyle(2, 0xffd54f).beginPath(); g.arc(r, -4, r / 2.2, 0, Phaser.Math.DegToRad(360), false); g.strokePath() // auréole
+        g.fillStyle(0xffffff, 0.85).fillEllipse(3, r - 2, 6, 11).fillEllipse(s - 3, r - 2, 6, 11) // petites ailes
+        break
+      case 'fabre':
+        g.fillStyle(dark).fillEllipse(r + 4, r + 8, r - 3, r - 7) // segment arrière
+        g.fillStyle(m.color).fillEllipse(r + 4, r + 8, r - 5, r - 9)
+        g.fillStyle(dark).fillCircle(r - 8, r, 9) // segment tête
+        g.fillStyle(m.color).fillCircle(r - 8, r, 7)
+        g.fillStyle(0xffffff).fillCircle(r - 11, r - 2, 2).fillCircle(r - 5, r - 2, 2)
+        g.fillStyle(0x000000).fillCircle(r - 11, r - 2, 1).fillCircle(r - 5, r - 2, 1)
+        g.lineStyle(1.5, dark).beginPath(); g.moveTo(r - 12, r - 8); g.lineTo(r - 16, r - 15); g.moveTo(r - 4, r - 8); g.lineTo(r, r - 15); g.strokePath() // antennes
+        g.fillStyle(dark).fillCircle(r - 16, r - 15, 1.5).fillCircle(r, r - 15, 1.5)
+        break
+      case 'lunatic':
+        g.fillStyle(m.color).fillTriangle(r - 7, 2, r - 2, 2, r - 5, -15) // oreille longue gauche
+        g.fillStyle(m.color).fillTriangle(r + 2, 2, r + 7, 2, r + 5, -15) // oreille longue droite
+        g.fillStyle(0xffe0ec, 0.9).fillTriangle(r - 5.5, 0, r - 3, 0, r - 4.5, -11).fillTriangle(r + 3, 0, r + 5.5, 0, r + 4.5, -11) // intérieur oreille
+        body(); eyes()
+        g.fillStyle(0x000000).fillEllipse(r, r + r / 2, 4, 3) // truffe
+        g.fillStyle(0xffffff).fillRect(r - 4, r + r / 1.7, 3, 5).fillRect(r + 1, r + r / 1.7, 3, 5) // grandes dents
+        break
+      case 'poporing':
+        body(); eyes(); mouth()
+        g.fillStyle(0x1b5e20).fillTriangle(r - 14, 4, r - 10, 4, r - 12, -6)
+        g.fillStyle(0x1b5e20).fillTriangle(r - 6, 2, r - 2, 2, r - 4, -9)
+        g.fillStyle(0x1b5e20).fillTriangle(r + 2, 2, r + 6, 2, r + 4, -9)
+        g.fillStyle(0x1b5e20).fillTriangle(r + 10, 4, r + 14, 4, r + 12, -6)
+        g.fillStyle(0x1b5e20).fillTriangle(r - 4, 0, r + 4, 0, r, -11) // épines
+        break
       case 'mandragore':
         g.fillStyle(0x33691e).fillTriangle(r - 10, 6, r - 2, 6, r - 12, -6) // feuilles
         g.fillStyle(0x33691e).fillTriangle(r + 10, 6, r + 2, 6, r + 12, -6)
@@ -192,6 +223,21 @@ export class PreloadScene extends Phaser.Scene {
         g.fillStyle(0x000000).fillEllipse(r, r + r / 2, 5, 4) // truffe
         g.fillStyle(0xffffff).fillTriangle(r - 4, r + r / 1.6, r - 1, r + r / 1.6, r - 2.5, r + r / 1.2) // croc
         break
+      case 'rocker':
+        g.fillStyle(m.color).fillTriangle(2, r + 12, r - 6, r + 4, 6, s - 2) // patte arrière pliée gauche
+        g.fillStyle(m.color).fillTriangle(s - 2, r + 12, r + 6, r + 4, s - 6, s - 2) // patte arrière pliée droite
+        body(); eyes()
+        g.fillStyle(0x4e342e).fillRect(r - 3, r + 1, 7, 11) // violon
+        g.lineStyle(1, 0xd7ccc8).beginPath(); g.moveTo(r - 9, r - 2); g.lineTo(r + 9, r + 13); g.strokePath() // archet
+        break
+      case 'willow':
+        g.fillStyle(dark).fillRoundedRect(r - 10, r - 4, 20, s - r, 4)
+        g.fillStyle(m.color).fillRoundedRect(r - 8, r - 2, 16, s - r - 4, 4) // tronc
+        g.fillStyle(0x2e7d32).fillCircle(r - 11, 0, 12).fillCircle(r + 11, 0, 12).fillCircle(r, -8, 14) // feuillage
+        g.fillStyle(0xffffff).fillCircle(r - 5, r + 4, 4).fillCircle(r + 5, r + 4, 4)
+        g.fillStyle(0x000000).fillCircle(r - 5, r + 4, 2).fillCircle(r + 5, r + 4, 2)
+        g.lineStyle(2, 0x000000, 0.7).beginPath(); g.arc(r, r + 14, 6, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false); g.strokePath()
+        break
       case 'scorpion':
         body()
         g.fillStyle(m.color).fillCircle(r - r / 1.2, r - 2, r / 3).fillCircle(r + r / 1.2, r - 2, r / 3) // pinces
@@ -199,6 +245,34 @@ export class PreloadScene extends Phaser.Scene {
         g.fillStyle(m.color).fillCircle(r, r - r / 1.1, r / 4) // queue
         g.fillStyle(0xffee58).fillCircle(r, r - r / 0.9, r / 8) // dard
         eyes()
+        break
+      case 'orc-guerrier':
+        body(); eyes()
+        g.fillStyle(0xffffff).fillTriangle(r - 8, r + r / 1.5, r - 3, r + r / 1.5, r - 6, r + r / 1) // croc gauche
+        g.fillStyle(0xffffff).fillTriangle(r + 3, r + r / 1.5, r + 8, r + r / 1.5, r + 6, r + r / 1) // croc droit
+        g.fillStyle(0xd32f2f).fillRect(2, r - 8, s - 4, 5) // bandeau
+        g.fillStyle(0x6d4c41).fillRect(s - 7, r - 16, 3, 26) // manche de hache
+        g.fillStyle(0x9e9e9e).fillTriangle(s - 5, r - 16, s - 2, r - 6, s - 5, r + 4) // lame
+        break
+      case 'zombie':
+        g.fillStyle(dark).fillCircle(r, r + 2, r - 1)
+        g.fillStyle(m.color).fillCircle(r, r + 2, r - 3)
+        g.fillStyle(0x33691e, 0.6).fillCircle(r - r / 1.6, r - r / 6, r / 5) // tache de pourriture
+        g.fillStyle(0xffffff).fillCircle(r - r / 3, r, r / 5); g.fillStyle(0x000000).fillCircle(r - r / 3, r, r / 10) // un œil valide
+        g.lineStyle(2, 0x000000).beginPath()
+        g.moveTo(r + r / 3 - 3, r - 3); g.lineTo(r + r / 3 + 3, r + 3); g.moveTo(r + r / 3 + 3, r - 3); g.lineTo(r + r / 3 - 3, r + 3) // œil en croix
+        g.strokePath()
+        for (let i = -2; i <= 1; i++) { g.beginPath(); g.moveTo(r - 6 + i * 3, r + r / 1.6); g.lineTo(r - 4 + i * 3, r + r / 1.4); g.strokePath() } // bouche recousue
+        break
+      case 'mini-baphomet':
+        g.fillStyle(0x2b1b1b).fillTriangle(r - 14, 2, r - 4, 4, r - 9, -16) // corne gauche
+        g.fillStyle(0x2b1b1b).fillTriangle(r + 14, 2, r + 4, 4, r + 9, -16) // corne droite
+        g.fillStyle(0x2b1b1b, 0.85).fillTriangle(0, r, r - 10, r - 4, 2, r + 12) // aile gauche
+        g.fillStyle(0x2b1b1b, 0.85).fillTriangle(s, r, r + 10, r - 4, s - 2, r + 12) // aile droite
+        body()
+        g.fillStyle(0xffe082).fillCircle(r - r / 3, r, r / 5).fillCircle(r + r / 3, r, r / 5) // yeux démoniaques
+        g.fillStyle(0xb71c1c).fillEllipse(r - r / 3, r, 3, r / 6).fillEllipse(r + r / 3, r, 3, r / 6) // pupilles fendues
+        g.fillStyle(0x2b1b1b).fillTriangle(r - 4, r + r / 1.3, r + 4, r + r / 1.3, r, r + r / 0.85) // barbiche
         break
       case 'momie':
         body()
@@ -226,6 +300,14 @@ export class PreloadScene extends Phaser.Scene {
         g.fillStyle(m.color).fillTriangle(r + 8, 6, r + 2, 4, r + 6, -6)
         body(); eyes()
         g.fillStyle(0xffffff).fillTriangle(r - 4, r + r / 2, r - 1, r + r / 2, r - 2.5, r + r / 1.3).fillTriangle(r + 1, r + r / 2, r + 4, r + r / 2, r + 2.5, r + r / 1.3) // crocs
+        break
+      case 'fantome':
+        g.fillStyle(m.color, 0.25).fillCircle(r, r + 2, r + 2) // halo translucide
+        g.fillStyle(m.color, 0.6).fillCircle(r, r - 2, r - 5) // tête flottante
+        g.fillStyle(m.color, 0.6).fillRect(r - r + 5, r - 2, s - 10, r) // corps
+        for (let i = -1; i <= 1; i++) g.fillStyle(m.color, 0.6).fillTriangle(r + i * 10 - 5, r + r - 4, r + i * 10 + 5, r + r - 4, r + i * 10, s - 2) // bas ondulé
+        g.fillStyle(0xffffff, 0.8).fillCircle(r - r / 3, r - 4, 3).fillCircle(r + r / 3, r - 4, 3)
+        g.fillStyle(0x263238).fillCircle(r - r / 3, r - 4, 1.5).fillCircle(r + r / 3, r - 4, 1.5)
         break
       case 'pharaon-scarabee':
         body()
