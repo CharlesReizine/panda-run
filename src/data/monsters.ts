@@ -23,8 +23,8 @@ const list: MonsterDef[] = [
       { kind: 'gold', chance: 1, min: 60, max: 100 },
       { kind: 'item', itemId: 'epee-bambou', chance: 1, min: 1, max: 1 },
       { kind: 'item', itemId: 'grelot-porte-bonheur', chance: 0.5, min: 1, max: 1 },
-      { kind: 'item', itemId: 'baton-feuillu', chance: 0.5, min: 1, max: 1 },
-      { kind: 'item', itemId: 'arc-souple', chance: 0.5, min: 1, max: 1 },
+      { kind: 'item', itemId: 'baton-feuillu', chance: 1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'arc-souple', chance: 1, min: 1, max: 1 },
     ],
   },
   {

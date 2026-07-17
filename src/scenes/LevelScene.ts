@@ -280,6 +280,7 @@ export class LevelScene extends Phaser.Scene {
   }
 
   usePotion() {
+    if (this.player.hp <= 0) return
     const p = getPlayer()
     if (p.potions <= 0 || this.player.hp >= this.player.stats.maxHp) return
     p.potions -= 1
