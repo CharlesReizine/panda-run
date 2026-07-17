@@ -1,7 +1,7 @@
 import type { PlayerState } from './player-state'
 
 export const SAVE_KEY = 'panda-run-save'
-const VERSION = 2
+const VERSION = 3
 
 interface SaveFile { version: number; player: PlayerState }
 
@@ -12,9 +12,19 @@ export function serialize(p: PlayerState): string {
 
 export function deserialize(json: string): PlayerState {
   const file = JSON.parse(json) as SaveFile
-  if (file.version === 1) return { ...file.player, materials: {} } // v1 → v2 : ajout de la collection de matériaux
-  if (file.version === 2) return file.player
-  throw new Error(`version de sauvegarde inconnue : ${file.version}`)
+  if (file.version < 1 || file.version > VERSION) throw new Error(`version de sauvegarde inconnue : ${file.version}`)
+  // migrations cumulatives vers la version courante
+  const raw = file.player as PlayerState & { unlockedSkills?: string[] }
+  let pl: PlayerState = raw
+  if (file.version === 1) pl = { ...pl, materials: {} } // v1 → v2 : collection de matériaux
+  if (file.version <= 2) {
+    // v2 → v3 : les skills débloqués deviennent des rangs (débloqué = rang 1)
+    const skillLevels: Record<string, number> = {}
+    for (const id of raw.unlockedSkills ?? []) skillLevels[id] = 1
+    pl = { ...pl, skillLevels }
+    delete (pl as PlayerState & { unlockedSkills?: string[] }).unlockedSkills
+  }
+  return pl
 }
 
 export function save(p: PlayerState, storage: Storage = localStorage): void {

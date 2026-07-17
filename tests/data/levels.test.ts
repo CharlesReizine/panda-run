@@ -39,8 +39,9 @@ describe('niveaux et carte', () => {
     for (const l of Object.values(LEVELS)) {
       const chests = (l.props ?? []).filter((p) => p.kind === 'coffre')
       for (const c of chests) {
+        const onGround = c.y === undefined // posé au sol
         const onPlatform = l.platforms.some((p) => c.x >= p.x && c.x < p.x + p.w && c.y === p.y - 1)
-        expect(onPlatform, `${l.id}: coffre x=${c.x} y=${c.y}`).toBe(true)
+        expect(onGround || onPlatform, `${l.id}: coffre x=${c.x} y=${c.y}`).toBe(true)
       }
     }
   })

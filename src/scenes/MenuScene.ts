@@ -6,6 +6,7 @@ import { ITEMS } from '../data/items'
 import { MATERIALS } from '../data/materials'
 import type { EquipSlot } from '../core/types'
 import { computeStats } from '../core/stats'
+import { MAX_SKILL_RANK } from '../core/player-state'
 
 const SLOTS: EquipSlot[] = ['weapon', 'armor', 'accessory']
 const SLOT_LABELS: Record<EquipSlot, string> = { weapon: 'Arme', armor: 'Armure', accessory: 'Accessoire' }
@@ -25,28 +26,37 @@ export class MenuScene extends Phaser.Scene {
     this.add.text(30, 20, `${p.name} — Nv ${p.level} — ATK ${stats.atk} / DEF ${stats.def} / PV ${stats.maxHp}`, { fontSize: '18px', color: '#ffffff' })
     this.add.text(30, 50, `Points de skill : ${p.skillPoints}`, { fontSize: '16px', color: '#ffd700' })
 
-    // Colonne skills
+    // Colonne skills : rang (points investis), équiper/retirer
     this.add.text(30, 85, 'SKILLS', { fontSize: '18px', color: '#80cbc4' })
+    const btn = (x: number, y: number, label: string, bg: number, onTap: () => void) =>
+      this.add.text(x, y, label, { fontSize: '13px', color: '#ffffff', backgroundColor: `#${bg.toString(16)}`, padding: { x: 6, y: 3 } })
+        .setInteractive().on('pointerdown', onTap)
+
     skillsOf(p.classId).forEach((s, i) => {
-      const y = 115 + i * 46
-      const unlocked = p.unlockedSkills.includes(s.id)
+      const y = 110 + i * 50
+      const rank = p.skillLevels[s.id] ?? 0
+      const unlocked = rank > 0
       const equippedAt = p.equippedSkills.indexOf(s.id)
-      const icon = this.add.image(40, y + 8, `skill-${s.id}`).setDisplaySize(32, 32)
+      const icon = this.add.image(40, y + 10, `skill-${s.id}`).setDisplaySize(34, 34)
       if (!unlocked) icon.setAlpha(0.35)
-      const label = `${s.name}${equippedAt >= 0 ? `  [slot ${equippedAt + 1}]` : ''}`
-      const t = this.add.text(64, y, label, { fontSize: '16px', color: unlocked ? '#ffffff' : '#78909c' }).setInteractive()
-      if (!unlocked && p.skillPoints > 0) {
-        this.add.text(320, y, '[Débloquer 1pt]', { fontSize: '14px', color: '#ffd700' }).setInteractive()
-          .on('pointerdown', () => { p.skillPoints--; p.unlockedSkills.push(s.id); save(p); this.render() })
+      const rankTxt = unlocked ? `  Nv ${rank}/${MAX_SKILL_RANK}` : ''
+      this.add.text(64, y, `${s.name}${rankTxt}`, { fontSize: '15px', color: unlocked ? '#ffffff' : '#78909c' })
+      if (equippedAt >= 0) this.add.text(64, y + 20, `équipé — slot ${equippedAt + 1}`, { fontSize: '11px', color: '#80cbc4' })
+
+      // bouton investir un point (débloque au rang 1, puis monte le rang)
+      if (p.skillPoints > 0 && rank < MAX_SKILL_RANK) {
+        btn(300, y, unlocked ? '+1 pt' : 'Débloquer', 0x8d6e00, () => {
+          p.skillPoints--; p.skillLevels[s.id] = rank + 1; save(p); this.render()
+        })
       }
+      // équiper / retirer
       if (unlocked && equippedAt < 0) {
-        t.on('pointerdown', () => {
+        btn(400, y, 'Équiper', 0x33691e, () => {
           const free = p.equippedSkills.indexOf(null)
-          p.equippedSkills[free >= 0 ? free : 3] = s.id
-          save(p); this.render()
+          p.equippedSkills[free >= 0 ? free : 3] = s.id; save(p); this.render()
         })
       } else if (equippedAt >= 0) {
-        t.on('pointerdown', () => { p.equippedSkills[equippedAt] = null; save(p); this.render() })
+        btn(400, y, 'Retirer', 0x8e2f2f, () => { p.equippedSkills[equippedAt] = null; save(p); this.render() })
       }
     })
 

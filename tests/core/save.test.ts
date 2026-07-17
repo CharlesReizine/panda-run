@@ -32,13 +32,16 @@ describe('save', () => {
     expect(() => deserialize('{"version":99,"player":{}}')).toThrow(/version/i)
   })
 
-  it('migre une save v1 (sans materials) vers v2', () => {
+  it('migre une save v1 → v3 (materials + skillLevels depuis unlockedSkills)', () => {
     const p = newPlayer('Panda')
-    const legacyPlayer: Record<string, unknown> = { ...p }
-    delete legacyPlayer.materials
-    const loaded = deserialize(JSON.stringify({ version: 1, player: legacyPlayer }))
+    const legacy: Record<string, unknown> = { ...p }
+    delete legacy.materials
+    delete legacy.skillLevels
+    legacy.unlockedSkills = ['calin-brutal', 'taillade']
+    const loaded = deserialize(JSON.stringify({ version: 1, player: legacy }))
     expect(loaded.materials).toEqual({})
-    expect(loaded.gold).toBe(p.gold)
+    expect(loaded.skillLevels).toEqual({ 'calin-brutal': 1, taillade: 1 })
+    expect((loaded as unknown as Record<string, unknown>).unlockedSkills).toBeUndefined()
   })
 
   it('save/load via storage', () => {

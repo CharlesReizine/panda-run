@@ -18,7 +18,7 @@ const list: LevelDef[] = [
   { id: 'zone1-1', name: 'Prairie de Prontera', biome: 'plaine', widthTiles: 90,
     platforms: [plat(20, 11, 4), plat(40, 9, 5)],
     spawns: [{ monsterId: 'gloopy', x: 18 }, { monsterId: 'gloopy', x: 30 }, { monsterId: 'gloopy', x: 45 }, { monsterId: 'mandragore', x: 60 }, { monsterId: 'gloopy', x: 75 }],
-    props: [prop('herbe', 10), prop('champignon', 38), prop('herbe', 68), prop('coffre', 22, 10), prop('coffre', 42, 8)] },
+    props: [prop('herbe', 10), prop('champignon', 38), prop('herbe', 68), prop('coffre', 7), prop('coffre', 42, 8)] },
   { id: 'zone1-2', name: 'Champs fleuris', biome: 'plaine', widthTiles: 100,
     platforms: [plat(25, 10, 5), plat(55, 11, 4), plat(70, 9, 4)],
     spawns: [{ monsterId: 'gloopy', x: 20 }, { monsterId: 'mandragore', x: 35 }, { monsterId: 'gloopy', x: 50 }, { monsterId: 'mandragore', x: 65 }, { monsterId: 'louveteau', x: 85 }],

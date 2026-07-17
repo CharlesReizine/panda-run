@@ -350,7 +350,7 @@ export class PreloadScene extends Phaser.Scene {
     }
 
     const g = this.add.graphics()
-    g.fillStyle(0xffee58).fillCircle(6, 6, 6); g.fillStyle(0xfff59d).fillCircle(4, 4, 2); g.generateTexture('projectile', 12, 12); g.clear()
+    g.fillStyle(0x000000, 0.25).fillCircle(9, 9, 8); g.fillStyle(0xffee58).fillCircle(9, 9, 7); g.fillStyle(0xffffff).fillCircle(6, 6, 3); g.generateTexture('projectile', 18, 18); g.clear()
     // faisceau (flèche perçante / laser) : capsule allongée lumineuse
     g.fillStyle(0xffffff).fillRoundedRect(0, 5, 48, 8, 4)
     g.fillStyle(0xfff176).fillRoundedRect(2, 6, 44, 6, 3); g.generateTexture('beam', 48, 18); g.clear()

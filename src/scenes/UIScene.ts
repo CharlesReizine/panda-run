@@ -78,10 +78,12 @@ export class UIScene extends Phaser.Scene {
     level.events.on('player-hp', this.onPlayerHp)
     this.game.events.on('hud-refresh', this.refresh, this)
     this.game.events.on('skill-cooldown', this.onCooldown, this)
+    this.game.events.on('player-level-up', this.onLevelUp, this)
     this.events.once('shutdown', () => {
       level.events.off('player-hp', this.onPlayerHp)
       this.game.events.off('hud-refresh', this.refresh, this)
       this.game.events.off('skill-cooldown', this.onCooldown, this)
+      this.game.events.off('player-level-up', this.onLevelUp, this)
     })
     this.refresh()
   }
@@ -95,6 +97,14 @@ export class UIScene extends Phaser.Scene {
 
   private onCooldown(slot: number, untilMs: number) {
     this.cooldownUntil[slot] = untilMs
+  }
+
+  // notif de passage de niveau, affichée sous les barres (haut-gauche)
+  private onLevelUp(level: number) {
+    const txt = this.add.text(14, 70, `Niveau ${level} ! +1 point de skill`, {
+      fontSize: '15px', color: '#ffd54f', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3,
+    })
+    this.tweens.add({ targets: txt, y: 64, alpha: 0, duration: 2500, ease: 'Cubic.in', onComplete: () => txt.destroy() })
   }
 
   refresh() {

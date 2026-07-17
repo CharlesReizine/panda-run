@@ -36,7 +36,7 @@ export class ClassChangeScene extends Phaser.Scene {
     const p = getPlayer()
     changeClass(p, id)
     const firstSkill = CLASSES[id].skillIds[0]!
-    p.unlockedSkills.push(firstSkill)
+    p.skillLevels[firstSkill] = 1
     p.equippedSkills = [firstSkill, null, null, null]
     save(p)
     const flash = this.add.rectangle(480, 270, 960, 540, 0xffffff).setAlpha(0)

@@ -92,7 +92,14 @@ export class LevelScene extends Phaser.Scene {
     this.props = this.physics.add.group()
     for (const propDef of this.levelDef.props ?? []) {
       const yTile = propDef.y ?? GROUND_ROW - 1
-      this.props.add(new Prop(this, propDef.x * TILE + TILE / 2, yTile * TILE + TILE / 2, PROPS[propDef.kind]!))
+      const prop = new Prop(this, propDef.x * TILE + TILE / 2, yTile * TILE + TILE / 2, PROPS[propDef.kind]!)
+      this.props.add(prop)
+      // les coffres attirent l'œil : petit rebond + éclat régulier
+      if (propDef.kind === 'coffre') {
+        this.tweens.add({ targets: prop, y: prop.y - 5, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+        const glint = this.add.text(prop.x, prop.y - 22, '✦', { fontSize: '16px', color: '#fff59d' }).setOrigin(0.5)
+        this.tweens.add({ targets: glint, alpha: 0.2, scale: 1.4, duration: 600, yoyo: true, repeat: -1 })
+      }
     }
 
     // contact ennemi → joueur
@@ -290,6 +297,7 @@ export class LevelScene extends Phaser.Scene {
   // projectile allié tiré depuis la main, à hauteur des monstres
   private spawnPlayerProjectile(damage: number, rangePx: number): Projectile {
     const proj = new Projectile(this, this.player.x + this.player.facing * 22, this.player.y + 16, this.player.facing, 0, damage, true, rangePx)
+    proj.setScale(1.5) // bien visible
     this.playerProjectiles.add(proj)
     return proj
   }
@@ -309,7 +317,8 @@ export class LevelScene extends Phaser.Scene {
     if (id.includes('feu') || id.includes('meteore')) return 0xff7043
     if (id.includes('givre')) return 0x4dd0e1
     if (id.includes('eclair')) return 0xfff176
-    if (id.includes('fleche') || id.includes('tir') || id.includes('salve') || id === 'bambou-jete' || id === 'fleche-de-bambou') return 0xd7a86e
+    if (id === 'bambou-jete' || id === 'fleche-de-bambou') return 0x9ccc65 // bambou vert
+    if (id.includes('fleche') || id.includes('tir') || id.includes('salve')) return 0xd7a86e
     if (id.includes('arcanique')) return 0xce93d8
     return 0xffd54f
   }
@@ -343,15 +352,18 @@ export class LevelScene extends Phaser.Scene {
 
     const { atk, maxHp } = this.player.stats
     const color = this.skillColor(skill.id)
+    // rang investi : +25% de puissance par point au-delà du 1er
+    const rank = p.skillLevels[skill.id] ?? 1
+    const mult = skill.multiplier * (1 + 0.25 * (rank - 1))
     if (skill.kind === 'melee') {
       this.player.playAttack()
       this.slashFx(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, color)
-      this.meleeHit(skill.range, skill.multiplier)
+      this.meleeHit(skill.range, mult)
     } else if (skill.kind === 'aoe') {
       for (const obj of this.enemies.getChildren()) {
         const e = obj as Enemy
         if (Phaser.Math.Distance.Between(this.player.x, this.player.y, e.x, e.y) <= skill.range) {
-          e.takeDamage(physicalDamage(atk, e.monster.def, skill.multiplier))
+          e.takeDamage(physicalDamage(atk, e.monster.def, mult))
         }
       }
       for (const obj of this.props.getChildren()) {
@@ -362,7 +374,7 @@ export class LevelScene extends Phaser.Scene {
       }
       this.aoeRing(this.player.x, this.player.y, skill.range, color)
     } else if (skill.kind === 'projectile') {
-      const proj = this.spawnPlayerProjectile(atk * skill.multiplier, skill.range)
+      const proj = this.spawnPlayerProjectile(atk * mult, skill.range)
       if (skill.pierce) {
         // gros faisceau qui transperce tout sur son trajet
         proj.pierce = true
@@ -373,7 +385,7 @@ export class LevelScene extends Phaser.Scene {
         else if (skill.multiplier >= 1.6) proj.setScale(1.3)
       }
     } else if (skill.kind === 'heal') {
-      this.player.heal(Math.round(maxHp * skill.multiplier))
+      this.player.heal(Math.round(maxHp * mult))
       this.aoeRing(this.player.x, this.player.y, 70, 0x66bb6a)
       for (let i = 0; i < 5; i++) {
         const spark = this.add.text(this.player.x + Phaser.Math.Between(-20, 20), this.player.y + 10, '✦', { fontSize: '16px', color: '#8aff9a' }).setOrigin(0.5).setDepth(6)
