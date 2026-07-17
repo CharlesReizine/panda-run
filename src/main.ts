@@ -1,5 +1,8 @@
 import Phaser from 'phaser'
 import { BootScene } from './scenes/BootScene'
+import { PreloadScene } from './scenes/PreloadScene'
+import { TitleScene } from './scenes/TitleScene'
+import { WorldMapScene } from './scenes/WorldMapScene'
 
 new Phaser.Game({
   type: Phaser.AUTO,
@@ -9,5 +12,5 @@ new Phaser.Game({
   backgroundColor: '#87ceeb',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   physics: { default: 'arcade', arcade: { gravity: { x: 0, y: 1200 } } },
-  scene: [BootScene],
+  scene: [BootScene, PreloadScene, TitleScene, WorldMapScene],
 })
