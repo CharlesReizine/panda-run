@@ -1,6 +1,5 @@
 import Phaser from 'phaser'
 import { WORLD_NODES, WORLD_EDGES, isNodeUnlocked } from '../data/worldmap'
-import { LEVELS } from '../data/levels'
 import { getPlayer } from '../state'
 import { canChangeClass } from '../core/progression'
 
