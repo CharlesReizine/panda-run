@@ -36,6 +36,7 @@ function fitViewport() {
   }
   game.scale.refresh()
 }
+game.events.once(Phaser.Core.Events.READY, fitViewport)
 window.visualViewport?.addEventListener('resize', fitViewport)
 window.visualViewport?.addEventListener('scroll', fitViewport)
 window.addEventListener('resize', () => setTimeout(fitViewport, 150))
