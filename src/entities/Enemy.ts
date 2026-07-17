@@ -25,6 +25,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   takeDamage(amount: number) {
+    if (!this.active) return
     this.hp -= amount
     // Phaser v4 : setTintFill() n'accepte plus de couleur en argument (silhouette blanche fixe)
     this.setTintFill()

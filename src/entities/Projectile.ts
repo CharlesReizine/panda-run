@@ -4,6 +4,7 @@ export class Projectile extends Phaser.Physics.Arcade.Sprite {
   damage: number
   fromPlayer: boolean
   private startX: number
+  private startY: number
   private rangePx: number
 
   constructor(scene: Phaser.Scene, x: number, y: number, dirX: number, dirY: number, damage: number, fromPlayer: boolean, rangePx: number) {
@@ -16,12 +17,13 @@ export class Projectile extends Phaser.Physics.Arcade.Sprite {
     this.damage = damage
     this.fromPlayer = fromPlayer
     this.startX = x
+    this.startY = y
     this.rangePx = rangePx
     if (!fromPlayer) this.setTint(0xff5252)
   }
 
   preUpdate(t: number, d: number) {
     super.preUpdate(t, d)
-    if (Math.abs(this.x - this.startX) > this.rangePx) this.destroy()
+    if (Phaser.Math.Distance.Between(this.x, this.y, this.startX, this.startY) > this.rangePx) this.destroy()
   }
 }

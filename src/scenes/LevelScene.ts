@@ -71,7 +71,7 @@ export class LevelScene extends Phaser.Scene {
       ;(proj as Projectile).destroy()
     })
 
-    this.events.on('enemy-died', (e: Enemy) => this.onEnemyDied(e))
+    this.events.on('enemy-died', this.onEnemyDied, this)
     this.game.events.on('input-attack', this.basicAttack, this)
     this.input.keyboard!.on('keydown-X', this.basicAttack, this)
 
@@ -94,6 +94,7 @@ export class LevelScene extends Phaser.Scene {
       this.game.events.off('input-jump-down', this.onJumpDown, this)
       this.game.events.off('input-jump-up', this.onJumpUp, this)
       this.game.events.off('input-attack', this.basicAttack, this)
+      this.events.off('enemy-died', this.onEnemyDied, this)
       this.scene.stop('UI')
     })
     this.game.events.emit('hud-refresh')
