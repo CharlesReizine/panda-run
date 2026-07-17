@@ -20,7 +20,7 @@ describe('données monstres/items', () => {
     }
   })
 
-  it('exactement 2 boss', () => {
-    expect(Object.values(MONSTERS).filter((m) => m.boss)).toHaveLength(2)
+  it('exactement 6 boss', () => {
+    expect(Object.values(MONSTERS).filter((m) => m.boss)).toHaveLength(6)
   })
 })

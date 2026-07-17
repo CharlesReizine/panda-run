@@ -6,10 +6,10 @@ import { WORLD_NODES, WORLD_EDGES, START_NODE, isNodeUnlocked } from '../../src/
 import { unreachablePlatforms, maxJumpTiles } from '../../src/core/platforming'
 
 describe('niveaux et carte', () => {
-  it('10 niveaux dont 2 boss', () => {
+  it('25 niveaux dont 6 boss', () => {
     const all = Object.values(LEVELS)
-    expect(all).toHaveLength(10)
-    expect(all.filter((l) => l.boss)).toHaveLength(2)
+    expect(all).toHaveLength(25)
+    expect(all.filter((l) => l.boss)).toHaveLength(6)
   })
 
   it('aucune plateforme inatteignable (écart vertical toujours < saut max)', () => {

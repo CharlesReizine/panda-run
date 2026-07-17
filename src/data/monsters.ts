@@ -49,6 +49,66 @@ const list: MonsterDef[] = [
       { kind: 'item', itemId: 'griffe-royale', chance: 0.3, min: 1, max: 1 },
     ],
   },
+  // Zone 3 — jungle
+  { id: 'flora-vorace', name: 'Flora vorace', color: 0xb0245e, hp: 190, atk: 95, def: 20, xp: 1450, speed: 0, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'spore-lumineuse', chance: 0.05, min: 1, max: 1 }] },
+  { id: 'frelon-geant', name: 'Frelon géant', color: 0xf9a825, hp: 160, atk: 110, def: 12, xp: 1400, speed: 130, behavior: 'charge', drops: [goldMid, potion, { kind: 'material', materialId: 'spore-lumineuse', chance: 0.05, min: 1, max: 1 }] },
+  { id: 'singe-grimpeur', name: 'Singe grimpeur', color: 0x795548, hp: 210, atk: 100, def: 18, xp: 1500, speed: 90, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'herbe-tendre', chance: 0.06, min: 1, max: 1 }] },
+  // Route alternative — plage
+  { id: 'crabe-geant', name: 'Crabe géant', color: 0xe64a19, hp: 230, atk: 90, def: 30, xp: 1400, speed: 40, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] },
+  { id: 'meduse', name: 'Méduse', color: 0xba68c8, hp: 150, atk: 100, def: 10, xp: 1350, speed: 25, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] },
+  // Zone 4 — montagne
+  { id: 'harpie', name: 'Harpie', color: 0x8d6e63, hp: 260, atk: 130, def: 20, xp: 2200, speed: 140, behavior: 'charge', drops: [goldMid, potion, { kind: 'material', materialId: 'croc-de-loup', chance: 0.05, min: 1, max: 1 }] },
+  { id: 'yeti', name: 'Yéti', color: 0xeceff1, hp: 380, atk: 140, def: 35, xp: 2600, speed: 45, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.06, min: 1, max: 1 }, { kind: 'item', itemId: 'plastron-feuilles', chance: 0.04, min: 1, max: 1 }] },
+  // Route alternative — carrière
+  { id: 'golem-de-pierre', name: 'Golem de pierre', color: 0x8a8078, hp: 340, atk: 120, def: 40, xp: 2400, speed: 25, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.08, min: 1, max: 1 }, { kind: 'item', itemId: 'carapace-scarabee', chance: 0.03, min: 1, max: 1 }] },
+  { id: 'gobelin-mineur', name: 'Gobelin mineur', color: 0x6d8a3f, hp: 220, atk: 110, def: 18, xp: 2000, speed: 60, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.06, min: 1, max: 1 }] },
+  // Zone 5 — cimetière
+  { id: 'goule', name: 'Goule', color: 0x556b2f, hp: 420, atk: 160, def: 30, xp: 3200, speed: 70, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }, { kind: 'item', itemId: 'baton-feuillu', chance: 0.03, min: 1, max: 1 }] },
+  { id: 'banshee', name: 'Banshee', color: 0x9575cd, hp: 320, atk: 180, def: 20, xp: 3000, speed: 50, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] },
+  // Zone 6 — enfer
+  { id: 'diablotin', name: 'Diablotin', color: 0xd84315, hp: 480, atk: 190, def: 35, xp: 4200, speed: 150, behavior: 'charge', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.06, min: 1, max: 1 }] },
+  { id: 'gargouille', name: 'Gargouille', color: 0x546e7a, hp: 620, atk: 200, def: 55, xp: 4800, speed: 60, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.06, min: 1, max: 1 }, { kind: 'item', itemId: 'arc-souple', chance: 0.03, min: 1, max: 1 }] },
+  // Boss — zone 3 (jungle)
+  {
+    id: 'seigneur-liane', name: 'Seigneur Liane', color: 0x1b5e20, hp: 4200, atk: 65, def: 30, xp: 9000, speed: 40, behavior: 'charge', boss: true,
+    drops: [
+      { kind: 'gold', chance: 1, min: 200, max: 320 },
+      { kind: 'item', itemId: 'baton-feuillu', chance: 1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'plastron-feuilles', chance: 1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'grelot-porte-bonheur', chance: 0.5, min: 1, max: 1 },
+    ],
+  },
+  // Boss — zone 4 (montagne)
+  {
+    id: 'golem-ancien', name: 'Golem Ancien', color: 0x78909c, hp: 6500, atk: 90, def: 45, xp: 13000, speed: 30, behavior: 'contact', boss: true,
+    drops: [
+      { kind: 'gold', chance: 1, min: 280, max: 420 },
+      { kind: 'item', itemId: 'carapace-scarabee', chance: 1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'griffe-royale', chance: 1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'amulette-pharaon', chance: 0.4, min: 1, max: 1 },
+    ],
+  },
+  // Boss — zone 5 (cimetière)
+  {
+    id: 'roi-liche', name: 'Roi Liche', color: 0x4527a0, hp: 9000, atk: 130, def: 40, xp: 18000, speed: 40, behavior: 'projectile', boss: true,
+    drops: [
+      { kind: 'gold', chance: 1, min: 350, max: 520 },
+      { kind: 'item', itemId: 'griffe-royale', chance: 1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'amulette-pharaon', chance: 1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'grelot-porte-bonheur', chance: 0.5, min: 1, max: 1 },
+    ],
+  },
+  // Boss final — zone 6 (enfer)
+  {
+    id: 'seigneur-dechu', name: 'Seigneur Déchu', color: 0x8a1414, hp: 14000, atk: 190, def: 55, xp: 30000, speed: 70, behavior: 'charge', boss: true,
+    drops: [
+      { kind: 'gold', chance: 1, min: 500, max: 800 },
+      { kind: 'item', itemId: 'griffe-royale', chance: 1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'carapace-scarabee', chance: 1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'amulette-pharaon', chance: 1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'grelot-porte-bonheur', chance: 1, min: 1, max: 1 },
+    ],
+  },
 ]
 
 export const MONSTERS: Record<string, MonsterDef> = Object.fromEntries(list.map((m) => [m.id, m]))

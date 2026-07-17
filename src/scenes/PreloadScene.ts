@@ -316,6 +316,139 @@ export class PreloadScene extends Phaser.Scene {
         g.lineStyle(3, 0xffd54f); g.beginPath(); g.moveTo(r, 6); g.lineTo(r - r / 2, r); g.moveTo(r, 6); g.lineTo(r + r / 2, r); g.strokePath() // antennes dorées
         eyes()
         break
+      case 'flora-vorace':
+        g.fillStyle(0x1b5e20).fillTriangle(r - 16, 6, r - 4, 4, r - 10, -14) // pétales
+        g.fillStyle(0x1b5e20).fillTriangle(r + 16, 6, r + 4, 4, r + 10, -14)
+        g.fillStyle(0x2e7d32).fillTriangle(r - 6, 4, r + 6, 4, r, -18)
+        body()
+        g.fillStyle(0x1b1b1b).fillEllipse(r, r + r / 2.2, r / 1.3, r / 2.2) // grande gueule
+        g.fillStyle(0xffffff).fillTriangle(r - 8, r + r / 3, r - 4, r + r / 3, r - 6, r + r / 1.3).fillTriangle(r + 4, r + r / 3, r + 8, r + r / 3, r + 6, r + r / 1.3) // crocs
+        eyes(-4)
+        break
+      case 'frelon-geant':
+        g.fillStyle(0xfff9c4, 0.7).fillEllipse(4, r - 6, 16, 22).fillEllipse(s - 4, r - 6, 16, 22) // ailes
+        body()
+        g.fillStyle(0x1b1b1b).fillRect(2, r - 4, s - 4, 5).fillRect(2, r + 6, s - 4, 5) // rayures
+        g.fillStyle(m.color).fillTriangle(r - 3, s - 6, r + 3, s - 6, r, s + 6) // dard
+        eyes()
+        break
+      case 'singe-grimpeur':
+        g.fillStyle(m.color).fillCircle(r - 15, r - 4, 9).fillCircle(r + 15, r - 4, 9) // oreilles
+        g.fillStyle(0xd7ccc8).fillCircle(r - 15, r - 4, 6).fillCircle(r + 15, r - 4, 6)
+        body()
+        g.fillStyle(0xd7ccc8).fillEllipse(r, r + 6, r / 1.1, r / 1.6) // museau clair
+        eyes(2); mouth()
+        g.lineStyle(3, m.color).beginPath(); g.moveTo(s - 4, r); g.arc(s + 6, r - 6, 12, Phaser.Math.DegToRad(90), Phaser.Math.DegToRad(220), false); g.strokePath() // queue
+        break
+      case 'crabe-geant':
+        g.fillStyle(m.color).fillCircle(r - r / 1.1, r - 2, r / 2.4).fillCircle(r + r / 1.1, r - 2, r / 2.4) // pinces
+        g.fillStyle(0xbf360c).fillCircle(r - r / 1.1, r - 2, r / 4).fillCircle(r + r / 1.1, r - 2, r / 4)
+        for (let i = -1; i <= 1; i += 2) { g.fillStyle(m.color).fillTriangle(r + i * r / 1.4, r + 8, r + i * (r / 1.4 - 6), r + 6, r + i * (r / 1.4 - 2), r + 16) } // pattes
+        body(); eyes(-6)
+        break
+      case 'meduse':
+        g.fillStyle(m.color, 0.55).fillEllipse(r, r - 4, s - 10, r + 4) // ombrelle
+        g.fillStyle(0xffffff, 0.35).fillEllipse(r, r - 8, s - 20, r / 1.4)
+        for (let i = -2; i <= 2; i++) { g.lineStyle(2, m.color, 0.7).beginPath(); g.moveTo(r + i * 6, r + 6); g.lineTo(r + i * 8, s - 2); g.strokePath() } // tentacules
+        g.fillStyle(0xffffff, 0.8).fillCircle(r - r / 3, r - 6, 3).fillCircle(r + r / 3, r - 6, 3)
+        g.fillStyle(0x4a148c).fillCircle(r - r / 3, r - 6, 1.5).fillCircle(r + r / 3, r - 6, 1.5)
+        break
+      case 'harpie':
+        g.fillStyle(m.color).fillTriangle(0, r, r - 4, r - 10, 4, r + 18) // aile gauche
+        g.fillStyle(m.color).fillTriangle(s, r, r + 4, r - 10, s - 4, r + 18) // aile droite
+        body(); eyes()
+        g.fillStyle(0xffca28).fillTriangle(r - 4, r + r / 2, r + 4, r + r / 2, r, r + r / 1.1) // bec
+        g.fillStyle(0xffca28).fillTriangle(2, s - 4, 8, s - 4, 5, s + 6).fillTriangle(s - 2, s - 4, s - 8, s - 4, s - 5, s + 6) // serres
+        break
+      case 'yeti':
+        g.fillStyle(dark).fillCircle(r, r + 2, r - 1)
+        g.fillStyle(m.color).fillCircle(r, r + 2, r - 3)
+        for (let i = 0; i < 6; i++) g.fillStyle(0xdcdcdc).fillTriangle(4 + i * (s - 8) / 5, r - 2, 8 + i * (s - 8) / 5, r - 2, 6 + i * (s - 8) / 5, r - 10) // fourrure hérissée
+        g.fillStyle(0x37474f).fillEllipse(r - r / 3, r, r / 5, r / 6).fillEllipse(r + r / 3, r, r / 5, r / 6) // yeux plissés
+        g.lineStyle(2, 0x000000, 0.7).beginPath(); g.arc(r, r + r / 1.5, r / 3, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340), false); g.strokePath()
+        break
+      case 'golem-de-pierre':
+        g.fillStyle(0x5a5148).fillRoundedRect(6, 4, s - 12, s - 4, 4)
+        g.fillStyle(m.color).fillRoundedRect(9, 7, s - 18, s - 10, 4)
+        g.lineStyle(2, 0x5a5148).beginPath(); g.moveTo(10, r); g.lineTo(r, r - 6); g.lineTo(s - 10, r + 4); g.strokePath() // lézardes
+        g.fillStyle(0xffca28).fillCircle(r - r / 3, r, r / 6).fillCircle(r + r / 3, r, r / 6) // yeux luminescents
+        break
+      case 'gobelin-mineur':
+        g.fillStyle(m.color).fillTriangle(r - 16, 2, r - 4, 6, r - 12, -10) // oreille pointue gauche
+        g.fillStyle(m.color).fillTriangle(r + 16, 2, r + 4, 6, r + 12, -10)
+        body(); eyes()
+        g.fillStyle(0xffffff).fillTriangle(r - 3, r + r / 1.6, r + 1, r + r / 1.6, r - 1, r + r / 1.1) // croc
+        g.fillStyle(0x6d4c41).fillRect(s - 6, r - 18, 3, 24) // manche pioche
+        g.fillStyle(0x9e9e9e).fillTriangle(s - 10, r - 18, s + 2, r - 18, s - 4, r - 10) // tête de pioche
+        break
+      case 'goule':
+        body()
+        g.fillStyle(0x33691e, 0.5).fillEllipse(r - r / 1.5, r - r / 4, r / 4, r / 5).fillEllipse(r + r / 2, r + r / 3, r / 5, r / 6) // taches nécrosées
+        g.fillStyle(0xffffff).fillCircle(r - r / 3, r, r / 5).fillCircle(r + r / 3, r, r / 5)
+        g.fillStyle(0xb71c1c).fillCircle(r - r / 3, r, r / 10).fillCircle(r + r / 3, r, r / 10) // yeux injectés
+        for (let i = -1; i <= 1; i += 2) g.fillStyle(0x37474f).fillTriangle(r + i * r / 1.3, r + 6, r + i * (r / 1.3 - 4), r + 4, r + i * (r / 1.3 - 6), r + 16) // griffes
+        break
+      case 'banshee':
+        g.fillStyle(m.color, 0.2).fillCircle(r, r + 2, r + 2)
+        g.fillStyle(m.color, 0.6).fillCircle(r, r - 2, r - 5)
+        g.fillStyle(m.color, 0.6).fillRect(5, r - 2, s - 10, r)
+        for (let i = -1; i <= 1; i++) g.fillStyle(m.color, 0.6).fillTriangle(r + i * 10 - 5, r + r - 4, r + i * 10 + 5, r + r - 4, r + i * 10, s - 2)
+        g.fillStyle(0x000000).fillEllipse(r, r + 2, r / 3, r / 2.2) // bouche hurlante
+        g.fillStyle(0xffffff, 0.9).fillCircle(r - r / 3, r - 6, 3).fillCircle(r + r / 3, r - 6, 3)
+        break
+      case 'diablotin':
+        g.fillStyle(0x8a1414).fillTriangle(r - 12, 2, r - 4, 4, r - 9, -12) // cornes
+        g.fillStyle(0x8a1414).fillTriangle(r + 12, 2, r + 4, 4, r + 9, -12)
+        body(); eyes()
+        g.fillStyle(0xffee58).fillCircle(r - r / 3, r, r / 6).fillCircle(r + r / 3, r, r / 6)
+        g.fillStyle(0xb71c1c).fillEllipse(r - r / 3, r, 2, r / 8).fillEllipse(r + r / 3, r, 2, r / 8)
+        g.lineStyle(2, m.color).beginPath(); g.moveTo(s - 4, r + 10); g.arc(s + 4, r + 14, 8, Phaser.Math.DegToRad(160), Phaser.Math.DegToRad(320), false); g.strokePath() // queue fourchue
+        break
+      case 'gargouille':
+        g.fillStyle(0x37474f).fillTriangle(2, r, r - 6, r - 10, 4, r + 20) // aile gauche
+        g.fillStyle(0x37474f).fillTriangle(s - 2, r, r + 6, r - 10, s - 4, r + 20) // aile droite
+        g.fillStyle(0x2b1b1b).fillTriangle(r - 12, 4, r - 4, 6, r - 10, -10) // cornes
+        g.fillStyle(0x2b1b1b).fillTriangle(r + 12, 4, r + 4, 6, r + 10, -10)
+        body()
+        g.fillStyle(0xffee58).fillCircle(r - r / 3, r, r / 6).fillCircle(r + r / 3, r, r / 6)
+        mouth()
+        break
+      case 'seigneur-liane':
+        for (let i = 0; i < 5; i++) { const a = Phaser.Math.DegToRad(i * 72 - 90); g.fillStyle(0x1b5e20).fillTriangle(r, r - 6, r + Math.cos(a) * 34, r + Math.sin(a) * 34 - 6, r + Math.cos(a + 0.5) * 20, r + Math.sin(a + 0.5) * 20 - 6) } // grande fleur de pétales
+        body()
+        g.fillStyle(0x0d1b0d).fillEllipse(r, r + r / 2, r / 1.1, r / 2) // gueule béante
+        g.fillStyle(0xffffff).fillTriangle(r - 12, r + r / 3, r - 6, r + r / 3, r - 9, r + r / 0.9).fillTriangle(r + 6, r + r / 3, r + 12, r + r / 3, r + 9, r + r / 0.9)
+        eyes(-8)
+        g.lineStyle(3, 0x2e7d32); g.beginPath(); g.arc(-6, s / 2, 26, Phaser.Math.DegToRad(-60), Phaser.Math.DegToRad(60), false); g.arc(s + 6, s / 2, 26, Phaser.Math.DegToRad(120), Phaser.Math.DegToRad(240), false); g.strokePath() // lianes latérales
+        break
+      case 'golem-ancien':
+        g.fillStyle(0x37474f).fillRoundedRect(4, 2, s - 8, s + 2, 6)
+        g.fillStyle(m.color).fillRoundedRect(8, 6, s - 16, s - 8, 6)
+        g.lineStyle(2, 0x37474f).beginPath(); g.moveTo(10, r - 6); g.lineTo(r + 4, r); g.lineTo(s - 12, r + 10); g.moveTo(r - 10, 8); g.lineTo(r, r - 4); g.strokePath() // lézardes anciennes
+        g.fillStyle(0x4fc3f7).fillCircle(r - r / 3, r, r / 5).fillCircle(r + r / 3, r, r / 5) // yeux runiques
+        g.fillStyle(0x4fc3f7, 0.5).fillCircle(r - r / 3, r, r / 3).fillCircle(r + r / 3, r, r / 3)
+        g.fillStyle(0x263238).fillRect(r - 10, s - 10, 20, 6) // mâchoire de pierre
+        break
+      case 'roi-liche':
+        body()
+        g.fillStyle(0x000000).fillCircle(r - r / 3, r, r / 4).fillCircle(r + r / 3, r, r / 4) // orbites
+        g.fillStyle(0x9575cd).fillCircle(r - r / 3, r, r / 8).fillCircle(r + r / 3, r, r / 8) // lueur spectrale
+        g.lineStyle(2, 0x000000).beginPath(); g.moveTo(r - r / 2, r + r / 1.4); g.lineTo(r + r / 2, r + r / 1.4); g.strokePath()
+        for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(r + i * 4, r + r / 1.6); g.lineTo(r + i * 4, r + r / 1.2); g.strokePath() }
+        g.fillStyle(0xffd54f).fillTriangle(r - 20, 6, r - 8, 6, r - 14, -14).fillTriangle(r - 4, 6, r + 4, 6, r, -18).fillTriangle(r + 8, 6, r + 20, 6, r + 14, -14) // couronne du roi-liche
+        g.fillStyle(0x4527a0, 0.5).fillRect(0, r + 12, s, s - r - 8) // robe spectrale
+        break
+      case 'seigneur-dechu':
+        g.fillStyle(0x2b1b1b).fillTriangle(r - 20, 6, r - 6, 8, r - 14, -22) // grandes cornes
+        g.fillStyle(0x2b1b1b).fillTriangle(r + 20, 6, r + 6, 8, r + 14, -22)
+        g.fillStyle(0x2b1b1b, 0.9).fillTriangle(0, r - 4, r - 12, r - 14, 2, r + 26) // ailes démoniaques
+        g.fillStyle(0x2b1b1b, 0.9).fillTriangle(s, r - 4, r + 12, r - 14, s - 2, r + 26)
+        body()
+        g.fillStyle(0xffee58).fillCircle(r - r / 3, r, r / 5).fillCircle(r + r / 3, r, r / 5)
+        g.fillStyle(0xb71c1c).fillEllipse(r - r / 3, r, 3, r / 6).fillEllipse(r + r / 3, r, 3, r / 6) // pupilles fendues
+        g.fillStyle(0xffffff).fillTriangle(r - 10, r + r / 1.5, r - 4, r + r / 1.5, r - 7, r + r / 1) .fillTriangle(r + 4, r + r / 1.5, r + 10, r + r / 1.5, r + 7, r + r / 1) // crocs immenses
+        g.fillStyle(0xff7043, 0.5).fillCircle(r, s + 2, r / 1.3) // aura de flammes au sol
+        break
       default:
         body(); eyes(); mouth()
     }
