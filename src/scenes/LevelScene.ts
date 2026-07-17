@@ -9,6 +9,8 @@ import { grantXp } from '../core/progression'
 import { emptyControls, mergeControls, type ControlsState } from '../core/controls'
 import { getPlayer } from '../state'
 import { save } from '../core/save'
+import { CooldownTracker } from '../core/skill-executor'
+import { SKILLS } from '../data/skills'
 import type { UIScene } from './UIScene'
 
 export const TILE = 32
@@ -24,6 +26,7 @@ export class LevelScene extends Phaser.Scene {
   private jumpHeld = false
   private invulnUntil = 0
   private nextBasicAttackAt = 0
+  private cooldowns = new CooldownTracker()
 
   constructor() { super('Level') }
 
@@ -74,6 +77,10 @@ export class LevelScene extends Phaser.Scene {
     this.events.on('enemy-died', this.onEnemyDied, this)
     this.game.events.on('input-attack', this.basicAttack, this)
     this.input.keyboard!.on('keydown-X', this.basicAttack, this)
+    this.game.events.on('input-skill', this.castSkill, this)
+    for (const [key, slot] of [['ONE', 0], ['TWO', 1], ['THREE', 2], ['FOUR', 3]] as const) {
+      this.input.keyboard!.on(`keydown-${key}`, () => this.castSkill(slot))
+    }
 
     // porte de sortie en fin de niveau
     const exit = this.physics.add.staticImage(widthPx - 2 * TILE, GROUND_ROW * TILE - 24 + TILE, 'exit')
@@ -94,6 +101,7 @@ export class LevelScene extends Phaser.Scene {
       this.game.events.off('input-jump-down', this.onJumpDown, this)
       this.game.events.off('input-jump-up', this.onJumpUp, this)
       this.game.events.off('input-attack', this.basicAttack, this)
+      this.game.events.off('input-skill', this.castSkill, this)
       this.events.off('enemy-died', this.onEnemyDied, this)
       this.scene.stop('UI')
     })
@@ -133,6 +141,35 @@ export class LevelScene extends Phaser.Scene {
     if (this.time.now < this.nextBasicAttackAt) return
     this.nextBasicAttackAt = this.time.now + 1000 / this.player.stats.attackSpeed
     this.damageEnemiesInRect(this.player.x + this.player.facing * 30, this.player.y, 60, 50, 1)
+  }
+
+  castSkill(slot: number) {
+    const p = getPlayer()
+    const skillId = p.equippedSkills[slot]
+    if (!skillId || !this.cooldowns.canUse(slot, this.time.now)) return
+    const skill = SKILLS[skillId]!
+    this.cooldowns.use(slot, this.time.now, skill.cooldownMs)
+    this.game.events.emit('skill-cooldown', slot, this.time.now + skill.cooldownMs)
+
+    const { atk, maxHp } = this.player.stats
+    if (skill.kind === 'melee') {
+      this.damageEnemiesInRect(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, 60, skill.multiplier)
+    } else if (skill.kind === 'aoe') {
+      for (const obj of this.enemies.getChildren()) {
+        const e = obj as Enemy
+        if (Phaser.Math.Distance.Between(this.player.x, this.player.y, e.x, e.y) <= skill.range) {
+          e.takeDamage(physicalDamage(atk, e.monster.def, skill.multiplier))
+        }
+      }
+      const fx = this.add.circle(this.player.x, this.player.y, skill.range, 0xffffff, 0.25)
+      this.tweens.add({ targets: fx, alpha: 0, duration: 300, onComplete: () => fx.destroy() })
+    } else if (skill.kind === 'projectile') {
+      this.playerProjectiles.add(new Projectile(this, this.player.x, this.player.y - 6, this.player.facing, 0, atk * skill.multiplier, true, skill.range))
+    } else if (skill.kind === 'heal') {
+      this.player.heal(Math.round(maxHp * skill.multiplier))
+      const fx = this.add.text(this.player.x, this.player.y - 50, '+PV', { fontSize: '18px', color: '#66bb6a' }).setOrigin(0.5)
+      this.tweens.add({ targets: fx, y: fx.y - 30, alpha: 0, duration: 800, onComplete: () => fx.destroy() })
+    }
   }
 
   damageEnemiesInRect(cx: number, cy: number, w: number, h: number, multiplier: number) {
