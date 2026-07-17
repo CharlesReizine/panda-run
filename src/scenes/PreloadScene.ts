@@ -26,6 +26,13 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'tir-charge': { color: 0xffb74d, glyph: 'arrow' },
   'fleche-de-bambou': { color: 0x9ccc65, glyph: 'arrow' },
   'salve-ultime': { color: 0xffd54f, glyph: 'rain' },
+  'rugissement-panda': { color: 0xffb300, glyph: 'roar' },
+  'estoc-rapide': { color: 0xe0e0e0, glyph: 'thrust' },
+  'onde-tranchante': { color: 0x80deea, glyph: 'wave' },
+  'soin-majeur': { color: 0x66bb6a, glyph: 'heart' },
+  'rayon-arcanique': { color: 0xba68c8, glyph: 'ray' },
+  'tir-instinctif': { color: 0xd7a86e, glyph: 'quickshot' },
+  'tir-en-cloche': { color: 0x9ccc65, glyph: 'lob' },
 }
 
 type ClassId = 'novice' | 'swordsman' | 'mage' | 'archer'
@@ -449,6 +456,37 @@ export class PreloadScene extends Phaser.Scene {
         break
       case 'rain':
         g.fillStyle(c); for (const dx of [-9, 0, 9]) g.fillTriangle(cx + dx - 3, 12, cx + dx + 3, 12, cx + dx, 34)
+        break
+      case 'roar':
+        g.fillStyle(c).fillCircle(cx, cy + 4, 7)
+        g.fillStyle(0x2b2b2b).fillTriangle(cx - 4, cy + 2, cx + 4, cy + 2, cx, cy + 9) // gueule ouverte
+        g.lineStyle(2, c); for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(cx, cy + 2, 10 + i * 5, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340), false); g.strokePath() }
+        break
+      case 'thrust':
+        g.lineStyle(4, c).beginPath(); g.moveTo(cx, 32); g.lineTo(cx, 10); g.strokePath()
+        g.fillStyle(c).fillTriangle(cx - 5, 12, cx + 5, 12, cx, 4)
+        g.lineStyle(2, 0x9e9e9e).beginPath(); g.moveTo(cx - 6, 27); g.lineTo(cx + 6, 27); g.strokePath() // garde
+        break
+      case 'wave':
+        g.lineStyle(3, c); for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(8 + i * 2, 22, 9 + i * 6, Phaser.Math.DegToRad(-50), Phaser.Math.DegToRad(50), false); g.strokePath() }
+        break
+      case 'heart':
+        g.fillStyle(c).fillCircle(cx - 5, cy - 3, 6).fillCircle(cx + 5, cy - 3, 6).fillTriangle(cx - 10, cy - 1, cx + 10, cy - 1, cx, cy + 11)
+        break
+      case 'ray':
+        g.fillStyle(c, 0.35).fillTriangle(cx - 9, 34, cx + 9, 34, cx, 6)
+        g.lineStyle(3, c).beginPath(); g.moveTo(cx, 32); g.lineTo(cx, 8); g.strokePath()
+        g.fillStyle(0xffffff).fillCircle(cx, 8, 3)
+        break
+      case 'quickshot':
+        g.lineStyle(2, c).beginPath(); g.moveTo(11, 27); g.lineTo(25, 13); g.strokePath()
+        g.fillStyle(c).fillTriangle(25, 13, 18, 15, 23, 20)
+        g.lineStyle(2, c, 0.5).beginPath(); g.moveTo(6, 32); g.lineTo(15, 23); g.strokePath()
+        break
+      case 'lob':
+        g.lineStyle(2, c).beginPath(); g.arc(cx, 30, 14, Phaser.Math.DegToRad(180), Phaser.Math.DegToRad(360), false); g.strokePath()
+        g.fillStyle(c).fillCircle(cx + 14, 30, 3)
+        g.fillStyle(c, 0.4).fillCircle(cx - 14, 30, 2.5).fillCircle(cx - 2, 17, 2)
         break
     }
     g.generateTexture(`skill-${id}`, 44, 44)

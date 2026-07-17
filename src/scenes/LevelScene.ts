@@ -127,6 +127,7 @@ export class LevelScene extends Phaser.Scene {
     // contact ennemi → joueur
     this.physics.add.overlap(this.player, this.enemies, (_p, e) => this.hitPlayer((e as Enemy).monster.atk))
     this.physics.add.overlap(this.player, this.enemyProjectiles, (_p, proj) => {
+      this.impactFx((proj as Projectile).x, (proj as Projectile).y, 0xff5252)
       this.hitPlayer((proj as Projectile).damage)
       ;(proj as Projectile).destroy()
     })
@@ -136,8 +137,10 @@ export class LevelScene extends Phaser.Scene {
         if (proj.hitEnemies.has(e)) return
         proj.hitEnemies.add(e)
         e.takeDamage(physicalDamage(proj.damage, e.monster.def))
+        this.impactFx(proj.x, proj.y, proj.tintTopLeft)
       } else {
         e.takeDamage(physicalDamage(proj.damage, e.monster.def))
+        this.impactFx(proj.x, proj.y, proj.tintTopLeft)
         proj.destroy()
       }
     })
@@ -147,8 +150,10 @@ export class LevelScene extends Phaser.Scene {
         if (proj.hitEnemies.has(prop)) return
         proj.hitEnemies.add(prop)
         prop.takeDamage(1)
+        this.impactFx(proj.x, proj.y, proj.tintTopLeft)
       } else {
         prop.takeDamage(1)
+        this.impactFx(proj.x, proj.y, proj.tintTopLeft)
         proj.destroy()
       }
     })
@@ -319,14 +324,32 @@ export class LevelScene extends Phaser.Scene {
     return proj
   }
 
-  // croissant de coup visible même dans le vide + petit élan du panda
-  private slashFx(cx: number, cy: number, w: number, color: number) {
-    const arc = this.add.graphics({ x: cx, y: cy }).setDepth(5)
-    arc.lineStyle(5, color, 0.95).beginPath()
-    arc.arc(0, 0, w * 0.5, Phaser.Math.DegToRad(-70), Phaser.Math.DegToRad(70), false)
-    arc.strokePath()
-    this.tweens.add({ targets: arc, scale: 1.4, alpha: 0, duration: 170, onComplete: () => arc.destroy() })
-    this.tweens.add({ targets: this.player, x: this.player.x + this.player.facing * 6, duration: 60, yoyo: true })
+  // croissant de coup visible même dans le vide + petit élan du panda ; en mode "intense"
+  // (gros coup), double croissant + léger tremblement de caméra
+  private slashFx(cx: number, cy: number, w: number, color: number, intense = false) {
+    const drawCrescent = (offsetDeg: number, scaleMul: number, alpha: number) => {
+      const arc = this.add.graphics({ x: cx, y: cy }).setDepth(5)
+      arc.lineStyle(intense ? 6 : 5, color, alpha).beginPath()
+      arc.arc(0, 0, (w * 0.5) * scaleMul, Phaser.Math.DegToRad(-70 + offsetDeg), Phaser.Math.DegToRad(70 + offsetDeg), false)
+      arc.strokePath()
+      this.tweens.add({ targets: arc, scale: 1.4, alpha: 0, duration: 170, onComplete: () => arc.destroy() })
+    }
+    drawCrescent(0, 1, 0.95)
+    if (intense) drawCrescent(16, 0.72, 0.55)
+    this.tweens.add({ targets: this.player, x: this.player.x + this.player.facing * (intense ? 10 : 6), duration: 60, yoyo: true })
+    if (intense) this.cameras.main.shake(60, 0.004)
+  }
+
+  // flash + petits éclats à l'endroit d'un impact (projectile touché, ou touché par un
+  // projectile ennemi)
+  private impactFx(x: number, y: number, color: number) {
+    const flash = this.add.image(x, y, 'ring').setTint(color).setDepth(6).setScale(0.05)
+    this.tweens.add({ targets: flash, scale: 0.4, alpha: 0, duration: 160, onComplete: () => flash.destroy() })
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.3, 0.3)
+      const spark = this.add.rectangle(x, y, 3, 3, color).setDepth(6)
+      this.tweens.add({ targets: spark, x: x + Math.cos(a) * 16, y: y + Math.sin(a) * 16, alpha: 0, duration: 200, onComplete: () => spark.destroy() })
+    }
   }
 
   // couleur d'effet selon l'élément du skill
@@ -340,9 +363,22 @@ export class LevelScene extends Phaser.Scene {
     return 0xffd54f
   }
 
-  private aoeRing(x: number, y: number, radius: number, color: number) {
+  // onde de choc de zone ; withShards ajoute une 2e onde plus rapide + des éclats
+  // qui volent depuis le centre (utilisé pour les vrais sorts d'AoE, pas les petits effets)
+  private aoeRing(x: number, y: number, radius: number, color: number, withShards = false) {
     const ring = this.add.image(x, y, 'ring').setTint(color).setDepth(5).setScale(0.2)
     this.tweens.add({ targets: ring, scale: radius / 28, alpha: 0, duration: 350, onComplete: () => ring.destroy() })
+    if (withShards) {
+      const shock = this.add.image(x, y, 'ring').setTint(color).setDepth(5).setScale(0.08).setAlpha(0.7)
+      this.tweens.add({ targets: shock, scale: (radius / 28) * 1.35, alpha: 0, duration: 260, onComplete: () => shock.destroy() })
+      const shardCount = 8
+      for (let i = 0; i < shardCount; i++) {
+        const a = (i / shardCount) * Math.PI * 2
+        const dist = radius * Phaser.Math.FloatBetween(0.55, 1)
+        const shard = this.add.rectangle(x, y, 4, 4, color).setDepth(6).setRotation(a)
+        this.tweens.add({ targets: shard, x: x + Math.cos(a) * dist, y: y + Math.sin(a) * dist, alpha: 0, duration: 380, onComplete: () => shard.destroy() })
+      }
+    }
   }
 
   private announceSkill(name: string, color = 0xffd700) {
@@ -374,7 +410,8 @@ export class LevelScene extends Phaser.Scene {
     const mult = skill.multiplier * (1 + 0.25 * (rank - 1))
     if (skill.kind === 'melee') {
       this.player.playAttack()
-      this.slashFx(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, color)
+      // gros coup (rang inclus) : double croissant + tremblement de caméra
+      this.slashFx(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, color, mult >= 2)
       this.meleeHit(skill.range, mult)
     } else if (skill.kind === 'aoe') {
       for (const obj of this.enemies.getChildren()) {
@@ -389,7 +426,7 @@ export class LevelScene extends Phaser.Scene {
           prop.takeDamage(1)
         }
       }
-      this.aoeRing(this.player.x, this.player.y, skill.range, color)
+      this.aoeRing(this.player.x, this.player.y, skill.range, color, true)
     } else if (skill.kind === 'projectile') {
       const proj = this.spawnPlayerProjectile(atk * mult, skill.range)
       if (skill.arc) {
@@ -398,7 +435,7 @@ export class LevelScene extends Phaser.Scene {
         b.setAllowGravity(true)
         b.setVelocity(this.player.facing * 340, -430)
         b.setBounce(0.45)
-        proj.setTexture('bamboo').setScale(1).setAngularVelocity(this.player.facing * 480)
+        proj.setTexture('bamboo').setScale(1).setTint(color).setAngularVelocity(this.player.facing * 480)
         this.physics.add.collider(proj, this.platforms)
       } else if (skill.pierce) {
         // gros faisceau qui transperce tout sur son trajet
@@ -412,9 +449,15 @@ export class LevelScene extends Phaser.Scene {
     } else if (skill.kind === 'heal') {
       this.player.heal(Math.round(maxHp * mult))
       this.aoeRing(this.player.x, this.player.y, 70, 0x66bb6a)
-      for (let i = 0; i < 5; i++) {
-        const spark = this.add.text(this.player.x + Phaser.Math.Between(-20, 20), this.player.y + 10, '✦', { fontSize: '16px', color: '#8aff9a' }).setOrigin(0.5).setDepth(6)
-        this.tweens.add({ targets: spark, y: spark.y - 50, alpha: 0, duration: 700, delay: i * 50, onComplete: () => spark.destroy() })
+      // halo doux qui pulse sous le panda, en plus de l'onde
+      const halo = this.add.image(this.player.x, this.player.y, 'ring').setTint(0x81ffa0).setAlpha(0.35).setDepth(3).setScale(1.6)
+      this.tweens.add({ targets: halo, scale: 2.3, alpha: 0, duration: 620, onComplete: () => halo.destroy() })
+      for (let i = 0; i < 8; i++) {
+        const spark = this.add.text(
+          this.player.x + Phaser.Math.Between(-26, 26), this.player.y + 14, '✦',
+          { fontSize: `${Phaser.Math.Between(12, 18)}px`, color: '#8aff9a' },
+        ).setOrigin(0.5).setDepth(6)
+        this.tweens.add({ targets: spark, y: spark.y - Phaser.Math.Between(45, 75), alpha: 0, duration: 750, delay: i * 45, onComplete: () => spark.destroy() })
       }
     }
   }

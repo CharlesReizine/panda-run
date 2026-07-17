@@ -3,11 +3,11 @@ import { CLASSES } from '../../src/data/classes'
 import { SKILLS, skillsOf } from '../../src/data/skills'
 
 describe('données classes/skills', () => {
-  it('4 classes, novice 2 skills, les autres 6', () => {
+  it('4 classes, novice 3 skills, les autres 8', () => {
     expect(Object.keys(CLASSES)).toHaveLength(4)
-    expect(CLASSES.novice.skillIds).toHaveLength(2)
+    expect(CLASSES.novice.skillIds).toHaveLength(3)
     for (const id of ['swordsman', 'mage', 'archer'] as const) {
-      expect(CLASSES[id].skillIds).toHaveLength(6)
+      expect(CLASSES[id].skillIds).toHaveLength(8)
     }
   })
 

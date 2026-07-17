@@ -8,6 +8,8 @@ export class Projectile extends Phaser.Physics.Arcade.Sprite {
   private startX: number
   private startY: number
   private rangePx: number
+  private trailSinceMs = 0
+  private readonly trailEveryMs = 35
 
   constructor(scene: Phaser.Scene, x: number, y: number, dirX: number, dirY: number, damage: number, fromPlayer: boolean, rangePx: number) {
     super(scene, x, y, 'projectile')
@@ -16,6 +18,7 @@ export class Projectile extends Phaser.Physics.Arcade.Sprite {
     ;(this.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
     const v = new Phaser.Math.Vector2(dirX, dirY).normalize().scale(420)
     this.setVelocity(v.x, v.y)
+    this.setRotation(Math.atan2(v.y, v.x)) // oriente le sprite dans l'axe du tir dès le départ
     this.damage = damage
     this.fromPlayer = fromPlayer
     this.startX = x
@@ -27,5 +30,31 @@ export class Projectile extends Phaser.Physics.Arcade.Sprite {
   preUpdate(t: number, d: number) {
     super.preUpdate(t, d)
     if (Phaser.Math.Distance.Between(this.x, this.y, this.startX, this.startY) > this.rangePx) this.destroy()
+    const body = this.body as Phaser.Physics.Arcade.Body
+    // les tirs droits pointent vers leur trajectoire ; les tirs en cloche tournent déjà
+    // sur eux-mêmes via angularVelocity (bambou), qu'on ne veut pas écraser ici
+    if (body.angularVelocity === 0 && (body.velocity.x !== 0 || body.velocity.y !== 0)) {
+      this.setRotation(Math.atan2(body.velocity.y, body.velocity.x))
+    }
+    this.trailSinceMs += d
+    if (this.trailSinceMs >= this.trailEveryMs) {
+      this.trailSinceMs = 0
+      this.spawnTrailEcho()
+    }
+  }
+
+  // traînée lumineuse : échos de la texture courante qui s'estompent derrière le projectile
+  private spawnTrailEcho() {
+    if (!this.scene) return
+    const echo = this.scene.add.image(this.x, this.y, this.texture.key)
+      .setRotation(this.rotation)
+      .setScale(this.scaleX * 0.9, this.scaleY * 0.9)
+      .setTint(this.tintTopLeft)
+      .setAlpha(0.4)
+      .setDepth((this.depth ?? 0) - 1)
+    this.scene.tweens.add({
+      targets: echo, alpha: 0, scaleX: echo.scaleX * 0.5, scaleY: echo.scaleY * 0.5,
+      duration: 220, onComplete: () => echo.destroy(),
+    })
   }
 }
