@@ -19,7 +19,7 @@ export class TitleScene extends Phaser.Scene {
   create() {
     this.add.text(480, 140, 'Panda-Run', { fontSize: '64px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
     // repère de version : dis-moi ce numéro pour qu'on sache si tu vois bien la dernière build
-    this.add.text(480, 95, 'build R24', { fontSize: '22px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0.5)
+    this.add.text(480, 95, 'build R25', { fontSize: '22px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0.5)
     this.add.image(480, 250, 'panda').setScale(3)
 
     const mkButton = (y: number, label: string, onTap: () => void) => {
