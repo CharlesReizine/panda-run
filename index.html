@@ -8,11 +8,13 @@
     <link rel="apple-touch-icon" href="./icon-192.png" />
     <title>Panda-Run</title>
     <style>
-      /* 100dvh : suit la barre d'outils dynamique d'iOS Safari (100% déborde dessous) */
-      html, body { margin: 0; padding: 0; background: #000; height: 100dvh; overflow: hidden; }
+      /* body fixé + hauteur pilotée en JS (main.ts) : innerHeight suit la barre Safari
+         sur tous les iOS, contrairement à 100% (déborde) et 100dvh (iOS 16.4+ only) */
+      html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
+      body { position: fixed; inset: 0; width: 100%; height: 100%; }
       canvas { display: block; margin: 0 auto; }
     </style>
-    <script type="module" crossorigin src="./assets/index-BIOqobDc.js"></script>
+    <script type="module" crossorigin src="./assets/index-CM3H1oCI.js"></script>
   <link rel="manifest" href="./manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="./registerSW.js"></script></head>
   <body>
   </body>
