@@ -32,6 +32,7 @@ export class LevelScene extends Phaser.Scene {
   private boss: Enemy | null = null
   private bossBar: Phaser.GameObjects.Rectangle | null = null
   private bossBarBg: Phaser.GameObjects.Rectangle | null = null
+  private bossName: Phaser.GameObjects.Text | null = null
   private bossVolley: Phaser.Time.TimerEvent | null = null
 
   constructor() { super('Level') }
@@ -100,6 +101,7 @@ export class LevelScene extends Phaser.Scene {
     this.boss = null
     this.bossBar = null
     this.bossBarBg = null
+    this.bossName = null
     this.bossVolley = null
     if (this.levelDef.boss) {
       this.spawnBoss()
@@ -160,7 +162,7 @@ export class LevelScene extends Phaser.Scene {
     // barre de vie géante
     this.bossBarBg = this.add.rectangle(480, 70, 604, 22, 0x000000, 0.6).setScrollFactor(0)
     this.bossBar = this.add.rectangle(480 - 300, 70, 600, 18, 0xef5350).setOrigin(0, 0.5).setScrollFactor(0)
-    this.add.text(480, 45, def.name, { fontSize: '20px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0)
+    this.bossName = this.add.text(480, 45, def.name, { fontSize: '20px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0)
 
     // salve de projectiles toutes les 5 s
     this.bossVolley = this.time.addEvent({
@@ -291,9 +293,11 @@ export class LevelScene extends Phaser.Scene {
     this.bossVolley?.remove()
     this.bossBarBg?.destroy()
     this.bossBar?.destroy()
+    this.bossName?.destroy()
     this.boss = null
     this.bossBar = null
     this.bossBarBg = null
+    this.bossName = null
     this.bossVolley = null
     const txt = this.add.text(480, 200, 'VICTOIRE !', { fontSize: '56px', color: '#ffd700', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0)
     this.tweens.add({ targets: txt, scale: 1.2, yoyo: true, repeat: 3, duration: 300 })
