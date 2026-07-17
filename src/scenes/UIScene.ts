@@ -44,6 +44,16 @@ export class UIScene extends Phaser.Scene {
     this.add.rectangle(12, 56, BAR_W + 4, 6, 0x000000, 0.5).setOrigin(0)
     this.xpBar = this.add.rectangle(14, 57, BAR_W, 4, 0xfdd835).setOrigin(0)
 
+    // bouton d'accès à la gestion des skills (en jeu, sans passer par la carte)
+    const gear = this.add.text(636, 38, '⚙', { fontSize: '22px', color: '#ffffff', backgroundColor: '#37474f', padding: { x: 6, y: 4 } })
+      .setOrigin(0.5).setInteractive()
+    gear.on('pointerdown', () => {
+      this.pressFx(gear)
+      this.scene.launch('SkillEquip')
+      this.scene.pause('Level')
+      this.scene.pause('UI')
+    })
+
     // Haut-droite : les 4 slots de skills côte à côte
     for (let i = 0; i < 4; i++) {
       const x = 706 + i * 60
@@ -89,7 +99,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   // pulse visuel au tap pour que chaque bouton réponde sous le doigt
-  private pressFx(target: Phaser.GameObjects.Shape | Phaser.GameObjects.Image) {
+  private pressFx(target: Phaser.GameObjects.Shape | Phaser.GameObjects.Image | Phaser.GameObjects.Text) {
     this.tweens.add({ targets: target, scale: target.scale * 0.85, duration: 60, yoyo: true })
   }
 
