@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false, // on gère l'enregistrement nous-mêmes dans main.ts
       manifest: {
         name: 'Panda-Run',
         short_name: 'Panda-Run',

@@ -1,5 +1,14 @@
+import { registerSW } from 'virtual:pwa-register'
 import Phaser from 'phaser'
 import { BootScene } from './scenes/BootScene'
+
+// Mise à jour auto : dès qu'une nouvelle version est déployée, on l'applique et on recharge.
+// On sonde aussi toutes les 30 s pour qu'une session déjà ouverte se mette à jour seule.
+const updateSW = registerSW({
+  immediate: true,
+  onNeedRefresh() { updateSW(true) },
+  onRegisteredSW(_url, reg) { if (reg) setInterval(() => reg.update(), 30000) },
+})
 import { PreloadScene } from './scenes/PreloadScene'
 import { TitleScene } from './scenes/TitleScene'
 import { WorldMapScene } from './scenes/WorldMapScene'
