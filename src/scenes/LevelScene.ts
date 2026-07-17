@@ -19,6 +19,7 @@ import { rollDrops } from '../core/loot'
 import type { DropEntry } from '../core/types'
 import type { UIScene } from './UIScene'
 import { TILE, GROUND_ROW } from '../core/platforming'
+import { BIOMES } from '../data/biomes'
 
 export { TILE }
 
@@ -72,6 +73,12 @@ export class LevelScene extends Phaser.Scene {
         platforms.create((p.x + i) * TILE + TILE / 2, p.y * TILE + TILE / 2, tileKey)
       }
     }
+    // ponts de planches : plateformes fines traversables
+    for (const br of this.levelDef.bridges ?? []) {
+      for (let i = 0; i < br.w; i++) {
+        platforms.create((br.x + i) * TILE + TILE / 2, br.y * TILE + 6, 'bridge')
+      }
+    }
 
     this.player = new Player(this, 2 * TILE, GROUND_ROW * TILE - 40)
     this.physics.add.collider(this.player, platforms)
@@ -102,6 +109,20 @@ export class LevelScene extends Phaser.Scene {
         this.tweens.add({ targets: glint, alpha: 0.2, scale: 1.4, duration: 600, yoyo: true, repeat: -1 })
       }
     }
+
+    // pièges (pics = dégâts, eau = noyade/K.O.)
+    const hazards = this.physics.add.staticGroup()
+    for (const hz of this.levelDef.hazards ?? []) {
+      const tex = hz.kind === 'water' ? 'water' : 'spikes'
+      const y = hz.kind === 'water' ? GROUND_ROW * TILE + 24 : GROUND_ROW * TILE + 8
+      for (let i = 0; i < hz.w; i++) {
+        const s = hazards.create((hz.x + i) * TILE + TILE / 2, y, tex) as Phaser.Physics.Arcade.Sprite
+        s.setData('kind', hz.kind)
+      }
+    }
+    this.physics.add.overlap(this.player, hazards, (_p, hzObj) => {
+      this.hitPlayer((hzObj as Phaser.GameObjects.Sprite).getData('kind') === 'water' ? 9999 : 35)
+    })
 
     // contact ennemi → joueur
     this.physics.add.overlap(this.player, this.enemies, (_p, e) => this.hitPlayer((e as Enemy).monster.atk))
@@ -185,19 +206,14 @@ export class LevelScene extends Phaser.Scene {
   }
 
   private addBackground() {
-    const bg: Record<string, { sky: number; far: number; near: number; clouds: boolean }> = {
-      plaine: { sky: 0x87ceeb, far: 0x8fd18f, near: 0x5cb85c, clouds: true },
-      foret: { sky: 0x9fd8c8, far: 0x4a8f5a, near: 0x2e7d32, clouds: true },
-      desert: { sky: 0xfbe2a0, far: 0xe6c878, near: 0xd4a94a, clouds: true },
-      cave: { sky: 0x1e1e2a, far: 0x34343f, near: 0x45454f, clouds: false },
-    }
-    const b = bg[this.levelDef.biome] ?? bg.plaine!
-    this.add.rectangle(0, 0, 960, 540, b.sky).setOrigin(0).setScrollFactor(0).setDepth(-30)
+    const b = BIOMES[this.levelDef.biome] ?? BIOMES.plaine!
+    const sky = this.add.graphics().setScrollFactor(0).setDepth(-30)
+    sky.fillGradientStyle(b.skyTop, b.skyTop, b.skyBot, b.skyBot, 1).fillRect(0, 0, 960, 540)
     if (b.clouds) {
       this.bgClouds = this.add.tileSprite(0, 30, 960, 60, 'cloud').setOrigin(0).setScrollFactor(0).setDepth(-25).setAlpha(0.85)
     }
-    this.bgFar = this.add.tileSprite(0, 300, 960, 240, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-22).setTint(b.far)
-    this.bgNear = this.add.tileSprite(0, 360, 960, 200, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-20).setTint(b.near)
+    this.bgFar = this.add.tileSprite(0, 300, 960, 240, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-22).setTint(b.hillFar)
+    this.bgNear = this.add.tileSprite(0, 360, 960, 200, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-20).setTint(b.hillNear)
 
     // décors posés au sol pour remplir l'espace (défilent avec le monde, derrière le joueur)
     const widthPx = this.levelDef.widthTiles * TILE

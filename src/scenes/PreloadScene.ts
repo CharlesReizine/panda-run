@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import { MONSTERS } from '../data/monsters'
 import { SKILLS } from '../data/skills'
+import { BIOMES } from '../data/biomes'
 import type { MonsterDef } from '../core/types'
 
 // icône par skill : couleur + glyphe
@@ -45,13 +46,6 @@ const POSES: Record<string, Pose> = {
   'attack-0': { bx: -2, ra: [-3, -2] },
   'attack-1': { bx: 3, ra: [7, -4], paw: true },
   'jump': { lf: [3, -8], rf: [-3, -8], la: [0, -5], ra: [0, -5] }, // jambes repliées, bras levés
-}
-
-const TILE_PALETTES: Record<string, { soil: number; top: number; speck: number }> = {
-  'tile-plaine': { soil: 0x6b4a2f, top: 0x5cb85c, speck: 0x4a9d4a },
-  'tile-foret': { soil: 0x4a3320, top: 0x2e7d32, speck: 0x256528 },
-  'tile-desert': { soil: 0xcaa85a, top: 0xe0c068, speck: 0xd4b46a },
-  'tile-cave': { soil: 0x3f3f3f, top: 0x616161, speck: 0x525252 },
 }
 
 const OY = 14 // décalage vertical : laisse de la place au-dessus de la tête pour les coiffes
@@ -329,23 +323,69 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   private drawDecor() {
-    let g = this.add.graphics()
-    g.fillStyle(0x3f8f3f).fillEllipse(20, 26, 40, 24).fillEllipse(8, 30, 20, 16).fillEllipse(32, 30, 20, 16)
-    g.fillStyle(0x5cb85c).fillEllipse(20, 22, 34, 18)
-    g.generateTexture('deco-plaine', 40, 36); g.destroy()
-    g = this.add.graphics()
-    g.fillStyle(0x5d4037).fillRect(18, 44, 8, 20)
-    g.fillStyle(0x2e5e30).fillCircle(22, 24, 20)
-    g.fillStyle(0x3c7d3f).fillCircle(14, 20, 12).fillCircle(30, 22, 12).fillCircle(22, 13, 12)
-    g.generateTexture('deco-foret', 44, 64); g.destroy()
-    g = this.add.graphics()
-    g.fillStyle(0x3c7d3f).fillRoundedRect(12, 10, 10, 46, 4)
-    g.fillStyle(0x4a9d4a).fillRoundedRect(2, 26, 8, 16, 3).fillRoundedRect(24, 20, 8, 22, 3)
-    g.generateTexture('deco-desert', 34, 56); g.destroy()
-    g = this.add.graphics()
-    g.fillStyle(0x50505c).fillTriangle(4, 48, 16, 4, 28, 48)
-    g.fillStyle(0x6a6a78).fillTriangle(10, 48, 16, 18, 22, 48)
-    g.generateTexture('deco-cave', 32, 48); g.destroy()
+    for (const [id, b] of Object.entries(BIOMES)) {
+      const g = this.add.graphics()
+      let w = 40, h = 48
+      switch (b.deco) {
+        case 'buisson':
+          w = 40; h = 36
+          g.fillStyle(0x3f8f3f).fillEllipse(20, 26, 40, 24).fillEllipse(8, 30, 20, 16).fillEllipse(32, 30, 20, 16)
+          g.fillStyle(0x5cb85c).fillEllipse(20, 22, 34, 18)
+          break
+        case 'arbre':
+          w = 44; h = 64
+          g.fillStyle(0x5d4037).fillRect(18, 44, 8, 20)
+          g.fillStyle(0x2e5e30).fillCircle(22, 24, 20)
+          g.fillStyle(0x3c7d3f).fillCircle(14, 20, 12).fillCircle(30, 22, 12).fillCircle(22, 13, 12)
+          break
+        case 'cactus':
+          w = 34; h = 56
+          g.fillStyle(0x3c7d3f).fillRoundedRect(12, 10, 10, 46, 4)
+          g.fillStyle(0x4a9d4a).fillRoundedRect(2, 26, 8, 16, 3).fillRoundedRect(24, 20, 8, 22, 3)
+          break
+        case 'stalagmite':
+          w = 32; h = 48
+          g.fillStyle(0x50505c).fillTriangle(4, 48, 16, 4, 28, 48)
+          g.fillStyle(0x6a6a78).fillTriangle(10, 48, 16, 18, 22, 48)
+          break
+        case 'palmier':
+          w = 48; h = 64
+          g.fillStyle(0x8d6e63).fillRoundedRect(20, 24, 7, 40, 3)
+          g.fillStyle(0x2e7d32).fillEllipse(24, 20, 34, 10).fillEllipse(14, 16, 20, 8).fillEllipse(34, 16, 20, 8)
+          g.fillStyle(0x3c9d42).fillEllipse(24, 14, 16, 8)
+          break
+        case 'pierre':
+          w = 42; h = 34
+          g.fillStyle(0x6f665e).fillEllipse(21, 22, 40, 22)
+          g.fillStyle(0x8a8078).fillEllipse(16, 16, 20, 12).fillEllipse(30, 18, 16, 10)
+          break
+        case 'tombe':
+          w = 34; h = 46
+          g.fillStyle(0x455058).fillRoundedRect(6, 6, 22, 40, 8)
+          g.fillStyle(0x6a7680).fillRoundedRect(8, 10, 18, 34, 6)
+          g.fillStyle(0x2f363c).fillRect(15, 16, 4, 16).fillRect(9, 21, 16, 4)
+          break
+        case 'flamme':
+          w = 36; h = 48
+          g.fillStyle(0xb71c1c).fillTriangle(6, 48, 18, 2, 30, 48)
+          g.fillStyle(0xff7043).fillTriangle(11, 48, 18, 16, 25, 48)
+          g.fillStyle(0xffd54f).fillTriangle(15, 48, 18, 30, 21, 48)
+          break
+        case 'liane':
+          w = 30; h = 64
+          g.fillStyle(0x2f6f22).fillRect(13, 0, 4, 60)
+          g.fillStyle(0x3f8f2f).fillEllipse(9, 18, 12, 7).fillEllipse(21, 34, 12, 7).fillEllipse(9, 50, 12, 7)
+          break
+        case 'sapin':
+          w = 44; h = 64
+          g.fillStyle(0x5d4037).fillRect(19, 50, 6, 14)
+          g.fillStyle(0x1f5e32).fillTriangle(6, 50, 22, 12, 38, 50)
+          g.fillStyle(0x2e7d42).fillTriangle(9, 36, 22, 8, 35, 36)
+          break
+      }
+      g.generateTexture(`deco-${id}`, w, h)
+      g.destroy()
+    }
   }
 
   private drawSkillIcon(id: string, spec: { color: number; glyph: string }) {
@@ -421,13 +461,13 @@ export class PreloadScene extends Phaser.Scene {
     for (const m of Object.values(MONSTERS)) this.drawMonster(m)
     for (const s of Object.values(SKILLS)) this.drawSkillIcon(s.id, SKILL_ICONS[s.id] ?? { color: 0xffd54f, glyph: 'sword' })
 
-    for (const [key, pal] of Object.entries(TILE_PALETTES)) {
+    for (const [id, b] of Object.entries(BIOMES)) {
       const g = this.add.graphics()
-      g.fillStyle(pal.soil).fillRect(0, 0, 32, 32)
-      g.fillStyle(pal.top).fillRect(0, 0, 32, 9)
-      g.fillStyle(pal.speck).fillEllipse(6, 5, 5, 4).fillEllipse(22, 6, 5, 4).fillEllipse(14, 3, 3, 3)
+      g.fillStyle(b.tile.soil).fillRect(0, 0, 32, 32)
+      g.fillStyle(b.tile.top).fillRect(0, 0, 32, 9)
+      g.fillStyle(b.tile.speck).fillEllipse(6, 5, 5, 4).fillEllipse(22, 6, 5, 4).fillEllipse(14, 3, 3, 3)
       g.fillStyle(0x000000, 0.15).fillRect(0, 0, 32, 1).fillRect(0, 0, 1, 32)
-      g.generateTexture(key, 32, 32)
+      g.generateTexture(`tile-${id}`, 32, 32)
       g.destroy()
     }
 
@@ -440,6 +480,16 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0x33691e).fillRoundedRect(0, 3, 26, 8, 3)
     g.fillStyle(0x7cb342).fillRoundedRect(1, 4, 24, 5, 2)
     g.fillStyle(0x33691e).fillRect(8, 3, 2, 8).fillRect(17, 3, 2, 8); g.generateTexture('bamboo', 26, 14); g.clear()
+    // pics (rangée de pointes) — piège
+    g.fillStyle(0x9e9e9e); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8, 16, i * 8 + 4, 2, i * 8 + 8, 16)
+    g.fillStyle(0xcfd8dc); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 + 2, 16, i * 8 + 4, 6, i * 8 + 6, 16)
+    g.generateTexture('spikes', 32, 16); g.clear()
+    // eau (surface bleue translucide)
+    g.fillStyle(0x1e88e5, 0.55).fillRect(0, 0, 32, 32)
+    g.fillStyle(0x64b5f6, 0.5).fillRect(0, 0, 32, 5); g.generateTexture('water', 32, 32); g.clear()
+    // pont de planches
+    g.fillStyle(0x8d6e63).fillRect(0, 0, 32, 12)
+    g.fillStyle(0x6d4c41).fillRect(0, 0, 32, 2).fillRect(7, 0, 2, 12).fillRect(22, 0, 2, 12); g.generateTexture('bridge', 32, 12); g.clear()
     // sortie : portail lumineux
     g.fillStyle(0x00695c).fillRoundedRect(0, 4, 32, 44, 10)
     g.fillStyle(0x4db6ac).fillRoundedRect(4, 8, 24, 38, 8)

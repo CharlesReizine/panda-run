@@ -1,4 +1,4 @@
-export type Biome = 'plaine' | 'foret' | 'desert' | 'cave'
+export type Biome = string // clé du registre BIOMES
 
 export interface LevelDef {
   id: string
@@ -8,6 +8,8 @@ export interface LevelDef {
   platforms: { x: number; y: number; w: number }[] // en tuiles ; y depuis le haut (16 lignes visibles)
   spawns: { monsterId: string; x: number }[] // x en tuiles
   props?: { kind: string; x: number; y?: number }[] // x en tuiles ; y (tuiles) seulement pour les coffres sur plateforme
+  hazards?: { kind: 'spikes' | 'water'; x: number; w: number }[] // pièges au sol (x, largeur en tuiles)
+  bridges?: { x: number; y: number; w: number }[] // ponts de planches (plateformes fines)
   boss?: string
 }
 
