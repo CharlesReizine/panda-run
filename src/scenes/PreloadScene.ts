@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { MONSTERS } from '../data/monsters'
 import { SKILLS } from '../data/skills'
 import { BIOMES } from '../data/biomes'
+import { ITEMS } from '../data/items'
 import type { MonsterDef } from '../core/types'
 
 // icône par skill : couleur + glyphe
@@ -462,6 +463,49 @@ export class PreloadScene extends Phaser.Scene {
     g.destroy()
   }
 
+  // chapeaux cosmétiques (slot 'hat') : dessinés pensés pour se poser sur le haut de la tête du panda
+  private drawCosmetic(id: string) {
+    const g = this.add.graphics()
+    switch (id) {
+      case 'chapeau-poring':
+        g.fillStyle(0xff6fa8).fillEllipse(20, 18, 30, 22)
+        g.fillStyle(0xffffff).fillCircle(13, 15, 4).fillCircle(27, 15, 4)
+        g.fillStyle(0x2b2b2b).fillCircle(13, 16, 2).fillCircle(27, 16, 2)
+        g.fillStyle(0xffffff, 0.5).fillEllipse(14, 10, 10, 6) // brillance
+        break
+      case 'ailes-angeling':
+        g.lineStyle(2, 0xffd54f).strokeCircle(20, 6, 9) // auréole
+        g.fillStyle(0xffffff, 0.95).fillEllipse(6, 22, 12, 20).fillEllipse(34, 22, 12, 20) // ailes
+        g.fillStyle(0xe0e0e0, 0.6).fillEllipse(6, 22, 6, 12).fillEllipse(34, 22, 6, 12)
+        break
+      case 'couronne-royale':
+        g.fillStyle(0xffd700).fillRect(4, 18, 32, 8)
+        g.fillStyle(0xffd700).fillTriangle(4, 18, 10, 4, 16, 18)
+        g.fillStyle(0xffd700).fillTriangle(16, 18, 20, 0, 24, 18)
+        g.fillStyle(0xffd700).fillTriangle(24, 18, 30, 4, 36, 18)
+        g.fillStyle(0xd32f2f).fillCircle(10, 12, 2.5)
+        g.fillStyle(0x1e88e5).fillCircle(20, 6, 2.5)
+        g.fillStyle(0x43a047).fillCircle(30, 12, 2.5)
+        break
+      case 'bonnet-champi':
+        g.fillStyle(0xd32f2f).fillEllipse(20, 16, 34, 22)
+        g.fillStyle(0xf5f5f5).fillCircle(11, 10, 3).fillCircle(24, 8, 3).fillCircle(30, 16, 3).fillCircle(16, 20, 2.5)
+        g.fillStyle(0xf5f5dc).fillRect(6, 24, 28, 5) // bord du bonnet
+        break
+      case 'casque-orc':
+        g.fillStyle(0x546e5a).fillEllipse(20, 18, 32, 20)
+        g.fillStyle(0x37474f).fillRect(4, 16, 32, 6) // bande frontale
+        g.fillStyle(0x8d6e63).fillTriangle(4, 16, 0, 4, 10, 16) // corne gauche
+        g.fillStyle(0x8d6e63).fillTriangle(36, 16, 40, 4, 30, 16) // corne droite
+        g.fillStyle(0x263238).fillRect(14, 18, 12, 3) // fente visière
+        break
+      default:
+        g.fillStyle(0xce93d8).fillEllipse(20, 16, 26, 18)
+    }
+    g.generateTexture(`cosmetic-${id}`, 40, 32)
+    g.destroy()
+  }
+
   private drawDecor() {
     for (const [id, b] of Object.entries(BIOMES)) {
       const g = this.add.graphics()
@@ -629,6 +673,7 @@ export class PreloadScene extends Phaser.Scene {
   create() {
     this.drawPandas()
     this.drawDecor()
+    for (const item of Object.values(ITEMS)) if (item.slot === 'hat') this.drawCosmetic(item.id)
     for (const m of Object.values(MONSTERS)) this.drawMonster(m)
     for (const s of Object.values(SKILLS)) this.drawSkillIcon(s.id, SKILL_ICONS[s.id] ?? { color: 0xffd54f, glyph: 'sword' })
 

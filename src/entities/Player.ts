@@ -10,6 +10,7 @@ const JUMP_VELOCITY = -JUMP_SPEED // source unique (partagée avec le test d'att
 const MAX_ENERGY = 100
 const ENERGY_REGEN_PER_SEC = 22
 const ENERGY_PER_BASIC_HIT = 6
+const HAT_OFFSET_Y = -34 // place le chapeau au-dessus de la tête du panda
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   stats: StatBlock
@@ -19,6 +20,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   facing: 1 | -1 = 1
   private wasGrounded = true
   private attacking = false
+  private hatImage: Phaser.GameObjects.Image | null = null
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, `panda-${getPlayer().classId}`)
@@ -32,6 +34,27 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.hp = this.stats.maxHp
     this.play(this.anim('idle'))
     this.emitHp()
+    this.refreshHat()
+  }
+
+  // (ré)affiche le chapeau cosmétique équipé (ou le retire si le slot est vide)
+  private refreshHat() {
+    const hatId = getPlayer().equipment.hat
+    this.hatImage?.destroy()
+    this.hatImage = hatId ? this.scene.add.image(this.x, this.y + HAT_OFFSET_Y, `cosmetic-${hatId}`).setDepth(this.depth + 1) : null
+  }
+
+  preUpdate(t: number, d: number) {
+    super.preUpdate(t, d)
+    if (this.hatImage) {
+      this.hatImage.setPosition(this.x, this.y + HAT_OFFSET_Y)
+      this.hatImage.setFlipX(this.facing === -1)
+    }
+  }
+
+  destroy(fromScene?: boolean) {
+    this.hatImage?.destroy()
+    super.destroy(fromScene)
   }
 
   // clé d'animation selon la classe courante (le visuel change au changement de classe)
@@ -52,6 +75,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.hp = Math.round(this.stats.maxHp * ratio)
     this.play(this.anim('idle')) // reprend l'allure de la nouvelle classe
     this.emitHp()
+    this.refreshHat()
   }
 
   updateFromControls(c: ControlsState) {

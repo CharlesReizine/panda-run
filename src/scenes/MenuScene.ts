@@ -8,8 +8,8 @@ import type { EquipSlot } from '../core/types'
 import { computeStats } from '../core/stats'
 import { MAX_SKILL_RANK } from '../core/player-state'
 
-const SLOTS: EquipSlot[] = ['weapon', 'armor', 'accessory']
-const SLOT_LABELS: Record<EquipSlot, string> = { weapon: 'Arme', armor: 'Armure', accessory: 'Accessoire' }
+const SLOTS: EquipSlot[] = ['weapon', 'armor', 'accessory', 'hat']
+const SLOT_LABELS: Record<EquipSlot, string> = { weapon: 'Arme', armor: 'Armure', accessory: 'Accessoire', hat: 'Chapeau' }
 
 export class MenuScene extends Phaser.Scene {
   constructor() { super('Menu') }

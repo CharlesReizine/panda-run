@@ -3,7 +3,7 @@ import { getPlayer } from '../state'
 import { save } from '../core/save'
 import { buyPotion, buyItem } from '../core/shop'
 import { acceptQuest, refreshQuestProgress, claimQuest } from '../core/quests'
-import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, QUESTS } from '../data/shops'
+import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, HAT_SHOP, QUESTS } from '../data/shops'
 import { ITEMS } from '../data/items'
 
 const TOWN_SPEED = 170
@@ -203,7 +203,7 @@ export class TownScene extends Phaser.Scene {
   private openSpot(kind: SpotKind) {
     if (kind === 'potions') this.openPotionShop()
     else if (kind === 'armes') this.openItemShop('armes', WEAPON_SHOP)
-    else if (kind === 'vetements') this.openItemShop('vetements', ARMOR_SHOP)
+    else if (kind === 'vetements') this.openItemShop('vetements', [...ARMOR_SHOP, ...HAT_SHOP])
     else if (kind === 'quete') this.openQuestNpc()
   }
 
@@ -249,9 +249,16 @@ export class TownScene extends Phaser.Scene {
   private openItemShop(kind: 'armes' | 'vetements', list: { itemId: string; price: number }[]) {
     this.closePanel()
     const title = kind === 'armes' ? 'Armurerie' : 'Boutique de vêtements'
+    // au-delà de 4 objets (ex. vêtements + chapeaux) une seule colonne déborderait du panneau
+    const cols = list.length > 4 ? 2 : 1
+    const panelW = cols === 2 ? 860 : 620
+    const rows = Math.ceil(list.length / cols)
+    const panelH = Math.max(380, 165 + rows * 44 + 60)
+    const colW = panelW / cols
+    const panelLeft = 480 - panelW / 2
     const c = this.add.container(0, 0).setDepth(50)
     this.panel = c
-    c.add(this.add.rectangle(480, 270, 620, 380, 0x0d1b2a, 0.96))
+    c.add(this.add.rectangle(480, 270, panelW, panelH, 0x0d1b2a, 0.96))
     c.add(this.add.text(480, 100, title, { fontSize: '22px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
 
     const render = () => {
@@ -260,21 +267,24 @@ export class TownScene extends Phaser.Scene {
       c.add(this.add.text(480, 128, `Or : ${p.gold}`, { fontSize: '15px', color: '#ffd54f' }).setOrigin(0.5))
       list.forEach((entry, i) => {
         const item = ITEMS[entry.itemId]!
-        const y = 165 + i * 44
+        const col = i % cols
+        const row = Math.floor(i / cols)
+        const x0 = panelLeft + colW * col
+        const y = 165 + row * 44
         const bonus = Object.entries(item.bonus).map(([k, v]) => `${k} +${v}`).join(' / ')
-        c.add(this.add.text(230, y, `${item.name}`, { fontSize: '15px', color: '#ffffff' }).setOrigin(0, 0.5))
-        c.add(this.add.text(230, y + 16, bonus, { fontSize: '11px', color: '#90a4ae' }).setOrigin(0, 0.5))
+        c.add(this.add.text(x0 + 30, y, `${item.name}`, { fontSize: '15px', color: '#ffffff' }).setOrigin(0, 0.5))
+        c.add(this.add.text(x0 + 30, y + 16, bonus, { fontSize: '11px', color: '#90a4ae' }).setOrigin(0, 0.5))
         c.add(
-          this.add.text(700, y, `${entry.price} or`, {
+          this.add.text(x0 + colW - 90, y, `${entry.price} or`, {
             fontSize: '15px', color: '#ffffff', backgroundColor: '#2e7d32', padding: { x: 12, y: 6 },
           }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
             if (buyItem(p, entry.itemId, entry.price)) { save(p); render() }
-            else this.flash(c, 480, y + 30, "Pas assez d'or !", '#ff5252')
+            else this.flash(c, x0 + colW / 2, y + 30, "Pas assez d'or !", '#ff5252')
           }),
         )
       })
       c.add(
-        this.add.text(480, 165 + list.length * 44 + 20, '← Fermer', {
+        this.add.text(480, 165 + rows * 44 + 20, '← Fermer', {
           fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
         }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()),
       )

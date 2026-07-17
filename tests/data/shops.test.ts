@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, QUESTS } from '../../src/data/shops'
+import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, HAT_SHOP, QUESTS } from '../../src/data/shops'
 import { ITEMS } from '../../src/data/items'
 
 describe('données boutiques', () => {
@@ -16,6 +16,11 @@ describe('données boutiques', () => {
     for (const entry of ARMOR_SHOP) {
       expect(ITEMS[entry.itemId]).toBeDefined()
       expect(['armor', 'accessory']).toContain(ITEMS[entry.itemId]!.slot)
+      expect(entry.price).toBeGreaterThan(0)
+    }
+    for (const entry of HAT_SHOP) {
+      expect(ITEMS[entry.itemId]).toBeDefined()
+      expect(ITEMS[entry.itemId]!.slot).toBe('hat')
       expect(entry.price).toBeGreaterThan(0)
     }
   })

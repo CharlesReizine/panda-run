@@ -20,6 +20,14 @@ export const ARMOR_SHOP: ShopItemDef[] = [
   { itemId: 'carapace-scarabee', price: 350 },
 ]
 
+export const HAT_SHOP: ShopItemDef[] = [
+  { itemId: 'chapeau-poring', price: 100 },
+  { itemId: 'bonnet-champi', price: 130 },
+  { itemId: 'casque-orc', price: 220 },
+  { itemId: 'ailes-angeling', price: 280 },
+  { itemId: 'couronne-royale', price: 400 },
+]
+
 export interface QuestDef {
   id: string
   name: string
