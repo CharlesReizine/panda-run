@@ -3,7 +3,10 @@ import { LEVELS, type LevelDef } from '../data/levels'
 import { Player } from '../entities/Player'
 import { Enemy } from '../entities/Enemy'
 import { Projectile } from '../entities/Projectile'
+import { Prop } from '../entities/Prop'
 import { MONSTERS } from '../data/monsters'
+import { PROPS } from '../data/props'
+import { MATERIALS } from '../data/materials'
 import { physicalDamage } from '../core/combat'
 import { grantXp } from '../core/progression'
 import { emptyControls, mergeControls, type ControlsState } from '../core/controls'
@@ -12,6 +15,7 @@ import { save } from '../core/save'
 import { CooldownTracker } from '../core/skill-executor'
 import { SKILLS } from '../data/skills'
 import { rollDrops } from '../core/loot'
+import type { DropEntry } from '../core/types'
 import type { UIScene } from './UIScene'
 
 export const TILE = 32
@@ -23,6 +27,7 @@ export class LevelScene extends Phaser.Scene {
   enemyProjectiles!: Phaser.Physics.Arcade.Group
   playerProjectiles!: Phaser.Physics.Arcade.Group
   pickups!: Phaser.Physics.Arcade.Group
+  props!: Phaser.Physics.Arcade.Group
   levelDef!: LevelDef
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private jumpHeld = false
@@ -78,6 +83,12 @@ export class LevelScene extends Phaser.Scene {
       this.enemies.add(new Enemy(this, s.x * TILE, GROUND_ROW * TILE - 40, MONSTERS[s.monsterId]!))
     }
 
+    this.props = this.physics.add.group()
+    for (const propDef of this.levelDef.props ?? []) {
+      const yTile = propDef.y ?? GROUND_ROW - 1
+      this.props.add(new Prop(this, propDef.x * TILE + TILE / 2, yTile * TILE + TILE / 2, PROPS[propDef.kind]!))
+    }
+
     // contact ennemi → joueur
     this.physics.add.overlap(this.player, this.enemies, (_p, e) => this.hitPlayer((e as Enemy).monster.atk))
     this.physics.add.overlap(this.player, this.enemyProjectiles, (_p, proj) => {
@@ -88,10 +99,15 @@ export class LevelScene extends Phaser.Scene {
       ;(e as Enemy).takeDamage(physicalDamage((proj as Projectile).damage, (e as Enemy).monster.def))
       ;(proj as Projectile).destroy()
     })
+    this.physics.add.overlap(this.playerProjectiles, this.props, (proj, prop) => {
+      ;(prop as Prop).takeDamage(1)
+      ;(proj as Projectile).destroy()
+    })
 
     this.events.on('enemy-died', this.onEnemyDied, this)
     this.events.on('enemy-died', this.onBossDied, this)
-    this.events.on('enemy-loot', this.spawnLoot, this)
+    this.events.on('enemy-loot', this.onEnemyLoot, this)
+    this.events.on('prop-broken', this.onPropBroken, this)
     this.game.events.on('input-attack', this.basicAttack, this)
     this.input.keyboard!.on('keydown-X', this.basicAttack, this)
     this.game.events.on('input-skill', this.castSkill, this)
@@ -132,7 +148,8 @@ export class LevelScene extends Phaser.Scene {
       this.game.events.off('input-potion', this.usePotion, this)
       this.events.off('enemy-died', this.onEnemyDied, this)
       this.events.off('enemy-died', this.onBossDied, this)
-      this.events.off('enemy-loot', this.spawnLoot, this)
+      this.events.off('enemy-loot', this.onEnemyLoot, this)
+      this.events.off('prop-broken', this.onPropBroken, this)
       this.bossVolley?.remove()
       this.scene.stop('UI')
     })
@@ -244,6 +261,12 @@ export class LevelScene extends Phaser.Scene {
           e.takeDamage(physicalDamage(atk, e.monster.def, skill.multiplier))
         }
       }
+      for (const obj of this.props.getChildren()) {
+        const prop = obj as Prop
+        if (Phaser.Math.Distance.Between(this.player.x, this.player.y, prop.x, prop.y) <= skill.range) {
+          prop.takeDamage(1)
+        }
+      }
       const fx = this.add.circle(this.player.x, this.player.y, skill.range, 0xffffff, 0.25)
       this.tweens.add({ targets: fx, alpha: 0, duration: 300, onComplete: () => fx.destroy() })
     } else if (skill.kind === 'projectile') {
@@ -261,18 +284,27 @@ export class LevelScene extends Phaser.Scene {
       const e = obj as Enemy
       if (rect.contains(e.x, e.y)) e.takeDamage(physicalDamage(this.player.stats.atk, e.monster.def, multiplier))
     }
+    for (const obj of this.props.getChildren()) {
+      const prop = obj as Prop
+      if (rect.contains(prop.x, prop.y)) prop.takeDamage(1)
+    }
   }
 
-  spawnLoot(e: Enemy) {
-    const drops = rollDrops(e.monster.drops)
-    const spawn = (texture: string, data: Record<string, unknown>) => {
-      const s = this.pickups.create(e.x + Phaser.Math.Between(-20, 20), e.y - 10, texture) as Phaser.Physics.Arcade.Sprite
+  onEnemyLoot(e: Enemy) { this.spawnDrops(e.x, e.y, e.monster.drops) }
+  onPropBroken(prop: Prop) { this.spawnDrops(prop.x, prop.y, prop.def.drops) }
+
+  spawnDrops(x: number, y: number, drops: DropEntry[]) {
+    const result = rollDrops(drops)
+    const spawn = (texture: string, data: Record<string, unknown>, tint?: number) => {
+      const s = this.pickups.create(x + Phaser.Math.Between(-20, 20), y - 10, texture) as Phaser.Physics.Arcade.Sprite
       s.setVelocity(Phaser.Math.Between(-80, 80), -200)
       s.setData(data)
+      if (tint !== undefined) s.setTint(tint)
     }
-    if (drops.gold > 0) spawn('coin', { gold: drops.gold })
-    for (let i = 0; i < drops.potions; i++) spawn('potion-drop', { potion: 1 })
-    for (const itemId of drops.items) spawn('item-drop', { itemId })
+    if (result.gold > 0) spawn('coin', { gold: result.gold })
+    for (let i = 0; i < result.potions; i++) spawn('potion-drop', { potion: 1 })
+    for (const itemId of result.items) spawn('item-drop', { itemId })
+    for (const materialId of result.materials) spawn('material-drop', { materialId }, MATERIALS[materialId]!.color)
   }
 
   collectPickup(s: Phaser.Physics.Arcade.Sprite) {
@@ -280,6 +312,7 @@ export class LevelScene extends Phaser.Scene {
     const gold = s.getData('gold') as number | undefined
     const potion = s.getData('potion') as number | undefined
     const itemId = s.getData('itemId') as string | undefined
+    const materialId = s.getData('materialId') as string | undefined
     if (gold) {
       p.gold += gold
       const txt = this.add.text(s.x, s.y - 10, `+${gold} or`, { fontSize: '16px', color: '#ffd700' }).setOrigin(0.5)
@@ -291,6 +324,13 @@ export class LevelScene extends Phaser.Scene {
       this.tweens.add({ targets: txt, y: txt.y - 30, alpha: 0, duration: 600, onComplete: () => txt.destroy() })
     }
     if (itemId) p.inventory.push(itemId)
+    if (materialId) {
+      p.materials[materialId] = (p.materials[materialId] ?? 0) + 1
+      const def = MATERIALS[materialId]!
+      const color = `#${def.color.toString(16).padStart(6, '0')}`
+      const txt = this.add.text(s.x, s.y - 10, def.name, { fontSize: '14px', color }).setOrigin(0.5)
+      this.tweens.add({ targets: txt, y: txt.y - 30, alpha: 0, duration: 600, onComplete: () => txt.destroy() })
+    }
     s.destroy()
     save(p)
     this.game.events.emit('hud-refresh')

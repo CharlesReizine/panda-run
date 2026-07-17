@@ -50,6 +50,19 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0xffd700).fillCircle(6, 6, 6); g.generateTexture('coin', 12, 12); g.clear()
     g.fillStyle(0xba68c8).fillRect(2, 2, 12, 12); g.generateTexture('item-drop', 16, 16); g.clear()
 
+    // Props destructibles (herbes/champignons/roches/coffres) et le drop générique de matériau
+    g.fillStyle(0x7cb342).fillEllipse(12, 12, 22, 16); g.generateTexture('prop-herbe', 24, 20); g.clear()
+    g.fillStyle(0xffffff).fillRect(9, 10, 6, 14)
+    g.fillStyle(0xef5350).fillEllipse(12, 8, 22, 14)
+    g.fillStyle(0xffffff).fillCircle(6, 6, 2).fillCircle(18, 6, 2).fillCircle(12, 10, 2); g.generateTexture('prop-champignon', 24, 24); g.clear()
+    const rockPts = [[14, 0], [26, 6], [28, 18], [18, 24], [6, 22], [0, 10]].map(([x, y]) => new Phaser.Math.Vector2(x, y))
+    g.fillStyle(0x9e9e9e).fillPoints(rockPts, true); g.generateTexture('prop-roche', 28, 24); g.clear()
+    g.fillStyle(0x795548).fillRect(0, 0, 30, 24)
+    g.fillStyle(0xffd54f).fillRect(0, 9, 30, 6); g.generateTexture('prop-coffre', 30, 24); g.clear()
+    const diamondPts = [[7, 0], [14, 7], [7, 14], [0, 7]].map(([x, y]) => new Phaser.Math.Vector2(x, y))
+    g.fillStyle(0xffffff).fillPoints(diamondPts, true)
+    g.generateTexture('material-drop', 14, 14); g.clear()
+
     g.destroy()
     this.scene.start('Title')
   }

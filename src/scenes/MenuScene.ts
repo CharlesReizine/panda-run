@@ -3,6 +3,7 @@ import { getPlayer } from '../state'
 import { save } from '../core/save'
 import { skillsOf } from '../data/skills'
 import { ITEMS } from '../data/items'
+import { MATERIALS } from '../data/materials'
 import type { EquipSlot } from '../core/types'
 import { computeStats } from '../core/stats'
 
@@ -66,6 +67,20 @@ export class MenuScene extends Phaser.Scene {
           save(p); this.render()
         })
     })
+
+    // Colonne matériaux — collection pure en V1, le craft viendra plus tard
+    this.add.text(520, 350, 'MATÉRIAUX', { fontSize: '18px', color: '#80cbc4' })
+    const collected = Object.entries(p.materials).filter(([, count]) => count > 0)
+    if (collected.length === 0) {
+      this.add.text(520, 378, '(rien pour l\'instant)', { fontSize: '14px', color: '#78909c' })
+    } else {
+      collected.forEach(([id, count], i) => {
+        const def = MATERIALS[id]!
+        const color = `#${def.color.toString(16).padStart(6, '0')}`
+        this.add.text(520, 378 + i * 20, `${def.name} ×${count}`, { fontSize: '14px', color })
+      })
+    }
+    this.add.text(520, 378 + Math.max(collected.length, 1) * 20 + 4, 'Le craft arrive bientôt…', { fontSize: '12px', color: '#546e7a' })
 
     this.add.text(480, 500, '← Retour', { fontSize: '22px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 16, y: 8 } })
       .setOrigin(0.5).setInteractive().on('pointerdown', () => this.scene.start('WorldMap'))
