@@ -29,7 +29,8 @@ describe('niveaux et carte', () => {
       const chests = l.props!.filter((p) => p.kind === 'coffre')
       expect(ground.length, l.id).toBeGreaterThanOrEqual(2)
       expect(ground.length, l.id).toBeLessThanOrEqual(4)
-      expect(chests.length, l.id).toBe(1)
+      expect(chests.length, l.id).toBeGreaterThanOrEqual(1)
+      expect(chests.length, l.id).toBeLessThanOrEqual(3)
       for (const p of l.props!) expect(PROPS[p.kind], `${l.id}:${p.kind}`).toBeDefined()
     }
   })

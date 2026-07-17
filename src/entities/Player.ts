@@ -3,7 +3,6 @@ import type { StatBlock } from '../core/types'
 import type { ControlsState } from '../core/controls'
 import { computeStats } from '../core/stats'
 import { getPlayer } from '../state'
-import { CLASSES } from '../data/classes'
 
 const RUN_SPEED = 220
 const JUMP_VELOCITY = -560
@@ -21,21 +20,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private attacking = false
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
-    super(scene, x, y, 'panda')
+    super(scene, x, y, `panda-${getPlayer().classId}`)
     scene.add.existing(this)
     scene.physics.add.existing(this)
     this.setCollideWorldBounds(true)
     this.stats = computeStats(getPlayer())
     this.hp = this.stats.maxHp
-    this.setTint(CLASSES[getPlayer().classId].tint)
-    this.play('panda-idle')
+    this.play(this.anim('idle'))
     this.emitHp()
+  }
+
+  // clé d'animation selon la classe courante (le visuel change au changement de classe)
+  private anim(suffix: string): string {
+    return `panda-${getPlayer().classId}-${suffix}`
   }
 
   // joue l'animation d'attaque ; pendant ce temps run/idle sont suspendus
   playAttack() {
     this.attacking = true
-    this.play('panda-attack', true)
+    this.play(this.anim('attack'), true)
     this.scene.time.delayedCall(160, () => { this.attacking = false })
   }
 
@@ -43,7 +46,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const ratio = this.hp / this.stats.maxHp
     this.stats = computeStats(getPlayer())
     this.hp = Math.round(this.stats.maxHp * ratio)
-    this.setTint(CLASSES[getPlayer().classId].tint)
+    this.play(this.anim('idle')) // reprend l'allure de la nouvelle classe
     this.emitHp()
   }
 
@@ -62,15 +65,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // animations : l'attaque a la priorité, sinon course au sol / idle
     if (!this.attacking) {
-      if (body.blocked.down && (c.left || c.right)) this.play('panda-run', true)
-      else this.play('panda-idle', true)
+      if (body.blocked.down && (c.left || c.right)) this.play(this.anim('run'), true)
+      else this.play(this.anim('idle'), true)
     }
   }
 
   takeDamage(amount: number) {
     this.hp = Math.max(0, this.hp - amount)
-    this.setTint(0xff0000)
-    this.scene.time.delayedCall(100, () => this.setTint(CLASSES[getPlayer().classId].tint))
+    this.setTint(0xff5555)
+    this.scene.time.delayedCall(100, () => this.clearTint())
     this.emitHp()
   }
 

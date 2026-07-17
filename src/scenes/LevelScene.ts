@@ -261,11 +261,29 @@ export class LevelScene extends Phaser.Scene {
     this.damageEnemiesInRect(this.player.x + this.player.facing * 30, this.player.y, 60, 50, 1)
   }
 
-  // arc de coup visible même dans le vide + petit élan du panda
+  // croissant de coup visible même dans le vide + petit élan du panda
   private slashFx(cx: number, cy: number, w: number, color: number) {
-    const fx = this.add.ellipse(cx, cy, w, 44, color, 0.45)
-    this.tweens.add({ targets: fx, scaleX: 1.3, alpha: 0, duration: 150, onComplete: () => fx.destroy() })
+    const arc = this.add.graphics({ x: cx, y: cy }).setDepth(5)
+    arc.lineStyle(5, color, 0.95).beginPath()
+    arc.arc(0, 0, w * 0.5, Phaser.Math.DegToRad(-70), Phaser.Math.DegToRad(70), false)
+    arc.strokePath()
+    this.tweens.add({ targets: arc, scale: 1.4, alpha: 0, duration: 170, onComplete: () => arc.destroy() })
     this.tweens.add({ targets: this.player, x: this.player.x + this.player.facing * 6, duration: 60, yoyo: true })
+  }
+
+  // couleur d'effet selon l'élément du skill
+  private skillColor(id: string): number {
+    if (id.includes('feu') || id.includes('meteore')) return 0xff7043
+    if (id.includes('givre')) return 0x4dd0e1
+    if (id.includes('eclair')) return 0xfff176
+    if (id.includes('fleche') || id.includes('tir') || id.includes('salve') || id === 'bambou-jete' || id === 'fleche-de-bambou') return 0xd7a86e
+    if (id.includes('arcanique')) return 0xce93d8
+    return 0xffd54f
+  }
+
+  private aoeRing(x: number, y: number, radius: number, color: number) {
+    const ring = this.add.image(x, y, 'ring').setTint(color).setDepth(5).setScale(0.2)
+    this.tweens.add({ targets: ring, scale: radius / 28, alpha: 0, duration: 350, onComplete: () => ring.destroy() })
   }
 
   private announceSkill(name: string, color = 0xffd700) {
@@ -291,9 +309,10 @@ export class LevelScene extends Phaser.Scene {
     this.announceSkill(skill.name)
 
     const { atk, maxHp } = this.player.stats
+    const color = this.skillColor(skill.id)
     if (skill.kind === 'melee') {
       this.player.playAttack()
-      this.slashFx(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, 0xffd54f)
+      this.slashFx(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, color)
       this.damageEnemiesInRect(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, 60, skill.multiplier)
     } else if (skill.kind === 'aoe') {
       for (const obj of this.enemies.getChildren()) {
@@ -308,14 +327,20 @@ export class LevelScene extends Phaser.Scene {
           prop.takeDamage(1)
         }
       }
-      const fx = this.add.circle(this.player.x, this.player.y, skill.range, 0xffffff, 0.25)
-      this.tweens.add({ targets: fx, alpha: 0, duration: 300, onComplete: () => fx.destroy() })
+      this.aoeRing(this.player.x, this.player.y, skill.range, color)
     } else if (skill.kind === 'projectile') {
-      this.playerProjectiles.add(new Projectile(this, this.player.x, this.player.y - 6, this.player.facing, 0, atk * skill.multiplier, true, skill.range))
+      const proj = new Projectile(this, this.player.x, this.player.y - 6, this.player.facing, 0, atk * skill.multiplier, true, skill.range)
+      proj.setTint(color)
+      if (skill.multiplier >= 2.5) proj.setScale(1.8)
+      else if (skill.multiplier >= 1.6) proj.setScale(1.3)
+      this.playerProjectiles.add(proj)
     } else if (skill.kind === 'heal') {
       this.player.heal(Math.round(maxHp * skill.multiplier))
-      const fx = this.add.text(this.player.x, this.player.y - 50, '+PV', { fontSize: '18px', color: '#66bb6a' }).setOrigin(0.5)
-      this.tweens.add({ targets: fx, y: fx.y - 30, alpha: 0, duration: 800, onComplete: () => fx.destroy() })
+      this.aoeRing(this.player.x, this.player.y, 70, 0x66bb6a)
+      for (let i = 0; i < 5; i++) {
+        const spark = this.add.text(this.player.x + Phaser.Math.Between(-20, 20), this.player.y + 10, '✦', { fontSize: '16px', color: '#8aff9a' }).setOrigin(0.5).setDepth(6)
+        this.tweens.add({ targets: spark, y: spark.y - 50, alpha: 0, duration: 700, delay: i * 50, onComplete: () => spark.destroy() })
+      }
     }
   }
 

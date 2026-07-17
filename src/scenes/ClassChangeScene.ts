@@ -22,7 +22,7 @@ export class ClassChangeScene extends Phaser.Scene {
       const def = CLASSES[id]
       const x = 200 + i * 280
       const card = this.add.rectangle(x, 290, 240, 360, 0x1b3a4b).setStrokeStyle(3, def.tint).setInteractive()
-      this.add.image(x, 180, 'panda').setScale(2.5).setTint(def.tint)
+      this.add.image(x, 175, `panda-${id}`).setScale(2)
       this.add.text(x, 260, def.name, { fontSize: '26px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
       this.add.text(x, 300, `ATK ${def.baseStats.atk}  DEF ${def.baseStats.def}\nPV ${def.baseStats.maxHp}`, { fontSize: '14px', color: '#b0bec5', align: 'center' }).setOrigin(0.5)
       this.add.text(x, 390, skillsOf(id).slice(0, 3).map((s) => `• ${s.name}`).join('\n') + '\n…', { fontSize: '12px', color: '#80cbc4', align: 'center' }).setOrigin(0.5)

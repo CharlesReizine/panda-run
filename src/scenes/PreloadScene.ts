@@ -1,5 +1,25 @@
 import Phaser from 'phaser'
 import { MONSTERS } from '../data/monsters'
+import type { MonsterDef } from '../core/types'
+
+type ClassId = 'novice' | 'swordsman' | 'mage' | 'archer'
+const CLASSES: ClassId[] = ['novice', 'swordsman', 'mage', 'archer']
+
+interface Pose {
+  bx?: number; by?: number
+  lf?: [number, number]; rf?: [number, number]
+  la?: [number, number]; ra?: [number, number]
+  paw?: boolean
+}
+
+const POSES: Record<string, Pose> = {
+  '': {},
+  'run-0': { lf: [-3, -1], rf: [3, 1], la: [0, -2], ra: [0, 2] },
+  'run-1': { by: -3, lf: [1, -2], rf: [-1, -2] },
+  'run-2': { lf: [3, 1], rf: [-3, -1], la: [0, 2], ra: [0, -2] },
+  'attack-0': { bx: -2, ra: [-3, -2] },
+  'attack-1': { bx: 3, ra: [7, -4], paw: true },
+}
 
 const TILE_PALETTES: Record<string, { soil: number; top: number; speck: number }> = {
   'tile-plaine': { soil: 0x6b4a2f, top: 0x5cb85c, speck: 0x4a9d4a },
@@ -8,32 +28,43 @@ const TILE_PALETTES: Record<string, { soil: number; top: number; speck: number }
   'tile-cave': { soil: 0x3f3f3f, top: 0x616161, speck: 0x525252 },
 }
 
+const OY = 14 // décalage vertical : laisse de la place au-dessus de la tête pour les coiffes
+
 export class PreloadScene extends Phaser.Scene {
   constructor() { super('Preload') }
 
-  // Une frame du panda. bx/by décalent le corps+tête ; lf/rf les pieds ; la/ra les bras.
-  // paw = patte avant tendue (attaque). Toutes les frames font 64×80 → même ancrage.
-  private pandaFrame(key: string, o: {
-    bx?: number; by?: number
-    lf?: [number, number]; rf?: [number, number]
-    la?: [number, number]; ra?: [number, number]
-    paw?: boolean
-  }) {
+  // coiffe/accessoire de classe, dessiné au-dessus de la tête (hx,hy = centre tête)
+  private drawClassGear(g: Phaser.GameObjects.Graphics, cls: ClassId, hx: number, hy: number) {
+    if (cls === 'swordsman') {
+      g.fillStyle(0xd32f2f).fillRect(hx - 17, hy - 11, 34, 5)
+      g.fillTriangle(hx - 17, hy - 11, hx - 28, hy - 14, hx - 25, hy - 4) // pan du bandeau
+    } else if (cls === 'mage') {
+      g.fillStyle(0x3949ab).fillEllipse(hx, hy - 15, 42, 10)
+      g.fillTriangle(hx - 17, hy - 15, hx + 17, hy - 15, hx + 5, hy - 40)
+      g.fillStyle(0xffd54f).fillCircle(hx + 5, hy - 38, 3) // pompon
+      g.fillStyle(0xfff59d).fillCircle(hx - 4, hy - 22, 2) // étoile
+    } else if (cls === 'archer') {
+      g.fillStyle(0x2e7d32).fillTriangle(hx - 18, hy - 13, hx + 18, hy - 13, hx + 2, hy - 30)
+      g.fillStyle(0x1b5e20).fillRect(hx - 18, hy - 14, 36, 4)
+      g.fillStyle(0xffca28).fillTriangle(hx + 10, hy - 24, hx + 24, hy - 32, hx + 13, hy - 19) // plume
+    } else {
+      g.fillStyle(0x7cb342).fillEllipse(hx + 1, hy - 22, 7, 10) // petite pousse (novice)
+      g.fillStyle(0x33691e).fillRect(hx, hy - 24, 2, 6)
+    }
+  }
+
+  private pandaFrame(key: string, o: Pose, cls: ClassId) {
     const g = this.add.graphics()
     const W = 0xf7f7f7, K = 0x2b2b2b, PINK = 0xff9ab0, DARK = 0x3a2f2f
-    const bx = o.bx ?? 0, by = o.by ?? 0
+    const bx = o.bx ?? 0, by = (o.by ?? 0) + OY
     const [lfx, lfy] = o.lf ?? [0, 0], [rfx, rfy] = o.rf ?? [0, 0]
     const [lax, lay] = o.la ?? [0, 0], [rax, ray] = o.ra ?? [0, 0]
-    // pieds
-    g.fillStyle(K).fillEllipse(24 + lfx, 72 + lfy, 15, 11).fillEllipse(40 + rfx, 72 + rfy, 15, 11)
-    // corps
+    g.fillStyle(K).fillEllipse(24 + lfx, 72 + lfy + OY, 15, 11).fillEllipse(40 + rfx, 72 + rfy + OY, 15, 11)
     g.fillStyle(K).fillEllipse(32 + bx, 54 + by, 46, 40)
     g.fillStyle(W).fillEllipse(32 + bx, 53 + by, 40, 33)
     g.fillStyle(0xe4e4e4).fillEllipse(32 + bx, 61 + by, 26, 14)
-    // bras
     g.fillStyle(K).fillEllipse(12 + bx + lax, 50 + by + lay, 13, 22).fillEllipse(52 + bx + rax, 50 + by + ray, 13, 22)
-    if (o.paw) g.fillStyle(K).fillCircle(57 + rax, 46 + ray, 7)
-    // oreilles + tête
+    if (o.paw) g.fillStyle(K).fillCircle(57 + rax, 46 + ray + OY, 7)
     g.fillStyle(K).fillCircle(15 + bx, 9 + by, 9).fillCircle(49 + bx, 9 + by, 9)
     g.fillStyle(K).fillCircle(32 + bx, 25 + by, 23)
     g.fillStyle(W).fillCircle(32 + bx, 25 + by, 20)
@@ -46,51 +77,145 @@ export class PreloadScene extends Phaser.Scene {
     g.lineStyle(2, DARK).beginPath()
     g.arc(32 + bx, 34 + by, 5, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false)
     g.strokePath()
-    g.generateTexture(key, 64, 80)
+    this.drawClassGear(g, cls, 32 + bx, 25 + by)
+    g.generateTexture(key, 64, 92)
     g.destroy()
   }
 
-  private drawPanda() {
-    this.pandaFrame('panda', {})
-    this.pandaFrame('panda-run-0', { lf: [-3, -1], rf: [3, 1], la: [0, -2], ra: [0, 2] })
-    this.pandaFrame('panda-run-1', { by: -3, lf: [1, -2], rf: [-1, -2] })
-    this.pandaFrame('panda-run-2', { lf: [3, 1], rf: [-3, -1], la: [0, 2], ra: [0, -2] })
-    this.pandaFrame('panda-attack-0', { bx: -2, ra: [-3, -2] })
-    this.pandaFrame('panda-attack-1', { bx: 3, ra: [7, -4], paw: true })
-
-    if (!this.anims.exists('panda-run')) {
-      this.anims.create({ key: 'panda-idle', frames: [{ key: 'panda' }], frameRate: 1, repeat: -1 })
-      this.anims.create({
-        key: 'panda-run',
-        frames: [{ key: 'panda-run-0' }, { key: 'panda-run-1' }, { key: 'panda-run-2' }, { key: 'panda-run-1' }],
-        frameRate: 12, repeat: -1,
-      })
-      this.anims.create({
-        key: 'panda-attack',
-        frames: [{ key: 'panda-attack-0' }, { key: 'panda-attack-1' }],
-        frameRate: 14, repeat: 0,
-      })
+  private drawPandas() {
+    for (const cls of CLASSES) {
+      for (const [pose, opts] of Object.entries(POSES)) {
+        const key = pose ? `panda-${cls}-${pose}` : `panda-${cls}`
+        this.pandaFrame(key, opts, cls)
+      }
+      if (!this.anims.exists(`panda-${cls}-run`)) {
+        this.anims.create({ key: `panda-${cls}-idle`, frames: [{ key: `panda-${cls}` }], frameRate: 1, repeat: -1 })
+        this.anims.create({
+          key: `panda-${cls}-run`,
+          frames: [{ key: `panda-${cls}-run-0` }, { key: `panda-${cls}-run-1` }, { key: `panda-${cls}-run-2` }, { key: `panda-${cls}-run-1` }],
+          frameRate: 12, repeat: -1,
+        })
+        this.anims.create({
+          key: `panda-${cls}-attack`,
+          frames: [{ key: `panda-${cls}-attack-0` }, { key: `panda-${cls}-attack-1` }],
+          frameRate: 14, repeat: 0,
+        })
+      }
     }
+    // alias pour les menus (écran titre) : le panda novice
+    this.pandaFrame('panda', {}, 'novice')
+  }
+
+  private drawMonster(m: MonsterDef) {
+    const s = m.boss ? 76 : 40
+    const r = s / 2
+    const g = this.add.graphics()
+    const dark = 0x222222
+    g.fillStyle(dark, 0.35).fillEllipse(r, s + 2, r * 1.4, 6) // ombre au sol
+
+    const body = () => {
+      g.fillStyle(dark).fillCircle(r, r + 2, r - 1)
+      g.fillStyle(m.color).fillCircle(r, r + 2, r - 3)
+      g.fillStyle(0xffffff, 0.28).fillEllipse(r - r / 3, r - r / 3, r / 2, r / 3)
+    }
+    const eyes = (dy = 0) => {
+      const e = Math.max(3, r / 5)
+      g.fillStyle(0xffffff).fillCircle(r - r / 3, r + dy, e).fillCircle(r + r / 3, r + dy, e)
+      g.fillStyle(0x000000).fillCircle(r - r / 3 + 1, r + dy + 1, e / 2).fillCircle(r + r / 3 + 1, r + dy + 1, e / 2)
+    }
+    const mouth = () => {
+      g.lineStyle(2, 0x000000, 0.6).beginPath()
+      g.arc(r, r + r / 2, r / 4, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false)
+      g.strokePath()
+    }
+
+    switch (m.id) {
+      case 'gloopy':
+      case 'roi-gloopy':
+        body(); eyes(); mouth()
+        g.fillStyle(0xffffff, 0.5).fillCircle(r - r / 2, r - r / 2, r / 6) // brillance slime
+        break
+      case 'mandragore':
+        g.fillStyle(0x33691e).fillTriangle(r - 10, 6, r - 2, 6, r - 12, -6) // feuilles
+        g.fillStyle(0x33691e).fillTriangle(r + 10, 6, r + 2, 6, r + 12, -6)
+        body(); eyes()
+        g.lineStyle(2, 0x000000, 0.7).beginPath(); g.arc(r, r + r / 1.6, r / 3, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340), false); g.strokePath() // grimace
+        break
+      case 'louveteau':
+        g.fillStyle(m.color).fillTriangle(r - 14, 4, r - 4, 2, r - 8, -10) // oreilles
+        g.fillStyle(m.color).fillTriangle(r + 14, 4, r + 4, 2, r + 8, -10)
+        body(); eyes()
+        g.fillStyle(0x000000).fillEllipse(r, r + r / 2, 5, 4) // truffe
+        g.fillStyle(0xffffff).fillTriangle(r - 4, r + r / 1.6, r - 1, r + r / 1.6, r - 2.5, r + r / 1.2) // croc
+        break
+      case 'scorpion':
+        body()
+        g.fillStyle(m.color).fillCircle(r - r / 1.2, r - 2, r / 3).fillCircle(r + r / 1.2, r - 2, r / 3) // pinces
+        g.fillStyle(dark).fillCircle(r - r / 1.05, r - 4, r / 6).fillCircle(r + r / 1.05, r - 4, r / 6)
+        g.fillStyle(m.color).fillCircle(r, r - r / 1.1, r / 4) // queue
+        g.fillStyle(0xffee58).fillCircle(r, r - r / 0.9, r / 8) // dard
+        eyes()
+        break
+      case 'momie':
+        body()
+        g.lineStyle(2, 0xbfae86, 0.9)
+        for (let i = -1; i <= 2; i++) { g.beginPath(); g.moveTo(2, r + i * 6); g.lineTo(s - 2, r + i * 6 + 2); g.strokePath() } // bandages
+        g.fillStyle(0xffffff).fillCircle(r + r / 4, r, r / 5); g.fillStyle(0x000000).fillCircle(r + r / 4, r, r / 10) // un œil
+        break
+      case 'vautour':
+        g.fillStyle(m.color).fillTriangle(2, r, r, r - 6, r, r + 8) // aile gauche
+        g.fillStyle(m.color).fillTriangle(s - 2, r, r, r - 6, r, r + 8) // aile droite
+        body(); eyes()
+        g.fillStyle(0xffb300).fillTriangle(r - 4, r + r / 2, r + 4, r + r / 2, r, r + r / 1.1) // bec
+        break
+      case 'squelette':
+        g.fillStyle(0xf5f5f5).fillCircle(r, r + 2, r - 2)
+        g.fillStyle(0x000000).fillCircle(r - r / 3, r, r / 4).fillCircle(r + r / 3, r, r / 4) // orbites
+        g.fillStyle(0x000000).fillTriangle(r - 3, r + r / 2, r + 3, r + r / 2, r, r + r / 3) // nez
+        g.lineStyle(2, 0x000000).beginPath(); g.moveTo(r - r / 2, r + r / 1.4); g.lineTo(r + r / 2, r + r / 1.4); g.strokePath()
+        for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(r + i * 4, r + r / 1.6); g.lineTo(r + i * 4, r + r / 1.2); g.strokePath() } // dents
+        break
+      case 'chauve-souris':
+        g.fillStyle(m.color).fillTriangle(0, r - 6, r, r, 2, r + 8) // ailes
+        g.fillStyle(m.color).fillTriangle(s, r - 6, r, r, s - 2, r + 8)
+        g.fillStyle(m.color).fillTriangle(r - 8, 6, r - 2, 4, r - 6, -6) // oreilles
+        g.fillStyle(m.color).fillTriangle(r + 8, 6, r + 2, 4, r + 6, -6)
+        body(); eyes()
+        g.fillStyle(0xffffff).fillTriangle(r - 4, r + r / 2, r - 1, r + r / 2, r - 2.5, r + r / 1.3).fillTriangle(r + 1, r + r / 2, r + 4, r + r / 2, r + 2.5, r + r / 1.3) // crocs
+        break
+      case 'pharaon-scarabee':
+        body()
+        g.fillStyle(0x1a1a1a).fillRect(r - r / 8, 4, r / 4, s - 8) // ligne de carapace
+        g.lineStyle(3, 0xffd54f); g.beginPath(); g.moveTo(r, 6); g.lineTo(r - r / 2, r); g.moveTo(r, 6); g.lineTo(r + r / 2, r); g.strokePath() // antennes dorées
+        eyes()
+        break
+      default:
+        body(); eyes(); mouth()
+    }
+
+    if (m.boss) {
+      g.fillStyle(0xffd54f).fillTriangle(r - 14, 8, r - 7, 18, r, 8).fillTriangle(r, 8, r + 7, 18, r + 14, 8)
+      g.fillRect(r - 14, 15, 28, 5)
+      g.fillStyle(0xff5252).fillCircle(r, 8, 2).fillCircle(r - 14, 8, 2).fillCircle(r + 14, 8, 2) // joyaux
+    }
+    g.generateTexture(`monster-${m.id}`, s, s + 6)
+    g.destroy()
   }
 
   private drawDecor() {
     let g = this.add.graphics()
-    // buisson (plaine)
     g.fillStyle(0x3f8f3f).fillEllipse(20, 26, 40, 24).fillEllipse(8, 30, 20, 16).fillEllipse(32, 30, 20, 16)
     g.fillStyle(0x5cb85c).fillEllipse(20, 22, 34, 18)
     g.generateTexture('deco-plaine', 40, 36); g.destroy()
-    // arbre (forêt)
     g = this.add.graphics()
     g.fillStyle(0x5d4037).fillRect(18, 44, 8, 20)
     g.fillStyle(0x2e5e30).fillCircle(22, 24, 20)
     g.fillStyle(0x3c7d3f).fillCircle(14, 20, 12).fillCircle(30, 22, 12).fillCircle(22, 13, 12)
     g.generateTexture('deco-foret', 44, 64); g.destroy()
-    // cactus (désert)
     g = this.add.graphics()
     g.fillStyle(0x3c7d3f).fillRoundedRect(12, 10, 10, 46, 4)
     g.fillStyle(0x4a9d4a).fillRoundedRect(2, 26, 8, 16, 3).fillRoundedRect(24, 20, 8, 22, 3)
     g.generateTexture('deco-desert', 34, 56); g.destroy()
-    // stalagmite (cave)
     g = this.add.graphics()
     g.fillStyle(0x50505c).fillTriangle(4, 48, 16, 4, 28, 48)
     g.fillStyle(0x6a6a78).fillTriangle(10, 48, 16, 18, 22, 48)
@@ -98,10 +223,10 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create() {
-    this.drawPanda()
+    this.drawPandas()
     this.drawDecor()
+    for (const m of Object.values(MONSTERS)) this.drawMonster(m)
 
-    // Tuiles par biome
     for (const [key, pal] of Object.entries(TILE_PALETTES)) {
       const g = this.add.graphics()
       g.fillStyle(pal.soil).fillRect(0, 0, 32, 32)
@@ -112,31 +237,7 @@ export class PreloadScene extends Phaser.Scene {
       g.destroy()
     }
 
-    // Monstres : corps rond ombré, yeux + bouche, couronne pour les boss
-    for (const m of Object.values(MONSTERS)) {
-      const s = m.boss ? 64 : 36
-      const r = s / 2
-      const g = this.add.graphics()
-      g.fillStyle(0x222222, 0.4).fillEllipse(r, s + 1, r * 1.4, 6) // ombre portée
-      g.fillStyle(0x222222).fillCircle(r, r + 2, r - 1)
-      g.fillStyle(m.color).fillCircle(r, r + 2, r - 3)
-      g.fillStyle(0xffffff, 0.3).fillEllipse(r - r / 3, r - r / 3, r / 2, r / 3)
-      const eye = Math.max(2.5, r / 6)
-      g.fillStyle(0xffffff).fillCircle(r - r / 3, r, eye).fillCircle(r + r / 3, r, eye)
-      g.fillStyle(0x000000).fillCircle(r - r / 3 + 1, r + 1, eye / 2).fillCircle(r + r / 3 + 1, r + 1, eye / 2)
-      g.lineStyle(2, 0x000000, 0.6).beginPath()
-      g.arc(r, r + r / 2, r / 4, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false)
-      g.strokePath()
-      if (m.boss) {
-        g.fillStyle(0xffd54f).fillTriangle(r - 12, 6, r - 6, 14, r, 6).fillTriangle(r, 6, r + 6, 14, r + 12, 6)
-        g.fillRect(r - 12, 12, 24, 4)
-      }
-      g.generateTexture(`monster-${m.id}`, s, s + 6)
-      g.destroy()
-    }
-
     const g = this.add.graphics()
-    // Divers
     g.fillStyle(0xffee58).fillCircle(6, 6, 6); g.fillStyle(0xfff59d).fillCircle(4, 4, 2); g.generateTexture('projectile', 12, 12); g.clear()
     g.fillStyle(0x5d4037).fillRect(0, 0, 32, 48)
     g.fillStyle(0x8d6e63).fillRect(2, 2, 28, 44)
@@ -147,7 +248,6 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0xb8860b).fillCircle(6, 6, 6); g.fillStyle(0xffd700).fillCircle(6, 6, 5); g.fillStyle(0xfff59d).fillCircle(4, 4, 1); g.generateTexture('coin', 12, 12); g.clear()
     g.fillStyle(0x7b1fa2).fillRoundedRect(1, 1, 14, 14, 3); g.fillStyle(0xba68c8).fillRoundedRect(2, 2, 12, 12, 2); g.generateTexture('item-drop', 16, 16); g.clear()
 
-    // Props destructibles
     g.fillStyle(0x33691e).fillEllipse(12, 13, 22, 16)
     g.fillStyle(0x7cb342).fillEllipse(12, 11, 20, 13)
     g.fillStyle(0x9ccc65).fillEllipse(7, 8, 3, 7).fillEllipse(12, 6, 3, 9).fillEllipse(17, 8, 3, 7); g.generateTexture('prop-herbe', 24, 20); g.clear()
@@ -157,15 +257,19 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0xffffff).fillCircle(6, 6, 2).fillCircle(18, 6, 2).fillCircle(12, 10, 2); g.generateTexture('prop-champignon', 24, 24); g.clear()
     g.fillStyle(0x616161).fillEllipse(14, 14, 28, 20)
     g.fillStyle(0x9e9e9e).fillEllipse(13, 11, 16, 9); g.generateTexture('prop-roche', 28, 24); g.clear()
-    g.fillStyle(0x4e342e).fillRoundedRect(0, 0, 30, 24, 3)
-    g.fillStyle(0x795548).fillRoundedRect(1, 1, 28, 22, 3)
-    g.fillStyle(0xffd54f).fillRect(0, 9, 30, 6)
-    g.fillStyle(0xfff176).fillCircle(15, 12, 3); g.generateTexture('prop-coffre', 30, 24); g.clear()
+    // coffre plus détaillé (couvercle bombé + serrure + ferrures)
+    g.fillStyle(0x4e342e).fillRoundedRect(0, 6, 34, 22, 3)
+    g.fillStyle(0x6d4c41).fillRect(2, 8, 30, 18)
+    g.fillStyle(0x4e342e).fillEllipse(17, 6, 34, 14)
+    g.fillStyle(0x8d6e63).fillEllipse(17, 6, 30, 10)
+    g.fillStyle(0xffd54f).fillRect(0, 15, 34, 3).fillRect(15, 4, 4, 22)
+    g.fillStyle(0xfff176).fillCircle(17, 16, 3); g.generateTexture('prop-coffre', 34, 30); g.clear()
     g.fillStyle(0xffffff).fillEllipse(7, 7, 12, 12); g.generateTexture('material-drop', 14, 14); g.clear()
 
-    // Collines et nuages de fond (teintés à l'usage)
     g.fillStyle(0xffffff).fillEllipse(120, 120, 260, 180); g.generateTexture('hill', 240, 130); g.clear()
     g.fillStyle(0xffffff).fillCircle(20, 20, 18).fillCircle(44, 22, 22).fillCircle(70, 20, 16); g.generateTexture('cloud', 90, 40); g.clear()
+    // anneau pour les effets de zone (blanc, teinté à l'usage)
+    g.lineStyle(4, 0xffffff).strokeCircle(32, 32, 28); g.generateTexture('ring', 64, 64); g.clear()
 
     g.destroy()
     this.scene.start('Title')
