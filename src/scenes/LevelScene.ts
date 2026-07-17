@@ -11,6 +11,7 @@ import { getPlayer } from '../state'
 import { save } from '../core/save'
 import { CooldownTracker } from '../core/skill-executor'
 import { SKILLS } from '../data/skills'
+import { rollDrops } from '../core/loot'
 import type { UIScene } from './UIScene'
 
 export const TILE = 32
@@ -21,6 +22,7 @@ export class LevelScene extends Phaser.Scene {
   enemies!: Phaser.Physics.Arcade.Group
   enemyProjectiles!: Phaser.Physics.Arcade.Group
   playerProjectiles!: Phaser.Physics.Arcade.Group
+  pickups!: Phaser.Physics.Arcade.Group
   levelDef!: LevelDef
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private jumpHeld = false
@@ -59,6 +61,10 @@ export class LevelScene extends Phaser.Scene {
     this.enemyProjectiles = this.physics.add.group()
     this.playerProjectiles = this.physics.add.group()
 
+    this.pickups = this.physics.add.group()
+    this.physics.add.collider(this.pickups, platforms)
+    this.physics.add.overlap(this.player, this.pickups, (_p, pk) => this.collectPickup(pk as Phaser.Physics.Arcade.Sprite))
+
     for (const s of this.levelDef.spawns) {
       this.enemies.add(new Enemy(this, s.x * TILE, GROUND_ROW * TILE - 40, MONSTERS[s.monsterId]!))
     }
@@ -75,9 +81,12 @@ export class LevelScene extends Phaser.Scene {
     })
 
     this.events.on('enemy-died', this.onEnemyDied, this)
+    this.events.on('enemy-loot', this.spawnLoot, this)
     this.game.events.on('input-attack', this.basicAttack, this)
     this.input.keyboard!.on('keydown-X', this.basicAttack, this)
     this.game.events.on('input-skill', this.castSkill, this)
+    this.game.events.on('input-potion', this.usePotion, this)
+    this.input.keyboard!.on('keydown-P', this.usePotion, this)
     for (const [key, slot] of [['ONE', 0], ['TWO', 1], ['THREE', 2], ['FOUR', 3]] as const) {
       this.input.keyboard!.on(`keydown-${key}`, () => this.castSkill(slot))
     }
@@ -102,7 +111,9 @@ export class LevelScene extends Phaser.Scene {
       this.game.events.off('input-jump-up', this.onJumpUp, this)
       this.game.events.off('input-attack', this.basicAttack, this)
       this.game.events.off('input-skill', this.castSkill, this)
+      this.game.events.off('input-potion', this.usePotion, this)
       this.events.off('enemy-died', this.onEnemyDied, this)
+      this.events.off('enemy-loot', this.spawnLoot, this)
       this.scene.stop('UI')
     })
     this.game.events.emit('hud-refresh')
@@ -178,6 +189,40 @@ export class LevelScene extends Phaser.Scene {
       const e = obj as Enemy
       if (rect.contains(e.x, e.y)) e.takeDamage(physicalDamage(this.player.stats.atk, e.monster.def, multiplier))
     }
+  }
+
+  spawnLoot(e: Enemy) {
+    const drops = rollDrops(e.monster.drops)
+    const spawn = (texture: string, data: Record<string, unknown>) => {
+      const s = this.pickups.create(e.x + Phaser.Math.Between(-20, 20), e.y - 10, texture) as Phaser.Physics.Arcade.Sprite
+      s.setVelocity(Phaser.Math.Between(-80, 80), -200)
+      s.setData(data)
+    }
+    if (drops.gold > 0) spawn('coin', { gold: drops.gold })
+    for (let i = 0; i < drops.potions; i++) spawn('potion-drop', { potion: 1 })
+    for (const itemId of drops.items) spawn('item-drop', { itemId })
+  }
+
+  collectPickup(s: Phaser.Physics.Arcade.Sprite) {
+    const p = getPlayer()
+    const gold = s.getData('gold') as number | undefined
+    const potion = s.getData('potion') as number | undefined
+    const itemId = s.getData('itemId') as string | undefined
+    if (gold) p.gold += gold
+    if (potion) p.potions += potion
+    if (itemId) p.inventory.push(itemId)
+    s.destroy()
+    save(p)
+    this.game.events.emit('hud-refresh')
+  }
+
+  usePotion() {
+    const p = getPlayer()
+    if (p.potions <= 0 || this.player.hp >= this.player.stats.maxHp) return
+    p.potions -= 1
+    this.player.heal(Math.round(this.player.stats.maxHp * 0.5))
+    save(p)
+    this.game.events.emit('hud-refresh')
   }
 
   onEnemyDied(e: Enemy) {
