@@ -9,9 +9,12 @@ import type { ClassId } from '../core/types'
 const CHOICES: ClassId[] = ['swordsman', 'mage', 'archer']
 
 export class ClassChangeScene extends Phaser.Scene {
+  private chosen = false
+
   constructor() { super('ClassChange') }
 
   create() {
+    this.chosen = false
     this.add.rectangle(480, 270, 960, 540, 0x0d1b2a)
     this.add.text(480, 50, '✦ Choisis ta voie, petit panda ✦', { fontSize: '32px', color: '#ffd700' }).setOrigin(0.5)
 
@@ -28,6 +31,8 @@ export class ClassChangeScene extends Phaser.Scene {
   }
 
   private choose(id: ClassId) {
+    if (this.chosen) return
+    this.chosen = true
     const p = getPlayer()
     changeClass(p, id)
     const firstSkill = CLASSES[id].skillIds[0]!
