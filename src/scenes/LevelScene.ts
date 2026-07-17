@@ -29,6 +29,10 @@ export class LevelScene extends Phaser.Scene {
   private invulnUntil = 0
   private nextBasicAttackAt = 0
   private cooldowns = new CooldownTracker()
+  private boss: Enemy | null = null
+  private bossBar: Phaser.GameObjects.Rectangle | null = null
+  private bossBarBg: Phaser.GameObjects.Rectangle | null = null
+  private bossVolley: Phaser.Time.TimerEvent | null = null
 
   constructor() { super('Level') }
 
@@ -81,6 +85,7 @@ export class LevelScene extends Phaser.Scene {
     })
 
     this.events.on('enemy-died', this.onEnemyDied, this)
+    this.events.on('enemy-died', this.onBossDied, this)
     this.events.on('enemy-loot', this.spawnLoot, this)
     this.game.events.on('input-attack', this.basicAttack, this)
     this.input.keyboard!.on('keydown-X', this.basicAttack, this)
@@ -91,9 +96,16 @@ export class LevelScene extends Phaser.Scene {
       this.input.keyboard!.on(`keydown-${key}`, () => this.castSkill(slot))
     }
 
-    // porte de sortie en fin de niveau
-    const exit = this.physics.add.staticImage(widthPx - 2 * TILE, GROUND_ROW * TILE - 24 + TILE, 'exit')
-    this.physics.add.overlap(this.player, exit, () => this.completeLevel())
+    // porte de sortie en fin de niveau (sauf arène de boss : elle n'apparaît qu'à sa mort)
+    this.boss = null
+    this.bossBar = null
+    this.bossBarBg = null
+    this.bossVolley = null
+    if (this.levelDef.boss) {
+      this.spawnBoss()
+    } else {
+      this.createExit()
+    }
 
     this.cameras.main.setBounds(0, 0, widthPx, 540)
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1)
@@ -113,7 +125,9 @@ export class LevelScene extends Phaser.Scene {
       this.game.events.off('input-skill', this.castSkill, this)
       this.game.events.off('input-potion', this.usePotion, this)
       this.events.off('enemy-died', this.onEnemyDied, this)
+      this.events.off('enemy-died', this.onBossDied, this)
       this.events.off('enemy-loot', this.spawnLoot, this)
+      this.bossVolley?.remove()
       this.scene.stop('UI')
     })
     this.game.events.emit('hud-refresh')
@@ -129,6 +143,38 @@ export class LevelScene extends Phaser.Scene {
 
   private onJumpDown() { this.jumpHeld = true }
   private onJumpUp() { this.jumpHeld = false }
+
+  private exitX(): number { return this.levelDef.widthTiles * TILE - 2 * TILE }
+
+  createExit() {
+    const exit = this.physics.add.staticImage(this.exitX(), GROUND_ROW * TILE - 24 + TILE, 'exit')
+    this.physics.add.overlap(this.player, exit, () => this.completeLevel())
+  }
+
+  spawnBoss() {
+    const def = MONSTERS[this.levelDef.boss!]!
+    const boss = new Enemy(this, this.levelDef.widthTiles * TILE * 0.7, GROUND_ROW * TILE - 80, def)
+    this.enemies.add(boss)
+    this.boss = boss
+
+    // barre de vie géante
+    this.bossBarBg = this.add.rectangle(480, 70, 604, 22, 0x000000, 0.6).setScrollFactor(0)
+    this.bossBar = this.add.rectangle(480 - 300, 70, 600, 18, 0xef5350).setOrigin(0, 0.5).setScrollFactor(0)
+    this.add.text(480, 45, def.name, { fontSize: '20px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0)
+
+    // salve de projectiles toutes les 5 s
+    this.bossVolley = this.time.addEvent({
+      delay: 5000,
+      loop: true,
+      callback: () => {
+        if (!boss.active) return
+        for (const dy of [-0.3, 0, 0.3]) {
+          const proj = new Projectile(this, boss.x, boss.y - 20, this.player.x - boss.x, this.player.y - boss.y + dy * 200, def.atk, false, 600)
+          this.enemyProjectiles.add(proj)
+        }
+      },
+    })
+  }
 
   completeLevel() {
     const p = getPlayer()
@@ -239,10 +285,28 @@ export class LevelScene extends Phaser.Scene {
     this.game.events.emit('hud-refresh')
   }
 
+  // écoute permanente (voir shutdown) ; ne consomme rien tant que ce n'est pas le boss en cours
+  onBossDied(e: Enemy) {
+    if (e !== this.boss) return
+    this.bossVolley?.remove()
+    this.bossBarBg?.destroy()
+    this.bossBar?.destroy()
+    this.boss = null
+    this.bossBar = null
+    this.bossBarBg = null
+    this.bossVolley = null
+    const txt = this.add.text(480, 200, 'VICTOIRE !', { fontSize: '56px', color: '#ffd700', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0)
+    this.tweens.add({ targets: txt, scale: 1.2, yoyo: true, repeat: 3, duration: 300 })
+    this.createExit()
+  }
+
   update() {
     const ui = this.scene.get('UI') as UIScene
     const joy = ui.joystick?.state ?? emptyControls()
     const touch: ControlsState = { ...joy, jump: this.jumpHeld }
     this.player.updateFromControls(mergeControls(this.keyboardControls(), touch))
+    if (this.boss?.active && this.bossBar) {
+      this.bossBar.setDisplaySize(600 * Math.max(0, this.boss.hp / this.boss.monster.hp), 18)
+    }
   }
 }
