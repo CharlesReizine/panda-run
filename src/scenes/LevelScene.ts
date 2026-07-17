@@ -176,6 +176,17 @@ export class LevelScene extends Phaser.Scene {
     }
     this.bgFar = this.add.tileSprite(0, 300, 960, 240, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-22).setTint(b.far)
     this.bgNear = this.add.tileSprite(0, 360, 960, 200, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-20).setTint(b.near)
+
+    // décors posés au sol pour remplir l'espace (défilent avec le monde, derrière le joueur)
+    const widthPx = this.levelDef.widthTiles * TILE
+    const groundY = GROUND_ROW * TILE
+    const decoKey = `deco-${this.levelDef.biome}`
+    if (this.textures.exists(decoKey)) {
+      for (let x = 160; x < widthPx - 80; x += 250) {
+        const jitter = ((x * 37) % 70) - 35 // pseudo-aléa déterministe
+        this.add.image(x + jitter, groundY + 4, decoKey).setOrigin(0.5, 1).setDepth(-5)
+      }
+    }
   }
 
   private keyboardControls(): ControlsState {

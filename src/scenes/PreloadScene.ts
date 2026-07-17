@@ -1,35 +1,6 @@
 import Phaser from 'phaser'
 import { MONSTERS } from '../data/monsters'
 
-// Palette du panda (pixel-art). '.' = transparent.
-const PANDA_PALETTE: Record<string, number> = {
-  o: 0x2b2b2b, // contour / fourrure noire
-  W: 0xf7f7f7, // blanc
-  p: 0xff9ab0, // joues
-  e: 0xffffff, // reflet des yeux
-  n: 0x555555, // museau
-}
-
-// 16 colonnes de large. Panda chibi de face.
-const PANDA = [
-  '...ooo..ooo.....',
-  '...ooo..ooo.....',
-  '..oooooooooooo..',
-  '.oWWWWWWWWWWWWo.',
-  '.oWWooWWWWooWWo.',
-  '.oWWoeWWWWeoWWo.',
-  '.oWWooWWWWooWWo.',
-  '.oWWWWWnnWWWWWo.',
-  '.opWWWWWWWWWWpo.',
-  '..oWWWWWWWWWWo..',
-  '...oWWWWWWWWo...',
-  '..oWWWWWWWWWWo..',
-  '..oWWWWWWWWWWo..',
-  '..oWWWWWWWWWWo..',
-  '..ooWWWWWWWWoo..',
-  '....oo..oo......',
-]
-
 const TILE_PALETTES: Record<string, { soil: number; top: number; speck: number }> = {
   'tile-plaine': { soil: 0x6b4a2f, top: 0x5cb85c, speck: 0x4a9d4a },
   'tile-foret': { soil: 0x4a3320, top: 0x2e7d32, speck: 0x256528 },
@@ -40,54 +11,99 @@ const TILE_PALETTES: Record<string, { soil: number; top: number; speck: number }
 export class PreloadScene extends Phaser.Scene {
   constructor() { super('Preload') }
 
-  // dessine une grille de pixels (rows de même longueur) en texture
-  private pixelArt(key: string, rows: string[], palette: Record<string, number>, px: number) {
+  // Panda mignon, formes lisses et ombrées (rendu antialiasé → aspect illustré)
+  private drawPanda() {
     const g = this.add.graphics()
-    const w = rows[0]!.length
-    for (let y = 0; y < rows.length; y++) {
-      const row = rows[y]!
-      for (let x = 0; x < row.length; x++) {
-        const color = palette[row[x]!]
-        if (color === undefined) continue
-        g.fillStyle(color).fillRect(x * px, y * px, px, px)
-      }
-    }
-    g.generateTexture(key, w * px, rows.length * px)
+    const W = 0xf7f7f7, K = 0x2b2b2b, PINK = 0xff9ab0, DARK = 0x3a2f2f
+    // corps
+    g.fillStyle(K).fillEllipse(32, 54, 46, 40)
+    g.fillStyle(W).fillEllipse(32, 53, 40, 33)
+    g.fillStyle(0xe4e4e4).fillEllipse(32, 61, 26, 14)
+    // bras
+    g.fillStyle(K).fillEllipse(12, 50, 13, 22).fillEllipse(52, 50, 13, 22)
+    // pieds
+    g.fillStyle(K).fillEllipse(24, 72, 15, 11).fillEllipse(40, 72, 15, 11)
+    // oreilles
+    g.fillStyle(K).fillCircle(15, 9, 9).fillCircle(49, 9, 9)
+    // tête
+    g.fillStyle(K).fillCircle(32, 25, 23)
+    g.fillStyle(W).fillCircle(32, 25, 20)
+    // taches des yeux
+    g.fillStyle(K).fillEllipse(24, 25, 13, 17).fillEllipse(40, 25, 13, 17)
+    // yeux + reflets
+    g.fillStyle(0xffffff).fillCircle(24, 26, 5).fillCircle(40, 26, 5)
+    g.fillStyle(0x222222).fillCircle(25, 27, 3).fillCircle(41, 27, 3)
+    g.fillStyle(0xffffff).fillCircle(23, 25, 1.5).fillCircle(39, 25, 1.5)
+    // joues
+    g.fillStyle(PINK, 0.7).fillCircle(16, 32, 4).fillCircle(48, 32, 4)
+    // museau + sourire
+    g.fillStyle(0x333333).fillEllipse(32, 32, 6, 4)
+    g.lineStyle(2, DARK).beginPath()
+    g.arc(32, 34, 5, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false)
+    g.strokePath()
+    g.generateTexture('panda', 64, 80)
     g.destroy()
   }
 
-  create() {
-    // Panda en pixel-art (16×16 grille, ×2 → 32×32)
-    this.pixelArt('panda', PANDA, PANDA_PALETTE, 2)
+  private drawDecor() {
+    let g = this.add.graphics()
+    // buisson (plaine)
+    g.fillStyle(0x3f8f3f).fillEllipse(20, 26, 40, 24).fillEllipse(8, 30, 20, 16).fillEllipse(32, 30, 20, 16)
+    g.fillStyle(0x5cb85c).fillEllipse(20, 22, 34, 18)
+    g.generateTexture('deco-plaine', 40, 36); g.destroy()
+    // arbre (forêt)
+    g = this.add.graphics()
+    g.fillStyle(0x5d4037).fillRect(18, 44, 8, 20)
+    g.fillStyle(0x2e5e30).fillCircle(22, 24, 20)
+    g.fillStyle(0x3c7d3f).fillCircle(14, 20, 12).fillCircle(30, 22, 12).fillCircle(22, 13, 12)
+    g.generateTexture('deco-foret', 44, 64); g.destroy()
+    // cactus (désert)
+    g = this.add.graphics()
+    g.fillStyle(0x3c7d3f).fillRoundedRect(12, 10, 10, 46, 4)
+    g.fillStyle(0x4a9d4a).fillRoundedRect(2, 26, 8, 16, 3).fillRoundedRect(24, 20, 8, 22, 3)
+    g.generateTexture('deco-desert', 34, 56); g.destroy()
+    // stalagmite (cave)
+    g = this.add.graphics()
+    g.fillStyle(0x50505c).fillTriangle(4, 48, 16, 4, 28, 48)
+    g.fillStyle(0x6a6a78).fillTriangle(10, 48, 16, 18, 22, 48)
+    g.generateTexture('deco-cave', 32, 48); g.destroy()
+  }
 
-    // Tuiles par biome : terre + bande d'herbe/sable en haut + petits reliefs
+  create() {
+    this.drawPanda()
+    this.drawDecor()
+
+    // Tuiles par biome
     for (const [key, pal] of Object.entries(TILE_PALETTES)) {
       const g = this.add.graphics()
       g.fillStyle(pal.soil).fillRect(0, 0, 32, 32)
       g.fillStyle(pal.top).fillRect(0, 0, 32, 9)
-      g.fillStyle(pal.speck).fillRect(4, 3, 3, 3).fillRect(20, 5, 3, 3).fillRect(13, 2, 2, 2)
-      g.fillStyle(0x000000, 0.18).fillRect(0, 0, 32, 1).fillRect(0, 0, 1, 32)
+      g.fillStyle(pal.speck).fillEllipse(6, 5, 5, 4).fillEllipse(22, 6, 5, 4).fillEllipse(14, 3, 3, 3)
+      g.fillStyle(0x000000, 0.15).fillRect(0, 0, 32, 1).fillRect(0, 0, 1, 32)
       g.generateTexture(key, 32, 32)
       g.destroy()
     }
 
-    // Monstres : blob contouré, yeux + bouche, couronne pour les boss
+    // Monstres : corps rond ombré, yeux + bouche, couronne pour les boss
     for (const m of Object.values(MONSTERS)) {
-      const s = m.boss ? 64 : 32
+      const s = m.boss ? 64 : 36
       const r = s / 2
       const g = this.add.graphics()
-      g.fillStyle(0x222222).fillCircle(r, r + 2, r - 1)      // contour
-      g.fillStyle(m.color).fillCircle(r, r + 2, r - 3)       // corps
-      g.fillStyle(0xffffff, 0.25).fillCircle(r - r / 3, r - r / 4, r / 5) // reflet
-      const eye = Math.max(2, r / 6)
-      g.fillStyle(0xffffff).fillCircle(r - r / 3, r - 1, eye).fillCircle(r + r / 3, r - 1, eye)
-      g.fillStyle(0x000000).fillCircle(r - r / 3, r - 1, eye / 2).fillCircle(r + r / 3, r - 1, eye / 2)
-      g.fillStyle(0x000000, 0.6).fillRect(r - r / 4, r + r / 3, r / 2, Math.max(1, r / 12)) // bouche
+      g.fillStyle(0x222222, 0.4).fillEllipse(r, s + 1, r * 1.4, 6) // ombre portée
+      g.fillStyle(0x222222).fillCircle(r, r + 2, r - 1)
+      g.fillStyle(m.color).fillCircle(r, r + 2, r - 3)
+      g.fillStyle(0xffffff, 0.3).fillEllipse(r - r / 3, r - r / 3, r / 2, r / 3)
+      const eye = Math.max(2.5, r / 6)
+      g.fillStyle(0xffffff).fillCircle(r - r / 3, r, eye).fillCircle(r + r / 3, r, eye)
+      g.fillStyle(0x000000).fillCircle(r - r / 3 + 1, r + 1, eye / 2).fillCircle(r + r / 3 + 1, r + 1, eye / 2)
+      g.lineStyle(2, 0x000000, 0.6).beginPath()
+      g.arc(r, r + r / 2, r / 4, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false)
+      g.strokePath()
       if (m.boss) {
         g.fillStyle(0xffd54f).fillTriangle(r - 12, 6, r - 6, 14, r, 6).fillTriangle(r, 6, r + 6, 14, r + 12, 6)
         g.fillRect(r - 12, 12, 24, 4)
       }
-      g.generateTexture(`monster-${m.id}`, s, s + 4)
+      g.generateTexture(`monster-${m.id}`, s, s + 6)
       g.destroy()
     }
 
@@ -101,28 +117,25 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0xef5350).fillRoundedRect(1, 5, 14, 8, 3)
     g.fillStyle(0xffffff).fillRect(6, 0, 4, 6); g.generateTexture('potion-drop', 16, 16); g.clear()
     g.fillStyle(0xb8860b).fillCircle(6, 6, 6); g.fillStyle(0xffd700).fillCircle(6, 6, 5); g.fillStyle(0xfff59d).fillCircle(4, 4, 1); g.generateTexture('coin', 12, 12); g.clear()
-    g.fillStyle(0x7b1fa2).fillRect(1, 1, 14, 14); g.fillStyle(0xba68c8).fillRect(2, 2, 12, 12); g.generateTexture('item-drop', 16, 16); g.clear()
+    g.fillStyle(0x7b1fa2).fillRoundedRect(1, 1, 14, 14, 3); g.fillStyle(0xba68c8).fillRoundedRect(2, 2, 12, 12, 2); g.generateTexture('item-drop', 16, 16); g.clear()
 
     // Props destructibles
     g.fillStyle(0x33691e).fillEllipse(12, 13, 22, 16)
     g.fillStyle(0x7cb342).fillEllipse(12, 11, 20, 13)
-    g.fillStyle(0x9ccc65).fillRect(6, 6, 2, 6).fillRect(11, 4, 2, 8).fillRect(16, 6, 2, 6); g.generateTexture('prop-herbe', 24, 20); g.clear()
-    g.fillStyle(0xf5f5dc).fillRect(9, 10, 6, 14)
+    g.fillStyle(0x9ccc65).fillEllipse(7, 8, 3, 7).fillEllipse(12, 6, 3, 9).fillEllipse(17, 8, 3, 7); g.generateTexture('prop-herbe', 24, 20); g.clear()
+    g.fillStyle(0xf5f5dc).fillRoundedRect(9, 10, 6, 14, 2)
     g.fillStyle(0xb71c1c).fillEllipse(12, 9, 22, 15)
     g.fillStyle(0xef5350).fillEllipse(12, 8, 20, 12)
     g.fillStyle(0xffffff).fillCircle(6, 6, 2).fillCircle(18, 6, 2).fillCircle(12, 10, 2); g.generateTexture('prop-champignon', 24, 24); g.clear()
-    const rockPts = [[14, 0], [26, 6], [28, 18], [18, 24], [6, 22], [0, 10]].map(([x, y]) => new Phaser.Math.Vector2(x, y))
-    g.fillStyle(0x616161).fillPoints(rockPts, true)
-    g.fillStyle(0x9e9e9e).fillEllipse(13, 11, 14, 8); g.generateTexture('prop-roche', 28, 24); g.clear()
-    g.fillStyle(0x4e342e).fillRect(0, 0, 30, 24)
-    g.fillStyle(0x795548).fillRect(1, 1, 28, 22)
+    g.fillStyle(0x616161).fillEllipse(14, 14, 28, 20)
+    g.fillStyle(0x9e9e9e).fillEllipse(13, 11, 16, 9); g.generateTexture('prop-roche', 28, 24); g.clear()
+    g.fillStyle(0x4e342e).fillRoundedRect(0, 0, 30, 24, 3)
+    g.fillStyle(0x795548).fillRoundedRect(1, 1, 28, 22, 3)
     g.fillStyle(0xffd54f).fillRect(0, 9, 30, 6)
-    g.fillStyle(0xfff176).fillRect(13, 8, 4, 8); g.generateTexture('prop-coffre', 30, 24); g.clear()
-    const diamondPts = [[7, 0], [14, 7], [7, 14], [0, 7]].map(([x, y]) => new Phaser.Math.Vector2(x, y))
-    g.fillStyle(0xffffff).fillPoints(diamondPts, true)
-    g.generateTexture('material-drop', 14, 14); g.clear()
+    g.fillStyle(0xfff176).fillCircle(15, 12, 3); g.generateTexture('prop-coffre', 30, 24); g.clear()
+    g.fillStyle(0xffffff).fillEllipse(7, 7, 12, 12); g.generateTexture('material-drop', 14, 14); g.clear()
 
-    // Fonds de parallaxe : bandes de collines (teintées par biome à l'usage)
+    // Collines et nuages de fond (teintés à l'usage)
     g.fillStyle(0xffffff).fillEllipse(120, 120, 260, 180); g.generateTexture('hill', 240, 130); g.clear()
     g.fillStyle(0xffffff).fillCircle(20, 20, 18).fillCircle(44, 22, 22).fillCircle(70, 20, 16); g.generateTexture('cloud', 90, 40); g.clear()
 
