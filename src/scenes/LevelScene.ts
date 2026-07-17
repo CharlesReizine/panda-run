@@ -40,6 +40,9 @@ export class LevelScene extends Phaser.Scene {
   private bossBarBg: Phaser.GameObjects.Rectangle | null = null
   private bossName: Phaser.GameObjects.Text | null = null
   private bossVolley: Phaser.Time.TimerEvent | null = null
+  private bgFar?: Phaser.GameObjects.TileSprite
+  private bgNear?: Phaser.GameObjects.TileSprite
+  private bgClouds?: Phaser.GameObjects.TileSprite
 
   constructor() { super('Level') }
 
@@ -54,6 +57,8 @@ export class LevelScene extends Phaser.Scene {
 
     const widthPx = this.levelDef.widthTiles * TILE
     this.physics.world.setBounds(0, 0, widthPx, 540)
+
+    this.addBackground()
 
     const platforms = this.physics.add.staticGroup()
     const tileKey = `tile-${this.levelDef.biome}`
@@ -155,6 +160,22 @@ export class LevelScene extends Phaser.Scene {
       this.scene.stop('UI')
     })
     this.game.events.emit('hud-refresh')
+  }
+
+  private addBackground() {
+    const bg: Record<string, { sky: number; far: number; near: number; clouds: boolean }> = {
+      plaine: { sky: 0x87ceeb, far: 0x8fd18f, near: 0x5cb85c, clouds: true },
+      foret: { sky: 0x9fd8c8, far: 0x4a8f5a, near: 0x2e7d32, clouds: true },
+      desert: { sky: 0xfbe2a0, far: 0xe6c878, near: 0xd4a94a, clouds: true },
+      cave: { sky: 0x1e1e2a, far: 0x34343f, near: 0x45454f, clouds: false },
+    }
+    const b = bg[this.levelDef.biome] ?? bg.plaine!
+    this.add.rectangle(0, 0, 960, 540, b.sky).setOrigin(0).setScrollFactor(0).setDepth(-30)
+    if (b.clouds) {
+      this.bgClouds = this.add.tileSprite(0, 30, 960, 60, 'cloud').setOrigin(0).setScrollFactor(0).setDepth(-25).setAlpha(0.85)
+    }
+    this.bgFar = this.add.tileSprite(0, 300, 960, 240, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-22).setTint(b.far)
+    this.bgNear = this.add.tileSprite(0, 360, 960, 200, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-20).setTint(b.near)
   }
 
   private keyboardControls(): ControlsState {
@@ -385,6 +406,10 @@ export class LevelScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
+    const sx = this.cameras.main.scrollX
+    if (this.bgClouds) this.bgClouds.tilePositionX = sx * 0.1
+    if (this.bgFar) this.bgFar.tilePositionX = sx * 0.3
+    if (this.bgNear) this.bgNear.tilePositionX = sx * 0.55
     if (this.player.hp <= 0) return
     this.player.regenEnergy(delta)
     const ui = this.scene.get('UI') as UIScene
