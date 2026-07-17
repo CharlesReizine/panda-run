@@ -31,8 +31,10 @@ export class MenuScene extends Phaser.Scene {
       const y = 115 + i * 46
       const unlocked = p.unlockedSkills.includes(s.id)
       const equippedAt = p.equippedSkills.indexOf(s.id)
+      const icon = this.add.image(40, y + 8, `skill-${s.id}`).setDisplaySize(32, 32)
+      if (!unlocked) icon.setAlpha(0.35)
       const label = `${s.name}${equippedAt >= 0 ? `  [slot ${equippedAt + 1}]` : ''}`
-      const t = this.add.text(30, y, label, { fontSize: '16px', color: unlocked ? '#ffffff' : '#78909c' }).setInteractive()
+      const t = this.add.text(64, y, label, { fontSize: '16px', color: unlocked ? '#ffffff' : '#78909c' }).setInteractive()
       if (!unlocked && p.skillPoints > 0) {
         this.add.text(320, y, '[Débloquer 1pt]', { fontSize: '14px', color: '#ffd700' }).setInteractive()
           .on('pointerdown', () => { p.skillPoints--; p.unlockedSkills.push(s.id); save(p); this.render() })

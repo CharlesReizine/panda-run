@@ -2,7 +2,6 @@ import Phaser from 'phaser'
 import { VirtualJoystick } from '../ui/VirtualJoystick'
 import { getPlayer } from '../state'
 import { xpToNext } from '../core/progression'
-import { SKILLS } from '../data/skills'
 import type { LevelScene } from './LevelScene'
 
 const BAR_W = 200
@@ -18,7 +17,7 @@ export class UIScene extends Phaser.Scene {
   private levelText!: Phaser.GameObjects.Text
   private potionText!: Phaser.GameObjects.Text
   private slotCooldownOverlays: Phaser.GameObjects.Rectangle[] = []
-  private slotLabels: Phaser.GameObjects.Text[] = []
+  private slotIcons: Phaser.GameObjects.Image[] = []
   private cooldownUntil: number[] = [0, 0, 0, 0]
 
   constructor() { super('UI') }
@@ -27,7 +26,7 @@ export class UIScene extends Phaser.Scene {
     // Scène réutilisée à chaque niveau (launch depuis LevelScene) : ces tableaux sont des
     // class fields initialisés une seule fois à l'instanciation, pas à chaque create().
     // Sans reset, refresh()/update() continuent de cibler les objets détruits du niveau précédent.
-    this.slotLabels = []
+    this.slotIcons = []
     this.slotCooldownOverlays = []
     this.cooldownUntil = [0, 0, 0, 0]
 
@@ -52,7 +51,7 @@ export class UIScene extends Phaser.Scene {
         .setStrokeStyle(2, 0xffffff, 0.6).setInteractive()
       slot.on('pointerdown', () => { this.pressFx(slot); this.game.events.emit('input-skill', i) })
       this.add.text(x, SLOT_Y - SLOT_SIZE / 2 - 8, `${i + 1}`, { fontSize: '11px', color: '#ffd54f' }).setOrigin(0.5)
-      this.slotLabels.push(this.add.text(x, SLOT_Y, '', { fontSize: '9px', color: '#fff', align: 'center', wordWrap: { width: SLOT_SIZE - 6 } }).setOrigin(0.5))
+      this.slotIcons.push(this.add.image(x, SLOT_Y, '__DEFAULT').setDisplaySize(SLOT_SIZE - 8, SLOT_SIZE - 8).setVisible(false))
       const ov = this.add.rectangle(x, SLOT_Y, SLOT_SIZE, SLOT_SIZE, 0x000000, 0.7).setVisible(false)
       this.slotCooldownOverlays.push(ov)
     }
@@ -106,7 +105,9 @@ export class UIScene extends Phaser.Scene {
     this.xpBar.setDisplaySize(BAR_W * (p.xp / xpToNext(p.level)), 4)
     for (let i = 0; i < 4; i++) {
       const sid = p.equippedSkills[i]
-      this.slotLabels[i]!.setText(sid ? SKILLS[sid]!.name : '—')
+      const icon = this.slotIcons[i]!
+      if (sid) icon.setTexture(`skill-${sid}`).setDisplaySize(SLOT_SIZE - 8, SLOT_SIZE - 8).setVisible(true)
+      else icon.setVisible(false)
     }
   }
 

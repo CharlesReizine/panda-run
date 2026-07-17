@@ -1,6 +1,31 @@
 import Phaser from 'phaser'
 import { MONSTERS } from '../data/monsters'
+import { SKILLS } from '../data/skills'
 import type { MonsterDef } from '../core/types'
+
+// icône par skill : couleur + glyphe
+const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
+  'calin-brutal': { color: 0xff9ab0, glyph: 'paw' },
+  'bambou-jete': { color: 0x9ccc65, glyph: 'bamboo' },
+  'taillade': { color: 0xcfd8dc, glyph: 'sword' },
+  'tourbillon': { color: 0x90caf9, glyph: 'tornado' },
+  'charge-bambou': { color: 0xffcc80, glyph: 'dash' },
+  'cri-de-guerre': { color: 0xffe082, glyph: 'shout' },
+  'provocation': { color: 0xef9a9a, glyph: 'target' },
+  'lame-ultime': { color: 0xffd54f, glyph: 'sword' },
+  'boule-de-feu': { color: 0xff7043, glyph: 'fireball' },
+  'eclair': { color: 0xfff176, glyph: 'bolt' },
+  'nova-de-givre': { color: 0x4dd0e1, glyph: 'snow' },
+  'meteore': { color: 0xff8a65, glyph: 'fireball' },
+  'soin-du-panda': { color: 0x81c784, glyph: 'cross' },
+  'tempete-arcanique': { color: 0xce93d8, glyph: 'star' },
+  'fleche-percante': { color: 0xd7a86e, glyph: 'arrow' },
+  'double-tir': { color: 0xd7a86e, glyph: 'arrow2' },
+  'pluie-de-fleches': { color: 0xa5d6a7, glyph: 'rain' },
+  'tir-charge': { color: 0xffb74d, glyph: 'arrow' },
+  'fleche-de-bambou': { color: 0x9ccc65, glyph: 'arrow' },
+  'salve-ultime': { color: 0xffd54f, glyph: 'rain' },
+}
 
 type ClassId = 'novice' | 'swordsman' | 'mage' | 'archer'
 const CLASSES: ClassId[] = ['novice', 'swordsman', 'mage', 'archer']
@@ -222,10 +247,78 @@ export class PreloadScene extends Phaser.Scene {
     g.generateTexture('deco-cave', 32, 48); g.destroy()
   }
 
+  private drawSkillIcon(id: string, spec: { color: number; glyph: string }) {
+    const g = this.add.graphics()
+    const c = spec.color
+    g.fillStyle(0x1b2631).fillRoundedRect(0, 0, 44, 44, 8)
+    g.lineStyle(2, c, 0.9).strokeRoundedRect(1, 1, 42, 42, 8)
+    const cx = 22, cy = 22
+    switch (spec.glyph) {
+      case 'sword':
+        g.lineStyle(4, c).beginPath(); g.moveTo(13, 31); g.lineTo(31, 13); g.strokePath()
+        g.lineStyle(3, 0x9e9e9e).beginPath(); g.moveTo(10, 28); g.lineTo(16, 34); g.strokePath() // garde
+        break
+      case 'paw':
+        g.fillStyle(c).fillCircle(cx, cy + 3, 8)
+        g.fillCircle(cx - 7, cy - 6, 3).fillCircle(cx, cy - 8, 3).fillCircle(cx + 7, cy - 6, 3)
+        break
+      case 'bamboo':
+        g.fillStyle(c).fillRoundedRect(cx - 3, 8, 6, 28, 2)
+        g.lineStyle(2, 0x33691e).beginPath(); g.moveTo(cx - 3, 18); g.lineTo(cx + 3, 18); g.moveTo(cx - 3, 27); g.lineTo(cx + 3, 27); g.strokePath()
+        break
+      case 'tornado':
+        g.lineStyle(3, c); for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(cx, 12 + i * 8, 12 - i * 3, 0, Math.PI, false); g.strokePath() }
+        break
+      case 'dash':
+        g.lineStyle(4, c).beginPath(); g.moveTo(15, 30); g.lineTo(31, 14); g.strokePath()
+        g.lineStyle(2, c, 0.6).beginPath(); g.moveTo(8, 20); g.lineTo(16, 20); g.moveTo(8, 26); g.lineTo(14, 26); g.strokePath()
+        break
+      case 'shout':
+        g.fillStyle(c).fillTriangle(12, 16, 12, 28, 22, 22)
+        g.lineStyle(2, c); for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(24, 22, 4 + i * 5, -0.7, 0.7, false); g.strokePath() }
+        break
+      case 'target':
+        g.lineStyle(2, c).strokeCircle(cx, cy, 12).strokeCircle(cx, cy, 7); g.fillStyle(c).fillCircle(cx, cy, 3)
+        break
+      case 'fireball':
+        g.fillStyle(c).fillCircle(cx, cy + 2, 9)
+        g.fillStyle(0xffd54f).fillCircle(cx, cy + 2, 5)
+        g.fillStyle(c).fillTriangle(cx - 6, cy - 6, cx, cy - 16, cx + 6, cy - 6)
+        break
+      case 'bolt':
+        g.fillStyle(c).fillPoints([[24, 8], [16, 24], [22, 24], [18, 36], [30, 20], [23, 20]].map(([x, y]) => new Phaser.Math.Vector2(x, y)), true)
+        break
+      case 'snow':
+        g.lineStyle(2, c); for (let a = 0; a < 6; a++) { const r = Phaser.Math.DegToRad(a * 60); g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(r) * 13, cy + Math.sin(r) * 13); g.strokePath() }
+        break
+      case 'cross':
+        g.fillStyle(c).fillRect(cx - 4, cy - 11, 8, 22).fillRect(cx - 11, cy - 4, 22, 8)
+        break
+      case 'star':
+        g.fillStyle(c).fillCircle(cx, cy, 4)
+        g.fillStyle(0xfff59d).fillCircle(14, 14, 2).fillCircle(30, 16, 2).fillCircle(28, 30, 2).fillCircle(15, 29, 2)
+        break
+      case 'arrow':
+        g.lineStyle(3, c).beginPath(); g.moveTo(12, 32); g.lineTo(32, 12); g.strokePath()
+        g.fillStyle(c).fillTriangle(32, 12, 24, 14, 30, 20)
+        break
+      case 'arrow2':
+        g.lineStyle(2, c).beginPath(); g.moveTo(10, 30); g.lineTo(28, 12); g.moveTo(16, 34); g.lineTo(34, 16); g.strokePath()
+        g.fillStyle(c).fillTriangle(28, 12, 21, 14, 26, 19).fillTriangle(34, 16, 27, 18, 32, 23)
+        break
+      case 'rain':
+        g.fillStyle(c); for (const dx of [-9, 0, 9]) g.fillTriangle(cx + dx - 3, 12, cx + dx + 3, 12, cx + dx, 34)
+        break
+    }
+    g.generateTexture(`skill-${id}`, 44, 44)
+    g.destroy()
+  }
+
   create() {
     this.drawPandas()
     this.drawDecor()
     for (const m of Object.values(MONSTERS)) this.drawMonster(m)
+    for (const s of Object.values(SKILLS)) this.drawSkillIcon(s.id, SKILL_ICONS[s.id] ?? { color: 0xffd54f, glyph: 'sword' })
 
     for (const [key, pal] of Object.entries(TILE_PALETTES)) {
       const g = this.add.graphics()
