@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import { LEVELS, type LevelDef } from '../data/levels'
 import { Player } from '../entities/Player'
-import { mergeControls, type ControlsState } from '../core/controls'
+import { emptyControls, mergeControls, type ControlsState } from '../core/controls'
 import { getPlayer } from '../state'
 import { save } from '../core/save'
 import type { UIScene } from './UIScene'
@@ -59,7 +59,7 @@ export class LevelScene extends Phaser.Scene {
     this.jumpHeld = false
     this.game.events.on('input-jump-down', this.onJumpDown, this)
     this.game.events.on('input-jump-up', this.onJumpUp, this)
-    this.events.on('shutdown', () => {
+    this.events.once('shutdown', () => {
       this.game.events.off('input-jump-down', this.onJumpDown, this)
       this.game.events.off('input-jump-up', this.onJumpUp, this)
       this.scene.stop('UI')
@@ -87,7 +87,8 @@ export class LevelScene extends Phaser.Scene {
 
   update() {
     const ui = this.scene.get('UI') as UIScene
-    const touch: ControlsState = { ...ui.joystick.state, jump: this.jumpHeld }
+    const joy = ui.joystick?.state ?? emptyControls()
+    const touch: ControlsState = { ...joy, jump: this.jumpHeld }
     this.player.updateFromControls(mergeControls(this.keyboardControls(), touch))
   }
 }

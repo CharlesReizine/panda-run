@@ -17,6 +17,9 @@ export class VirtualJoystick {
     scene.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       if (this.pointerId !== null) return
       if (!zone.contains(p.x, p.y)) return
+      // Skip pointers that landed on an interactive object (e.g. the potion button)
+      // so the joystick doesn't steal touches meant for UI buttons overlapping its zone.
+      if (scene.input.hitTestPointer(p).length > 0) return
       this.pointerId = p.id
       this.origin = new Phaser.Math.Vector2(p.x, p.y)
       this.base.setPosition(p.x, p.y).setVisible(true)

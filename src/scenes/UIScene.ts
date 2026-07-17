@@ -5,7 +5,7 @@ import { xpToNext } from '../core/progression'
 import { SKILLS } from '../data/skills'
 
 export class UIScene extends Phaser.Scene {
-  joystick!: VirtualJoystick
+  joystick?: VirtualJoystick
   private hpBar!: Phaser.GameObjects.Rectangle
   private xpBar!: Phaser.GameObjects.Rectangle
   private goldText!: Phaser.GameObjects.Text
@@ -56,15 +56,18 @@ export class UIScene extends Phaser.Scene {
 
     // Écoute des mises à jour émises par LevelScene
     const level = this.scene.get('Level')
-    level.events.on('player-hp', (hp: number, max: number) => this.hpBar.setDisplaySize(200 * (hp / max), 14))
+    level.events.on('player-hp', this.onPlayerHp)
     this.game.events.on('hud-refresh', this.refresh, this)
     this.game.events.on('skill-cooldown', this.onCooldown, this)
-    this.events.on('shutdown', () => {
+    this.events.once('shutdown', () => {
+      level.events.off('player-hp', this.onPlayerHp)
       this.game.events.off('hud-refresh', this.refresh, this)
       this.game.events.off('skill-cooldown', this.onCooldown, this)
     })
     this.refresh()
   }
+
+  private onPlayerHp = (hp: number, max: number) => this.hpBar.setDisplaySize(200 * (hp / max), 14)
 
   private onCooldown(slot: number, untilMs: number) {
     this.cooldownUntil[slot] = untilMs
