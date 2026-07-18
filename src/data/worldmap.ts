@@ -35,14 +35,14 @@ export const WORLD_NODES: MapNode[] = [
   { id: 'jungle-1', name: 'Lisière', x: 398, y: 282, levelId: 'zone3-1', type: 'level' },
   { id: 'jungle-2', name: 'Marécages', x: 185, y: 240, levelId: 'zone3-2', type: 'level' },
   { id: 'boss-jungle', name: 'Cœur de la Jungle', x: 72, y: 288, levelId: 'zone3-boss', type: 'boss' },
-  { id: 'plage-1', name: 'Rivage', x: 300, y: 330, levelId: 'plage-1', type: 'level' },
-  { id: 'plage-2', name: 'Récif', x: 185, y: 330, levelId: 'plage-2', type: 'level' },
+  { id: 'plage-1', name: 'Rivage', x: 300, y: 324, levelId: 'plage-1', type: 'level' },
+  { id: 'plage-2', name: 'Récif', x: 185, y: 324, levelId: 'plage-2', type: 'level' },
   // Zone 4 — montagne (+ route alternative carrière), rangée du bas, gauche → droite
   { id: 'montagne-1', name: 'Cimes', x: 105, y: 452, levelId: 'zone4-1', type: 'level' },
   { id: 'montagne-2', name: 'Col glacé', x: 375, y: 452, levelId: 'zone4-2', type: 'level' },
   { id: 'boss-montagne', name: 'Pic du Golem', x: 490, y: 452, levelId: 'zone4-boss', type: 'boss' },
-  { id: 'carriere-1', name: 'Carrière', x: 195, y: 405, levelId: 'carriere-1', type: 'level' },
-  { id: 'carriere-2', name: 'Fosse', x: 300, y: 405, levelId: 'carriere-2', type: 'level' },
+  { id: 'carriere-1', name: 'Carrière', x: 195, y: 410, levelId: 'carriere-1', type: 'level' },
+  { id: 'carriere-2', name: 'Fosse', x: 300, y: 410, levelId: 'carriere-2', type: 'level' },
   // Zone 5 — cimetière, tronc commun rangée du bas
   { id: 'cimetiere-1', name: 'Nécropole', x: 600, y: 452, levelId: 'zone5-1', type: 'level' },
   { id: 'cimetiere-2', name: 'Cryptes', x: 705, y: 452, levelId: 'zone5-2', type: 'level' },

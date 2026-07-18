@@ -10,17 +10,6 @@ const NODE_COLORS = { town: 0xffd700, level: 0x66bb6a, boss: 0xef5350 } as const
 const LOCKED_COLOR = 0x555555
 const RADIUS = { town: 22, level: 12, boss: 20 } as const
 
-// Régions teintées par zone/biome (façon carte au trésor) : chaque bloc regroupe les nœuds
-// d'une même zone narrative pour calculer une pastille de fond qui les englobe.
-const ZONE_TINTS: { color: number; nodeIds: string[] }[] = [
-  { color: 0x7cb342, nodeIds: ['prontera', 'plaine-1', 'plaine-2', 'foret-1', 'foret-2', 'boss-1'] },
-  { color: 0xd7b56d, nodeIds: ['morroc', 'desert-1', 'desert-2', 'desert-3', 'cave-a', 'boss-2'] },
-  { color: 0x2e9e8f, nodeIds: ['jungle-1', 'jungle-2', 'boss-jungle', 'plage-1', 'plage-2'] },
-  { color: 0x8d6e63, nodeIds: ['montagne-1', 'montagne-2', 'boss-montagne', 'carriere-1', 'carriere-2'] },
-  { color: 0x7e57c2, nodeIds: ['cimetiere-1', 'cimetiere-2', 'boss-cimetiere'] },
-  { color: 0xb71c1c, nodeIds: ['enfer-1', 'boss-enfer'] },
-]
-
 export class WorldMapScene extends Phaser.Scene {
   constructor() { super('WorldMap') }
 
@@ -28,7 +17,7 @@ export class WorldMapScene extends Phaser.Scene {
     audio.playMusic('carte')
 
     const byId = new Map(WORLD_NODES.map((n) => [n.id, n]))
-    this.drawBackground(byId)
+    this.drawBackground()
 
     this.add.text(480, 26, 'Carte du monde', { fontSize: '26px', color: '#4e342e', fontStyle: 'bold' }).setOrigin(0.5)
 
@@ -110,9 +99,10 @@ export class WorldMapScene extends Phaser.Scene {
     }
   }
 
-  // fond façon parchemin : dégradé de base (bandes interpolées à la main — fillGradientStyle
-  // est WebGL only et ne s'affiche pas si le renderer bascule en Canvas) + régions teintées
-  private drawBackground(byId: Map<string, MapNode>) {
+  // fond façon parchemin : dégradé de base uni (bandes interpolées à la main —
+  // fillGradientStyle est WebGL only et ne s'affiche pas si le renderer bascule en Canvas).
+  // Pas de blocs de zone teintés : ils se chevauchaient et créaient des carrés superposés.
+  private drawBackground() {
     const bg = this.add.graphics()
     const top: [number, number, number] = [0xf1, 0xe2, 0xbd]
     const bottom: [number, number, number] = [0xc9, 0xa8, 0x6a]
@@ -134,20 +124,6 @@ export class WorldMapScene extends Phaser.Scene {
       bg.fillStyle(0x8d6e3f, 0.05).fillEllipse(x, y, 90, 60)
     }
     bg.lineStyle(6, 0x8d6e3f, 0.5).strokeRect(6, 6, 948, 528)
-
-    for (const zone of ZONE_TINTS) {
-      const pts = zone.nodeIds.map((id) => byId.get(id)).filter((n): n is MapNode => !!n)
-      if (!pts.length) continue
-      const minX = Math.min(...pts.map((n) => n.x)) - 55
-      const maxX = Math.max(...pts.map((n) => n.x)) + 55
-      const minY = Math.min(...pts.map((n) => n.y)) - 55
-      const maxY = Math.max(...pts.map((n) => n.y)) + 55
-      const zg = this.add.graphics()
-      zg.fillStyle(zone.color, 0.16)
-      zg.fillRoundedRect(minX, minY, maxX - minX, maxY - minY, 40)
-      zg.lineStyle(2, zone.color, 0.3)
-      zg.strokeRoundedRect(minX, minY, maxX - minX, maxY - minY, 40)
-    }
   }
 
   // routes en pointillés épais entre les nœuds reliés
