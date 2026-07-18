@@ -30,6 +30,7 @@ const list: MonsterDef[] = [
   { id: 'squelette', name: 'Squelette', color: 0xe8e8e8, hp: 130, atk: 65, def: 16, xp: 900, speed: 50, behavior: 'contact', drops: [goldMid, potion] },
   { id: 'chauve-souris', name: 'Chauve-souris', color: 0x6b4f9e, hp: 70, atk: 85, def: 8, xp: 600, speed: 120, behavior: 'charge', drops: [goldMid, potion] },
   { id: 'fantome', name: 'Fantôme', color: 0xb2ebf2, hp: 80, atk: 60, def: 22, xp: 700, speed: 35, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.04, min: 1, max: 1 }] },
+  { id: 'mage-noir', name: 'Mage noir', color: 0x7e57c2, hp: 100, atk: 70, def: 12, xp: 850, speed: 45, behavior: 'caster', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] },
   // Boss
   {
     id: 'roi-gloopy', name: 'Roi Gloopy', color: 0xff5fa8, hp: 380, atk: 18, def: 5, xp: 3200, speed: 55, behavior: 'charge', boss: true,
@@ -66,6 +67,7 @@ const list: MonsterDef[] = [
   // Zone 5 — cimetière
   { id: 'goule', name: 'Goule', color: 0x556b2f, hp: 420, atk: 160, def: 30, xp: 3200, speed: 70, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }, { kind: 'item', itemId: 'baton-feuillu', chance: 0.03, min: 1, max: 1 }] },
   { id: 'banshee', name: 'Banshee', color: 0x9575cd, hp: 320, atk: 180, def: 20, xp: 3000, speed: 50, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] },
+  { id: 'pretre-goule', name: 'Prêtre-goule', color: 0x455a64, hp: 360, atk: 150, def: 25, xp: 3200, speed: 40, behavior: 'caster', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.06, min: 1, max: 1 }] },
   // Zone 6 — enfer
   { id: 'diablotin', name: 'Diablotin', color: 0xd84315, hp: 480, atk: 190, def: 35, xp: 4200, speed: 150, behavior: 'charge', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.06, min: 1, max: 1 }] },
   { id: 'gargouille', name: 'Gargouille', color: 0x546e7a, hp: 620, atk: 200, def: 55, xp: 4800, speed: 60, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.06, min: 1, max: 1 }, { kind: 'item', itemId: 'arc-souple', chance: 0.03, min: 1, max: 1 }] },

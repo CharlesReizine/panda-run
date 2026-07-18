@@ -47,7 +47,7 @@ export interface DropEntry {
   max: number
 }
 
-export type MonsterBehavior = 'contact' | 'projectile' | 'charge'
+export type MonsterBehavior = 'contact' | 'projectile' | 'charge' | 'caster'
 
 export interface MonsterDef {
   id: string

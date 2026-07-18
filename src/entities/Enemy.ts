@@ -6,12 +6,15 @@ import type { LevelScene } from '../scenes/LevelScene'
 const AGGRO_RANGE = 350
 const CHARGE_COOLDOWN = 2500
 const SHOOT_COOLDOWN = 2000
+const CAST_COOLDOWN = 3200
+const CASTER_KEEP_DIST = 240 // distance de confort du lanceur de sorts
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   monster: MonsterDef
   hp: number
   private levelScene: LevelScene
   private nextActionAt = 0
+  private nextShootAt = 0
   private bar: Phaser.GameObjects.Graphics
   private isCharging = false
   private zzz: Phaser.GameObjects.Text | null = null
@@ -56,9 +59,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const dir = Math.sign(player.x - this.x) || 1
 
     if (dist < AGGRO_RANGE) {
-      if (this.monster.behavior === 'contact') {
-        this.setVelocityX(dir * this.monster.speed)
-      } else if (this.monster.behavior === 'charge' && t > this.nextActionAt) {
+      if (this.monster.behavior === 'charge' && t > this.nextActionAt) {
         this.setVelocityX(dir * this.monster.speed * 3)
         this.nextActionAt = t + CHARGE_COOLDOWN
         this.isCharging = true
@@ -67,6 +68,25 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         const p = new Projectile(this.scene, this.x, this.y - 10, player.x - this.x, player.y - this.y, this.monster.atk, false, 500)
         this.levelScene.enemyProjectiles.add(p)
         this.nextActionAt = t + SHOOT_COOLDOWN
+      } else if (this.monster.behavior === 'caster') {
+        // garde ses distances : recule si le joueur s'approche, avance s'il fuit
+        if (dist < CASTER_KEEP_DIST - 30) this.setVelocityX(-dir * this.monster.speed)
+        else if (dist > CASTER_KEEP_DIST + 60) this.setVelocityX(dir * this.monster.speed)
+        else this.setVelocityX(0)
+        // sort de zone télégraphié sous le joueur
+        if (t > this.nextActionAt) {
+          this.levelScene.enemyGroundSpell(player.x, this.monster.atk)
+          this.nextActionAt = t + CAST_COOLDOWN
+        }
+        // + projectile occasionnel pour harceler pendant le rechargement du sort
+        if (t > this.nextShootAt) {
+          const p = new Projectile(this.scene, this.x, this.y - 10, player.x - this.x, player.y - this.y, this.monster.atk, false, 500)
+          this.levelScene.enemyProjectiles.add(p)
+          this.nextShootAt = t + SHOOT_COOLDOWN * 1.5
+        }
+      } else if (this.monster.behavior !== 'charge' && this.monster.behavior !== 'projectile') {
+        // 'contact' et tout behavior inconnu : repli sûr, fonce au contact
+        this.setVelocityX(dir * this.monster.speed)
       }
     } else if (this.monster.behavior !== 'charge') {
       this.setVelocityX(0)

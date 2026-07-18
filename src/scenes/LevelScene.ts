@@ -45,6 +45,8 @@ export class LevelScene extends Phaser.Scene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private jumpHeld = false
   private invulnUntil = 0
+  private dashUntil = 0
+  private dashCooldownUntil = 0
   private nextBasicAttackAt = 0
   private cooldowns = new CooldownTracker()
   private boss: Enemy | null = null
@@ -52,6 +54,7 @@ export class LevelScene extends Phaser.Scene {
   private bossBarBg: Phaser.GameObjects.Rectangle | null = null
   private bossName: Phaser.GameObjects.Text | null = null
   private bossVolley: Phaser.Time.TimerEvent | null = null
+  private bossPhase = 1
   private bgFar?: Phaser.GameObjects.TileSprite
   private bgNear?: Phaser.GameObjects.TileSprite
   private bgClouds?: Phaser.GameObjects.TileSprite
@@ -191,6 +194,8 @@ export class LevelScene extends Phaser.Scene {
     this.game.events.on('input-skill', this.castSkill, this)
     this.game.events.on('input-potion', this.usePotion, this)
     this.input.keyboard!.on('keydown-P', this.usePotion, this)
+    this.game.events.on('input-dash', this.dash, this)
+    this.input.keyboard!.on('keydown-SHIFT', this.dash, this)
     for (const [key, slot] of [['ONE', 0], ['TWO', 1], ['THREE', 2], ['FOUR', 3]] as const) {
       this.input.keyboard!.on(`keydown-${key}`, () => this.castSkill(slot))
     }
@@ -201,6 +206,7 @@ export class LevelScene extends Phaser.Scene {
     this.bossBarBg = null
     this.bossName = null
     this.bossVolley = null
+    this.bossPhase = 1
     if (this.levelDef.boss) {
       this.spawnBoss()
     } else {
@@ -226,6 +232,7 @@ export class LevelScene extends Phaser.Scene {
       this.game.events.off('input-attack', this.basicAttack, this)
       this.game.events.off('input-skill', this.castSkill, this)
       this.game.events.off('input-potion', this.usePotion, this)
+      this.game.events.off('input-dash', this.dash, this)
       this.events.off('enemy-died', this.onEnemyDied, this)
       this.events.off('enemy-died', this.onBossDied, this)
       this.events.off('enemy-loot', this.onEnemyLoot, this)
@@ -292,18 +299,92 @@ export class LevelScene extends Phaser.Scene {
     this.bossBar = this.add.rectangle(480 - 300, 70, 600, 18, 0xef5350).setOrigin(0, 0.5).setScrollFactor(0)
     this.bossName = this.add.text(480, 45, def.name, { fontSize: '20px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0)
 
-    // salve de projectiles toutes les 5 s
+    this.bossPhase = 1
+    this.startBossVolley(5000) // phase 1 : salve toutes les 5 s
+  }
+
+  // (re)programme la salve du boss courant ; le pattern dépend de la phase active
+  private startBossVolley(delay: number) {
+    this.bossVolley?.remove()
+    const boss = this.boss
+    if (!boss) return
+    const def = boss.monster
     this.bossVolley = this.time.addEvent({
-      delay: 5000,
+      delay,
       loop: true,
       callback: () => {
         if (!boss.active) return
-        for (const dy of [-0.3, 0, 0.3]) {
-          const proj = new Projectile(this, boss.x, boss.y - 20, this.player.x - boss.x, this.player.y - boss.y + dy * 200, def.atk, false, 600)
-          this.enemyProjectiles.add(proj)
+        if (this.bossPhase >= 2) {
+          // éventail de 5 projectiles + slam de zone télégraphié sous le joueur
+          for (const dy of [-0.5, -0.25, 0, 0.25, 0.5]) {
+            const proj = new Projectile(this, boss.x, boss.y - 20, this.player.x - boss.x, this.player.y - boss.y + dy * 260, def.atk, false, 650)
+            this.enemyProjectiles.add(proj)
+          }
+          this.enemyGroundSpell(this.player.x, def.atk)
+        } else {
+          for (const dy of [-0.3, 0, 0.3]) {
+            const proj = new Projectile(this, boss.x, boss.y - 20, this.player.x - boss.x, this.player.y - boss.y + dy * 200, def.atk, false, 600)
+            this.enemyProjectiles.add(proj)
+          }
         }
       },
     })
+  }
+
+  // passage en furie sous 50 % PV : cadence accélérée + nouveau pattern, une seule fois
+  private enterBossPhase2() {
+    this.bossPhase = 2
+    this.startBossVolley(2500)
+    this.cameras.main.shake(300, 0.01)
+    const txt = this.add.text(480, 110, 'ENRAGÉ !', {
+      fontSize: '44px', color: '#ff1744', fontStyle: 'bold', stroke: '#000000', strokeThickness: 5,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(30).setScale(0.3)
+    this.tweens.add({
+      targets: txt, scale: 1.2, duration: 260, ease: 'Back.out', yoyo: true, hold: 500,
+      onComplete: () => this.tweens.add({ targets: txt, alpha: 0, duration: 500, onComplete: () => txt.destroy() }),
+    })
+  }
+
+  // sort de zone télégraphié posé au sol : marqueur qui se remplit ~600 ms, puis dégâts
+  // de zone (onde de choc) touchant le joueur s'il est encore dans le cercle
+  enemyGroundSpell(targetX: number, damage: number) {
+    const groundY = GROUND_ROW * TILE - 10
+    const radius = 58
+    const marker = this.add.graphics().setDepth(4)
+    const draw = (fill: number) => {
+      marker.clear()
+      marker.fillStyle(0xab47bc, 0.12 + fill * 0.25).fillCircle(targetX, groundY, radius)
+      marker.lineStyle(3, 0xce93d8, 0.5 + fill * 0.5).strokeCircle(targetX, groundY, radius)
+    }
+    draw(0)
+    this.tweens.addCounter({ from: 0, to: 1, duration: 600, onUpdate: (tw) => draw(tw.getValue() ?? 0) })
+    this.time.delayedCall(600, () => {
+      marker.destroy()
+      this.aoeRing(targetX, groundY, radius, 0xab47bc, true)
+      if (Phaser.Math.Distance.Between(this.player.x, this.player.y, targetX, groundY) <= radius) {
+        this.hitPlayer(damage)
+      }
+    })
+  }
+
+  // roulade d'esquive : impulsion horizontale rapide + brève invulnérabilité + traînée
+  dash() {
+    if (this.player.hp <= 0) return
+    if (this.time.now < this.dashCooldownUntil) return
+    this.dashCooldownUntil = this.time.now + 1200
+    this.dashUntil = this.time.now + 180
+    this.invulnUntil = Math.max(this.invulnUntil, this.time.now + 300)
+    audio.playSfx('jump')
+    this.player.setVelocityX(this.player.facing * 600)
+    for (let i = 0; i < 4; i++) {
+      this.time.delayedCall(i * 40, () => {
+        if (!this.player.active || this.player.hp <= 0) return
+        const echo = this.add.image(this.player.x, this.player.y, this.player.texture.key, this.player.frame.name)
+          .setFlipX(this.player.flipX).setAlpha(0.5).setTint(0x81d4fa).setDepth(this.player.depth - 1)
+          .setDisplaySize(this.player.displayWidth, this.player.displayHeight)
+        this.tweens.add({ targets: echo, alpha: 0, duration: 220, onComplete: () => echo.destroy() })
+      })
+    }
   }
 
   completeLevel() {
@@ -640,12 +721,19 @@ export class LevelScene extends Phaser.Scene {
     if (this.bgNear) this.bgNear.tilePositionX = sx * 0.55
     if (this.player.hp <= 0) return
     this.player.regenEnergy(delta)
-    const ui = this.scene.get('UI') as UIScene
-    const joy = ui.joystick?.state ?? emptyControls()
-    const touch: ControlsState = { ...joy, jump: this.jumpHeld }
-    this.player.updateFromControls(mergeControls(this.keyboardControls(), touch))
+    if (this.time.now < this.dashUntil) {
+      // pendant la roulade : vitesse imposée, contrôles suspendus (le saut/déplacement
+      // reprennent la main dès la fin de la fenêtre)
+      this.player.setVelocityX(this.player.facing * 600)
+    } else {
+      const ui = this.scene.get('UI') as UIScene
+      const joy = ui.joystick?.state ?? emptyControls()
+      const touch: ControlsState = { ...joy, jump: this.jumpHeld }
+      this.player.updateFromControls(mergeControls(this.keyboardControls(), touch))
+    }
     if (this.boss?.active && this.bossBar) {
       this.bossBar.setDisplaySize(600 * Math.max(0, this.boss.hp / this.boss.monster.hp), 18)
+      if (this.bossPhase === 1 && this.boss.hp <= this.boss.monster.hp * 0.5) this.enterBossPhase2()
     }
   }
 }

@@ -488,6 +488,21 @@ export class PreloadScene extends Phaser.Scene {
         g.fillStyle(0xffffff).fillTriangle(r - 10, r + r / 1.5, r - 4, r + r / 1.5, r - 7, r + r / 1) .fillTriangle(r + 4, r + r / 1.5, r + 10, r + r / 1.5, r + 7, r + r / 1) // crocs immenses
         g.fillStyle(0xff7043, 0.5).fillCircle(r, s + 2, r / 1.3) // aura de flammes au sol
         break
+      case 'mage-noir':
+        body(); eyes()
+        g.fillStyle(0x311b6b).fillTriangle(r - 12, 2, r + 12, 2, r, -20) // grand chapeau pointu
+        g.fillStyle(0x311b6b).fillEllipse(r, 3, r + 2, 6) // bord du chapeau
+        g.fillStyle(0xffca28).fillCircle(r + 2, -8, 2) // étoile sur le chapeau
+        g.fillStyle(0x5e35b1).fillRect(s - 6, r - 6, 3, s - r) // bâton
+        g.fillStyle(0xba68c8, 0.9).fillCircle(s - 4, r - 8, 4) // orbe magique
+        break
+      case 'pretre-goule':
+        g.fillStyle(0x263238).fillTriangle(r - r, r + 2, r + r, r + 2, r, -14) // capuche
+        g.fillStyle(0x1a1210).fillCircle(r, r + 2, r - 6) // visage dans l'ombre
+        g.fillStyle(0x69f0ae).fillCircle(r - r / 3, r, r / 6).fillCircle(r + r / 3, r, r / 6) // yeux luisants
+        g.fillStyle(0x455a64).fillRect(r - 4, r + r / 2, 8, s - r) // pendentif/robe
+        g.fillStyle(0xb0bec5).fillRect(r - 1, r + r / 2, 2, 8).fillRect(r - 3, r + r / 2 + 2, 6, 2) // petite croix
+        break
       default:
         body(); eyes(); mouth()
     }

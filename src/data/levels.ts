@@ -53,7 +53,7 @@ const list: LevelDef[] = [
     props: [prop('roche', 12), prop('herbe', 44), prop('roche', 105), prop('coffre', 66, 7)] },
   { id: 'cave-1', name: 'Cave aux échos', biome: 'cave', widthTiles: 105,
     platforms: [plat(18, 11, 4), plat(22, 8, 4), plat(26, 5, 4), plat(58, 11, 4), plat(62, 8, 4)],
-    spawns: [{ monsterId: 'chauve-souris', x: 14 }, { monsterId: 'squelette', x: 44 }, { monsterId: 'fantome', x: 50 }, { monsterId: 'chauve-souris', x: 70 }, { monsterId: 'squelette', x: 82 }, { monsterId: 'chauve-souris', x: 95 }],
+    spawns: [{ monsterId: 'chauve-souris', x: 14 }, { monsterId: 'squelette', x: 44 }, { monsterId: 'fantome', x: 50 }, { monsterId: 'mage-noir', x: 76 }, { monsterId: 'chauve-souris', x: 70 }, { monsterId: 'squelette', x: 82 }, { monsterId: 'chauve-souris', x: 95 }],
     props: [prop('roche', 10), prop('champignon', 42), prop('roche', 90), prop('coffre', 28, 4), prop('coffre', 64, 7)] },
   { id: 'zone2-boss', name: 'Pyramide du Pharaon', biome: 'desert', widthTiles: 40,
     platforms: [plat(8, 10, 4), plat(28, 10, 4)],
@@ -119,7 +119,7 @@ const list: LevelDef[] = [
   // Zone 5 — cimetière
   { id: 'zone5-1', name: 'Nécropole oubliée', biome: 'cimetiere', widthTiles: 140,
     platforms: [plat(16, 12, 4), plat(20, 9, 4), plat(24, 6, 4), plat(45, 11, 5), plat(60, 13, 4), plat(64, 10, 4), plat(70, 13, 4), plat(85, 12, 4), plat(89, 9, 4), plat(93, 6, 4), plat(110, 11, 5), plat(125, 13, 4)],
-    spawns: [{ monsterId: 'goule', x: 10 }, { monsterId: 'banshee', x: 28 }, { monsterId: 'goule', x: 42 }, { monsterId: 'banshee', x: 58 }, { monsterId: 'goule', x: 72 }, { monsterId: 'banshee', x: 88 }, { monsterId: 'goule', x: 102 }, { monsterId: 'banshee', x: 118 }, { monsterId: 'goule', x: 132 }],
+    spawns: [{ monsterId: 'goule', x: 10 }, { monsterId: 'banshee', x: 28 }, { monsterId: 'goule', x: 42 }, { monsterId: 'pretre-goule', x: 50 }, { monsterId: 'banshee', x: 58 }, { monsterId: 'goule', x: 72 }, { monsterId: 'banshee', x: 88 }, { monsterId: 'goule', x: 102 }, { monsterId: 'banshee', x: 118 }, { monsterId: 'goule', x: 132 }],
     props: [prop('roche', 22), prop('herbe', 52), prop('roche', 115), prop('coffre', 12), prop('coffre', 46, 10)],
     hazards: [{ kind: 'water', x: 35, w: 5 }, { kind: 'spikes', x: 100, w: 4 }],
     bridges: [{ x: 34, y: 13, w: 7 }] },
