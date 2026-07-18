@@ -73,6 +73,14 @@ describe('save', () => {
     expect(loaded.allocated).toEqual({ str: 0, agi: 0, int: 0 })
   })
 
+  it('migre une save v6 → v7 (upgrades par défaut)', () => {
+    const p = newPlayer('Panda')
+    const legacy: Record<string, unknown> = { ...p }
+    delete legacy.upgrades
+    const loaded = deserialize(JSON.stringify({ version: 6, player: legacy }))
+    expect(loaded.upgrades).toEqual({})
+  })
+
   it('save/load via storage', () => {
     const s = fakeStorage()
     const p = newPlayer('Panda')

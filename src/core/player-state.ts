@@ -28,6 +28,7 @@ export interface PlayerState {
   potions: number
   inventory: string[] // itemIds non équipés
   equipment: Partial<Record<EquipSlot, string>>
+  upgrades: Record<string, number> // itemId → niveau de réforge (1..MAX_REFORGE_LEVEL) ; absent = niveau 0
   completedLevels: string[]
   materials: Record<string, number> // matériaux collectés (id → quantité) — collection pure, craft à venir
   monstersKilled: number // compteur global, incrémenté dans LevelScene.onEnemyDied
@@ -50,6 +51,7 @@ export function newPlayer(name: string): PlayerState {
     potions: 1,
     inventory: [],
     equipment: {},
+    upgrades: {},
     completedLevels: [],
     materials: {},
     monstersKilled: 0,

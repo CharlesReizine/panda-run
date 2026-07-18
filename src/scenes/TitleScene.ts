@@ -43,7 +43,7 @@ export class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: logo, scale: 1.03, yoyo: true, repeat: -1, duration: 1800, ease: 'Sine.inOut' })
 
     // repère de version : dis-moi ce numéro pour qu'on sache si tu vois bien la dernière build
-    this.add.text(10, 8, 'build R59', { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
+    this.add.text(10, 8, 'build R60', { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
 
     // bouton muet discret (coin haut-droit)
     const muteBtn = this.add.text(944, 6, audio.isMuted() ? '🔇' : '🔊', { fontSize: '22px' })

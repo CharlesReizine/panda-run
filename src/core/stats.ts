@@ -2,6 +2,7 @@ import type { StatBlock } from './types'
 import type { PlayerState } from './player-state'
 import { CLASSES } from '../data/classes'
 import { ITEMS } from '../data/items'
+import { upgradedBonus } from './reforge'
 
 // Effet d'un point de stat réparti sur les stats dérivées.
 export const STR_ATK_PER_POINT = 2
@@ -21,9 +22,11 @@ export function computeStats(p: PlayerState): StatBlock {
   for (const itemId of Object.values(p.equipment)) {
     const item = ITEMS[itemId]
     if (!item) continue
-    s.atk += item.bonus.atk ?? 0
-    s.def += item.bonus.def ?? 0
-    s.maxHp += item.bonus.maxHp ?? 0
+    // bonus majoré selon le niveau de réforge de la pièce (0 = bonus de base)
+    const bonus = upgradedBonus(item.bonus, p.upgrades[itemId] ?? 0)
+    s.atk += bonus.atk ?? 0
+    s.def += bonus.def ?? 0
+    s.maxHp += bonus.maxHp ?? 0
   }
   // Stats réparties (STR/AGI/INT), appliquées après base + croissance + équipement.
   // Mapping par point : STR → +2 atk ; AGI → +0.02 attackSpeed et +0.3 def ; INT → +4 maxHp.

@@ -86,14 +86,18 @@ export class MenuScene extends Phaser.Scene {
       const itemId = p.equipment[slot]
       const item = itemId ? ITEMS[itemId]! : null
       const color = item ? css(rarityColor(item.rarity)) : '#ffffff'
-      this.add.text(520, 115 + i * 30, `${SLOT_LABELS[slot]} : ${item ? item.name : '—'}`, { fontSize: '16px', color })
+      const up = itemId ? (p.upgrades[itemId] ?? 0) : 0
+      const upTxt = up > 0 ? ` +${up}` : ''
+      this.add.text(520, 115 + i * 30, `${SLOT_LABELS[slot]} : ${item ? item.name : '—'}${upTxt}`, { fontSize: '16px', color })
     })
     this.add.text(520, 220, 'Inventaire (tap = équiper) :', { fontSize: '14px', color: '#b0bec5' })
     p.inventory.forEach((itemId, i) => {
       const item = ITEMS[itemId]!
       const y = 245 + i * 26
+      const up = p.upgrades[itemId] ?? 0
+      const upTxt = up > 0 ? ` +${up}` : ''
       this.add.circle(526, y + 8, 4, rarityColor(item.rarity))
-      this.add.text(536, y, `${item.name} (${SLOT_LABELS[item.slot]})`, { fontSize: '14px', color: css(rarityColor(item.rarity)) })
+      this.add.text(536, y, `${item.name}${upTxt} (${SLOT_LABELS[item.slot]})`, { fontSize: '14px', color: css(rarityColor(item.rarity)) })
         .setInteractive()
         .on('pointerdown', () => {
           const prev = p.equipment[item.slot]

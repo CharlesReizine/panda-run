@@ -3,9 +3,10 @@ import { getPlayer } from '../state'
 import { save } from '../core/save'
 import { buyPotion, buyItem } from '../core/shop'
 import { canCraft, doCraft } from '../core/craft'
+import { canReforge, doReforge, reforgeCost, upgradedBonus, sellItem, sellValue, MAX_REFORGE_LEVEL } from '../core/reforge'
 import { acceptQuest, refreshQuestProgress, claimQuest } from '../core/quests'
 import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, HAT_SHOP, QUESTS } from '../data/shops'
-import { ITEMS } from '../data/items'
+import { ITEMS, rarityColor } from '../data/items'
 import { MATERIALS } from '../data/materials'
 import { RECIPES } from '../data/recipes'
 import { audio } from '../audio/audio-engine'
@@ -451,33 +452,68 @@ export class TownScene extends Phaser.Scene {
     return (m?.name ?? id).split(' ')[0]!
   }
 
-  // Forge : transforme les matériaux collectés en équipement. Une ligne par recette avec
-  // icône du résultat, nom + bonus, coût (possédé/requis en vert/rouge + or) et bouton Forger
-  // actif seulement si canCraft. render() reconstruit tout après un craft pour rafraîchir.
-  private openForge() {
+  // Forge : trois onglets partagent le même bâtiment — Forger (craft), Réforger (améliorer une
+  // pièce) et Vendre (revendre un objet de l'inventaire). openForge() ouvre l'onglet craft.
+  private openForge() { this.openForgePanel('craft') }
+
+  private openForgePanel(tab: 'craft' | 'reforge' | 'sell') {
     this.closePanel()
-    const w = 860
-    const rowH = 44
-    const headerH = 118, footerH = 56
-    const h = headerH + RECIPES.length * rowH + footerH
     const c = this.add.container(0, 0).setDepth(50)
     this.panel = c
+    if (tab === 'craft') this.renderCraft(c)
+    else if (tab === 'reforge') this.renderReforge(c)
+    else this.renderSell(c)
+  }
 
-    const render = (msg?: string, ok?: boolean) => {
+  // barre d'onglets commune aux trois panneaux de la forge, sous le titre
+  private drawForgeTabs(c: Phaser.GameObjects.Container, top: number, active: 'craft' | 'reforge' | 'sell') {
+    const tabs: { id: 'craft' | 'reforge' | 'sell'; label: string }[] = [
+      { id: 'craft', label: 'Forger' },
+      { id: 'reforge', label: 'Réforger' },
+      { id: 'sell', label: 'Vendre' },
+    ]
+    const tw = 128, gap = 10
+    const totalW = tabs.length * tw + (tabs.length - 1) * gap
+    let x = 480 - totalW / 2 + tw / 2
+    for (const tab of tabs) {
+      const on = tab.id === active
+      const btn = this.add.text(x, top + 74, tab.label, {
+        fontSize: '15px', color: on ? '#ffd54f' : '#cfd8dc',
+        backgroundColor: on ? '#5d4037' : '#3a2b28', fontStyle: on ? 'bold' : 'normal',
+        padding: { x: 14, y: 6 },
+      }).setOrigin(0.5)
+      c.add(btn)
+      if (!on) btn.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openForgePanel(tab.id))
+      x += tw + gap
+    }
+  }
+
+  // Forger : transforme les matériaux collectés en équipement. Une ligne par recette avec
+  // icône du résultat, nom + bonus, coût (possédé/requis en vert/rouge + or) et bouton Forger
+  // actif seulement si canCraft. renderCraft() reconstruit tout après un craft pour rafraîchir.
+  private renderCraft(c: Phaser.GameObjects.Container, msg?: string, ok?: boolean) {
+    const w = 860
+    const rowH = 44
+    const headerH = 140, footerH = 56
+    const h = headerH + RECIPES.length * rowH + footerH
+
+    {
       c.removeAll(true)
       const top = this.drawPanelFrame(c, w, h, 'Forge')
       const p = getPlayer()
       this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
+      this.drawForgeTabs(c, top, 'craft')
 
       // récap des matériaux possédés
       const owned = Object.entries(p.materials).filter(([, q]) => q > 0)
       const recap = owned.length
         ? owned.map(([id, q]) => `${this.shortMat(id)} x${q}`).join('   ·   ')
         : 'Aucun matériau collecté — va combattre pour en récolter !'
-      c.add(this.add.text(480, top + 84, recap, {
+      c.add(this.add.text(480, top + 108, recap, {
         fontSize: '12px', color: '#cfd8dc', align: 'center', wordWrap: { width: w - 48 },
       }).setOrigin(0.5))
 
+      const render = (m?: string, o?: boolean) => this.renderCraft(c, m, o)
       const rowsTop = top + headerH
       const rowLeft = 480 - w / 2 + 16
       RECIPES.forEach((recipe, i) => {
@@ -546,6 +582,194 @@ export class TownScene extends Phaser.Scene {
         fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
       }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()))
     }
-    render()
+  }
+
+  // pièces réforçables : itemIds uniques de l'équipement porté + de l'inventaire
+  private reforgeableIds(): string[] {
+    const p = getPlayer()
+    const ids = [...Object.values(p.equipment), ...p.inventory].filter((id): id is string => !!id && !!ITEMS[id])
+    return [...new Set(ids)]
+  }
+
+  // Réforger : améliore une pièce d'un cran (+20 % de bonus / niveau, cap au niveau max). Une
+  // ligne par pièce avec son niveau, l'effet actuel → suivant, le coût (or + matériaux) et un
+  // bouton actif si canReforge. renderReforge() reconstruit tout après une réforge.
+  private renderReforge(c: Phaser.GameObjects.Container, msg?: string, ok?: boolean) {
+    c.removeAll(true)
+    const w = 860
+    const rowH = 46
+    const headerH = 140, footerH = 56
+    const ids = this.reforgeableIds()
+    const rows = Math.max(ids.length, 1)
+    const h = headerH + rows * rowH + footerH
+    const top = this.drawPanelFrame(c, w, h, 'Forge')
+    const p = getPlayer()
+    this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
+    this.drawForgeTabs(c, top, 'reforge')
+
+    const owned = Object.entries(p.materials).filter(([, q]) => q > 0)
+    const recap = owned.length
+      ? owned.map(([id, q]) => `${this.shortMat(id)} x${q}`).join('   ·   ')
+      : 'Aucun matériau collecté — va combattre pour en récolter !'
+    c.add(this.add.text(480, top + 108, recap, {
+      fontSize: '12px', color: '#cfd8dc', align: 'center', wordWrap: { width: w - 48 },
+    }).setOrigin(0.5))
+
+    const render = (m?: string, o?: boolean) => this.renderReforge(c, m, o)
+    const rowsTop = top + headerH
+    const rowLeft = 480 - w / 2 + 16
+
+    if (ids.length === 0) {
+      c.add(this.add.text(480, rowsTop + rowH / 2, 'Aucune pièce à réforger.', {
+        fontSize: '14px', color: '#90a4ae',
+      }).setOrigin(0.5))
+    }
+
+    ids.forEach((id, i) => {
+      const y = rowsTop + i * rowH + rowH / 2
+      const item = ITEMS[id]!
+      const level = p.upgrades[id] ?? 0
+      const atMax = level >= MAX_REFORGE_LEVEL
+      const canDo = canReforge(p, id)
+
+      if (i > 0) c.add(this.add.rectangle(480, y - rowH / 2, w - 40, 1, 0xffffff, 0.08))
+
+      // icône
+      const icon = this.iconFor(id)
+      if ('texture' in icon) c.add(this.add.image(rowLeft + 18, y, icon.texture).setDisplaySize(28, 28))
+      else {
+        c.add(this.add.circle(rowLeft + 18, y, 13, icon.pastille).setStrokeStyle(2, 0xffffff, 0.6))
+        c.add(this.add.text(rowLeft + 18, y, icon.glyph, { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
+      }
+
+      // nom + niveau, puis effet actuel → suivant
+      const nameTxt = level > 0 ? `${item.name} +${level}` : item.name
+      c.add(this.add.text(rowLeft + 42, y - 10, `${nameTxt}  (Nv ${level}/${MAX_REFORGE_LEVEL})`, {
+        fontSize: '13px', color: '#ffffff', fontStyle: 'bold',
+      }).setOrigin(0, 0.5))
+      const cur = upgradedBonus(item.bonus, level)
+      const bonusStr = atMax
+        ? Object.entries(cur).map(([k, v]) => `${k} +${v}`).join(' / ')
+        : (() => {
+            const next = upgradedBonus(item.bonus, level + 1)
+            return Object.keys(item.bonus).map((k) => `${k} +${cur[k as keyof typeof cur]}→+${next[k as keyof typeof next]}`).join(' / ')
+          })()
+      c.add(this.add.text(rowLeft + 42, y + 9, bonusStr, { fontSize: '10px', color: '#90a4ae' }).setOrigin(0, 0.5))
+
+      // coût de la prochaine réforge
+      if (!atMax) {
+        const cost = reforgeCost(level)
+        let cx = rowLeft + 330
+        for (const [matId, qty] of Object.entries(cost.materials)) {
+          const have = p.materials[matId] ?? 0
+          const t = this.add.text(cx, y, `${this.shortMat(matId)} ${have}/${qty}`, {
+            fontSize: '11px', color: have >= qty ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
+          }).setOrigin(0, 0.5)
+          c.add(t)
+          cx += t.width + 14
+        }
+        const g = this.add.text(cx, y, `${cost.gold} or`, {
+          fontSize: '11px', color: p.gold >= cost.gold ? '#ffd54f' : '#ff5252', fontStyle: 'bold',
+        }).setOrigin(0, 0.5)
+        c.add(g)
+      } else {
+        c.add(this.add.text(rowLeft + 330, y, 'Niveau max', { fontSize: '11px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0, 0.5))
+      }
+
+      // bouton Réforger
+      const btn = this.add.text(480 + w / 2 - 24, y, atMax ? 'Max' : 'Réforger', {
+        fontSize: '13px', color: canDo ? '#ffffff' : '#9e9e9e',
+        backgroundColor: canDo ? '#2e7d32' : '#3a2b28', padding: { x: 12, y: 6 },
+      }).setOrigin(1, 0.5)
+      c.add(btn)
+      btn.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        if (doReforge(p, id)) {
+          audio.playSfx('buy')
+          save(p)
+          render(`${item.name} réforgé au +${(p.upgrades[id] ?? 0)} !`, true)
+        } else render(atMax ? 'Niveau max atteint' : 'Ressources insuffisantes', false)
+      })
+    })
+
+    if (msg) c.add(this.add.text(480, top + h - 54, msg, {
+      fontSize: '14px', color: ok ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
+    }).setOrigin(0.5))
+
+    c.add(this.add.text(480, top + h - 28, '← Fermer', {
+      fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()))
+  }
+
+  // Vendre : revend un objet de l'inventaire contre de l'or (selon sa rareté). Une ligne par
+  // objet avec son prix de vente et un bouton Vendre. renderSell() reconstruit tout après une vente.
+  private renderSell(c: Phaser.GameObjects.Container, msg?: string, ok?: boolean) {
+    c.removeAll(true)
+    const w = 860
+    const rowH = 44
+    const headerH = 132, footerH = 56
+    const p = getPlayer()
+    const rows = Math.max(p.inventory.length, 1)
+    const h = headerH + rows * rowH + footerH
+    const top = this.drawPanelFrame(c, w, h, 'Forge')
+    this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
+    this.drawForgeTabs(c, top, 'sell')
+    c.add(this.add.text(480, top + 104, 'Revends les objets de ton inventaire non équipé.', {
+      fontSize: '12px', color: '#cfd8dc', align: 'center',
+    }).setOrigin(0.5))
+
+    const render = (m?: string, o?: boolean) => this.renderSell(c, m, o)
+    const rowsTop = top + headerH
+    const rowLeft = 480 - w / 2 + 16
+
+    if (p.inventory.length === 0) {
+      c.add(this.add.text(480, rowsTop + rowH / 2, 'Inventaire vide.', {
+        fontSize: '14px', color: '#90a4ae',
+      }).setOrigin(0.5))
+    }
+
+    p.inventory.forEach((id, i) => {
+      const y = rowsTop + i * rowH + rowH / 2
+      const item = ITEMS[id]!
+      const level = p.upgrades[id] ?? 0
+
+      if (i > 0) c.add(this.add.rectangle(480, y - rowH / 2, w - 40, 1, 0xffffff, 0.08))
+
+      const icon = this.iconFor(id)
+      if ('texture' in icon) c.add(this.add.image(rowLeft + 18, y, icon.texture).setDisplaySize(28, 28))
+      else {
+        c.add(this.add.circle(rowLeft + 18, y, 13, icon.pastille).setStrokeStyle(2, 0xffffff, 0.6))
+        c.add(this.add.text(rowLeft + 18, y, icon.glyph, { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
+      }
+
+      const nameTxt = level > 0 ? `${item.name} +${level}` : item.name
+      c.add(this.add.text(rowLeft + 42, y - 10, nameTxt, { fontSize: '13px', color: `#${rarityColor(item.rarity).toString(16).padStart(6, '0')}`, fontStyle: 'bold' }).setOrigin(0, 0.5))
+      const bonus = Object.entries(item.bonus).map(([k, v]) => `${k} +${v}`).join(' / ')
+      c.add(this.add.text(rowLeft + 42, y + 9, bonus, { fontSize: '10px', color: '#90a4ae' }).setOrigin(0, 0.5))
+
+      c.add(this.add.text(rowLeft + 360, y, `${sellValue(item)} or`, {
+        fontSize: '12px', color: '#ffd54f', fontStyle: 'bold',
+      }).setOrigin(0, 0.5))
+
+      const btn = this.add.text(480 + w / 2 - 24, y, 'Vendre', {
+        fontSize: '13px', color: '#ffffff', backgroundColor: '#8e2f2f', padding: { x: 12, y: 6 },
+      }).setOrigin(1, 0.5)
+      c.add(btn)
+      btn.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        const value = sellValue(item)
+        if (sellItem(p, i)) {
+          audio.playSfx('buy')
+          save(p)
+          render(`Vendu : ${item.name} (+${value} or)`, true)
+        }
+      })
+    })
+
+    if (msg) c.add(this.add.text(480, top + h - 54, msg, {
+      fontSize: '14px', color: ok ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
+    }).setOrigin(0.5))
+
+    c.add(this.add.text(480, top + h - 28, '← Fermer', {
+      fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()))
   }
 }

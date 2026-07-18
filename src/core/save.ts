@@ -2,7 +2,7 @@ import type { PlayerState } from './player-state'
 import { START_NODE } from '../data/worldmap'
 
 export const SAVE_KEY = 'panda-run-save'
-const VERSION = 6
+const VERSION = 7
 
 interface SaveFile { version: number; player: PlayerState }
 
@@ -15,7 +15,7 @@ export function deserialize(json: string): PlayerState {
   const file = JSON.parse(json) as SaveFile
   if (file.version < 1 || file.version > VERSION) throw new Error(`version de sauvegarde inconnue : ${file.version}`)
   // migrations cumulatives vers la version courante
-  const raw = file.player as PlayerState & { unlockedSkills?: string[]; monstersKilled?: number; quests?: PlayerState['quests']; currentNode?: string; statPoints?: number; allocated?: PlayerState['allocated'] }
+  const raw = file.player as PlayerState & { unlockedSkills?: string[]; monstersKilled?: number; quests?: PlayerState['quests']; currentNode?: string; statPoints?: number; allocated?: PlayerState['allocated']; upgrades?: PlayerState['upgrades'] }
   let pl: PlayerState = raw
   if (file.version === 1) pl = { ...pl, materials: {} } // v1 → v2 : collection de matériaux
   if (file.version <= 2) {
@@ -36,6 +36,10 @@ export function deserialize(json: string): PlayerState {
   if (file.version <= 5) {
     // v5 → v6 : répartition de stats (STR/AGI/INT) + points de stat non dépensés
     pl = { ...pl, statPoints: raw.statPoints ?? 0, allocated: raw.allocated ?? { str: 0, agi: 0, int: 0 } }
+  }
+  if (file.version <= 6) {
+    // v6 → v7 : niveaux de réforge par objet
+    pl = { ...pl, upgrades: raw.upgrades ?? {} }
   }
   return pl
 }
