@@ -3,7 +3,7 @@ import { LEVELS } from '../../src/data/levels'
 import { MONSTERS } from '../../src/data/monsters'
 import { PROPS } from '../../src/data/props'
 import { WORLD_NODES, WORLD_EDGES, START_NODE, isNodeUnlocked } from '../../src/data/worldmap'
-import { unreachablePlatforms, maxJumpTiles } from '../../src/core/platforming'
+import { unreachablePlatforms, maxJumpTiles, MIN_LADDER_TILES } from '../../src/core/platforming'
 
 describe('niveaux et carte', () => {
   it('25 niveaux dont 6 boss', () => {
@@ -17,6 +17,15 @@ describe('niveaux et carte', () => {
     for (const l of Object.values(LEVELS)) {
       const bad = unreachablePlatforms(l.platforms, l.widthTiles)
       expect(bad, `${l.id}: plateformes inatteignables → ${JSON.stringify(bad)}`).toEqual([])
+    }
+  })
+
+  it('chaque échelle fait au moins 2× la hauteur de saut max (h >= MIN_LADDER_TILES)', () => {
+    expect(MIN_LADDER_TILES).toBeGreaterThanOrEqual(Math.ceil(2 * maxJumpTiles()))
+    for (const l of Object.values(LEVELS)) {
+      for (const ld of l.ladders ?? []) {
+        expect(ld.h, `${l.id}: échelle x=${ld.x} h=${ld.h} < ${MIN_LADDER_TILES}`).toBeGreaterThanOrEqual(MIN_LADDER_TILES)
+      }
     }
   })
 

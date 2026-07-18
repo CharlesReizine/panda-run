@@ -16,6 +16,14 @@ export function maxJumpTiles(): number {
   return maxJumpHeightPx() / TILE
 }
 
+// Hauteur minimale d'une échelle, en tuiles : au moins deux fois la hauteur de saut max, pour
+// qu'aucune échelle ne puisse se franchir d'un simple saut (elle doit se grimper).
+export const MIN_LADDER_TILES = Math.ceil(2 * maxJumpTiles())
+
+export function ladderTooShort(h: number): boolean {
+  return h < MIN_LADDER_TILES
+}
+
 // Prédicat de collision « one-way » (plateformes traversables par le bas) : on ne retient
 // la collision que si le joueur descend (velocityY >= 0) ET que ses pieds venaient d'au-dessus
 // du haut de la plateforme. On monte donc librement à travers, puis on se pose dessus en
