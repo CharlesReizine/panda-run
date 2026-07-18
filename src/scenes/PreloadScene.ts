@@ -91,6 +91,9 @@ export class PreloadScene extends Phaser.Scene {
     img.setPosition(0, (h - s) / 2)
     const rt = this.make.renderTexture({ width: s, height: h }, false)
     rt.draw(img, 0, (h - s) / 2)
+    // Phaser v4 : draw() ne fait qu'empiler des commandes dans un command buffer.
+    // Sans render(), rien n'est réellement dessiné dans la texture → monster-<id> vide.
+    rt.render()
     rt.saveTexture(`monster-${id}`)
     img.destroy()
   }
