@@ -4,6 +4,7 @@ import { SKILLS } from '../data/skills'
 import { BIOMES } from '../data/biomes'
 import { ITEMS } from '../data/items'
 import type { MonsterDef } from '../core/types'
+import { stripBorderBackground } from '../core/image-strip'
 
 // icône par skill : couleur + glyphe
 const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
@@ -83,11 +84,38 @@ export class PreloadScene extends Phaser.Scene {
     for (const id of ART_MONSTERS) this.load.image(`art-${id}`, `art/art-${id}.png`)
   }
 
+  // Retire le fond uni (gris/blanc « polaroïd ») autour de l'illustration en effaçant
+  // les pixels de fond connectés aux bords, puis recrée une texture nettoyée
+  // `art-<id>-clean`. Renvoie la clé à utiliser pour le bake (fallback sur l'art brut
+  // si le canvas / contexte 2D échoue).
+  private cleanArtTexture(id: string): string {
+    const src = `art-${id}`
+    const clean = `${src}-clean`
+    if (this.textures.exists(clean)) return clean
+    try {
+      const source = this.textures.get(src).getSourceImage() as HTMLImageElement | HTMLCanvasElement
+      const w = source.width, h = source.height
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return src
+      ctx.drawImage(source as CanvasImageSource, 0, 0)
+      const imageData = ctx.getImageData(0, 0, w, h)
+      stripBorderBackground(imageData)
+      ctx.putImageData(imageData, 0, 0)
+      this.textures.addCanvas(clean, canvas)
+      return clean
+    } catch {
+      return src // fallback : illustration brute (fond conservé, mais jamais de crash)
+    }
+  }
+
   // bake l'illustration fournie dans la texture monster-<id> à la taille standard (carrée, centrée)
   private artMonster(id: string, boss: boolean) {
     const s = boss ? 76 : 40
     const h = s + 6
-    const img = this.add.image(0, 0, `art-${id}`).setOrigin(0, 0).setDisplaySize(s, s)
+    const img = this.add.image(0, 0, this.cleanArtTexture(id)).setOrigin(0, 0).setDisplaySize(s, s)
     img.setPosition(0, (h - s) / 2)
     const rt = this.make.renderTexture({ width: s, height: h }, false)
     rt.draw(img, 0, (h - s) / 2)
