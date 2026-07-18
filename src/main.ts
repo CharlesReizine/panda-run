@@ -12,6 +12,7 @@ const updateSW = registerSW({
 import { PreloadScene } from './scenes/PreloadScene'
 import { TitleScene } from './scenes/TitleScene'
 import { WorldMapScene } from './scenes/WorldMapScene'
+import { LevelIntroScene } from './scenes/LevelIntroScene'
 import { TownScene } from './scenes/TownScene'
 import { LevelScene } from './scenes/LevelScene'
 import { UIScene } from './scenes/UIScene'
@@ -32,7 +33,7 @@ const game = new Phaser.Game({
   backgroundColor: '#87ceeb',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   physics: { default: 'arcade', arcade: { gravity: { x: 0, y: GRAVITY } } },
-  scene: [BootScene, PreloadScene, TitleScene, WorldMapScene, TownScene, LevelScene, UIScene, PauseScene, MenuScene, ClassChangeScene, SkillEquipScene, BestiaryScene],
+  scene: [BootScene, PreloadScene, TitleScene, WorldMapScene, LevelIntroScene, TownScene, LevelScene, UIScene, PauseScene, MenuScene, ClassChangeScene, SkillEquipScene, BestiaryScene],
 })
 
 // On dimensionne le conteneur #game EXACTEMENT sur la zone visible (visualViewport, qui

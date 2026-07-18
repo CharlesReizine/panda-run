@@ -4,6 +4,7 @@ import { getPlayer } from '../state'
 import { canChangeClass, canEvolveClass } from '../core/progression'
 import { save } from '../core/save'
 import { audio } from '../audio/audio-engine'
+import { isLevelSeen } from './LevelIntroScene'
 
 const NODE_COLORS = { town: 0xffd700, level: 0x66bb6a, boss: 0xef5350 } as const
 const LOCKED_COLOR = 0x555555
@@ -251,6 +252,10 @@ export class WorldMapScene extends Phaser.Scene {
     }
 
     const dir: 'forward' | 'backward' = target.x > currentNode.x ? 'forward' : 'backward'
-    this.scene.start('Level', { levelId: target.levelId, fromNode: p.currentNode, targetNode: targetId, dir })
+    const data = { levelId: target.levelId, fromNode: p.currentNode, targetNode: targetId, dir }
+    // Première entrée dans ce terrain → écran d'intro (présentation des monstres et loots).
+    // Les fois suivantes → directement le jeu, pas de re-présentation.
+    const scene = target.levelId && !isLevelSeen(target.levelId) ? 'LevelIntro' : 'Level'
+    this.scene.start(scene, data)
   }
 }
