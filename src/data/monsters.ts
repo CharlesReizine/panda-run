@@ -31,6 +31,57 @@ const list: MonsterDef[] = [
   { id: 'chauve-souris', name: 'Chauve-souris', color: 0x6b4f9e, hp: 70, atk: 85, def: 8, xp: 600, speed: 120, behavior: 'charge', drops: [goldMid, potion] },
   { id: 'fantome', name: 'Fantôme', color: 0xb2ebf2, hp: 80, atk: 60, def: 22, xp: 700, speed: 35, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.04, min: 1, max: 1 }] },
   { id: 'mage-noir', name: 'Mage noir', color: 0x7e57c2, hp: 100, atk: 70, def: 12, xp: 850, speed: 45, behavior: 'caster', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] },
+  // MVP — élites rares (mvp: true) : versions surpuissantes d'un biome, stats bien au-dessus des
+  // mobs mais loin d'un boss ; xp élevé ; drops rares (objets épiques/légendaires à faible %)
+  {
+    id: 'poring-dore', name: 'Poring doré', color: 0xffd700, hp: 220, atk: 32, def: 14, xp: 2200, speed: 30, behavior: 'contact', mvp: true,
+    drops: [
+      { kind: 'gold', chance: 1, min: 40, max: 80 },
+      { kind: 'potion', chance: 0.5, min: 1, max: 1 },
+      { kind: 'item', itemId: 'couronne-royale', chance: 0.12, min: 1, max: 1 },
+      { kind: 'item', itemId: 'amulette-gemme', chance: 0.08, min: 1, max: 1 },
+    ],
+  },
+  {
+    id: 'orc-seigneur', name: 'Orc seigneur', color: 0x2f5a26, hp: 520, atk: 125, def: 32, xp: 4200, speed: 55, behavior: 'charge', mvp: true,
+    drops: [
+      { kind: 'gold', chance: 1, min: 70, max: 130 },
+      { kind: 'potion', chance: 0.5, min: 1, max: 1 },
+      { kind: 'item', itemId: 'epee-fer-forgee', chance: 0.15, min: 1, max: 1 },
+      { kind: 'item', itemId: 'casque-croc', chance: 0.1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'lame-scorpion', chance: 0.05, min: 1, max: 1 },
+    ],
+  },
+  {
+    id: 'roi-crabe', name: 'Roi Crabe', color: 0xe64a19, hp: 640, atk: 115, def: 48, xp: 4400, speed: 35, behavior: 'contact', mvp: true,
+    drops: [
+      { kind: 'gold', chance: 1, min: 80, max: 140 },
+      { kind: 'potion', chance: 0.5, min: 1, max: 1 },
+      { kind: 'item', itemId: 'amulette-gemme', chance: 0.1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'armure-carapace', chance: 0.05, min: 1, max: 1 },
+    ],
+  },
+  {
+    id: 'spectre-ancien', name: 'Spectre ancien', color: 0xb39ddb, hp: 920, atk: 195, def: 36, xp: 6800, speed: 45, behavior: 'projectile', mvp: true,
+    drops: [
+      { kind: 'gold', chance: 1, min: 120, max: 200 },
+      { kind: 'potion', chance: 0.5, min: 1, max: 1 },
+      { kind: 'item', itemId: 'griffe-royale', chance: 0.12, min: 1, max: 1 },
+      { kind: 'item', itemId: 'amulette-pharaon', chance: 0.1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'talisman-trefle', chance: 0.06, min: 1, max: 1 },
+    ],
+  },
+  {
+    id: 'dragon-flamme', name: 'Dragon de flamme', color: 0xc62828, hp: 1450, atk: 235, def: 52, xp: 9500, speed: 60, behavior: 'charge', mvp: true,
+    drops: [
+      { kind: 'gold', chance: 1, min: 180, max: 300 },
+      { kind: 'potion', chance: 0.6, min: 1, max: 1 },
+      { kind: 'item', itemId: 'baton-lumineux', chance: 0.1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'couronne-royale', chance: 0.1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'lame-scorpion', chance: 0.08, min: 1, max: 1 },
+      { kind: 'item', itemId: 'armure-carapace', chance: 0.05, min: 1, max: 1 },
+    ],
+  },
   // Boss
   {
     id: 'roi-gloopy', name: 'Roi Gloopy', color: 0xff5fa8, hp: 380, atk: 18, def: 5, xp: 3200, speed: 55, behavior: 'charge', boss: true,

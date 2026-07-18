@@ -207,7 +207,7 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   private drawMonster(m: MonsterDef) {
-    const s = m.boss ? 76 : 40
+    const s = m.boss ? 76 : m.mvp ? 56 : 40
     const r = s / 2
     const g = this.add.graphics()
     const dark = 0x222222
@@ -557,8 +557,62 @@ export class PreloadScene extends Phaser.Scene {
         g.fillStyle(0x455a64).fillRect(r - 4, r + r / 2, 8, s - r) // pendentif/robe
         g.fillStyle(0xb0bec5).fillRect(r - 1, r + r / 2, 2, 8).fillRect(r - 3, r + r / 2 + 2, 6, 2) // petite croix
         break
+      case 'poring-dore':
+        // poring royal doré : slime bombé, épines dorées, brillance nacrée
+        body(); eyes(); mouth()
+        g.fillStyle(0xfff59d, 0.6).fillCircle(r - r / 2, r - r / 2, r / 5) // brillance
+        g.fillStyle(0xffe082).fillTriangle(r - 12, 2, r - 6, 2, r - 9, -8).fillTriangle(r + 6, 2, r + 12, 2, r + 9, -8).fillTriangle(r - 3, 0, r + 3, 0, r, -11) // épines dorées
+        break
+      case 'orc-seigneur':
+        // chef orc massif : peau sombre, défenses, casque à cornes et hache lourde
+        body(); eyes()
+        g.fillStyle(0xffffff).fillTriangle(r - 9, r + r / 1.5, r - 3, r + r / 1.5, r - 6, r + r / 0.9).fillTriangle(r + 3, r + r / 1.5, r + 9, r + r / 1.5, r + 6, r + r / 0.9) // défenses
+        g.fillStyle(0x455a64).fillRect(2, r - 10, s - 4, 7) // casque
+        g.fillStyle(0x263238).fillTriangle(2, r - 10, 10, r - 26, 14, r - 10).fillTriangle(s - 2, r - 10, s - 10, r - 26, s - 14, r - 10) // cornes du casque
+        g.fillStyle(0x6d4c41).fillRect(s - 8, r - 20, 4, 34) // manche de hache
+        g.fillStyle(0xb0bec5).fillTriangle(s - 6, r - 22, s + 6, r - 18, s - 6, r - 2) // lame de hache
+        break
+      case 'roi-crabe':
+        // crabe monarque : grosses pinces, carapace bombée, petite couronne au sommet
+        g.fillStyle(m.color).fillCircle(r - r / 1.05, r, r / 2).fillCircle(r + r / 1.05, r, r / 2) // pinces
+        g.fillStyle(0xbf360c).fillCircle(r - r / 1.05, r, r / 3.5).fillCircle(r + r / 1.05, r, r / 3.5)
+        for (let i = -1; i <= 1; i += 2) g.fillStyle(m.color).fillTriangle(r + i * r / 1.3, r + 10, r + i * (r / 1.3 - 7), r + 8, r + i * (r / 1.3 - 2), r + 20) // pattes
+        body(); eyes(-6)
+        g.fillStyle(0xffd700).fillRect(r - 9, 3, 18, 5).fillTriangle(r - 9, 3, r - 5, -6, r - 1, 3).fillTriangle(r - 1, 3, r + 4, -8, r + 9, 3) // couronne
+        break
+      case 'spectre-ancien':
+        // spectre royal : voile fantomatique lumineux, yeux ardents, diadème spectral
+        g.fillStyle(m.color, 0.22).fillCircle(r, r + 2, r + 3) // aura spectrale
+        g.fillStyle(m.color, 0.6).fillCircle(r, r - 2, r - 5) // tête flottante
+        g.fillStyle(m.color, 0.55).fillRect(r - r + 6, r - 2, s - 12, r) // voile
+        for (let i = -1; i <= 1; i++) g.fillStyle(m.color, 0.55).fillTriangle(r + i * 12 - 6, r + r - 4, r + i * 12 + 6, r + r - 4, r + i * 12, s - 2) // bas ondulé
+        g.fillStyle(0xede7f6, 0.9).fillCircle(r - r / 3, r - 4, 4).fillCircle(r + r / 3, r - 4, 4)
+        g.fillStyle(0x7c4dff).fillCircle(r - r / 3, r - 4, 2).fillCircle(r + r / 3, r - 4, 2) // yeux ardents
+        g.fillStyle(0xd1c4e9).fillTriangle(r - 12, 4, r - 5, 4, r - 8, -6).fillTriangle(r - 3, 3, r + 3, 3, r, -9).fillTriangle(r + 5, 4, r + 12, 4, r + 8, -6) // diadème spectral
+        break
+      case 'dragon-flamme':
+        // dragon ardent : ailes membraneuses, cornes, gueule en feu
+        g.fillStyle(0x7f1d1d, 0.9).fillTriangle(0, r - 6, r - 8, r - 12, 4, r + 22).fillTriangle(s, r - 6, r + 8, r - 12, s - 4, r + 22) // ailes
+        g.fillStyle(0x2b1010).fillTriangle(r - 14, 4, r - 5, 6, r - 11, -14).fillTriangle(r + 14, 4, r + 5, 6, r + 11, -14) // cornes
+        body()
+        g.fillStyle(0xffee58).fillCircle(r - r / 3, r - 2, r / 5).fillCircle(r + r / 3, r - 2, r / 5) // yeux
+        g.fillStyle(0xb71c1c).fillEllipse(r - r / 3, r - 2, 3, r / 6).fillEllipse(r + r / 3, r - 2, 3, r / 6) // pupilles fendues
+        g.fillStyle(0x1a0a0a).fillEllipse(r, r + r / 1.6, r / 1.4, r / 3) // gueule
+        g.fillStyle(0xff7043).fillEllipse(r, r + r / 1.5, r / 2, r / 6) // souffle de feu
+        g.fillStyle(0xffca28, 0.7).fillCircle(r, s + 2, r / 1.4) // aura de braises au sol
+        break
       default:
         body(); eyes(); mouth()
+    }
+
+    if (m.mvp) {
+      // marque d'élite : double halo doré + étoiles scintillantes, distinct de la couronne des boss
+      g.lineStyle(3, 0xffd54f, 0.85).strokeCircle(r, r + 2, r + 1)
+      g.lineStyle(1.5, 0xfff59d, 0.5).strokeCircle(r, r + 2, r + 4)
+      g.fillStyle(0xfff59d)
+      for (const [sx, sy] of [[r - 13, 8], [r, 3], [r + 13, 8]] as [number, number][]) {
+        g.fillTriangle(sx - 3, sy, sx + 3, sy, sx, sy - 5).fillTriangle(sx - 3, sy, sx + 3, sy, sx, sy + 5)
+      }
     }
 
     if (m.boss) {

@@ -16,6 +16,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private nextActionAt = 0
   private nextShootAt = 0
   private bar: Phaser.GameObjects.Graphics
+  private eliteAura: Phaser.GameObjects.Graphics | null = null
   private isCharging = false
   private zzz: Phaser.GameObjects.Text | null = null
   private nextZzzToggleAt = 0
@@ -34,6 +35,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.monster = def
     this.hp = def.hp
     this.bar = scene.add.graphics()
+    if (def.mvp) this.eliteAura = scene.add.graphics()
   }
 
   takeDamage(amount: number) {
@@ -47,6 +49,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this.hp <= 0) {
       this.scene.events.emit('enemy-died', this)
       this.bar.destroy()
+      this.eliteAura?.destroy()
       this.zzz?.destroy()
       this.destroy()
     }
@@ -121,5 +124,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const w = this.monster.boss ? 60 : 30
     this.bar.fillStyle(0x000000, 0.6).fillRect(this.x - w / 2, this.y - this.height / 2 - 12, w, 5)
     this.bar.fillStyle(0x66bb6a).fillRect(this.x - w / 2, this.y - this.height / 2 - 12, w * Math.max(0, this.hp / this.monster.hp), 5)
+
+    // halo d'élite pulsant autour des MVP
+    if (this.eliteAura) {
+      this.eliteAura.clear()
+      const pulse = 0.35 + 0.2 * Math.sin(t / 220)
+      this.eliteAura.lineStyle(2, 0xffd54f, pulse).strokeCircle(this.x, this.y, this.width * 0.6)
+    }
   }
 }

@@ -63,5 +63,6 @@ export interface MonsterDef {
   speed: number // px/s
   behavior: MonsterBehavior
   boss?: boolean
+  mvp?: boolean // élite rare : stats renforcées, drops rares, ni mob ni boss
   drops: DropEntry[]
 }
