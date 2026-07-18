@@ -753,9 +753,17 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0x9e9e9e); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8, 16, i * 8 + 4, 2, i * 8 + 8, 16)
     g.fillStyle(0xcfd8dc); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 + 2, 16, i * 8 + 4, 6, i * 8 + 6, 16)
     g.generateTexture('spikes', 32, 16); g.clear()
-    // eau (surface bleue translucide)
-    g.fillStyle(0x1e88e5, 0.55).fillRect(0, 0, 32, 32)
-    g.fillStyle(0x64b5f6, 0.5).fillRect(0, 0, 32, 5); g.generateTexture('water', 32, 32); g.clear()
+    // eau (zone nageable, translucide : on voit le panda dedans)
+    g.fillStyle(0x1e88e5, 0.38).fillRect(0, 0, 32, 32)
+    g.fillStyle(0x64b5f6, 0.45).fillRect(0, 0, 32, 5)
+    g.fillStyle(0xbbdefb, 0.35).fillRect(4, 12, 8, 2).fillRect(18, 22, 9, 2); g.generateTexture('water', 32, 32); g.clear()
+    // échelle (montants + barreaux, répétée verticalement)
+    g.fillStyle(0x8d6e63).fillRect(4, 0, 5, 32).fillRect(23, 0, 5, 32) // montants
+    g.fillStyle(0xa1887f).fillRect(4, 4, 24, 4).fillRect(4, 20, 24, 4) // barreaux
+    g.fillStyle(0x6d4c41).fillRect(4, 4, 24, 1).fillRect(4, 20, 24, 1); g.generateTexture('ladder', 32, 32); g.clear()
+    // drapeau de checkpoint (mât + fanion), teinté vert une fois activé
+    g.fillStyle(0x9e9e9e).fillRect(3, 0, 3, 44)
+    g.fillStyle(0xffffff).fillTriangle(6, 2, 6, 18, 26, 10); g.generateTexture('flag', 30, 44); g.clear()
     // pont de planches
     g.fillStyle(0x8d6e63).fillRect(0, 0, 32, 12)
     g.fillStyle(0x6d4c41).fillRect(0, 0, 32, 2).fillRect(7, 0, 2, 12).fillRect(22, 0, 2, 12); g.generateTexture('bridge', 32, 12); g.clear()

@@ -7,6 +7,10 @@ import { PANDA_BODY } from './player-body'
 import { JUMP_SPEED, RUN_SPEED } from '../core/platforming'
 
 const JUMP_VELOCITY = -JUMP_SPEED // source unique (partagée avec le test d'atteignabilité)
+const CLIMB_SPEED = 150 // vitesse verticale sur une échelle (up/down)
+const SWIM_SPEED = 150 // vitesse verticale de nage dans l'eau (up/down)
+const SWIM_DRIFT = 40 // léger enfoncement quand on ne nage pas activement
+const SWIM_RUN_MULT = 0.7 // déplacement horizontal ralenti dans l'eau
 const MAX_ENERGY = 100
 const ENERGY_REGEN_PER_SEC = 22
 const ENERGY_PER_BASIC_HIT = 6
@@ -18,6 +22,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   energy = MAX_ENERGY
   readonly maxEnergy = MAX_ENERGY
   facing: 1 | -1 = 1
+  // renseignés chaque frame par LevelScene selon les zones chevauchées
+  onLadder = false
+  inWater = false
+  private climbing = false
   private wasGrounded = true
   private attacking = false
   private hatImage: Phaser.GameObjects.Image | null = null
@@ -80,9 +88,23 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   updateFromControls(c: ControlsState) {
     const body = this.body as Phaser.Physics.Arcade.Body
-    if (c.left) { this.setVelocityX(-RUN_SPEED); this.facing = -1; this.setFlipX(true) }
-    else if (c.right) { this.setVelocityX(RUN_SPEED); this.facing = 1; this.setFlipX(false) }
+
+    // ESCALADE : entrer en mode grimpe en poussant up/down sur une échelle ;
+    // en sortir en sautant ou en quittant l'échelle.
+    if (this.onLadder && (c.up || c.down)) this.climbing = true
+    if (this.climbing && !this.onLadder) this.climbing = false
+    if (this.climbing) { this.updateClimb(c, body); return }
+
+    body.setAllowGravity(true)
+
+    // horizontale (ralentie dans l'eau)
+    const runSpeed = this.inWater ? RUN_SPEED * SWIM_RUN_MULT : RUN_SPEED
+    if (c.left) { this.setVelocityX(-runSpeed); this.facing = -1; this.setFlipX(true) }
+    else if (c.right) { this.setVelocityX(runSpeed); this.facing = 1; this.setFlipX(false) }
     else this.setVelocityX(0)
+
+    if (this.inWater) { this.updateSwim(c, body); return }
+
     if (c.jump && body.blocked.down) {
       this.setVelocityY(JUMP_VELOCITY)
       this.scene.events.emit('player-jump')
@@ -99,6 +121,43 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       if (!body.blocked.down) this.play(this.anim('jump'), true)
       else if (c.left || c.right) this.play(this.anim('run'), true)
       else this.play(this.anim('idle'), true)
+    }
+  }
+
+  // sur une échelle : gravité coupée, montée/descente au clavier/joystick, le saut détache
+  private updateClimb(c: ControlsState, body: Phaser.Physics.Arcade.Body) {
+    body.setAllowGravity(false)
+    if (c.jump) {
+      this.climbing = false
+      body.setAllowGravity(true)
+      this.setVelocityY(JUMP_VELOCITY)
+      this.scene.events.emit('player-jump')
+      return
+    }
+    if (c.up) this.setVelocityY(-CLIMB_SPEED)
+    else if (c.down) this.setVelocityY(CLIMB_SPEED)
+    else this.setVelocityY(0)
+    // on peut se décaler pour quitter l'échelle
+    if (c.left) { this.setVelocityX(-RUN_SPEED); this.facing = -1; this.setFlipX(true) }
+    else if (c.right) { this.setVelocityX(RUN_SPEED); this.facing = 1; this.setFlipX(false) }
+    else this.setVelocityX(0)
+    this.wasGrounded = false
+    if (!this.attacking) {
+      if (c.up || c.down) this.play(this.anim('jump'), true)
+      else this.play(this.anim('idle'), true)
+    }
+  }
+
+  // dans l'eau : gravité coupée, flottaison + nage verticale ; ne tue jamais
+  private updateSwim(c: ControlsState, body: Phaser.Physics.Arcade.Body) {
+    body.setAllowGravity(false)
+    if (c.up || c.jump) this.setVelocityY(-SWIM_SPEED)
+    else if (c.down) this.setVelocityY(SWIM_SPEED)
+    else this.setVelocityY(SWIM_DRIFT) // léger enfoncement, façon flottaison
+    this.wasGrounded = false
+    if (!this.attacking) {
+      if (c.left || c.right) this.play(this.anim('run'), true)
+      else this.play(this.anim('jump'), true)
     }
   }
 

@@ -28,9 +28,16 @@ export class VirtualJoystick {
     scene.input.on('pointermove', (p: Phaser.Input.Pointer) => {
       if (!this.origin || p.id !== this.pointerId || !p.isDown) return
       const dx = p.x - this.origin.x
-      this.thumb.setPosition(this.origin.x + Phaser.Math.Clamp(dx, -50, 50), this.origin.y)
+      const dy = p.y - this.origin.y
+      this.thumb.setPosition(
+        this.origin.x + Phaser.Math.Clamp(dx, -50, 50),
+        this.origin.y + Phaser.Math.Clamp(dy, -50, 50),
+      )
       this.state.left = dx < -DEAD_ZONE
       this.state.right = dx > DEAD_ZONE
+      // lecture verticale : sert aux échelles et à la nage (le saut reste sur son bouton dédié)
+      this.state.up = dy < -DEAD_ZONE
+      this.state.down = dy > DEAD_ZONE
     })
     const release = (p: Phaser.Input.Pointer) => {
       if (p.id !== this.pointerId) return

@@ -38,6 +38,9 @@ export class LevelScene extends Phaser.Scene {
   pickups!: Phaser.Physics.Arcade.Group
   props!: Phaser.Physics.Arcade.Group
   private platforms!: Phaser.Physics.Arcade.StaticGroup
+  private ladderRects: Phaser.Geom.Rectangle[] = []
+  private waterRects: Phaser.Geom.Rectangle[] = []
+  private lastCheckpoint: { x: number; y: number } | null = null
   levelDef!: LevelDef
   private fromNode: string | null = null
   private targetNode: string | null = null
@@ -73,6 +76,10 @@ export class LevelScene extends Phaser.Scene {
     // this.time.now est monotone sur toute la durée du jeu (partagé entre scènes) : sans reset,
     // les cooldowns de compétences posés dans un niveau précédent restent actifs dans le suivant.
     this.cooldowns = new CooldownTracker()
+    // la scène est réutilisée entre niveaux : ces états doivent repartir de zéro
+    this.ladderRects = []
+    this.waterRects = []
+    this.lastCheckpoint = null
 
     const widthPx = this.levelDef.widthTiles * TILE
     this.physics.world.setBounds(0, 0, widthPx, 540)
@@ -136,19 +143,58 @@ export class LevelScene extends Phaser.Scene {
       }
     }
 
-    // pièges (pics = dégâts, eau = noyade/K.O.)
-    const hazards = this.physics.add.staticGroup()
+    // pics = danger mortel ; eau = zone nageable (rendu + zone d'overlap, jamais létale)
+    const spikes = this.physics.add.staticGroup()
+    const WATER_TOP = GROUND_ROW - 2 // l'eau monte de 2 tuiles au-dessus du sol : de quoi nager
     for (const hz of this.levelDef.hazards ?? []) {
-      const tex = hz.kind === 'water' ? 'water' : 'spikes'
-      const y = hz.kind === 'water' ? GROUND_ROW * TILE + 24 : GROUND_ROW * TILE + 8
-      for (let i = 0; i < hz.w; i++) {
-        const s = hazards.create((hz.x + i) * TILE + TILE / 2, y, tex) as Phaser.Physics.Arcade.Sprite
-        s.setData('kind', hz.kind)
+      if (hz.kind === 'spikes') {
+        for (let i = 0; i < hz.w; i++) {
+          spikes.create((hz.x + i) * TILE + TILE / 2, GROUND_ROW * TILE + 8, 'spikes')
+        }
+      } else {
+        // bassin d'eau : plusieurs rangées de tuiles translucides derrière le joueur
+        for (let ty = WATER_TOP; ty <= GROUND_ROW + 1; ty++) {
+          for (let i = 0; i < hz.w; i++) {
+            this.add.image((hz.x + i) * TILE + TILE / 2, ty * TILE + TILE / 2, 'water').setDepth(-2)
+          }
+        }
+        this.waterRects.push(new Phaser.Geom.Rectangle(
+          hz.x * TILE, WATER_TOP * TILE, hz.w * TILE, (GROUND_ROW + 2 - WATER_TOP) * TILE,
+        ))
       }
     }
-    this.physics.add.overlap(this.player, hazards, (_p, hzObj) => {
-      this.hitPlayer((hzObj as Phaser.GameObjects.Sprite).getData('kind') === 'water' ? 9999 : 35)
-    })
+    this.physics.add.overlap(this.player, spikes, () => this.hitPlayer(35))
+
+    // échelles : texture répétée + zone d'escalade (gérée dans update via ladderRects)
+    for (const l of this.levelDef.ladders ?? []) {
+      for (let i = 0; i < l.h; i++) {
+        this.add.image(l.x * TILE + TILE / 2, (l.y + i) * TILE + TILE / 2, 'ladder').setDepth(-1)
+      }
+      // on descend d'une tuile sous le bas de l'échelle pour pouvoir l'attraper depuis le sol
+      this.ladderRects.push(new Phaser.Geom.Rectangle(
+        l.x * TILE, l.y * TILE, TILE, (l.h + 1) * TILE,
+      ))
+    }
+
+    // checkpoints : drapeaux ; passer dessus mémorise le point de réapparition
+    for (const cp of this.levelDef.checkpoints ?? []) {
+      const fx = cp.x * TILE + TILE / 2
+      const fy = GROUND_ROW * TILE - 22
+      const flag = this.physics.add.staticImage(fx, fy, 'flag')
+      let activated = false
+      this.physics.add.overlap(this.player, flag, () => {
+        if (activated) return
+        activated = true
+        this.lastCheckpoint = { x: fx, y: GROUND_ROW * TILE - 40 }
+        flag.setTint(0x66bb6a)
+        audio.playSfx('level-up')
+        this.aoeRing(fx, fy, 50, 0x66bb6a)
+        const txt = this.add.text(fx, fy - 30, 'Checkpoint !', {
+          fontSize: '16px', color: '#a5d6a7', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3,
+        }).setOrigin(0.5)
+        this.tweens.add({ targets: txt, y: txt.y - 24, alpha: 0, duration: 800, onComplete: () => txt.destroy() })
+      })
+    }
 
     // contact ennemi → joueur
     this.physics.add.overlap(this.player, this.enemies, (_p, e) => this.hitPlayer((e as Enemy).monster.atk))
@@ -266,10 +312,14 @@ export class LevelScene extends Phaser.Scene {
   }
 
   private keyboardControls(): ControlsState {
+    // saut = espace (le bouton tactile dédié double le saut) ; flèches haut/bas = vertical
+    // (échelles / nage), pour ne pas confondre grimper et sauter au clavier
     return {
       left: this.cursors.left.isDown,
       right: this.cursors.right.isDown,
-      jump: this.cursors.up.isDown || this.cursors.space.isDown,
+      jump: this.cursors.space.isDown,
+      up: this.cursors.up.isDown,
+      down: this.cursors.down.isDown,
     }
   }
 
@@ -404,6 +454,8 @@ export class LevelScene extends Phaser.Scene {
     this.player.setVelocity(-this.player.facing * 200, -200)
     audio.playSfx(this.player.hp <= 0 ? 'player-death' : 'player-hit')
     if (this.player.hp <= 0) {
+      // un checkpoint atteint : on réapparaît sur place plutôt que de repartir à la carte
+      if (this.lastCheckpoint) { this.respawnAtCheckpoint(); return }
       save(getPlayer())
       // écran K.O. clair avant de renvoyer à la carte
       this.add.rectangle(480, 270, 960, 540, 0x000000, 0.55).setScrollFactor(0).setDepth(20)
@@ -411,6 +463,17 @@ export class LevelScene extends Phaser.Scene {
       this.add.text(480, 310, 'Retour à la carte…', { fontSize: '20px', color: '#ffffff' }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
       this.time.delayedCall(1400, () => this.scene.start('WorldMap'))
     }
+  }
+
+  // réapparition au dernier checkpoint : PV pleins, brève invulnérabilité, sans retour carte
+  private respawnAtCheckpoint() {
+    const cp = this.lastCheckpoint!
+    this.cameras.main.flash(250, 120, 200, 120)
+    this.player.setPosition(cp.x, cp.y)
+    this.player.setVelocity(0, 0)
+    this.player.clearTint()
+    this.player.heal(this.player.stats.maxHp)
+    this.invulnUntil = this.time.now + 1500
   }
 
   basicAttack() {
@@ -721,6 +784,9 @@ export class LevelScene extends Phaser.Scene {
     if (this.bgNear) this.bgNear.tilePositionX = sx * 0.55
     if (this.player.hp <= 0) return
     this.player.regenEnergy(delta)
+    // zones verticales chevauchées (échelle / eau) lues sur le centre du panda
+    this.player.onLadder = this.ladderRects.some((r) => r.contains(this.player.x, this.player.y))
+    this.player.inWater = this.waterRects.some((r) => r.contains(this.player.x, this.player.y))
     if (this.time.now < this.dashUntil) {
       // pendant la roulade : vitesse imposée, contrôles suspendus (le saut/déplacement
       // reprennent la main dès la fin de la fenêtre)
