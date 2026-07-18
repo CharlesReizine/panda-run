@@ -61,11 +61,14 @@ export class WorldMapScene extends Phaser.Scene {
       else if (n.type === 'boss') this.drawSkull(g, n.x, n.y, radius, color, interactive)
       else this.drawTent(g, n.x, n.y, radius, color, interactive)
 
-      const labelColor = interactive ? '#ffffff' : '#8d8d8d'
-      this.add.text(n.x, n.y + radius + 16, n.name, {
-        fontSize: '12px', color: labelColor, fontStyle: isCurrent ? 'bold' : 'normal',
-        stroke: '#2b1a10', strokeThickness: interactive ? 3 : 0,
-      }).setOrigin(0.5)
+      const labelColor = interactive ? '#ffffff' : '#b8b8b8'
+      // étiquette ancrée sous le nœud (origine haut-centre) : fond semi-opaque + retour à la
+      // ligne pour rester lisible par-dessus les régions teintées et ne jamais déborder
+      this.add.text(n.x, n.y + radius + 5, n.name, {
+        fontSize: '11px', color: labelColor, fontStyle: isCurrent ? 'bold' : 'normal',
+        align: 'center', wordWrap: { width: 96 },
+        backgroundColor: 'rgba(43,26,16,0.6)', padding: { x: 4, y: 2 },
+      }).setOrigin(0.5, 0).setDepth(4)
 
       if (done) {
         this.add.text(n.x + radius - 4, n.y - radius + 2, '✓', {
