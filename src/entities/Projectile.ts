@@ -29,8 +29,16 @@ export class Projectile extends Phaser.Physics.Arcade.Sprite {
 
   preUpdate(t: number, d: number) {
     super.preUpdate(t, d)
-    if (Phaser.Math.Distance.Between(this.x, this.y, this.startX, this.startY) > this.rangePx) this.destroy()
+    // au-delà de sa portée : on se détruit ET ON SORT. Sans ce return, la suite lisait
+    // this.body (mis à null par destroy()) → « Cannot read properties of undefined
+    // (reading 'angularVelocity') », exception non gérée dans le step Phaser qui TUE la boucle
+    // RAF (la frame suivante n'est jamais reprogrammée) → gel définitif du jeu.
+    if (Phaser.Math.Distance.Between(this.x, this.y, this.startX, this.startY) > this.rangePx) {
+      this.destroy()
+      return
+    }
     const body = this.body as Phaser.Physics.Arcade.Body
+    if (!body) return
     // les tirs droits pointent vers leur trajectoire ; les tirs en cloche tournent déjà
     // sur eux-mêmes via angularVelocity (bambou), qu'on ne veut pas écraser ici
     if (body.angularVelocity === 0 && (body.velocity.x !== 0 || body.velocity.y !== 0)) {
