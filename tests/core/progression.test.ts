@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { newPlayer } from '../../src/core/player-state'
-import { xpToNext, grantXp, canChangeClass, changeClass, CLASS_CHANGE_LEVEL } from '../../src/core/progression'
+import { xpToNext, grantXp, canChangeClass, changeClass, CLASS_CHANGE_LEVEL, STAT_POINTS_PER_LEVEL } from '../../src/core/progression'
 
 describe('progression', () => {
   it('courbe croissante', () => {
@@ -15,6 +15,7 @@ describe('progression', () => {
     expect(p.level).toBe(2)
     expect(p.xp).toBe(10)
     expect(p.skillPoints).toBe(1)
+    expect(p.statPoints).toBe(STAT_POINTS_PER_LEVEL)
   })
 
   it('grantXp gère plusieurs niveaux d un coup', () => {

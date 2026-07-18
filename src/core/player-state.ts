@@ -19,6 +19,9 @@ export interface PlayerState {
   level: number
   xp: number // XP accumulée dans le niveau courant
   skillPoints: number
+  statPoints: number // points de stat non dépensés
+  allocated: { str: number; agi: number; int: number } // points de stat répartis
+
   skillLevels: Record<string, number> // id → rang investi (1..MAX_SKILL_RANK) ; absent/0 = pas débloqué
   equippedSkills: (string | null)[] // toujours longueur 4
   gold: number
@@ -39,6 +42,8 @@ export function newPlayer(name: string): PlayerState {
     level: 1,
     xp: 0,
     skillPoints: 0,
+    statPoints: 0,
+    allocated: { str: 0, agi: 0, int: 0 },
     skillLevels: { 'calin-brutal': 1 },
     equippedSkills: ['calin-brutal', null, null, null],
     gold: 0,

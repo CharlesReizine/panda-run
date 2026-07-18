@@ -63,6 +63,16 @@ describe('save', () => {
     expect(loaded.currentNode).toBe(START_NODE)
   })
 
+  it('migre une save v5 → v6 (statPoints + allocated par défaut)', () => {
+    const p = newPlayer('Panda')
+    const legacy: Record<string, unknown> = { ...p }
+    delete legacy.statPoints
+    delete legacy.allocated
+    const loaded = deserialize(JSON.stringify({ version: 5, player: legacy }))
+    expect(loaded.statPoints).toBe(0)
+    expect(loaded.allocated).toEqual({ str: 0, agi: 0, int: 0 })
+  })
+
   it('save/load via storage', () => {
     const s = fakeStorage()
     const p = newPlayer('Panda')

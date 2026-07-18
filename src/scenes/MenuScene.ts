@@ -2,7 +2,7 @@ import Phaser from 'phaser'
 import { getPlayer } from '../state'
 import { save } from '../core/save'
 import { skillsOf } from '../data/skills'
-import { ITEMS } from '../data/items'
+import { ITEMS, rarityColor } from '../data/items'
 import { MATERIALS } from '../data/materials'
 import type { EquipSlot } from '../core/types'
 import { computeStats } from '../core/stats'
@@ -23,7 +23,8 @@ export class MenuScene extends Phaser.Scene {
     this.add.rectangle(480, 270, 960, 540, 0x1b2631, 0.95)
     const p = getPlayer()
     const stats = computeStats(p)
-    this.add.text(30, 20, `${p.name} — Nv ${p.level} — ATK ${stats.atk} / DEF ${stats.def} / PV ${stats.maxHp}`, { fontSize: '18px', color: '#ffffff' })
+    const css = (n: number) => `#${n.toString(16).padStart(6, '0')}`
+    this.add.text(30, 20, `${p.name} — Nv ${p.level} — ATK ${stats.atk} / DEF ${Math.round(stats.def)} / PV ${stats.maxHp} / VIT ${stats.attackSpeed.toFixed(2)}`, { fontSize: '18px', color: '#ffffff' })
     this.add.text(30, 50, `Points de skill : ${p.skillPoints}`, { fontSize: '16px', color: '#ffd700' })
 
     // Colonne skills : rang (points investis), équiper/retirer
@@ -60,16 +61,39 @@ export class MenuScene extends Phaser.Scene {
       }
     })
 
+    // Colonne stats réparties (STR/AGI/INT)
+    this.add.text(760, 85, 'STATS', { fontSize: '18px', color: '#80cbc4' })
+    this.add.text(760, 108, `Points : ${p.statPoints}`, { fontSize: '14px', color: '#ffd700' })
+    const STAT_ROWS: { key: 'str' | 'agi' | 'int'; label: string; effet: string }[] = [
+      { key: 'str', label: 'STR', effet: '+2 ATK' },
+      { key: 'agi', label: 'AGI', effet: '+VIT/DEF' },
+      { key: 'int', label: 'INT', effet: '+4 PV' },
+    ]
+    STAT_ROWS.forEach((row, i) => {
+      const y = 135 + i * 40
+      this.add.text(760, y, `${row.label} ${p.allocated[row.key]}`, { fontSize: '16px', color: '#ffffff' })
+      this.add.text(760, y + 18, row.effet, { fontSize: '11px', color: '#78909c' })
+      if (p.statPoints > 0) {
+        btn(880, y, '+', 0x8d6e00, () => {
+          p.statPoints--; p.allocated[row.key]++; save(p); this.render()
+        })
+      }
+    })
+
     // Colonne équipement
     this.add.text(520, 85, 'ÉQUIPEMENT', { fontSize: '18px', color: '#80cbc4' })
     SLOTS.forEach((slot, i) => {
       const itemId = p.equipment[slot]
-      this.add.text(520, 115 + i * 30, `${SLOT_LABELS[slot]} : ${itemId ? ITEMS[itemId]!.name : '—'}`, { fontSize: '16px', color: '#ffffff' })
+      const item = itemId ? ITEMS[itemId]! : null
+      const color = item ? css(rarityColor(item.rarity)) : '#ffffff'
+      this.add.text(520, 115 + i * 30, `${SLOT_LABELS[slot]} : ${item ? item.name : '—'}`, { fontSize: '16px', color })
     })
     this.add.text(520, 220, 'Inventaire (tap = équiper) :', { fontSize: '14px', color: '#b0bec5' })
     p.inventory.forEach((itemId, i) => {
       const item = ITEMS[itemId]!
-      this.add.text(520, 245 + i * 26, `• ${item.name} (${SLOT_LABELS[item.slot]})`, { fontSize: '14px', color: '#ce93d8' })
+      const y = 245 + i * 26
+      this.add.circle(526, y + 8, 4, rarityColor(item.rarity))
+      this.add.text(536, y, `${item.name} (${SLOT_LABELS[item.slot]})`, { fontSize: '14px', color: css(rarityColor(item.rarity)) })
         .setInteractive()
         .on('pointerdown', () => {
           const prev = p.equipment[item.slot]

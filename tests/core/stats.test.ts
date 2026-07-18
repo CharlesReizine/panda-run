@@ -21,6 +21,22 @@ describe('stats & combat', () => {
     expect(computeStats(p).atk).toBe(CLASSES.novice.baseStats.atk + 5)
   })
 
+  it('stats réparties : à 0 partout, aucun effet', () => {
+    const p = newPlayer('P')
+    expect(computeStats(p)).toEqual(CLASSES.novice.baseStats)
+  })
+
+  it('stats réparties : STR/AGI/INT modifient les stats dérivées', () => {
+    const p = newPlayer('P')
+    p.allocated = { str: 3, agi: 5, int: 2 }
+    const base = CLASSES.novice.baseStats
+    const s = computeStats(p)
+    expect(s.atk).toBe(base.atk + 2 * 3) // STR → +2 atk/pt
+    expect(s.attackSpeed).toBeCloseTo(base.attackSpeed + 0.02 * 5) // AGI → +0.02 vit/pt
+    expect(s.def).toBeCloseTo(base.def + 0.3 * 5) // AGI → +0.3 def/pt
+    expect(s.maxHp).toBe(base.maxHp + 4 * 2) // INT → +4 pv/pt
+  })
+
   it('dégâts = atk*mult - def, minimum 1', () => {
     expect(physicalDamage(20, 5)).toBe(15)
     expect(physicalDamage(20, 5, 2)).toBe(35)

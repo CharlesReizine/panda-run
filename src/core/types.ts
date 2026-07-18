@@ -31,11 +31,14 @@ export interface SkillDef {
   arc?: boolean // projectile lancé en cloche (soumis à la gravité, rebondit)
 }
 
+export type Rarity = 'commun' | 'rare' | 'epique' | 'legendaire'
+
 export interface ItemDef {
   id: string
   name: string
   slot: EquipSlot
   bonus: Partial<Pick<StatBlock, 'atk' | 'def' | 'maxHp'>>
+  rarity?: Rarity // défaut 'commun' si absent
 }
 
 export interface DropEntry {

@@ -2,6 +2,7 @@ import type { ClassId } from './types'
 import type { PlayerState } from './player-state'
 
 export const CLASS_CHANGE_LEVEL = 10
+export const STAT_POINTS_PER_LEVEL = 2 // points de stat gagnés à chaque niveau
 
 export function xpToNext(level: number): number {
   return Math.floor(100 * Math.pow(level, 1.5))
@@ -14,6 +15,7 @@ export function grantXp(p: PlayerState, amount: number): { levelsGained: number 
     p.xp -= xpToNext(p.level)
     p.level += 1
     p.skillPoints += 1
+    p.statPoints += STAT_POINTS_PER_LEVEL
     levelsGained += 1
   }
   return { levelsGained }

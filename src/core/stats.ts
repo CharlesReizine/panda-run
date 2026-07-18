@@ -3,6 +3,12 @@ import type { PlayerState } from './player-state'
 import { CLASSES } from '../data/classes'
 import { ITEMS } from '../data/items'
 
+// Effet d'un point de stat réparti sur les stats dérivées.
+export const STR_ATK_PER_POINT = 2
+export const AGI_ATTACK_SPEED_PER_POINT = 0.02
+export const AGI_DEF_PER_POINT = 0.3
+export const INT_MAX_HP_PER_POINT = 4
+
 export function computeStats(p: PlayerState): StatBlock {
   const c = CLASSES[p.classId]
   const lv = p.level - 1
@@ -19,5 +25,13 @@ export function computeStats(p: PlayerState): StatBlock {
     s.def += item.bonus.def ?? 0
     s.maxHp += item.bonus.maxHp ?? 0
   }
+  // Stats réparties (STR/AGI/INT), appliquées après base + croissance + équipement.
+  // Mapping par point : STR → +2 atk ; AGI → +0.02 attackSpeed et +0.3 def ; INT → +4 maxHp.
+  // À 0 partout, computeStats est inchangé.
+  const a = p.allocated
+  s.atk += STR_ATK_PER_POINT * a.str
+  s.attackSpeed += AGI_ATTACK_SPEED_PER_POINT * a.agi
+  s.def += AGI_DEF_PER_POINT * a.agi
+  s.maxHp += INT_MAX_HP_PER_POINT * a.int
   return s
 }
