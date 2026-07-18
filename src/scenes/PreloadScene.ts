@@ -831,6 +831,58 @@ export class PreloadScene extends Phaser.Scene {
     g.destroy()
   }
 
+  // interpolation entre plusieurs paliers de couleur (dégradé fait main : fillGradientStyle est
+  // WebGL only et ne rend pas en Canvas — on peint des bandes de fillRect interpolées)
+  private lerpStops(stops: Array<[number, [number, number, number]]>, t: number): number {
+    let a = stops[0]!, b = stops[stops.length - 1]!
+    for (let i = 0; i < stops.length - 1; i++) {
+      const s0 = stops[i]!, s1 = stops[i + 1]!
+      if (t >= s0[0] && t <= s1[0]) { a = s0; b = s1; break }
+    }
+    const lt = (t - a[0]) / ((b[0] - a[0]) || 1)
+    const r = Math.round(a[1][0] + (b[1][0] - a[1][0]) * lt)
+    const g = Math.round(a[1][1] + (b[1][1] - a[1][1]) * lt)
+    const bl = Math.round(a[1][2] + (b[1][2] - a[1][2]) * lt)
+    return (r << 16) | (g << 8) | bl
+  }
+
+  // assets de l'écran titre : ciel dramatique en dégradé + halo, et lignes de vitesse (manga)
+  private drawTitleAssets() {
+    // ciel couché de soleil shōnen : violet profond → magenta → orangé → or pâle
+    const sky = this.add.graphics()
+    const stops: Array<[number, [number, number, number]]> = [
+      [0.0, [0x2a, 0x17, 0x5e]],
+      [0.34, [0x7b, 0x2d, 0x8e]],
+      [0.58, [0xff, 0x5e, 0x3a]],
+      [0.8, [0xff, 0xa0, 0x54]],
+      [1.0, [0xff, 0xe1, 0x9a]],
+    ]
+    const bands = 90
+    for (let i = 0; i < bands; i++) {
+      const t = i / (bands - 1)
+      const y0 = Math.floor((540 / bands) * i)
+      const h = Math.ceil(540 / bands) + 1
+      sky.fillStyle(this.lerpStops(stops, t), 1).fillRect(0, y0, 960, h)
+    }
+    // halo de soleil bas-centre pour ancrer la lumière derrière le héros
+    sky.fillStyle(0xffefc0, 0.22).fillCircle(480, 320, 300)
+    sky.fillStyle(0xffe3a0, 0.22).fillCircle(480, 320, 200)
+    sky.fillStyle(0xfff6de, 0.25).fillCircle(480, 320, 110)
+    sky.generateTexture('title-sky', 960, 540)
+    sky.destroy()
+
+    // lignes de vitesse / concentration : rayons clairs partant du centre (un wedge sur deux)
+    const RS = 1200, c = RS / 2, R = 900, N = 34
+    const rays = this.add.graphics()
+    for (let i = 0; i < N; i += 2) {
+      const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2
+      rays.fillStyle(0xfff6d5, 0.5)
+      rays.fillTriangle(c, c, c + Math.cos(a0) * R, c + Math.sin(a0) * R, c + Math.cos(a1) * R, c + Math.sin(a1) * R)
+    }
+    rays.generateTexture('title-rays', RS, RS)
+    rays.destroy()
+  }
+
   create() {
     this.drawPandas()
     this.drawDecor()
@@ -919,6 +971,7 @@ export class PreloadScene extends Phaser.Scene {
     g.lineStyle(4, 0xffffff).strokeCircle(32, 32, 28); g.generateTexture('ring', 64, 64); g.clear()
 
     g.destroy()
+    this.drawTitleAssets()
     this.scene.start('Title')
   }
 }
