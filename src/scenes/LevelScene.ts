@@ -61,6 +61,7 @@ export class LevelScene extends Phaser.Scene {
   private bgFar?: Phaser.GameObjects.TileSprite
   private bgNear?: Phaser.GameObjects.TileSprite
   private bgClouds?: Phaser.GameObjects.TileSprite
+  private hitStopTimer: Phaser.Time.TimerEvent | null = null
 
   constructor() { super('Level') }
 
@@ -83,6 +84,17 @@ export class LevelScene extends Phaser.Scene {
 
     const widthPx = this.levelDef.widthTiles * TILE
     this.physics.world.setBounds(0, 0, widthPx, 540)
+
+    // Garde-fou anti-gel. Le hit-stop met le monde physique GLOBAL en pause puis programme
+    // sa reprise via l'horloge de la scène ; or cette horloge se gèle dès qu'un overlay
+    // (menu Pause / compétences) met la scène en pause. Un hit-stop déclenché juste avant
+    // l'ouverture d'un menu laisserait donc la physique figée toute la durée du menu.
+    // Deux filets : on repart toujours d'un monde actif à la (re)création, et on force la
+    // reprise dès que la scène ressort d'une pause (reprise INSTANTANÉE, sans attendre le
+    // timer), ce qui rend le monde physique impossible à laisser figé.
+    this.physics.world.resume()
+    this.hitStopTimer = null
+    this.events.on(Phaser.Scenes.Events.RESUME, this.resumeWorld, this)
 
     this.addBackground()
 
@@ -283,6 +295,9 @@ export class LevelScene extends Phaser.Scene {
       this.events.off('enemy-died', this.onBossDied, this)
       this.events.off('enemy-loot', this.onEnemyLoot, this)
       this.events.off('prop-broken', this.onPropBroken, this)
+      this.events.off(Phaser.Scenes.Events.RESUME, this.resumeWorld, this)
+      this.hitStopTimer?.remove()
+      this.hitStopTimer = null
       this.bossVolley?.remove()
       this.scene.stop('UI')
     })
@@ -841,12 +856,28 @@ export class LevelScene extends Phaser.Scene {
     this.createExit()
   }
 
-  // hit-stop (juice) : gel très bref de la physique sur les gros impacts, puis reprise
-  // garantie via un timer d'horloge (indépendant de la pause physique)
+  // hit-stop (juice) : gel très bref de la physique sur les gros impacts. La reprise est
+  // garantie de plusieurs façons — le timer d'horloge ci-dessous, MAIS AUSSI le hook
+  // 'resume' de la scène et le create() (voir resumeWorld) — pour ne jamais laisser le
+  // monde physique figé si un overlay met la scène (et donc son horloge) en pause pendant
+  // la fenêtre de hit-stop.
   private hitStop(ms: number) {
-    if (this.physics.world.isPaused) return
+    // pas de gel si la scène est déjà en pause (overlay ouvert) : l'horloge est gelée, la
+    // reprise serait repoussée et la physique resterait figée toute la durée du menu
+    if (!this.scene.isActive() || this.physics.world.isPaused) return
     this.physics.world.pause()
-    this.time.delayedCall(ms, () => this.physics.world.resume())
+    // un seul timer de reprise à la fois (deux hit-stops qui se chevauchent ne doivent pas
+    // laisser un timer orphelin)
+    this.hitStopTimer?.remove()
+    this.hitStopTimer = this.time.delayedCall(ms, () => this.resumeWorld())
+  }
+
+  // reprise idempotente du monde physique : fin de hit-stop, retour d'un overlay, ou
+  // (re)création du niveau. Toujours sûre à appeler, même si aucun hit-stop n'est en cours.
+  private resumeWorld() {
+    this.hitStopTimer?.remove()
+    this.hitStopTimer = null
+    this.physics.world.resume()
   }
 
   update(_time: number, delta: number) {

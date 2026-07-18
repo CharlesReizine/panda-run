@@ -49,6 +49,7 @@ export class UIScene extends Phaser.Scene {
     this.add.rectangle(12, 22, BAR_W + 4, 42, 0xffffff, 0.001).setOrigin(0).setInteractive()
       .on('pointerdown', () => {
         audio.playSfx('ui-tap')
+        this.freezeLevelForOverlay()
         this.scene.launch('SkillEquip')
         this.scene.pause('Level')
         this.scene.pause('UI')
@@ -68,6 +69,7 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(1, 0).setDepth(50).setInteractive({ useHandCursor: true })
     pauseBtn.on('pointerdown', () => {
       audio.playSfx('ui-tap')
+      this.freezeLevelForOverlay()
       this.scene.launch('Pause')
       this.scene.pause('Level')
       this.scene.pause('UI')
@@ -121,6 +123,16 @@ export class UIScene extends Phaser.Scene {
       this.game.events.off('player-level-up', this.onLevelUp, this)
     })
     this.refresh()
+  }
+
+  // Avant d'ouvrir un overlay (Pause / compétences) on remet le monde physique du niveau à
+  // l'état actif : si un hit-stop venait juste de le mettre en pause, l'horloge de Level
+  // (gelée par la pause de scène) ne pourrait plus déclencher sa reprise et la physique
+  // resterait figée tant que le menu est ouvert. Le niveau reste bien figé par la pause de
+  // scène ; on évite seulement de laisser le flag physique bloqué.
+  private freezeLevelForOverlay() {
+    const level = this.scene.get('Level') as LevelScene | undefined
+    level?.physics?.world?.resume()
   }
 
   // pulse visuel au tap pour que chaque bouton réponde sous le doigt
