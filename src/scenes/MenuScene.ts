@@ -120,5 +120,8 @@ export class MenuScene extends Phaser.Scene {
 
     this.add.text(480, 500, '← Retour', { fontSize: '22px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 16, y: 8 } })
       .setOrigin(0.5).setInteractive().on('pointerdown', () => this.scene.start('WorldMap'))
+
+    this.add.text(770, 500, '📖 Bestiaire', { fontSize: '18px', color: '#ffffff', backgroundColor: '#37474f', padding: { x: 14, y: 8 } })
+      .setOrigin(0.5).setInteractive().on('pointerdown', () => this.scene.start('Bestiary'))
   }
 }

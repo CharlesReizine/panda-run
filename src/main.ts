@@ -19,6 +19,7 @@ import { PauseScene } from './scenes/PauseScene'
 import { MenuScene } from './scenes/MenuScene'
 import { ClassChangeScene } from './scenes/ClassChangeScene'
 import { SkillEquipScene } from './scenes/SkillEquipScene'
+import { BestiaryScene } from './scenes/BestiaryScene'
 import { GRAVITY } from './core/platforming'
 
 const game = new Phaser.Game({
@@ -31,7 +32,7 @@ const game = new Phaser.Game({
   backgroundColor: '#87ceeb',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   physics: { default: 'arcade', arcade: { gravity: { x: 0, y: GRAVITY } } },
-  scene: [BootScene, PreloadScene, TitleScene, WorldMapScene, TownScene, LevelScene, UIScene, PauseScene, MenuScene, ClassChangeScene, SkillEquipScene],
+  scene: [BootScene, PreloadScene, TitleScene, WorldMapScene, TownScene, LevelScene, UIScene, PauseScene, MenuScene, ClassChangeScene, SkillEquipScene, BestiaryScene],
 })
 
 // On dimensionne le conteneur #game EXACTEMENT sur la zone visible (visualViewport, qui
