@@ -22,31 +22,10 @@ export class TitleScene extends Phaser.Scene {
     this.input.once('pointerdown', () => audio.unlock())
     audio.playMusic('titre')
 
-    // ciel dramatique (dégradé fait main, texture générée au Preload)
-    this.add.image(480, 270, 'title-sky')
-
-    // lignes de vitesse derrière le héros : rotation lente + pulsation (façon splash manga)
-    const rays = this.add.image(480, 250, 'title-rays').setAlpha(0.26)
-    this.tweens.add({ targets: rays, angle: 360, duration: 44000, repeat: -1 })
-    this.tweens.add({ targets: rays, scale: 1.08, yoyo: true, repeat: -1, duration: 2600, ease: 'Sine.inOut' })
-
-    // nuages pour la profondeur (dérive douce)
-    for (const [cx, cy, s, a, dur] of [[150, 120, 1.1, 0.5, 17000], [820, 170, 0.8, 0.4, 21000], [640, 90, 0.6, 0.35, 25000]] as const) {
-      const cloud = this.add.image(cx, cy, 'cloud').setScale(s).setAlpha(a).setTint(0xffe8d0)
-      this.tweens.add({ targets: cloud, x: cx + 40, yoyo: true, repeat: -1, duration: dur, ease: 'Sine.inOut' })
-    }
-
-    // ombre portée au sol + panda héroïque au centre, léger bob
-    const shadow = this.add.ellipse(480, 415, 210, 34, 0x1a0e2e, 0.35)
-    const panda = this.add.image(480, 250, 'panda').setScale(3.4)
-    this.tweens.add({ targets: panda, y: 238, yoyo: true, repeat: -1, duration: 1400, ease: 'Sine.inOut' })
-    this.tweens.add({ targets: shadow, scaleX: 0.86, yoyo: true, repeat: -1, duration: 1400, ease: 'Sine.inOut' })
-
-    // étincelles scintillantes autour du héros
-    for (const [sx, sy, r] of [[300, 150, 9], [672, 130, 7], [360, 330, 6], [620, 320, 8], [500, 96, 6], [235, 260, 5]] as const) {
-      const star = this.add.star(sx, sy, 4, r * 0.34, r, 0xfff8d0).setAlpha(0.9)
-      this.tweens.add({ targets: star, scale: 0.2, alpha: 0.2, yoyo: true, repeat: -1, duration: 700 + r * 90, ease: 'Sine.inOut', delay: sx % 900 })
-    }
+    // splash illustré (image fournie) en fond plein écran
+    this.add.image(480, 270, 'splash').setDisplaySize(960, 540)
+    // léger voile en haut pour la lisibilité du logo
+    this.add.rectangle(480, 60, 960, 120, 0x000000, 0.18)
 
     // logo « PANDA-RUN » : gros, gras, contour épais + ombre portée + dégradé doré
     const logo = this.add.text(480, 108, 'PANDA-RUN', {
@@ -64,7 +43,7 @@ export class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: logo, scale: 1.03, yoyo: true, repeat: -1, duration: 1800, ease: 'Sine.inOut' })
 
     // repère de version : dis-moi ce numéro pour qu'on sache si tu vois bien la dernière build
-    this.add.text(10, 8, 'build R56', { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
+    this.add.text(10, 8, 'build R57', { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
 
     // bouton muet discret (coin haut-droit)
     const muteBtn = this.add.text(944, 6, audio.isMuted() ? '🔇' : '🔊', { fontSize: '22px' })

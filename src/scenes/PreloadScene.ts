@@ -70,8 +70,30 @@ const POSES: Record<string, Pose> = {
 
 const OY = 14 // décalage vertical : laisse de la place au-dessus de la tête pour les coiffes
 
+// monstres pour lesquels une VRAIE illustration est fournie (public/art/art-<id>.png).
+// Elle est "bakée" dans la texture monster-<id> à la taille standard → bestiaire, écran
+// d'intro et combats utilisent l'illustration automatiquement.
+const ART_MONSTERS = ['gloopy', 'angeling', 'roi-gloopy', 'pharaon-scarabee', 'roi-liche', 'seigneur-liane', 'seigneur-dechu']
+
 export class PreloadScene extends Phaser.Scene {
   constructor() { super('Preload') }
+
+  preload() {
+    this.load.image('splash', 'art/splash.png')
+    for (const id of ART_MONSTERS) this.load.image(`art-${id}`, `art/art-${id}.png`)
+  }
+
+  // bake l'illustration fournie dans la texture monster-<id> à la taille standard (carrée, centrée)
+  private artMonster(id: string, boss: boolean) {
+    const s = boss ? 76 : 40
+    const h = s + 6
+    const img = this.add.image(0, 0, `art-${id}`).setOrigin(0, 0).setDisplaySize(s, s)
+    img.setPosition(0, (h - s) / 2)
+    const rt = this.make.renderTexture({ width: s, height: h }, false)
+    rt.draw(img, 0, (h - s) / 2)
+    rt.saveTexture(`monster-${id}`)
+    img.destroy()
+  }
 
   // coiffe/accessoire de classe, dessiné au-dessus de la tête (hx,hy = centre tête)
   private drawClassGear(g: Phaser.GameObjects.Graphics, cls: ClassId, hx: number, hy: number) {
@@ -929,7 +951,10 @@ export class PreloadScene extends Phaser.Scene {
     this.drawPandaDead()
     this.drawDecor()
     for (const item of Object.values(ITEMS)) if (item.slot === 'hat') this.drawCosmetic(item.id)
-    for (const m of Object.values(MONSTERS)) this.drawMonster(m)
+    for (const m of Object.values(MONSTERS)) {
+      if (ART_MONSTERS.includes(m.id)) this.artMonster(m.id, !!m.boss)
+      else this.drawMonster(m)
+    }
     for (const s of Object.values(SKILLS)) this.drawSkillIcon(s.id, SKILL_ICONS[s.id] ?? { color: 0xffd54f, glyph: 'sword' })
 
     for (const [id, b] of Object.entries(BIOMES)) {
