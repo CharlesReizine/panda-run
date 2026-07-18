@@ -44,15 +44,14 @@ export class UIScene extends Phaser.Scene {
     this.add.rectangle(12, 56, BAR_W + 4, 6, 0x000000, 0.5).setOrigin(0)
     this.xpBar = this.add.rectangle(14, 57, BAR_W, 4, 0xfdd835).setOrigin(0)
 
-    // bouton d'accès à la gestion des skills (en jeu, sans passer par la carte)
-    const gear = this.add.text(636, 38, '⚙', { fontSize: '22px', color: '#ffffff', backgroundColor: '#37474f', padding: { x: 6, y: 4 } })
-      .setOrigin(0.5).setInteractive()
-    gear.on('pointerdown', () => {
-      this.pressFx(gear)
-      this.scene.launch('SkillEquip')
-      this.scene.pause('Level')
-      this.scene.pause('UI')
-    })
+    // toucher la zone des barres (vie/énergie) ouvre la gestion des skills en jeu
+    this.add.rectangle(12, 22, BAR_W + 4, 42, 0xffffff, 0.001).setOrigin(0).setInteractive()
+      .on('pointerdown', () => {
+        this.scene.launch('SkillEquip')
+        this.scene.pause('Level')
+        this.scene.pause('UI')
+      })
+    this.add.text(12, 66, 'compétences ▸', { fontSize: '10px', color: '#b0bec5' })
 
     // Haut-droite : les 4 slots de skills côte à côte
     for (let i = 0; i < 4; i++) {
