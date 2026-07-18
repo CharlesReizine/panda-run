@@ -14,6 +14,15 @@ const list: ItemDef[] = [
   { id: 'couronne-royale', name: 'Couronne royale', slot: 'hat', bonus: { atk: 4, def: 4 } },
   { id: 'bonnet-champi', name: 'Bonnet champignon', slot: 'hat', bonus: { def: 3 } },
   { id: 'casque-orc', name: 'Casque orc', slot: 'hat', bonus: { def: 6 } },
+  // équipements forgés (craft en ville) — distincts de ceux des boutiques, meilleurs bonus
+  { id: 'epee-fer-forgee', name: 'Épée en fer forgé', slot: 'weapon', bonus: { atk: 12 } },
+  { id: 'lame-scorpion', name: 'Lame du scorpion', slot: 'weapon', bonus: { atk: 17 } },
+  { id: 'baton-lumineux', name: 'Bâton lumineux', slot: 'weapon', bonus: { atk: 11, maxHp: 20 } },
+  { id: 'plastron-fer', name: 'Plastron de fer', slot: 'armor', bonus: { def: 8, maxHp: 25 } },
+  { id: 'armure-carapace', name: 'Armure de carapace', slot: 'armor', bonus: { def: 13, maxHp: 55 } },
+  { id: 'amulette-gemme', name: 'Amulette de gemme', slot: 'accessory', bonus: { atk: 8, maxHp: 40 } },
+  { id: 'talisman-trefle', name: 'Talisman du trèfle', slot: 'accessory', bonus: { maxHp: 60 } },
+  { id: 'casque-croc', name: 'Casque à crocs', slot: 'hat', bonus: { def: 5, atk: 4 } },
 ]
 
 export const ITEMS: Record<string, ItemDef> = Object.fromEntries(list.map((i) => [i.id, i]))

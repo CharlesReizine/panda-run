@@ -2,9 +2,12 @@ import Phaser from 'phaser'
 import { getPlayer } from '../state'
 import { save } from '../core/save'
 import { buyPotion, buyItem } from '../core/shop'
+import { canCraft, doCraft } from '../core/craft'
 import { acceptQuest, refreshQuestProgress, claimQuest } from '../core/quests'
 import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, HAT_SHOP, QUESTS } from '../data/shops'
 import { ITEMS } from '../data/items'
+import { MATERIALS } from '../data/materials'
+import { RECIPES } from '../data/recipes'
 import { audio } from '../audio/audio-engine'
 
 const TOWN_SPEED = 170
@@ -61,7 +64,7 @@ class TopDownJoystick {
   }
 }
 
-type SpotKind = 'potions' | 'armes' | 'vetements' | 'quete'
+type SpotKind = 'potions' | 'armes' | 'vetements' | 'forge' | 'quete'
 
 interface TownSpot {
   id: SpotKind
@@ -85,6 +88,7 @@ const BUILDINGS: TownBuilding[] = [
   { id: 'potions', name: 'Herboristerie', x: 190, y: 150, w: 160, h: 110, roofColor: 0xc62828, wallColor: 0xffca28 },
   { id: 'armes', name: 'Armurerie', x: 480, y: 130, w: 180, h: 120, roofColor: 0x455a64, wallColor: 0xb0bec5 },
   { id: 'vetements', name: 'Boutique de vêtements', x: 770, y: 150, w: 160, h: 110, roofColor: 0x6a1b9a, wallColor: 0xce93d8 },
+  { id: 'forge', name: 'Forge', x: 780, y: 390, w: 170, h: 108, roofColor: 0x37474f, wallColor: 0x8d6e63 },
 ]
 
 const SPOTS: TownSpot[] = [
@@ -126,6 +130,19 @@ export class TownScene extends Phaser.Scene {
       this.add.rectangle(b.x, b.y + b.h / 2 - 14, 26, 28, 0x5d4037) // porte
       this.add.text(b.x, b.y - b.h / 2 - 10, b.name, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
     }
+
+    // enclume + marteau devant la forge (repère visuel)
+    const forge = BUILDINGS.find((b) => b.id === 'forge')!
+    const ax = forge.x - forge.w / 2 - 26
+    const ay = forge.y + 24
+    this.add.rectangle(ax, ay + 20, 34, 26, 0x5d4037) // billot de bois
+    this.add.rectangle(ax, ay + 4, 18, 12, 0x455a64) // pied de l'enclume
+    this.add.rectangle(ax, ay - 6, 42, 12, 0x37474f) // table de l'enclume
+    this.add.triangle(ax - 30, ay - 6, 0, -6, 0, 6, 16, 0, 0x37474f) // corne de l'enclume
+    this.add.rectangle(ax + 10, ay - 20, 4, 22, 0x6d4c41).setRotation(0.5) // manche du marteau
+    this.add.rectangle(ax + 16, ay - 28, 16, 10, 0x263238).setRotation(0.5) // tête du marteau
+    this.add.circle(ax - 6, ay - 12, 2, 0xffd54f, 0.9) // étincelles
+    this.add.circle(ax + 2, ay - 16, 1.5, 0xffb300, 0.9)
 
     // PNJ de quête
     this.add.circle(480, 360, 16, 0xffd54f).setStrokeStyle(2, 0xffffff, 0.9)
@@ -207,6 +224,7 @@ export class TownScene extends Phaser.Scene {
     if (kind === 'potions') this.openPotionShop()
     else if (kind === 'armes') this.openItemShop('armes', WEAPON_SHOP)
     else if (kind === 'vetements') this.openItemShop('vetements', [...ARMOR_SHOP, ...HAT_SHOP])
+    else if (kind === 'forge') this.openForge()
     else if (kind === 'quete') this.openQuestNpc()
   }
 
@@ -408,6 +426,110 @@ export class TownScene extends Phaser.Scene {
         this.add.text(480, 380, '← Fermer', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 } })
           .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()),
       )
+    }
+    render()
+  }
+
+  // libellé court d'un matériau (premier mot du nom) pour les puces de coût de la forge
+  private shortMat(id: string): string {
+    const m = MATERIALS[id]
+    return (m?.name ?? id).split(' ')[0]!
+  }
+
+  // Forge : transforme les matériaux collectés en équipement. Une ligne par recette avec
+  // icône du résultat, nom + bonus, coût (possédé/requis en vert/rouge + or) et bouton Forger
+  // actif seulement si canCraft. render() reconstruit tout après un craft pour rafraîchir.
+  private openForge() {
+    this.closePanel()
+    const w = 860
+    const rowH = 44
+    const headerH = 118, footerH = 56
+    const h = headerH + RECIPES.length * rowH + footerH
+    const c = this.add.container(0, 0).setDepth(50)
+    this.panel = c
+
+    const render = (msg?: string, ok?: boolean) => {
+      c.removeAll(true)
+      const top = this.drawPanelFrame(c, w, h, 'Forge')
+      const p = getPlayer()
+      this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
+
+      // récap des matériaux possédés
+      const owned = Object.entries(p.materials).filter(([, q]) => q > 0)
+      const recap = owned.length
+        ? owned.map(([id, q]) => `${this.shortMat(id)} x${q}`).join('   ·   ')
+        : 'Aucun matériau collecté — va combattre pour en récolter !'
+      c.add(this.add.text(480, top + 84, recap, {
+        fontSize: '12px', color: '#cfd8dc', align: 'center', wordWrap: { width: w - 48 },
+      }).setOrigin(0.5))
+
+      const rowsTop = top + headerH
+      const rowLeft = 480 - w / 2 + 16
+      RECIPES.forEach((recipe, i) => {
+        const y = rowsTop + i * rowH + rowH / 2
+        const item = ITEMS[recipe.resultItemId]!
+        const craftable = canCraft(p, recipe)
+
+        if (i > 0) c.add(this.add.rectangle(480, y - rowH / 2, w - 40, 1, 0xffffff, 0.08))
+
+        // icône du résultat
+        const icon = this.iconFor(recipe.resultItemId)
+        if ('texture' in icon) c.add(this.add.image(rowLeft + 18, y, icon.texture).setDisplaySize(28, 28))
+        else {
+          c.add(this.add.circle(rowLeft + 18, y, 13, icon.pastille).setStrokeStyle(2, 0xffffff, 0.6))
+          c.add(this.add.text(rowLeft + 18, y, icon.glyph, { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
+        }
+
+        // nom + bonus
+        c.add(this.add.text(rowLeft + 42, y - 10, item.name, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0, 0.5))
+        const bonus = Object.entries(item.bonus).map(([k, v]) => `${k} +${v}`).join(' / ')
+        c.add(this.add.text(rowLeft + 42, y + 9, bonus, { fontSize: '10px', color: '#90a4ae' }).setOrigin(0, 0.5))
+
+        // coût : puces matériaux + or
+        let cx = rowLeft + 250
+        for (const [matId, qty] of Object.entries(recipe.materials)) {
+          const have = p.materials[matId] ?? 0
+          const enough = have >= qty
+          const t = this.add.text(cx, y, `${this.shortMat(matId)} ${have}/${qty}`, {
+            fontSize: '11px', color: enough ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
+          }).setOrigin(0, 0.5)
+          c.add(t)
+          cx += t.width + 14
+        }
+        if (recipe.gold) {
+          const t = this.add.text(cx, y, `${recipe.gold} or`, {
+            fontSize: '11px', color: p.gold >= recipe.gold ? '#ffd54f' : '#ff5252', fontStyle: 'bold',
+          }).setOrigin(0, 0.5)
+          c.add(t)
+        }
+
+        // bouton Forger
+        const btn = this.add.text(480 + w / 2 - 24, y, 'Forger', {
+          fontSize: '13px', color: craftable ? '#ffffff' : '#9e9e9e',
+          backgroundColor: craftable ? '#2e7d32' : '#3a2b28', padding: { x: 12, y: 6 },
+        }).setOrigin(1, 0.5)
+        c.add(btn)
+        if (craftable) {
+          btn.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+            if (doCraft(p, recipe)) {
+              audio.playSfx('buy')
+              save(p)
+              render(`Forgé : ${item.name} !`, true)
+            } else render('Ressources insuffisantes', false)
+          })
+        } else {
+          btn.setInteractive({ useHandCursor: true }).on('pointerdown', () => render('Ressources insuffisantes', false))
+        }
+      })
+
+      // message de retour (résultat du dernier craft)
+      if (msg) c.add(this.add.text(480, top + h - 54, msg, {
+        fontSize: '14px', color: ok ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
+      }).setOrigin(0.5))
+
+      c.add(this.add.text(480, top + h - 28, '← Fermer', {
+        fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()))
     }
     render()
   }
