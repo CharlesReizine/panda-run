@@ -213,83 +213,150 @@ export class TownScene extends Phaser.Scene {
   }
 
   private flash(container: Phaser.GameObjects.Container, x: number, y: number, msg: string, color: string) {
-    const txt = this.add.text(x, y, msg, { fontSize: '14px', color, fontStyle: 'bold' }).setOrigin(0.5)
+    const txt = this.add.text(x, y, msg, { fontSize: '14px', color, fontStyle: 'bold' }).setOrigin(0.5).setDepth(60)
     container.add(txt)
     this.tweens.add({ targets: txt, y: y - 24, alpha: 0, duration: 700, onComplete: () => txt.destroy() })
   }
 
+  // fond de panneau façon coffre/parchemin, commun aux boutiques — bordure dorée sur bois sombre
+  private drawPanelFrame(c: Phaser.GameObjects.Container, w: number, h: number, title: string) {
+    c.add(this.add.rectangle(480, 270, 960, 540, 0x000000, 0.45)) // voile derrière le panneau
+    c.add(this.add.rectangle(480, 270, w, h, 0x3e2723, 0.97).setStrokeStyle(4, 0xd7a86e, 1))
+    c.add(this.add.rectangle(480, 270, w - 12, h - 12, 0xffffff, 0).setStrokeStyle(1, 0xffd54f, 0.35))
+    const top = 270 - h / 2
+    c.add(this.add.rectangle(480, top + 30, w, 52, 0x2a1a17, 0.9))
+    c.add(this.add.text(480, top + 30, title, { fontSize: '22px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0.5))
+    return top
+  }
+
+  // pastille or joueur, en haut à droite du panneau — renvoie le texte pour le rafraîchir sans
+  // reconstruire tout le panneau (évite de détruire un bouton en pleine animation d'achat)
+  private drawGoldBadge(c: Phaser.GameObjects.Container, x: number, y: number, gold: number): Phaser.GameObjects.Text {
+    c.add(this.add.rectangle(x, y, 108, 28, 0x1b0f0d, 0.85).setStrokeStyle(1, 0xffd700, 0.7))
+    c.add(this.add.image(x - 38, y, 'coin').setScale(1.4))
+    const txt = this.add.text(x - 16, y, `${gold} or`, { fontSize: '14px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0, 0.5)
+    c.add(txt)
+    return txt
+  }
+
+  // carte d'objet réutilisable (boutique d'armes/vêtements/potions) : icône, nom, sous-texte,
+  // prix + bouton Acheter, avec retour visuel vert/rouge selon le résultat de l'achat ;
+  // `onBuy` applique l'achat et renvoie le succès, `onBought` rafraîchit l'affichage (or, stock)
+  private drawItemCard(
+    c: Phaser.GameObjects.Container,
+    x: number, y: number, w: number, h: number,
+    icon: { texture: string } | { pastille: number; glyph: string },
+    name: string, sub: string, price: number,
+    onBuy: () => boolean,
+    onBought: () => void,
+  ) {
+    const card = this.add.rectangle(x, y, w, h, 0x4e342e, 0.9).setStrokeStyle(2, 0x8d6e63, 1)
+    c.add(card)
+    const iy = y - h / 2 + 30
+    if ('texture' in icon) {
+      c.add(this.add.image(x, iy, icon.texture).setDisplaySize(30, 30))
+    } else {
+      // pas de visuel dédié pour cet objet : pastille colorée par emplacement (arme/armure/accessoire)
+      c.add(this.add.circle(x, iy, 15, icon.pastille).setStrokeStyle(2, 0xffffff, 0.6))
+      c.add(this.add.text(x, iy, icon.glyph, { fontSize: '11px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
+    }
+    c.add(this.add.text(x, y - h / 2 + 52, name, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: w - 12 } }).setOrigin(0.5, 0))
+    if (sub) c.add(this.add.text(x, y - h / 2 + 74, sub, { fontSize: '10px', color: '#90a4ae', align: 'center', wordWrap: { width: w - 12 } }).setOrigin(0.5, 0))
+    const buyBtn = this.add.text(x, y + h / 2 - 18, `${price} or`, {
+      fontSize: '13px', color: '#ffffff', backgroundColor: '#2e7d32', padding: { x: 10, y: 5 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+    c.add(buyBtn)
+    buyBtn.on('pointerdown', () => {
+      if (onBuy()) {
+        onBought()
+        this.flash(c, x, y - h / 2 - 4, 'Acheté !', '#66bb6a')
+        buyBtn.setBackgroundColor('#66bb6a')
+        this.time.delayedCall(150, () => buyBtn.setBackgroundColor('#2e7d32'))
+      } else {
+        this.flash(c, x, y - h / 2 - 4, "Pas assez d'or !", '#ff5252')
+        card.setStrokeStyle(2, 0xff5252, 1)
+        this.time.delayedCall(300, () => card.setStrokeStyle(2, 0x8d6e63, 1))
+      }
+    })
+  }
+
   private openPotionShop() {
     this.closePanel()
+    const w = 380, h = 300
     const c = this.add.container(0, 0).setDepth(50)
     this.panel = c
-    c.add(this.add.rectangle(480, 270, 520, 260, 0x0d1b2a, 0.96))
-    c.add(this.add.text(480, 170, 'Herboristerie', { fontSize: '22px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
+    const top = this.drawPanelFrame(c, w, h, 'Herboristerie')
+    const p = getPlayer()
+    const goldText = this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
+    const stockText = this.add.text(480, top + 96, `Potions en réserve : ${p.potions}`, { fontSize: '14px', color: '#cfd8dc' }).setOrigin(0.5)
+    c.add(stockText)
+    this.drawItemCard(
+      c, 480, top + 190, 200, 130,
+      { texture: 'potion-drop' }, 'Potion de soin', 'Restaure des PV en combat', POTION_PRICE,
+      () => { const pl = getPlayer(); return buyPotion(pl) },
+      () => {
+        const pl = getPlayer()
+        save(pl)
+        goldText.setText(`${pl.gold} or`)
+        stockText.setText(`Potions en réserve : ${pl.potions}`)
+      },
+    )
+    c.add(
+      this.add.text(480, top + h - 30, '← Fermer', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 } })
+        .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()),
+    )
+  }
 
-    const render = () => {
-      const p = getPlayer()
-      // on retire tout sauf le fond/titre (2 premiers éléments)
-      for (const child of [...c.list].slice(2)) child.destroy()
-      c.add(this.add.text(480, 210, `Potions : ${p.potions}  —  Or : ${p.gold}`, { fontSize: '16px', color: '#ffd54f' }).setOrigin(0.5))
-      c.add(
-        this.add.text(480, 250, `Acheter 1 potion (${POTION_PRICE} or)`, {
-          fontSize: '16px', color: '#ffffff', backgroundColor: '#2e7d32', padding: { x: 14, y: 8 },
-        }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-          if (buyPotion(p)) { save(p); render() }
-          else this.flash(c, 480, 285, "Pas assez d'or !", '#ff5252')
-        }),
-      )
-      c.add(
-        this.add.text(480, 340, '← Fermer', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 } })
-          .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()),
-      )
-    }
-    render()
+  // icône par emplacement d'objet : les chapeaux ont un visuel dédié (cosmetic-<id>) ; les
+  // armes/armures/accessoires n'ont pas de sprite propre, donc pastille colorée + glyphe par slot
+  private iconFor(itemId: string): { texture: string } | { pastille: number; glyph: string } {
+    const item = ITEMS[itemId]!
+    if (item.slot === 'hat') return { texture: `cosmetic-${itemId}` }
+    const bySlot = {
+      weapon: { pastille: 0xe64a19, glyph: 'ATK' },
+      armor: { pastille: 0x1e88e5, glyph: 'DEF' },
+      accessory: { pastille: 0x43a047, glyph: 'PV' },
+    } as const
+    return bySlot[item.slot]
   }
 
   private openItemShop(kind: 'armes' | 'vetements', list: { itemId: string; price: number }[]) {
     this.closePanel()
     const title = kind === 'armes' ? 'Armurerie' : 'Boutique de vêtements'
-    // au-delà de 4 objets (ex. vêtements + chapeaux) une seule colonne déborderait du panneau
-    const cols = list.length > 4 ? 2 : 1
-    const panelW = cols === 2 ? 860 : 620
+    const cols = list.length <= 1 ? 1 : list.length <= 4 ? 2 : 3
     const rows = Math.ceil(list.length / cols)
-    const panelH = Math.max(380, 165 + rows * 44 + 60)
-    const colW = panelW / cols
-    const panelLeft = 480 - panelW / 2
+    const cardW = 168, cardH = 128, gapX = 16, gapY = 14
+    const w = Math.max(360, cols * cardW + (cols - 1) * gapX + 60)
+    const headerH = 100, footerH = 60
+    const h = headerH + rows * cardH + (rows - 1) * gapY + footerH
     const c = this.add.container(0, 0).setDepth(50)
     this.panel = c
-    c.add(this.add.rectangle(480, 270, panelW, panelH, 0x0d1b2a, 0.96))
-    c.add(this.add.text(480, 100, title, { fontSize: '22px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
+    const top = this.drawPanelFrame(c, w, h, title)
+    const p = getPlayer()
+    const goldText = this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
 
-    const render = () => {
-      const p = getPlayer()
-      for (const child of [...c.list].slice(2)) child.destroy()
-      c.add(this.add.text(480, 128, `Or : ${p.gold}`, { fontSize: '15px', color: '#ffd54f' }).setOrigin(0.5))
-      list.forEach((entry, i) => {
-        const item = ITEMS[entry.itemId]!
-        const col = i % cols
-        const row = Math.floor(i / cols)
-        const x0 = panelLeft + colW * col
-        const y = 165 + row * 44
-        const bonus = Object.entries(item.bonus).map(([k, v]) => `${k} +${v}`).join(' / ')
-        c.add(this.add.text(x0 + 30, y, `${item.name}`, { fontSize: '15px', color: '#ffffff' }).setOrigin(0, 0.5))
-        c.add(this.add.text(x0 + 30, y + 16, bonus, { fontSize: '11px', color: '#90a4ae' }).setOrigin(0, 0.5))
-        c.add(
-          this.add.text(x0 + colW - 90, y, `${entry.price} or`, {
-            fontSize: '15px', color: '#ffffff', backgroundColor: '#2e7d32', padding: { x: 12, y: 6 },
-          }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-            if (buyItem(p, entry.itemId, entry.price)) { save(p); render() }
-            else this.flash(c, x0 + colW / 2, y + 30, "Pas assez d'or !", '#ff5252')
-          }),
-        )
-      })
-      c.add(
-        this.add.text(480, 165 + rows * 44 + 20, '← Fermer', {
-          fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
-        }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()),
+    const gridTop = top + headerH
+    const gridLeft = 480 - (cols * cardW + (cols - 1) * gapX) / 2 + cardW / 2
+    list.forEach((entry, i) => {
+      const item = ITEMS[entry.itemId]!
+      const col = i % cols
+      const row = Math.floor(i / cols)
+      const x = gridLeft + col * (cardW + gapX)
+      const y = gridTop + row * (cardH + gapY) + cardH / 2
+      const bonus = Object.entries(item.bonus).map(([k, v]) => `${k} +${v}`).join(' / ')
+      this.drawItemCard(
+        c, x, y, cardW, cardH,
+        this.iconFor(entry.itemId), item.name, bonus, entry.price,
+        () => { const pl = getPlayer(); return buyItem(pl, entry.itemId, entry.price) },
+        () => { const pl = getPlayer(); save(pl); goldText.setText(`${pl.gold} or`) },
       )
-    }
-    render()
+    })
+
+    c.add(
+      this.add.text(480, top + h - 28, '← Fermer', {
+        fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()),
+    )
   }
 
   private openQuestNpc() {
