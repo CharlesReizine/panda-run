@@ -27,7 +27,9 @@ const list: LevelDef[] = [
     props: [prop('herbe', 12), prop('champignon', 52), prop('herbe', 90), prop('coffre', 8), prop('coffre', 46, 7)] },
   { id: 'zone1-3', name: 'Orée de la forêt', biome: 'foret', widthTiles: 100,
     platforms: [plat(20, 11, 4), plat(24, 8, 4), plat(28, 5, 4), plat(60, 10, 4)],
-    spawns: [{ monsterId: 'louveteau', x: 14 }, { monsterId: 'mandragore', x: 44 }, { monsterId: 'poporing', x: 55 }, { monsterId: 'mandragore', x: 70 }, { monsterId: 'louveteau', x: 85 }],
+    // le gardien sylve bloque le chemin au sol sous l'escalier de plateformes (20→32) : il faut
+    // grimper pour le contourner plutôt que d'affronter ce piège quasi increvable
+    spawns: [{ monsterId: 'louveteau', x: 14 }, { monsterId: 'gardien-sylve', x: 26 }, { monsterId: 'mandragore', x: 44 }, { monsterId: 'poporing', x: 55 }, { monsterId: 'mandragore', x: 70 }, { monsterId: 'louveteau', x: 85 }],
     props: [prop('herbe', 8), prop('champignon', 48), prop('herbe', 95), prop('coffre', 10), prop('coffre', 30, 4)] },
   { id: 'zone1-4', name: 'Forêt profonde', biome: 'foret', widthTiles: 110,
     platforms: [plat(20, 11, 5), plat(48, 12, 6), plat(80, 11, 4), plat(84, 8, 4)],
@@ -42,7 +44,8 @@ const list: LevelDef[] = [
     props: [prop('roche', 12), prop('herbe', 40), prop('roche', 90), prop('coffre', 52, 7)] },
   { id: 'zone2-2', name: 'Oasis perdue', biome: 'desert', widthTiles: 110,
     platforms: [plat(22, 11, 4), plat(26, 8, 4), plat(30, 5, 4), plat(78, 11, 4), plat(82, 8, 4)],
-    spawns: [{ monsterId: 'scorpion', x: 18 }, { monsterId: 'momie', x: 48 }, { monsterId: 'vautour', x: 60 }, { monsterId: 'momie', x: 70 }, { monsterId: 'scorpion', x: 100 }],
+    // gardien pierre posté sous l'escalier de plateformes (22→34) : détour obligatoire par le haut
+    spawns: [{ monsterId: 'scorpion', x: 18 }, { monsterId: 'gardien-pierre', x: 27 }, { monsterId: 'momie', x: 48 }, { monsterId: 'vautour', x: 60 }, { monsterId: 'momie', x: 70 }, { monsterId: 'scorpion', x: 100 }],
     props: [prop('roche', 10), prop('herbe', 52), prop('roche', 70), prop('herbe', 105), prop('coffre', 32, 4), prop('coffre', 84, 7)] },
   { id: 'zone2-3', name: 'Vallée des tombeaux', biome: 'desert', widthTiles: 110,
     platforms: [plat(30, 12, 6), plat(60, 11, 4), plat(64, 8, 4), plat(95, 11, 4)],
@@ -58,7 +61,8 @@ const list: LevelDef[] = [
   // Zone 3 — jungle (+ route alternative plage)
   { id: 'zone3-1', name: 'Lisière de la jungle', biome: 'jungle', widthTiles: 130,
     platforms: [plat(15, 11, 5), plat(20, 8, 4), plat(24, 5, 4), plat(45, 12, 6), plat(56, 11, 4), plat(60, 9, 4), plat(66, 6, 4), plat(80, 10, 5), plat(95, 13, 6), plat(105, 11, 4), plat(110, 10, 4), plat(115, 7, 4)],
-    spawns: [{ monsterId: 'poporing', x: 10 }, { monsterId: 'frelon-geant', x: 22 }, { monsterId: 'singe-grimpeur', x: 40 }, { monsterId: 'flora-vorace', x: 52 }, { monsterId: 'frelon-geant', x: 70 }, { monsterId: 'singe-grimpeur', x: 88 }, { monsterId: 'flora-vorace', x: 100 }, { monsterId: 'frelon-geant', x: 118 }],
+    // gardien sylve sous l'escalier de plateformes (56→70) : contournement par le haut
+    spawns: [{ monsterId: 'poporing', x: 10 }, { monsterId: 'frelon-geant', x: 22 }, { monsterId: 'singe-grimpeur', x: 40 }, { monsterId: 'flora-vorace', x: 52 }, { monsterId: 'gardien-sylve', x: 63 }, { monsterId: 'singe-grimpeur', x: 88 }, { monsterId: 'flora-vorace', x: 100 }, { monsterId: 'frelon-geant', x: 118 }],
     props: [prop('champignon', 18), prop('herbe', 48), prop('champignon', 92), prop('coffre', 12), prop('coffre', 57, 10)],
     hazards: [{ kind: 'water', x: 33, w: 5 }],
     bridges: [{ x: 32, y: 13, w: 7 }] },
@@ -101,7 +105,8 @@ const list: LevelDef[] = [
     spawns: [], boss: 'golem-ancien' },
   { id: 'carriere-1', name: 'Carrière abandonnée', biome: 'carriere', widthTiles: 115,
     platforms: [plat(16, 12, 5), plat(35, 13, 4), plat(39, 10, 4), plat(43, 7, 4), plat(60, 11, 5), plat(75, 13, 4), plat(85, 12, 4), plat(89, 9, 4), plat(100, 10, 5)],
-    spawns: [{ monsterId: 'golem-de-pierre', x: 10 }, { monsterId: 'gobelin-mineur', x: 22 }, { monsterId: 'golem-de-pierre', x: 32 }, { monsterId: 'gobelin-mineur', x: 48 }, { monsterId: 'golem-de-pierre', x: 58 }, { monsterId: 'gobelin-mineur', x: 70 }, { monsterId: 'golem-de-pierre', x: 82 }, { monsterId: 'gobelin-mineur', x: 95 }, { monsterId: 'golem-de-pierre', x: 108 }],
+    // gardien pierre sous l'escalier de plateformes (35→47) : contournement par le haut
+    spawns: [{ monsterId: 'golem-de-pierre', x: 10 }, { monsterId: 'gobelin-mineur', x: 22 }, { monsterId: 'golem-de-pierre', x: 32 }, { monsterId: 'gardien-pierre', x: 41 }, { monsterId: 'golem-de-pierre', x: 58 }, { monsterId: 'gobelin-mineur', x: 70 }, { monsterId: 'golem-de-pierre', x: 82 }, { monsterId: 'gobelin-mineur', x: 95 }, { monsterId: 'golem-de-pierre', x: 108 }],
     props: [prop('roche', 20), prop('roche', 55), prop('roche', 95), prop('coffre', 12), prop('coffre', 61, 10)],
     hazards: [{ kind: 'spikes', x: 25, w: 4 }, { kind: 'water', x: 65, w: 5 }],
     bridges: [{ x: 64, y: 13, w: 7 }] },
@@ -130,7 +135,8 @@ const list: LevelDef[] = [
   // Zone 6 — enfer (zone finale)
   { id: 'zone6-1', name: 'Sentier des Damnés', biome: 'enfer', widthTiles: 155,
     platforms: [plat(16, 12, 4), plat(20, 9, 4), plat(24, 6, 4), plat(42, 11, 5), plat(58, 13, 4), plat(62, 10, 4), plat(68, 13, 4), plat(80, 12, 4), plat(84, 9, 4), plat(88, 6, 4), plat(105, 11, 5), plat(122, 12, 4), plat(126, 9, 4), plat(130, 6, 4), plat(145, 13, 5)],
-    spawns: [{ monsterId: 'diablotin', x: 10 }, { monsterId: 'gargouille', x: 28 }, { monsterId: 'diablotin', x: 40 }, { monsterId: 'gargouille', x: 55 }, { monsterId: 'diablotin', x: 66 }, { monsterId: 'gargouille', x: 78 }, { monsterId: 'diablotin', x: 92 }, { monsterId: 'gargouille', x: 108 }, { monsterId: 'diablotin', x: 120 }, { monsterId: 'gargouille', x: 135 }, { monsterId: 'diablotin', x: 148 }],
+    // gardien flamme sous l'escalier de plateformes (122→134) : contournement par le haut
+    spawns: [{ monsterId: 'diablotin', x: 10 }, { monsterId: 'gargouille', x: 28 }, { monsterId: 'diablotin', x: 40 }, { monsterId: 'gargouille', x: 55 }, { monsterId: 'diablotin', x: 66 }, { monsterId: 'gargouille', x: 78 }, { monsterId: 'diablotin', x: 92 }, { monsterId: 'gargouille', x: 108 }, { monsterId: 'gardien-flamme', x: 127 }, { monsterId: 'gargouille', x: 135 }, { monsterId: 'diablotin', x: 148 }],
     props: [prop('roche', 30), prop('champignon', 70), prop('roche', 140), prop('coffre', 14), prop('coffre', 43, 10), prop('coffre', 150)],
     hazards: [{ kind: 'water', x: 35, w: 5 }, { kind: 'water', x: 95, w: 5 }, { kind: 'spikes', x: 115, w: 4 }, { kind: 'spikes', x: 138, w: 4 }],
     bridges: [{ x: 34, y: 13, w: 7 }, { x: 94, y: 13, w: 7 }] },

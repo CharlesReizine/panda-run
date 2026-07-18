@@ -3,6 +3,7 @@ import type { MonsterDef } from '../core/types'
 const goldSmall = { kind: 'gold', chance: 1, min: 2, max: 6 } as const
 const goldMid = { kind: 'gold', chance: 1, min: 5, max: 12 } as const
 const potion = { kind: 'potion', chance: 0.25, min: 1, max: 1 } as const
+const goldGardien = { kind: 'gold', chance: 1, min: 1, max: 3 } as const
 
 const list: MonsterDef[] = [
   // Zone 1 — plaine / forêt
@@ -68,6 +69,11 @@ const list: MonsterDef[] = [
   // Zone 6 — enfer
   { id: 'diablotin', name: 'Diablotin', color: 0xd84315, hp: 480, atk: 190, def: 35, xp: 4200, speed: 150, behavior: 'charge', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.06, min: 1, max: 1 }] },
   { id: 'gargouille', name: 'Gargouille', color: 0x546e7a, hp: 620, atk: 200, def: 55, xp: 4800, speed: 60, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.06, min: 1, max: 1 }, { kind: 'item', itemId: 'arc-souple', chance: 0.03, min: 1, max: 1 }] },
+  // Gardiens — obstacles immobiles, pièges vivants postés sur le chemin au sol : contact quasi
+  // fatal (atk énorme), increvables en pratique (hp/def énormes), pas faits pour être combattus
+  { id: 'gardien-sylve', name: 'Gardien Sylve', color: 0x4e342e, hp: 5000, atk: 999, def: 80, xp: 50, speed: 0, behavior: 'contact', drops: [goldGardien] },
+  { id: 'gardien-pierre', name: 'Gardien Pierre', color: 0x707070, hp: 5500, atk: 999, def: 90, xp: 55, speed: 0, behavior: 'contact', drops: [goldGardien] },
+  { id: 'gardien-flamme', name: 'Gardien Flamme', color: 0xbf360c, hp: 6000, atk: 999, def: 70, xp: 60, speed: 0, behavior: 'contact', drops: [goldGardien] },
   // Boss — zone 3 (jungle)
   {
     id: 'seigneur-liane', name: 'Seigneur Liane', color: 0x1b5e20, hp: 4200, atk: 65, def: 30, xp: 9000, speed: 40, behavior: 'charge', boss: true,

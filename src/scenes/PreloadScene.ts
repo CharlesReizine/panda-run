@@ -414,6 +414,44 @@ export class PreloadScene extends Phaser.Scene {
         g.fillStyle(0xffee58).fillCircle(r - r / 3, r, r / 6).fillCircle(r + r / 3, r, r / 6)
         mouth()
         break
+      case 'gardien-sylve':
+        // tronc noueux massif : occupe presque tout le gabarit pour intimider, visage grimaçant
+        // et yeux rouges luisants (contact = piège quasi mortel, bien distinct des monstres mobiles)
+        g.fillStyle(0x2b1f1a).fillRoundedRect(1, -2, s - 2, s + 6, 6) // écorce sombre
+        g.fillStyle(m.color).fillRoundedRect(4, 1, s - 8, s, 6) // tronc
+        g.lineStyle(2, 0x2b1f1a); for (let i = 0; i < 4; i++) { g.beginPath(); g.moveTo(6 + i * 3, 2); g.lineTo(4 + i * 4, s + 2); g.strokePath() } // nervures d'écorce
+        g.fillStyle(0x2b1f1a).fillTriangle(4, 2, 12, -12, 16, 4).fillTriangle(s - 4, 2, s - 12, -12, s - 16, 4) // moignons de branches menaçants
+        g.fillStyle(0x1a1210).fillEllipse(r - r / 2.6, r, 7, 9).fillEllipse(r + r / 2.6, r, 7, 9) // orbites creusées
+        g.fillStyle(0xff1744).fillCircle(r - r / 2.6, r, 4).fillCircle(r + r / 2.6, r, 4) // yeux rouges luisants
+        g.fillStyle(0xffcdd2, 0.6).fillCircle(r - r / 2.6 - 1, r - 1, 1.3).fillCircle(r + r / 2.6 - 1, r - 1, 1.3)
+        g.fillStyle(0x1a1210).fillEllipse(r, r + r / 1.3, r / 1.3, r / 3) // bouche grimaçante grande ouverte
+        g.fillStyle(0xe8e0d0).fillTriangle(r - 9, r + r / 1.7, r - 4, r + r / 1.7, r - 6.5, r + r / 1.1).fillTriangle(r + 4, r + r / 1.7, r + 9, r + r / 1.7, r + 6.5, r + r / 1.1) // crocs de bois
+        break
+      case 'gardien-pierre':
+        // totem de pierre massif et anguleux, fissuré, yeux gravés incandescents
+        g.fillStyle(0x3d3a36).fillRoundedRect(1, -4, s - 2, s + 8, 3) // socle sombre
+        g.fillStyle(m.color).fillRoundedRect(3, -1, s - 6, s + 2, 3) // bloc de pierre
+        g.lineStyle(2, 0x3d3a36).beginPath(); g.moveTo(6, 4); g.lineTo(r, r - 4); g.lineTo(s - 8, r + 8); g.moveTo(r + 6, -2); g.lineTo(r - 4, r + 10); g.strokePath() // fissures
+        g.fillStyle(0x2b2925).fillTriangle(2, 6, 10, -10, 16, 8).fillTriangle(s - 2, 6, s - 10, -10, s - 16, 8) // arêtes menaçantes du sommet
+        g.fillStyle(0x1a1816).fillRect(r - r / 1.6, r - 3, r / 1.6 * 2, 8) // sourcil massif gravé
+        g.fillStyle(0xff8f00).fillCircle(r - r / 2.6, r + 2, 4.5).fillCircle(r + r / 2.6, r + 2, 4.5) // yeux incandescents
+        g.fillStyle(0xffe0b2, 0.7).fillCircle(r - r / 2.6, r + 2, 4.5).fillCircle(r + r / 2.6, r + 2, 4.5)
+        g.fillStyle(0x1a1816).fillRect(r - 10, r + r / 1.4, 20, 5) // bouche taillée, fermée et rigide
+        break
+      case 'gardien-flamme':
+        // totem embrasé, silhouette large cerclée de flammes, regard rouge perçant
+        g.fillStyle(0x6d1b0a, 0.9).fillTriangle(0, s, r - 6, r - 12, 6, 4).fillTriangle(s, s, r + 6, r - 12, s - 6, 4) // flammes latérales
+        g.fillStyle(0x2b1b16).fillRoundedRect(4, -2, s - 8, s + 6, 5) // corps du totem calciné
+        g.fillStyle(m.color).fillRoundedRect(7, 1, s - 14, s, 5)
+        g.fillStyle(0xff7043).fillTriangle(r - 10, 2, r + 10, 2, r, -16) // couronne de flammes
+        g.fillStyle(0xffd54f).fillTriangle(r - 5, 2, r + 5, 2, r, -10)
+        g.fillStyle(0x1a0e0a).fillEllipse(r - r / 2.6, r, 6.5, 8).fillEllipse(r + r / 2.6, r, 6.5, 8) // orbites noircies
+        g.fillStyle(0xff1744).fillCircle(r - r / 2.6, r, 4).fillCircle(r + r / 2.6, r, 4) // regard rouge perçant
+        g.fillStyle(0xffee58, 0.8).fillCircle(r - r / 2.6, r, 1.6).fillCircle(r + r / 2.6, r, 1.6)
+        g.fillStyle(0x1a0e0a).fillEllipse(r, r + r / 1.3, r / 1.2, r / 3) // bouche béante incandescente
+        g.fillStyle(0xff7043).fillEllipse(r, r + r / 1.2, r / 2, r / 5)
+        g.fillStyle(0xff7043, 0.5).fillCircle(r, s + 2, r / 1.2) // aura de flammes au sol
+        break
       case 'seigneur-liane':
         for (let i = 0; i < 5; i++) { const a = Phaser.Math.DegToRad(i * 72 - 90); g.fillStyle(0x1b5e20).fillTriangle(r, r - 6, r + Math.cos(a) * 34, r + Math.sin(a) * 34 - 6, r + Math.cos(a + 0.5) * 20, r + Math.sin(a + 0.5) * 20 - 6) } // grande fleur de pétales
         body()
