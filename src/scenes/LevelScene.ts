@@ -18,7 +18,7 @@ import { SKILLS } from '../data/skills'
 import { rollDrops } from '../core/loot'
 import type { DropEntry } from '../core/types'
 import type { UIScene } from './UIScene'
-import { TILE, GROUND_ROW } from '../core/platforming'
+import { TILE, GROUND_ROW, landsOnOneWayPlatform } from '../core/platforming'
 import { BIOMES } from '../data/biomes'
 import { audio, type MusicTrack } from '../audio/audio-engine'
 
@@ -38,6 +38,7 @@ export class LevelScene extends Phaser.Scene {
   pickups!: Phaser.Physics.Arcade.Group
   props!: Phaser.Physics.Arcade.Group
   private platforms!: Phaser.Physics.Arcade.StaticGroup
+  private oneWayPlatforms!: Phaser.Physics.Arcade.StaticGroup
   private ladderRects: Phaser.Geom.Rectangle[] = []
   private waterRects: Phaser.Geom.Rectangle[] = []
   private lastCheckpoint: { x: number; y: number } | null = null
@@ -101,20 +102,26 @@ export class LevelScene extends Phaser.Scene {
     audio.playMusic(this.levelDef.boss ? 'boss' : (BIOME_TRACKS[this.levelDef.biome] ?? 'plaine'))
 
     const platforms = (this.platforms = this.physics.add.staticGroup())
+    // plateformes traversables par le bas (one-way) : surélevées + ponts. Le SOL, lui,
+    // reste dans `platforms` et donc solide dans les deux sens.
+    const oneWay = (this.oneWayPlatforms = this.physics.add.staticGroup())
     const tileKey = `tile-${this.levelDef.biome}`
     for (let x = 0; x < this.levelDef.widthTiles; x++) {
       platforms.create(x * TILE + TILE / 2, GROUND_ROW * TILE + TILE, tileKey)
       platforms.create(x * TILE + TILE / 2, (GROUND_ROW + 1) * TILE + TILE, tileKey)
     }
+    // plateformes surélevées : on les traverse en montant et on se pose dessus en
+    // retombant (voir landsFromAbove). Sans ça, une plateforme qui en surplombe une
+    // autre (escaliers) fait cogner son dessous au joueur qui saute → il retombe.
     for (const p of this.levelDef.platforms) {
       for (let i = 0; i < p.w; i++) {
-        platforms.create((p.x + i) * TILE + TILE / 2, p.y * TILE + TILE / 2, tileKey)
+        oneWay.create((p.x + i) * TILE + TILE / 2, p.y * TILE + TILE / 2, tileKey)
       }
     }
-    // ponts de planches : plateformes fines traversables
+    // ponts de planches : plateformes fines, elles aussi traversables par le bas
     for (const br of this.levelDef.bridges ?? []) {
       for (let i = 0; i < br.w; i++) {
-        const plank = platforms.create((br.x + i) * TILE + TILE / 2, br.y * TILE + 6, 'bridge') as Phaser.Physics.Arcade.Sprite
+        const plank = oneWay.create((br.x + i) * TILE + TILE / 2, br.y * TILE + 6, 'bridge') as Phaser.Physics.Arcade.Sprite
         // le visuel ne fait que 12px de haut ; à grande vitesse de chute le joueur peut
         // traverser cette fine tranche en un seul pas de physique (tunneling) — on épaissit
         // donc le corps de collision sans toucher au rendu
@@ -124,15 +131,19 @@ export class LevelScene extends Phaser.Scene {
 
     this.player = new Player(this, this.spawnX(), GROUND_ROW * TILE - 40)
     this.physics.add.collider(this.player, platforms)
+    // collision one-way : validée seulement quand le panda retombe sur le dessus
+    this.physics.add.collider(this.player, oneWay, undefined, this.landsFromAbove)
 
     this.enemies = this.physics.add.group()
     this.physics.add.collider(this.enemies, platforms)
+    this.physics.add.collider(this.enemies, oneWay)
 
     this.enemyProjectiles = this.physics.add.group()
     this.playerProjectiles = this.physics.add.group()
 
     this.pickups = this.physics.add.group()
     this.physics.add.collider(this.pickups, platforms)
+    this.physics.add.collider(this.pickups, oneWay)
     this.physics.add.overlap(this.player, this.pickups, (_p, pk) => this.collectPickup(pk as Phaser.Physics.Arcade.Sprite))
 
     for (const s of this.levelDef.spawns) {
@@ -387,6 +398,15 @@ export class LevelScene extends Phaser.Scene {
   // ressort à gauche, vers le nœud d'où l'on vient
   private spawnX(): number { return this.dir === 'backward' ? (this.levelDef.widthTiles - 3) * TILE : 2 * TILE }
   private exitX(): number { return this.dir === 'backward' ? 2 * TILE : this.levelDef.widthTiles * TILE - 2 * TILE }
+
+  // processCallback des plateformes one-way : la collision n'est retenue que si le panda
+  // descend (velocity.y >= 0) ET que ses pieds venaient d'au-dessus du haut de la
+  // plateforme. On monte donc librement à travers, puis on se pose dessus en retombant.
+  private readonly landsFromAbove: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (playerObj, platObj) => {
+    const pb = (playerObj as Phaser.Physics.Arcade.Sprite).body as Phaser.Physics.Arcade.Body
+    const plat = (platObj as Phaser.Physics.Arcade.Sprite).body as Phaser.Physics.Arcade.StaticBody
+    return landsOnOneWayPlatform(pb.prev.y + pb.height, pb.velocity.y, plat.top)
+  }
 
   createExit() {
     const exit = this.physics.add.staticImage(this.exitX(), GROUND_ROW * TILE - 24 + TILE, 'exit')
@@ -695,6 +715,7 @@ export class LevelScene extends Phaser.Scene {
         b.setBounce(0.45)
         proj.setTexture('bamboo').setScale(1).setTint(color).setAngularVelocity(this.player.facing * 480)
         this.physics.add.collider(proj, this.platforms)
+        this.physics.add.collider(proj, this.oneWayPlatforms)
       } else if (skill.pierce) {
         // gros faisceau qui transperce tout sur son trajet
         proj.pierce = true

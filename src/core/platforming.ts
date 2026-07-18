@@ -16,6 +16,14 @@ export function maxJumpTiles(): number {
   return maxJumpHeightPx() / TILE
 }
 
+// Prédicat de collision « one-way » (plateformes traversables par le bas) : on ne retient
+// la collision que si le joueur descend (velocityY >= 0) ET que ses pieds venaient d'au-dessus
+// du haut de la plateforme. On monte donc librement à travers, puis on se pose dessus en
+// retombant. Le processCallback du collider dans LevelScene s'appuie dessus.
+export function landsOnOneWayPlatform(prevBottom: number, velocityY: number, platformTop: number, margin = 8): boolean {
+  return velocityY >= 0 && prevBottom <= platformTop + margin
+}
+
 export interface Plat { x: number; y: number; w: number }
 
 // Peut-on, en sautant depuis une surface à la rangée surfaceRow, atteindre la plateforme b

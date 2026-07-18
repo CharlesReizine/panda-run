@@ -51,6 +51,14 @@ function fitViewport() {
   }
   game.scale.refresh()
 }
+// Crochet de débogage réservé au dev (retiré du build de production par tree-shaking sur
+// import.meta.env.DEV) : permet à un harnais headless de piloter le jeu.
+if (import.meta.env.DEV) {
+  void import('./state').then(({ setPlayer }) => import('./core/player-state').then(({ newPlayer }) => {
+    ;(window as unknown as { __panda: unknown }).__panda = { game, setPlayer, newPlayer }
+  }))
+}
+
 game.events.once(Phaser.Core.Events.READY, fitViewport)
 window.visualViewport?.addEventListener('resize', fitViewport)
 window.visualViewport?.addEventListener('scroll', fitViewport)
