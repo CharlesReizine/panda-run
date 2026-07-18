@@ -130,6 +130,7 @@ export class BestiaryScene extends Phaser.Scene {
     this.add.text(360, 70, 'CARACTÉRISTIQUES', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' })
     const rows: [string, string][] = [
       ['Type', kindLabel],
+      ['Niveau', `${m.level}`],
       ['PV', `${m.hp}`],
       ['ATK', `${m.atk}`],
       ['DEF', `${m.def}`],

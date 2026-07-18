@@ -127,6 +127,9 @@ export class LevelIntroScene extends Phaser.Scene {
       g.lineStyle(1, 0xffffff, 0.14).strokeRoundedRect(cx - cardW / 2, top, cardW, cardH, 8)
 
       this.add.image(cx, top + 32, `monster-${m.id}`).setDisplaySize(46, 46)
+      // plaque « Nv X » en coin de carte (couleur selon boss / MVP / normal)
+      const nvColor = m.boss ? '#ff5252' : m.mvp ? '#ffd54f' : '#ffffff'
+      this.add.text(cx - cardW / 2 + 8, top + 8, `Nv ${m.level}`, { fontSize: '11px', color: nvColor, fontStyle: 'bold' }).setOrigin(0, 0)
       this.add.text(cx, top + 58, m.name, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: cardW - 12 } }).setOrigin(0.5, 0)
       const kind = monsterKind(m)
       this.add.text(cx, top + 78, kind.label, { fontSize: '10px', color: '#0d1b2a', backgroundColor: css(kind.color), fontStyle: 'bold', padding: { x: 5, y: 2 } }).setOrigin(0.5, 0)

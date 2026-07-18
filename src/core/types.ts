@@ -61,6 +61,7 @@ export interface MonsterDef {
   atk: number
   def: number
   xp: number
+  level: number // niveau calibré sur l'économie d'XP (voir core/mob-level.ts)
   speed: number // px/s
   behavior: MonsterBehavior
   boss?: boolean

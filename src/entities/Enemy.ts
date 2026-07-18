@@ -16,6 +16,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private nextActionAt = 0
   private nextShootAt = 0
   private bar: Phaser.GameObjects.Graphics
+  private lvlText: Phaser.GameObjects.Text
   private eliteAura: Phaser.GameObjects.Graphics | null = null
   private isCharging = false
   private zzz: Phaser.GameObjects.Text | null = null
@@ -35,6 +36,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.monster = def
     this.hp = def.hp
     this.bar = scene.add.graphics()
+    // plaque de niveau au-dessus du monstre (couleur selon boss / MVP / normal)
+    const lvlColor = def.boss ? '#ff5252' : def.mvp ? '#ffd54f' : '#ffffff'
+    this.lvlText = scene.add.text(x, y, `Nv ${def.level}`, { fontSize: '11px', color: lvlColor, fontStyle: 'bold' }).setOrigin(0.5)
     if (def.mvp) this.eliteAura = scene.add.graphics()
   }
 
@@ -49,6 +53,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this.hp <= 0) {
       this.scene.events.emit('enemy-died', this)
       this.bar.destroy()
+      this.lvlText.destroy()
       this.eliteAura?.destroy()
       this.zzz?.destroy()
       this.destroy()
@@ -124,6 +129,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const w = this.monster.boss ? 60 : 30
     this.bar.fillStyle(0x000000, 0.6).fillRect(this.x - w / 2, this.y - this.height / 2 - 12, w, 5)
     this.bar.fillStyle(0x66bb6a).fillRect(this.x - w / 2, this.y - this.height / 2 - 12, w * Math.max(0, this.hp / this.monster.hp), 5)
+
+    // « Nv X » juste au-dessus de la barre de vie
+    this.lvlText.setPosition(this.x, this.y - this.height / 2 - 22)
 
     // halo d'élite pulsant autour des MVP
     if (this.eliteAura) {
