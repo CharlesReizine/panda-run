@@ -62,6 +62,13 @@ try {
   showErrorOverlay('Échec du démarrage', detail(err))
 }
 
+// Crochets de pilotage headless (inoffensifs en prod : simple lecture) — l'émulateur lit
+// l'instance Phaser et le heartbeat courant du watchdog pour piloter le jeu et détecter un gel.
+// Exposés inconditionnellement car l'émulateur joue le build de PRODUCTION (dist/).
+if (game) {
+  ;(window as unknown as { __pandaGame?: Phaser.Game }).__pandaGame = game
+}
+
 // On dimensionne le conteneur #game EXACTEMENT sur la zone visible (visualViewport, qui
 // exclut les barres Safari et suit l'encoche en paysage), et on le positionne à son
 // offset. Phaser (Scale.FIT) rentre alors toujours dans du visible → jamais coupé.
@@ -109,6 +116,8 @@ if (game) {
   let freezeReported = false
   g.events.on(Phaser.Core.Events.POST_STEP, () => {
     lastBeat = performance.now()
+    // exposé pour l'émulateur headless : (performance.now() - __pandaBeat) > 3000 ⇒ gel
+    ;(window as unknown as { __pandaBeat?: number }).__pandaBeat = lastBeat
     freezeReported = false // le heartbeat repart → on réarme l'alerte pour le prochain épisode
   })
 

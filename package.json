@@ -7,6 +7,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
+    "emulator": "node scripts/emulator.mjs",
     "deploy": "pnpm build && gh-pages -d dist"
   },
   "dependencies": {
@@ -14,6 +15,7 @@
   },
   "devDependencies": {
     "gh-pages": "^6.3.0",
+    "playwright": "^1.61.1",
     "typescript": "^7.0.2",
     "vite": "^8.1.5",
     "vite-plugin-pwa": "^1.3.0",
