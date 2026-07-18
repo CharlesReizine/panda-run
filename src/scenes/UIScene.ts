@@ -20,6 +20,11 @@ export class UIScene extends Phaser.Scene {
   private slotCooldownOverlays: Phaser.GameObjects.Rectangle[] = []
   private slotIcons: Phaser.GameObjects.Image[] = []
   private cooldownUntil: number[] = [0, 0, 0, 0]
+  // indicateur de buff ATK (Cri de guerre)
+  private buffParts: (Phaser.GameObjects.Rectangle | Phaser.GameObjects.Text)[] = []
+  private buffBar!: Phaser.GameObjects.Rectangle
+  private buffUntil = 0
+  private buffDuration = 0
 
   constructor() { super('UI') }
 
@@ -30,6 +35,9 @@ export class UIScene extends Phaser.Scene {
     this.slotIcons = []
     this.slotCooldownOverlays = []
     this.cooldownUntil = [0, 0, 0, 0]
+    this.buffParts = []
+    this.buffUntil = 0
+    this.buffDuration = 0
 
     this.input.addPointer(3)
     this.joystick = new VirtualJoystick(this, new Phaser.Geom.Rectangle(0, 100, 400, 440))
@@ -55,6 +63,14 @@ export class UIScene extends Phaser.Scene {
         this.scene.pause('UI')
       })
     this.add.text(12, 66, 'compétences ▸', { fontSize: '10px', color: '#b0bec5' })
+
+    // pastille de buff ATK : masquée par défaut, affichée avec un compte à rebours tant que le buff est actif
+    const bx = 12, by = 84, bw = 104, bh = 24
+    const buffBg = this.add.rectangle(bx, by, bw, bh, 0xff8f00, 0.9).setOrigin(0).setStrokeStyle(2, 0xffe082, 0.8)
+    const buffLabel = this.add.text(bx + 8, by + 4, '⚔ ATK+', { fontSize: '13px', color: '#3a2600', fontStyle: 'bold' }).setOrigin(0)
+    this.buffBar = this.add.rectangle(bx + 2, by + bh - 5, bw - 4, 4, 0xfff176).setOrigin(0)
+    this.buffParts = [buffBg, buffLabel, this.buffBar]
+    for (const o of this.buffParts) o.setVisible(false)
 
     // bouton muet discret (coin haut-droit), au-dessus des slots de compétences
     const muteBtn = this.add.text(944, 6, audio.isMuted() ? '🔇' : '🔊', { fontSize: '20px' })
@@ -113,11 +129,15 @@ export class UIScene extends Phaser.Scene {
     // Écoute des mises à jour émises par LevelScene
     const level = this.scene.get('Level')
     level.events.on('player-hp', this.onPlayerHp)
+    level.events.on('player-buff', this.onBuff)
+    level.events.on('player-buff-end', this.onBuffEnd)
     this.game.events.on('hud-refresh', this.refresh, this)
     this.game.events.on('skill-cooldown', this.onCooldown, this)
     this.game.events.on('player-level-up', this.onLevelUp, this)
     this.events.once('shutdown', () => {
       level.events.off('player-hp', this.onPlayerHp)
+      level.events.off('player-buff', this.onBuff)
+      level.events.off('player-buff-end', this.onBuffEnd)
       this.game.events.off('hud-refresh', this.refresh, this)
       this.game.events.off('skill-cooldown', this.onCooldown, this)
       this.game.events.off('player-level-up', this.onLevelUp, this)
@@ -145,6 +165,13 @@ export class UIScene extends Phaser.Scene {
   private onCooldown(slot: number, untilMs: number) {
     this.cooldownUntil[slot] = untilMs
   }
+
+  private onBuff = (untilMs: number, durationMs: number) => {
+    this.buffUntil = untilMs
+    this.buffDuration = durationMs
+  }
+
+  private onBuffEnd = () => { this.buffUntil = 0 }
 
   // notif de passage de niveau : grosse, au niveau des PV (haut-gauche), façon RO
   private onLevelUp(level: number) {
@@ -178,6 +205,13 @@ export class UIScene extends Phaser.Scene {
     if (pl && this.energyBar) this.energyBar.setDisplaySize(BAR_W * (pl.energy / pl.maxEnergy), 8)
     for (let i = 0; i < 4; i++) {
       this.slotCooldownOverlays[i]!.setVisible(time < (this.cooldownUntil[i] ?? 0))
+    }
+    // pastille de buff : visible + barre de compte à rebours tant que le buff court
+    const buffActive = time < this.buffUntil
+    for (const o of this.buffParts) o.setVisible(buffActive)
+    if (buffActive && this.buffDuration > 0) {
+      const remain = Phaser.Math.Clamp((this.buffUntil - time) / this.buffDuration, 0, 1)
+      this.buffBar.setDisplaySize(100 * remain, 4)
     }
   }
 }

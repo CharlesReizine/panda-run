@@ -5,7 +5,7 @@ const list: SkillDef[] = [
   // Novice
   { id: 'calin-brutal', name: 'Câlin brutal', classId: 'novice', kind: 'melee', multiplier: 1.5, cooldownMs: 2000, range: 50 },
   { id: 'bambou-jete', name: 'Bambou jeté', classId: 'novice', kind: 'projectile', multiplier: 1.2, cooldownMs: 3000, range: 520, arc: true },
-  { id: 'rugissement-panda', name: 'Rugissement du panda', classId: 'novice', kind: 'aoe', multiplier: 0.7, cooldownMs: 4500, range: 90 },
+  { id: 'rugissement-panda', name: 'Rugissement du panda', classId: 'novice', kind: 'aoe', multiplier: 0.7, cooldownMs: 4500, range: 90, buff: { atkMult: 1.4, durationMs: 6000 } },
   // Sabreur
   { id: 'taillade', name: 'Taillade', classId: 'swordsman', kind: 'melee', multiplier: 1.8, cooldownMs: 2000, range: 60 },
   { id: 'tourbillon', name: 'Tourbillon', classId: 'swordsman', kind: 'aoe', multiplier: 1.3, cooldownMs: 6000, range: 110 },

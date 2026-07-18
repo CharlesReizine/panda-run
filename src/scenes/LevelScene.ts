@@ -608,7 +608,7 @@ export class LevelScene extends Phaser.Scene {
     const cls = getPlayer().classId
     if (cls === 'archer' || cls === 'mage') {
       // attaque de base à distance : flèche (archer) ou orbe (mage)
-      const proj = this.spawnPlayerProjectile(this.player.stats.atk, 420)
+      const proj = this.spawnPlayerProjectile(this.player.stats.atk * this.player.outgoingMult(), 420)
       proj.setTint(cls === 'archer' ? 0xd7a86e : 0x64b5f6)
     } else {
       this.slashFx(this.player.x + this.player.facing * 30, this.player.y, 60, 0xffffff)
@@ -704,7 +704,8 @@ export class LevelScene extends Phaser.Scene {
     audio.playSfx('skill')
     this.announceSkill(skill.name)
 
-    const { atk, maxHp } = this.player.stats
+    const { maxHp } = this.player.stats
+    const atk = this.player.stats.atk * this.player.outgoingMult()
     const color = this.skillColor(skill.id)
     // rang investi : +25% de puissance par point au-delà du 1er
     const rank = p.skillLevels[skill.id] ?? 1
@@ -716,6 +717,8 @@ export class LevelScene extends Phaser.Scene {
       // gros coup (rang inclus) : double croissant + tremblement de caméra
       this.slashFx(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, color, mult >= 2)
       this.meleeHit(skill.range, mult)
+      // Câlin brutal : une volée de cœurs s'envole autour du point d'impact
+      if (skill.id === 'calin-brutal') this.heartsFx(this.player.x + this.player.facing * 30, this.player.y)
     } else if (skill.kind === 'aoe') {
       for (const obj of this.enemies.getChildren()) {
         const e = obj as Enemy
@@ -764,13 +767,51 @@ export class LevelScene extends Phaser.Scene {
         this.tweens.add({ targets: spark, y: spark.y - Phaser.Math.Between(45, 75), alpha: 0, duration: 750, delay: i * 45, onComplete: () => spark.destroy() })
       }
     }
+    // Cri de guerre : tout skill porteur d'un buff booste l'ATK sortante du panda + onde de cri
+    if (skill.buff) {
+      this.player.applyAtkBuff(skill.buff.atkMult, skill.buff.durationMs)
+      this.warCryFx()
+    }
+  }
+
+  // volée de cœurs roses qui s'envolent (montée + fondu) autour du point d'impact du Câlin brutal
+  private heartsFx(x: number, y: number) {
+    for (let i = 0; i < 7; i++) {
+      const heart = this.add.text(
+        x + Phaser.Math.Between(-26, 26), y + Phaser.Math.Between(-6, 16), '♥',
+        { fontSize: `${Phaser.Math.Between(16, 28)}px`, color: '#ff6b9d' },
+      ).setOrigin(0.5).setDepth(7)
+      this.tweens.add({
+        targets: heart,
+        y: heart.y - Phaser.Math.Between(55, 95),
+        x: heart.x + Phaser.Math.Between(-20, 20),
+        alpha: 0, scale: 1.3,
+        duration: Phaser.Math.Between(620, 900), delay: i * 55, ease: 'Sine.out',
+        onComplete: () => heart.destroy(),
+      })
+    }
+  }
+
+  // onde de cri dorée au lancement du buff : ondes concentriques + éclats + petit shake
+  private warCryFx() {
+    const x = this.player.x, y = this.player.y
+    this.cameras.main.shake(160, 0.006)
+    for (let i = 0; i < 2; i++) {
+      const wave = this.add.image(x, y, 'ring').setTint(0xffc107).setDepth(4).setScale(0.3).setAlpha(0.85)
+      this.tweens.add({ targets: wave, scale: 5 + i, alpha: 0, duration: 450 + i * 120, delay: i * 90, ease: 'Cubic.out', onComplete: () => wave.destroy() })
+    }
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2
+      const shard = this.add.rectangle(x, y - 10, 4, 12, 0xffe082).setDepth(6).setRotation(a)
+      this.tweens.add({ targets: shard, x: x + Math.cos(a) * 46, y: y - 26 + Math.sin(a) * 22, alpha: 0, duration: 420, onComplete: () => shard.destroy() })
+    }
   }
 
   // Touche les ennemis/props devant le panda (ou pile sur lui), avec grande tolérance
   // verticale : le centre du grand sprite panda est plus haut que celui des monstres.
   meleeHit(reach: number, multiplier: number) {
     const px = this.player.x, py = this.player.y, f = this.player.facing
-    const atk = this.player.stats.atk
+    const atk = this.player.stats.atk * this.player.outgoingMult()
     let touched = false
     for (const obj of this.enemies.getChildren()) {
       const e = obj as Enemy

@@ -29,6 +29,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private wasGrounded = true
   private attacking = false
   private hatImage: Phaser.GameObjects.Image | null = null
+  // buff d'attaque (Cri de guerre) : multiplicateur temporaire des dégâts sortants + aura dorée suivie
+  private buffUntil = 0
+  private buffMult = 1
+  private auraImage: Phaser.GameObjects.Image | null = null
+  private auraTween: Phaser.Tweens.Tween | null = null
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, `panda-${getPlayer().classId}`)
@@ -58,10 +63,43 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.hatImage.setPosition(this.x, this.y + HAT_OFFSET_Y)
       this.hatImage.setFlipX(this.facing === -1)
     }
+    // aura de buff : suit le panda tant que le buff est actif, puis se dissout à l'échéance
+    if (this.auraImage) {
+      if (this.scene.time.now >= this.buffUntil) {
+        this.auraTween?.remove(); this.auraTween = null
+        this.auraImage.destroy(); this.auraImage = null
+        this.scene.events.emit('player-buff-end')
+      } else {
+        this.auraImage.setPosition(this.x, this.y)
+      }
+    }
+  }
+
+  // applique (ou renouvelle) un buff d'attaque : multiplie les dégâts sortants un temps donné,
+  // fait apparaître une aura dorée pulsante et notifie le HUD
+  applyAtkBuff(mult: number, durationMs: number) {
+    this.buffMult = mult
+    this.buffUntil = this.scene.time.now + durationMs
+    if (!this.auraImage) {
+      this.auraImage = this.scene.add.image(this.x, this.y, 'ring')
+        .setTint(0xffd54f).setDepth(this.depth - 1).setAlpha(0.5).setScale(1.7)
+      this.auraTween = this.scene.tweens.add({
+        targets: this.auraImage, scale: 2.3, alpha: 0.8,
+        duration: 480, yoyo: true, repeat: -1, ease: 'Sine.inOut',
+      })
+    }
+    this.scene.events.emit('player-buff', this.buffUntil, durationMs)
+  }
+
+  // multiplicateur appliqué à tous les dégâts sortants (attaque de base + skills) ; 1 hors buff
+  outgoingMult(): number {
+    return this.scene.time.now < this.buffUntil ? this.buffMult : 1
   }
 
   destroy(fromScene?: boolean) {
     this.hatImage?.destroy()
+    this.auraTween?.remove()
+    this.auraImage?.destroy()
     super.destroy(fromScene)
   }
 
