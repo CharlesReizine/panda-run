@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 208 180">
+  <defs>
+    <linearGradient id="cw" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e1bee7"/><stop offset="1" stop-color="#ce93d8"/></linearGradient>
+    <linearGradient id="cr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8e24aa"/><stop offset="1" stop-color="#6a1b9a"/></linearGradient>
+  </defs>
+  <ellipse cx="104" cy="170" rx="92" ry="10" fill="#000" opacity="0.12"/>
+
+  <!-- corps -->
+  <rect x="30" y="70" width="148" height="96" rx="6" fill="url(#cw)" stroke="#8e24aa" stroke-width="2"/>
+
+  <!-- toit arrondi façon boutique chic -->
+  <path d="M18 74 L104 22 L190 74 Z" fill="url(#cr)" stroke="#4a1466" stroke-width="2"/>
+  <path d="M18 74 L190 74 L190 84 L18 84 Z" fill="#7b1fa2"/>
+  <circle cx="104" cy="31" r="5" fill="#ffd54f"/>
+
+  <!-- auvent rayé -->
+  <g>
+    <path d="M24 96 L184 96 L184 108 Q104 122 24 108 Z" fill="#f8bbd0"/>
+    <g fill="#e91e63">
+      <path d="M40 96 L56 96 L54 111 L44 110 Z"/>
+      <path d="M72 96 L88 96 L88 116 L76 114 Z"/>
+      <path d="M104 96 L120 96 L120 116 L108 116 Z"/>
+      <path d="M136 96 L152 96 L154 114 L140 116 Z"/>
+    </g>
+  </g>
+
+  <!-- enseigne : chapeau -->
+  <rect x="76" y="86" width="56" height="26" rx="6" fill="#3e2723" stroke="#d7a86e" stroke-width="2"/>
+  <g transform="translate(104,99)">
+    <ellipse cx="0" cy="7" rx="18" ry="4" fill="#ffca28"/>
+    <path d="M-10 7 Q-9 -8 0 -9 Q9 -8 10 7 Z" fill="#ffd54f" stroke="#c99a12" stroke-width="1"/>
+    <rect x="-10" y="4" width="20" height="4" fill="#e91e63"/>
+  </g>
+
+  <!-- vitrine avec mannequin/robe -->
+  <rect x="44" y="122" width="46" height="42" rx="3" fill="#d1c4e9" stroke="#4a1466" stroke-width="2"/>
+  <g transform="translate(67,144)">
+    <circle cx="0" cy="-12" r="4" fill="#f3e5ab"/>
+    <path d="M-10 12 L-6 -6 Q0 -10 6 -6 L10 12 Z" fill="#ec407a"/>
+  </g>
+
+  <!-- porte -->
+  <path d="M118 164 L118 128 Q136 120 154 128 L154 164 Z" fill="#6d4c41" stroke="#4e342e" stroke-width="2"/>
+  <circle cx="148" cy="146" r="2.5" fill="#ffd54f"/>
+</svg>

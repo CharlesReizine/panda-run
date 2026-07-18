@@ -96,6 +96,15 @@ const SPOTS: TownSpot[] = [
   { id: 'quete', label: QUESTS['chasse-aux-monstres']!.npcName, doorX: 480, doorY: 360 },
 ]
 
+// illustration rastérisée (public/town/*.png) associée à chaque bâtiment ; la porte de l'image
+// est calée sur le bas, alignée sur doorY pour rester cohérente avec la zone d'interaction
+const BUILDING_TEXTURE: Record<'potions' | 'armes' | 'vetements' | 'forge', string> = {
+  potions: 'town-shop-potion',
+  armes: 'town-shop-weapon',
+  vetements: 'town-shop-clothes',
+  forge: 'town-forge',
+}
+
 export class TownScene extends Phaser.Scene {
   private player!: Phaser.Physics.Arcade.Sprite
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
@@ -107,6 +116,15 @@ export class TownScene extends Phaser.Scene {
 
   constructor() { super('Town') }
 
+  preload() {
+    this.load.image('town-bg', 'town/bg.png')
+    this.load.image('town-shop-potion', 'town/shop-potion.png')
+    this.load.image('town-shop-weapon', 'town/shop-weapon.png')
+    this.load.image('town-shop-clothes', 'town/shop-clothes.png')
+    this.load.image('town-forge', 'town/forge.png')
+    this.load.image('town-npc', 'town/npc.png')
+  }
+
   create() {
     this.panel = undefined
     this.nearSpot = null
@@ -116,37 +134,34 @@ export class TownScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, 960, 540)
     this.cameras.main.setBounds(0, 0, 960, 540)
 
-    // sol
-    this.add.rectangle(480, 270, 960, 540, 0x7cb342)
-    this.add.rectangle(480, 270, 700, 340, 0x9ccc65) // place centrale, un peu plus claire
-    this.add.text(480, 20, 'Prontera', { fontSize: '26px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
+    // fond illustré (rue pavée + collines) — remplace les anciens aplats de couleur
+    this.add.image(480, 270, 'town-bg').setDisplaySize(960, 540)
+    this.add.text(480, 20, 'Prontera', {
+      fontSize: '26px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 4,
+    }).setOrigin(0.5)
 
     const wallsGroup = this.physics.add.staticGroup()
     for (const b of BUILDINGS) {
-      this.add.rectangle(b.x, b.y - b.h / 2 - 10, b.w + 20, 24, b.roofColor) // avant-toit
-      const wall = this.add.rectangle(b.x, b.y, b.w, b.h, b.wallColor)
+      // corps de collision invisible — emprise identique à l'ancien mur (x, y, w, h)
+      const wall = this.add.rectangle(b.x, b.y, b.w, b.h).setVisible(false)
       this.physics.add.existing(wall, true)
       wallsGroup.add(wall)
-      this.add.rectangle(b.x, b.y + b.h / 2 - 14, 26, 28, 0x5d4037) // porte
-      this.add.text(b.x, b.y - b.h / 2 - 10, b.name, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
+      // illustration du bâtiment, base (porte) calée sur le bas de la façade
+      const img = this.add.image(b.x, b.y + b.h / 2 + 12, BUILDING_TEXTURE[b.id as keyof typeof BUILDING_TEXTURE]).setOrigin(0.5, 1)
+      const dispW = b.w + 40
+      const dispH = dispW * (img.height / img.width)
+      img.setDisplaySize(dispW, dispH)
+      this.add.text(b.x, b.y + b.h / 2 + 12 - dispH - 4, b.name, {
+        fontSize: '13px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 3,
+      }).setOrigin(0.5, 1)
     }
 
-    // enclume + marteau devant la forge (repère visuel)
-    const forge = BUILDINGS.find((b) => b.id === 'forge')!
-    const ax = forge.x - forge.w / 2 - 26
-    const ay = forge.y + 24
-    this.add.rectangle(ax, ay + 20, 34, 26, 0x5d4037) // billot de bois
-    this.add.rectangle(ax, ay + 4, 18, 12, 0x455a64) // pied de l'enclume
-    this.add.rectangle(ax, ay - 6, 42, 12, 0x37474f) // table de l'enclume
-    this.add.triangle(ax - 30, ay - 6, 0, -6, 0, 6, 16, 0, 0x37474f) // corne de l'enclume
-    this.add.rectangle(ax + 10, ay - 20, 4, 22, 0x6d4c41).setRotation(0.5) // manche du marteau
-    this.add.rectangle(ax + 16, ay - 28, 16, 10, 0x263238).setRotation(0.5) // tête du marteau
-    this.add.circle(ax - 6, ay - 12, 2, 0xffd54f, 0.9) // étincelles
-    this.add.circle(ax + 2, ay - 16, 1.5, 0xffb300, 0.9)
-
-    // PNJ de quête
-    this.add.circle(480, 360, 16, 0xffd54f).setStrokeStyle(2, 0xffffff, 0.9)
-    this.add.text(480, 336, QUESTS['chasse-aux-monstres']!.npcName, { fontSize: '12px', color: '#ffffff' }).setOrigin(0.5)
+    // PNJ de quête (illustration) — position et zone d'interaction inchangées (480, 360)
+    const npc = this.add.image(480, 366, 'town-npc').setOrigin(0.5, 0.5)
+    npc.setDisplaySize(72, 72 * (npc.height / npc.width))
+    this.add.text(480, 302, QUESTS['chasse-aux-monstres']!.npcName, {
+      fontSize: '12px', color: '#ffffff', stroke: '#3e2723', strokeThickness: 3,
+    }).setOrigin(0.5)
 
     // panneau de sortie — toujours accessible, ramène directement à la carte
     this.add.text(880, 30, 'Sortie →', { fontSize: '18px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 10, y: 6 } })
