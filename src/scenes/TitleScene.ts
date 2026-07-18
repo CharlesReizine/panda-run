@@ -3,6 +3,8 @@ import { load, serialize, deserialize, save } from '../core/save'
 import { newPlayer, type PlayerState } from '../core/player-state'
 import { setPlayer } from '../state'
 import { audio } from '../audio/audio-engine'
+import { showLogsOverlay } from '../ui/error-overlay'
+import { clearLogs } from '../core/logger'
 
 export class TitleScene extends Phaser.Scene {
   constructor() { super('Title') }
@@ -43,7 +45,19 @@ export class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: logo, scale: 1.03, yoyo: true, repeat: -1, duration: 1800, ease: 'Sine.inOut' })
 
     // repère de version : dis-moi ce numéro pour qu'on sache si tu vois bien la dernière build
-    this.add.text(10, 8, 'build R61', { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
+    this.add.text(10, 8, 'build R62', { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
+
+    // accès aux logs sur mobile (pas de console sur iPhone) : « Logs » ouvre l'overlay DOM,
+    // « Vider » réinitialise le ring buffer + localStorage.
+    this.add.text(10, 30, 'Logs', { fontSize: '14px', color: '#ffe0b2', fontStyle: 'bold' })
+      .setShadow(0, 1, '#000000aa', 2, false, true)
+      .setInteractive({ useHandCursor: true }).on('pointerdown', () => showLogsOverlay())
+    const clearTxt = this.add.text(66, 30, 'Vider les logs', { fontSize: '14px', color: '#ffe0b2', fontStyle: 'bold' })
+      .setShadow(0, 1, '#000000aa', 2, false, true)
+      .setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        clearLogs()
+        clearTxt.setText('Logs vidés')
+      })
 
     // bouton muet discret (coin haut-droit)
     const muteBtn = this.add.text(944, 6, audio.isMuted() ? '🔇' : '🔊', { fontSize: '22px' })
