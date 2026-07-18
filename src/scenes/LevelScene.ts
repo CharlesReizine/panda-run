@@ -523,6 +523,9 @@ export class LevelScene extends Phaser.Scene {
   }
 
   hitPlayer(rawAtk: number) {
+    // God mode DEV (émulateur/tests physiques) : le joueur ne perd jamais de PV. Inoffensif
+    // en prod — window.__pandaGodMode est absent (donc falsy) par défaut.
+    if ((globalThis as { __pandaGodMode?: boolean }).__pandaGodMode) return
     if (this.time.now < this.invulnUntil || this.player.hp <= 0) return
     this.invulnUntil = this.time.now + 800
     this.player.takeDamage(physicalDamage(rawAtk, this.player.stats.def))

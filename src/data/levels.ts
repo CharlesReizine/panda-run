@@ -21,7 +21,8 @@ const ladder = (x: number, y: number, h: number) => ({ x, y, h })
 
 const list: LevelDef[] = [
   { id: 'zone1-1', name: 'Prairie de Prontera', biome: 'plaine', widthTiles: 90,
-    platforms: [plat(22, 11, 5), plat(26, 8, 4), plat(55, 11, 4)],
+    // plat(50, 5, 4) : palier de sommet de l'échelle x=54 (on grimpe puis on marche à gauche dessus)
+    platforms: [plat(22, 11, 5), plat(26, 8, 4), plat(55, 11, 4), plat(50, 5, 4)],
     spawns: [{ monsterId: 'gloopy', x: 12 }, { monsterId: 'angeling', x: 25 }, { monsterId: 'fabre', x: 38 }, { monsterId: 'poring-dore', x: 44 }, { monsterId: 'gloopy', x: 50 }, { monsterId: 'mandragore', x: 62 }, { monsterId: 'gloopy', x: 75 }],
     props: [prop('herbe', 10), prop('champignon', 44), prop('herbe', 68), prop('coffre', 7), prop('coffre', 28, 7)],
     ladders: [ladder(54, 5, 9)] },
@@ -30,7 +31,8 @@ const list: LevelDef[] = [
     spawns: [{ monsterId: 'gloopy', x: 18 }, { monsterId: 'mandragore', x: 48 }, { monsterId: 'gloopy', x: 58 }, { monsterId: 'mandragore', x: 65 }, { monsterId: 'lunatic', x: 76 }, { monsterId: 'louveteau', x: 85 }],
     props: [prop('herbe', 12), prop('champignon', 52), prop('herbe', 90), prop('coffre', 8), prop('coffre', 46, 7)] },
   { id: 'zone1-3', name: 'Orée de la forêt', biome: 'foret', widthTiles: 100,
-    platforms: [plat(20, 11, 4), plat(24, 8, 4), plat(28, 5, 4), plat(60, 10, 4)],
+    // plat(55, 5, 4) : palier de sommet de l'échelle x=59
+    platforms: [plat(20, 11, 4), plat(24, 8, 4), plat(28, 5, 4), plat(60, 10, 4), plat(55, 5, 4)],
     // le gardien sylve bloque le chemin au sol sous l'escalier de plateformes (20→32) : il faut
     // grimper pour le contourner plutôt que d'affronter ce piège quasi increvable
     spawns: [{ monsterId: 'louveteau', x: 14 }, { monsterId: 'gardien-sylve', x: 26 }, { monsterId: 'mandragore', x: 44 }, { monsterId: 'poporing', x: 55 }, { monsterId: 'mandragore', x: 70 }, { monsterId: 'louveteau', x: 85 }],
@@ -48,7 +50,8 @@ const list: LevelDef[] = [
     spawns: [{ monsterId: 'scorpion', x: 18 }, { monsterId: 'orc-seigneur', x: 38 }, { monsterId: 'scorpion', x: 62 }, { monsterId: 'vautour', x: 68 }, { monsterId: 'orc-guerrier', x: 74 }, { monsterId: 'scorpion', x: 88 }],
     props: [prop('roche', 12), prop('herbe', 40), prop('roche', 90), prop('coffre', 52, 7)] },
   { id: 'zone2-2', name: 'Oasis perdue', biome: 'desert', widthTiles: 110,
-    platforms: [plat(22, 11, 4), plat(26, 8, 4), plat(30, 5, 4), plat(78, 11, 4), plat(82, 8, 4)],
+    // plat(73, 5, 4) : palier de sommet de l'échelle x=77
+    platforms: [plat(22, 11, 4), plat(26, 8, 4), plat(30, 5, 4), plat(78, 11, 4), plat(82, 8, 4), plat(73, 5, 4)],
     // gardien pierre posté sous l'escalier de plateformes (22→34) : détour obligatoire par le haut
     spawns: [{ monsterId: 'scorpion', x: 18 }, { monsterId: 'gardien-pierre', x: 27 }, { monsterId: 'momie', x: 48 }, { monsterId: 'vautour', x: 60 }, { monsterId: 'momie', x: 70 }, { monsterId: 'scorpion', x: 100 }],
     props: [prop('roche', 10), prop('herbe', 52), prop('roche', 70), prop('herbe', 105), prop('coffre', 32, 4), prop('coffre', 84, 7)],
@@ -58,7 +61,8 @@ const list: LevelDef[] = [
     spawns: [{ monsterId: 'momie', x: 14 }, { monsterId: 'vautour', x: 48 }, { monsterId: 'zombie', x: 72 }, { monsterId: 'vautour', x: 82 }, { monsterId: 'momie', x: 90 }, { monsterId: 'mini-baphomet', x: 105 }],
     props: [prop('roche', 12), prop('herbe', 44), prop('roche', 105), prop('coffre', 66, 7)] },
   { id: 'cave-1', name: 'Cave aux échos', biome: 'cave', widthTiles: 105,
-    platforms: [plat(18, 11, 4), plat(22, 8, 4), plat(26, 5, 4), plat(58, 11, 4), plat(62, 8, 4)],
+    // plat(53, 5, 4) : palier de sommet de l'échelle x=57
+    platforms: [plat(18, 11, 4), plat(22, 8, 4), plat(26, 5, 4), plat(58, 11, 4), plat(62, 8, 4), plat(53, 5, 4)],
     spawns: [{ monsterId: 'chauve-souris', x: 14 }, { monsterId: 'squelette', x: 44 }, { monsterId: 'fantome', x: 50 }, { monsterId: 'mage-noir', x: 76 }, { monsterId: 'chauve-souris', x: 70 }, { monsterId: 'squelette', x: 82 }, { monsterId: 'chauve-souris', x: 95 }],
     props: [prop('roche', 10), prop('champignon', 42), prop('roche', 90), prop('coffre', 28, 4), prop('coffre', 64, 7)],
     ladders: [ladder(57, 5, 9)] },
@@ -67,7 +71,8 @@ const list: LevelDef[] = [
     spawns: [], boss: 'pharaon-scarabee' },
   // Zone 3 — jungle (+ route alternative plage)
   { id: 'zone3-1', name: 'Lisière de la jungle', biome: 'jungle', widthTiles: 130,
-    platforms: [plat(15, 11, 5), plat(20, 8, 4), plat(24, 5, 4), plat(45, 12, 6), plat(56, 11, 4), plat(60, 9, 4), plat(66, 6, 4), plat(80, 10, 5), plat(95, 13, 6), plat(105, 11, 4), plat(110, 10, 4), plat(115, 7, 4)],
+    // plat(75, 5, 4) : palier de sommet de l'échelle x=79
+    platforms: [plat(15, 11, 5), plat(20, 8, 4), plat(24, 5, 4), plat(45, 12, 6), plat(56, 11, 4), plat(60, 9, 4), plat(66, 6, 4), plat(80, 10, 5), plat(95, 13, 6), plat(105, 11, 4), plat(110, 10, 4), plat(115, 7, 4), plat(75, 5, 4)],
     // gardien sylve sous l'escalier de plateformes (56→70) : contournement par le haut
     spawns: [{ monsterId: 'poporing', x: 10 }, { monsterId: 'frelon-geant', x: 22 }, { monsterId: 'singe-grimpeur', x: 40 }, { monsterId: 'flora-vorace', x: 52 }, { monsterId: 'gardien-sylve', x: 63 }, { monsterId: 'singe-grimpeur', x: 88 }, { monsterId: 'flora-vorace', x: 100 }, { monsterId: 'frelon-geant', x: 118 }],
     props: [prop('champignon', 18), prop('herbe', 48), prop('champignon', 92), prop('coffre', 12), prop('coffre', 57, 10)],
@@ -100,7 +105,8 @@ const list: LevelDef[] = [
     checkpoints: [{ x: 50 }, { x: 78 }] },
   // Zone 4 — montagne (+ route alternative carrière)
   { id: 'zone4-1', name: 'Sentier des cimes', biome: 'montagne', widthTiles: 135,
-    platforms: [plat(16, 11, 4), plat(20, 8, 4), plat(24, 5, 4), plat(45, 12, 6), plat(65, 13, 4), plat(69, 10, 4), plat(73, 7, 4), plat(95, 11, 5), plat(110, 13, 4), plat(118, 10, 4), plat(122, 7, 4)],
+    // plat(90, 5, 4) : palier de sommet de l'échelle x=94
+    platforms: [plat(16, 11, 4), plat(20, 8, 4), plat(24, 5, 4), plat(45, 12, 6), plat(65, 13, 4), plat(69, 10, 4), plat(73, 7, 4), plat(95, 11, 5), plat(110, 13, 4), plat(118, 10, 4), plat(122, 7, 4), plat(90, 5, 4)],
     spawns: [{ monsterId: 'harpie', x: 12 }, { monsterId: 'yeti', x: 28 }, { monsterId: 'harpie', x: 42 }, { monsterId: 'yeti', x: 58 }, { monsterId: 'harpie', x: 72 }, { monsterId: 'yeti', x: 88 }, { monsterId: 'harpie', x: 105 }, { monsterId: 'yeti', x: 125 }],
     props: [prop('roche', 18), prop('herbe', 48), prop('roche', 100), prop('coffre', 10), prop('coffre', 46, 11)],
     hazards: [{ kind: 'water', x: 55, w: 5 }, { kind: 'spikes', x: 100, w: 4 }],

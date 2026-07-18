@@ -20,7 +20,13 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
-const BUDGET_MS = Number(process.env.BUDGET_MS ?? 12000) // temps de jeu simulé par niveau
+// budget de jeu par niveau : GÉNÉREUX (≥ 30 s), proportionnel à la largeur du terrain, pour
+// laisser le panda traverser tout le niveau jusqu'à la sortie même sur les cartes les plus
+// larges. BUDGET_MS=... force une valeur fixe (utile pour un test rapide).
+const FIXED_BUDGET_MS = process.env.BUDGET_MS ? Number(process.env.BUDGET_MS) : null
+const MS_PER_TILE = Number(process.env.MS_PER_TILE ?? 240)
+const MIN_BUDGET_MS = Number(process.env.MIN_BUDGET_MS ?? 30000)
+const budgetFor = (widthTiles) => FIXED_BUDGET_MS ?? Math.max(MIN_BUDGET_MS, Math.round((widthTiles ?? 120) * MS_PER_TILE))
 const LADDER_MS = 3500
 const SAMPLE_MS = 200
 const TILE = 32
@@ -121,12 +127,18 @@ async function main() {
   })
   await page.waitForFunction(() => window.__pandaGame.scene.isActive('WorldMap'), { timeout: 10000 })
 
+  // GOD MODE : le joueur ne perd jamais de PV (lu dans LevelScene.hitPlayer). On teste ici la
+  // JOUABILITÉ PHYSIQUE des terrains, pas l'équilibrage : les monstres sont ignorés.
+  await page.evaluate(() => { window.__pandaGodMode = true })
+  console.error('[emu] god mode activé')
+
   const results = []
 
   for (const levelId of ids) {
     const started = Date.now()
     // (re)démarrer proprement : stopper toutes les scènes actives puis lancer Level en direct
     const startInfo = await page.evaluate((id) => {
+      window.__pandaGodMode = true // (ré)affirme le god mode à chaque niveau
       const g = window.__pandaGame
       for (const s of g.scene.getScenes(true)) g.scene.stop(s.scene.key)
       g.scene.start('Level', { levelId: id, dir: 'forward' })
@@ -142,10 +154,25 @@ async function main() {
         const lvl = window.__pandaGame.scene.getScene('Level')
         const d = lvl && lvl.levelDef
         if (!d) return null
+        // plateformes portant un coffre : {x du coffre, platTop = rangée de la plateforme}
+        const chestPlatforms = (d.props ?? [])
+          .filter((p) => p.kind === 'coffre' && p.y != null)
+          .map((p) => {
+            const pl = d.platforms.find((q) => p.x >= q.x && p.x < q.x + q.w && p.y === q.y - 1)
+            return { x: p.x, platTop: pl ? pl.y : null }
+          })
+          .filter((c) => c.platTop != null)
+        // cross-check statique in-page : échelles sans plateforme posable au sommet (±1 rangée,
+        // adjacente à gauche/droite) — même règle que level-validator.laddersToNowhere
+        const laddersToNowhere = (d.ladders ?? []).filter((l) =>
+          !d.platforms.some((p) => Math.abs(p.y - l.y) <= 1 && l.x >= p.x - 1 && l.x <= p.x + p.w + 1),
+        ).map((l) => ({ x: l.x, y: l.y, h: l.h }))
         return {
           widthTiles: d.widthTiles,
           boss: d.boss ?? null,
           ladders: (d.ladders ?? []).map((l) => ({ x: l.x, y: l.y, h: l.h })),
+          chestPlatforms,
+          laddersToNowhere,
         }
       } catch { return null }
     })
@@ -157,7 +184,7 @@ async function main() {
     let completed = false
     let crashed = false
 
-    const runUntil = Date.now() + BUDGET_MS
+    const runUntil = Date.now() + budgetFor(meta?.widthTiles)
     while (Date.now() < runUntil) {
       const now = Date.now()
       if (now - lastJump > 650) { await page.keyboard.press('Space'); lastJump = now }
@@ -208,11 +235,28 @@ async function main() {
       } catch { return [] }
     }, started)
 
-    // ── Test échelle : on se place à l'x de la 1re échelle et on presse Haut ────────────────
-    let ladderReport = null
-    if (meta && meta.ladders.length > 0 && !crashed) {
-      const lad = meta.ladders[0]
-      ladderReport = await testLadder(page, levelId, lad, errors, started)
+    // La traversée a pu TERMINER le niveau (retour WorldMap → scène Level arrêtée, joueur
+    // détruit). Pour les tests d'échelles/paliers qui téléportent le joueur, on redémarre la
+    // scène Level à froid (god mode réaffirmé).
+    const needsRelive = meta && !crashed && (meta.ladders.length || meta.chestPlatforms.length)
+    let reliveOk = true
+    if (needsRelive) reliveOk = await ensureLevel(page, levelId)
+
+    // ── Test échelles : on grimpe CHAQUE échelle (place à son x, presse Haut, vérifie montée) ──
+    const ladderReports = []
+    if (needsRelive && reliveOk) {
+      for (const lad of meta.ladders) {
+        ladderReports.push(await testLadder(page, levelId, lad, errors, started))
+      }
+    }
+    const ladderReport = ladderReports[0] ?? null // compat rapport (1re échelle)
+
+    // ── Test plateformes clés : on vérifie qu'on se pose bien sur chaque plateforme à coffre ──
+    const landingReports = []
+    if (needsRelive && reliveOk) {
+      for (const chest of meta.chestPlatforms) {
+        landingReports.push(await testPlatformLanding(page, chest))
+      }
     }
 
     // ── Analyse des échantillons ───────────────────────────────────────────────────────────
@@ -249,6 +293,8 @@ async function main() {
       }
     }
 
+    const laddersKo = ladderReports.filter((r) => !r.ok).length
+    const landingsKo = landingReports.filter((r) => !r.ok).length
     results.push({
       levelId, boss: meta?.boss ?? null, widthTiles: meta?.widthTiles ?? null,
       completed, died, crashed, fellThrough, fellSample, stuck, stuckAt,
@@ -257,6 +303,9 @@ async function main() {
       startX: valid[0]?.x ?? null,
       errors: levelErrors,
       ladder: ladderReport,
+      ladders: ladderReports,
+      landings: landingReports,
+      laddersToNowhere: meta?.laddersToNowhere ?? [],
       hasLadder: !!(meta && meta.ladders.length),
     })
 
@@ -268,6 +317,9 @@ async function main() {
       stuck ? 'BLOCAGE' : null,
       died ? 'mort' : null,
       maxBeatIdle > 3000 ? 'GEL' : null,
+      laddersKo ? `${laddersKo}échelle-KO` : null,
+      landingsKo ? `${landingsKo}palier-KO` : null,
+      (meta?.laddersToNowhere?.length) ? 'échelle-vide!' : null,
     ].filter(Boolean).join(' ')
     console.log(`• ${levelId.padEnd(14)} ${flags}`)
   }
@@ -276,9 +328,44 @@ async function main() {
   server.kill('SIGTERM')
 
   writeReport(results, consoleErrors)
-  const broken = results.filter((r) => r.crashed || r.errors.length || r.fellThrough || r.maxBeatIdle > 3000)
-  console.log(`\nTerminé. ${results.length} niveaux testés, ${broken.length} avec exception/gel/traversée.`)
+  const broken = results.filter((r) => !isClean(r))
+  console.log(`\nTerminé. ${results.length} niveaux testés, ${broken.length} avec problème physique.`)
+  if (broken.length) console.log('À corriger : ' + broken.map((r) => r.levelId).join(', '))
   console.log('Rapport : emulator-report.md')
+  process.exitCode = broken.length ? 1 : 0
+}
+
+// Un niveau est « propre » = physiquement jouable. Filet physique commun : aucune exception,
+// aucun gel, aucune traversée du sol. Pour les TERRAINS (non-boss) on exige en plus : sortie
+// atteinte, pas de blocage, échelles grimpables + débouchant sur plateforme, paliers à coffre
+// atterrissables. Les ARÈNES de boss ne se « terminent » qu'en tuant le boss (monstres /
+// équilibrage — hors périmètre) : on ne vérifie donc que le filet physique.
+function isClean(r) {
+  const physical = !r.crashed && !r.errors.length && !r.fellThrough && r.maxBeatIdle <= 3000
+  if (r.boss) return physical
+  return physical && r.completed && !r.stuck
+    && (r.ladders ?? []).every((l) => l.ok)
+    && (r.landings ?? []).every((l) => l.ok)
+    && !(r.laddersToNowhere ?? []).length
+}
+
+// (Re)démarre la scène Level pour levelId et attend qu'un joueur vivant existe. Renvoie false
+// si le joueur n'apparaît pas dans le délai (scène cassée).
+async function ensureLevel(page, levelId) {
+  await page.evaluate((id) => {
+    window.__pandaGodMode = true
+    const g = window.__pandaGame
+    for (const s of g.scene.getScenes(true)) g.scene.stop(s.scene.key)
+    g.scene.start('Level', { levelId: id, dir: 'forward' })
+  }, levelId)
+  try {
+    await page.waitForFunction(() => {
+      const lvl = window.__pandaGame.scene.getScene('Level')
+      return !!(lvl && lvl.player && lvl.player.body)
+    }, { timeout: 8000 })
+    await sleep(150)
+    return true
+  } catch { return false }
 }
 
 // Grimpe une échelle : place le joueur à l'x de l'échelle (sur le sol au bas), presse Haut,
@@ -316,7 +403,42 @@ async function testLadder(page, levelId, lad, errors, started) {
   }
   await page.keyboard.up('ArrowUp')
   climbed = before && minY != null ? before.y - minY : 0
-  return { ladderX, climbedPx: climbed, ok: climbed > 40 && !ladderCrash, crash: ladderCrash }
+  return { ladderX, ladderY: lad.y, climbedPx: climbed, ok: climbed > 40 && !ladderCrash, crash: ladderCrash }
+}
+
+// Vérifie qu'on peut se POSER sur une plateforme clé (portant un coffre) : on téléporte le
+// panda juste au-dessus du dessus de la plateforme, on le laisse retomber et on vérifie qu'il
+// s'y arrête (collision one-way) au lieu de la traverser jusqu'au sol.
+async function testPlatformLanding(page, chest) {
+  const px = chest.x * TILE + TILE / 2
+  const topY = chest.platTop * TILE // dessus de la plateforme (surface)
+  // pieds du panda = centre + 40 (hitbox 62px, offsetY 24 sur texture 92px). On POSE le panda
+  // pile sur le dessus (centre = topY-40) et on vérifie qu'il TIENT — la plateforme one-way
+  // doit le retenir. Le téléport provoque parfois un micro-sursaut : on retente (≤3) et on
+  // conclut KO seulement si le panda ne tient sur aucun essai (plateforme réellement fantôme).
+  const expectRest = topY - 40
+  let restY = null
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    await page.evaluate(({ x, y }) => {
+      const p = window.__pandaGame.scene.getScene('Level').player
+      if (p) { p.setPosition(x, y); p.setVelocity(0, 0); p.hp = p.stats.maxHp }
+    }, { x: px, y: expectRest })
+    await sleep(600) // laisser passer le sursaut de téléportation
+    const ys = []
+    for (let i = 0; i < 8; i++) {
+      await sleep(120)
+      const y = await page.evaluate(() => {
+        try { return Math.round(window.__pandaGame.scene.getScene('Level').player.y) } catch { return null }
+      })
+      ys.push(y)
+    }
+    restY = ys[ys.length - 1]
+    // tient si les 4 derniers relevés restent près du dessus visé (pas de chute au sol)
+    const held = ys.slice(-4).every((y) => y != null && Math.abs(y - expectRest) <= 20)
+    if (held) return { x: chest.x, platTop: chest.platTop, restY, ok: true, attempts: attempt }
+  }
+  if (process.env.DEBUG_LAND) console.error(`[land x=${chest.x} top=${topY}] expect=${expectRest} rest=${restY} KO`)
+  return { x: chest.x, platTop: chest.platTop, restY, ok: false, attempts: 3 }
 }
 
 function writeReport(results, consoleErrors = new Map()) {
@@ -329,16 +451,28 @@ function writeReport(results, consoleErrors = new Map()) {
   L.push('Détections : exceptions (pageerror + console + __pandaLog), gel (__pandaBeat figé > 3 s), traversée du sol/plateforme (y du panda > sol+64), blocage (x figé au sol), niveau non terminé, test d’échelle.')
   L.push('')
 
-  const broken = results.filter((r) => r.crashed || r.errors.length || r.fellThrough || r.maxBeatIdle > 3000 || (r.ladder && r.ladder.crash))
+  const broken = results.filter((r) => !isClean(r))
+  const ladderCell = (r) => {
+    if (!r.hasLadder) return 'n/a'
+    const ls = r.ladders ?? (r.ladder ? [r.ladder] : [])
+    const ko = ls.filter((l) => !l.ok).length
+    return ko ? `${ko}/${ls.length} KO` : `${ls.length} ✓`
+  }
+  const landCell = (r) => {
+    const ls = r.landings ?? []
+    if (!ls.length) return 'n/a'
+    const ko = ls.filter((l) => !l.ok).length
+    return ko ? `${ko}/${ls.length} KO` : `${ls.length} ✓`
+  }
   L.push('## Synthèse')
   L.push('')
-  L.push('| Niveau | Fini | Exc | Gel | Traversée | Blocage | Mort | Échelle |')
-  L.push('|--------|------|-----|-----|-----------|---------|------|---------|')
+  L.push('| Niveau | Propre | Fini | Exc | Gel | Traversée | Blocage | Échelles | Paliers |')
+  L.push('|--------|--------|------|-----|-----|-----------|---------|----------|---------|')
   for (const r of results) {
-    L.push(`| ${r.levelId} | ${r.completed ? '✓' : '—'} | ${r.errors.length || (r.ladder && r.ladder.crash ? '?' : '—')} | ${r.maxBeatIdle > 3000 ? 'OUI' : '—'} | ${r.fellThrough ? 'OUI' : '—'} | ${r.stuck ? 'oui' : '—'} | ${r.died ? 'oui' : '—'} | ${!r.hasLadder ? 'n/a' : r.ladder ? (r.ladder.ok ? '✓' : 'KO') : '—'} |`)
+    L.push(`| ${r.levelId} | ${isClean(r) ? '✅' : '❌'} | ${r.completed ? '✓' : (r.boss ? 'boss' : '—')} | ${r.errors.length || '—'} | ${r.maxBeatIdle > 3000 ? 'OUI' : '—'} | ${r.fellThrough ? 'OUI' : '—'} | ${r.stuck ? 'oui' : '—'} | ${ladderCell(r)} | ${landCell(r)} |`)
   }
   L.push('')
-  L.push(`Niveaux avec exception / gel / traversée : ${broken.length ? broken.map((r) => r.levelId).join(', ') : 'aucun'}.`)
+  L.push(`Niveaux avec problème physique : ${broken.length ? broken.map((r) => r.levelId).join(', ') : 'aucun'}.`)
   L.push('')
 
   L.push('## Détail par niveau')
@@ -352,8 +486,16 @@ function writeReport(results, consoleErrors = new Map()) {
     L.push(`- Heartbeat idle max : ${r.maxBeatIdle} ms${r.maxBeatIdle > 3000 ? ' → **GEL**' : ''}`)
     if (r.fellThrough) L.push(`- **TRAVERSÉE** : le panda est descendu à y=${r.fellSample?.y} (bien sous le sol) — passage à travers une plateforme/sol.`)
     if (r.stuck) L.push(`- **BLOCAGE** : x figé au sol vers (${r.stuckAt?.x}, ${r.stuckAt?.y}).`)
-    if (r.died) L.push('- Le panda est mort (PV ≤ 0) durant le test.')
-    if (r.hasLadder && r.ladder) L.push(`- Échelle @x≈${r.ladder.ladderX} : montée ${r.ladder.climbedPx}px → ${r.ladder.ok ? 'OK' : (r.ladder.crash ? 'CRASH/GEL' : 'ne grimpe pas')}`)
+    if (r.died) L.push('- Le panda est mort (PV ≤ 0) durant le test (inattendu en god mode).')
+    for (const l of r.ladders ?? []) {
+      L.push(`- Échelle @x≈${l.ladderX} (haut rangée ${l.ladderY}) : montée ${l.climbedPx}px → ${l.ok ? 'OK' : (l.crash ? 'CRASH/GEL' : 'ne grimpe pas')}`)
+    }
+    for (const l of r.landings ?? []) {
+      L.push(`- Palier à coffre @x≈${l.x} (dessus rangée ${l.platTop}) : ${l.ok ? `tient (y=${l.restY}, essai ${l.attempts}) OK` : `ne tient pas (y=${l.restY}) — TRAVERSÉE`}`)
+    }
+    for (const l of r.laddersToNowhere ?? []) {
+      L.push(`- **ÉCHELLE VERS LE VIDE** (cross-check statique) : x=${l.x} haut rangée ${l.y} h=${l.h} — aucune plateforme posable au sommet.`)
+    }
     if (r.errors.length) {
       L.push(`- **EXCEPTIONS (${r.errors.length})** :`)
       for (const e of r.errors.slice(0, 5)) {

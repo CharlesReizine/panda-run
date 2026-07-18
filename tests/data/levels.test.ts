@@ -3,7 +3,8 @@ import { LEVELS } from '../../src/data/levels'
 import { MONSTERS } from '../../src/data/monsters'
 import { PROPS } from '../../src/data/props'
 import { WORLD_NODES, WORLD_EDGES, START_NODE, isNodeUnlocked } from '../../src/data/worldmap'
-import { unreachablePlatforms, maxJumpTiles, MIN_LADDER_TILES } from '../../src/core/platforming'
+import { maxJumpTiles, MIN_LADDER_TILES } from '../../src/core/platforming'
+import { unreachablePlatforms } from '../../src/core/level-validator'
 
 describe('niveaux et carte', () => {
   it('25 niveaux dont 6 boss', () => {
@@ -12,10 +13,13 @@ describe('niveaux et carte', () => {
     expect(all.filter((l) => l.boss)).toHaveLength(6)
   })
 
-  it('aucune plateforme inatteignable (écart vertical toujours < saut max)', () => {
+  // atteignabilité au sens PHYSIQUE : saut de proche en proche OU montée d'échelle. Les paliers
+  // de sommet d'échelle (rangée 5) ne sont joignables qu'en grimpant, pas au saut — d'où le
+  // validateur qui modélise l'échelle comme connecteur vertical (voir level-validator.ts).
+  it('aucune plateforme inatteignable (saut de proche en proche ou échelle)', () => {
     expect(maxJumpTiles()).toBeGreaterThan(3) // le saut couvre au moins 3 tuiles
     for (const l of Object.values(LEVELS)) {
-      const bad = unreachablePlatforms(l.platforms, l.widthTiles)
+      const bad = unreachablePlatforms(l)
       expect(bad, `${l.id}: plateformes inatteignables → ${JSON.stringify(bad)}`).toEqual([])
     }
   })
