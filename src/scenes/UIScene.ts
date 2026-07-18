@@ -63,6 +63,16 @@ export class UIScene extends Phaser.Scene {
       muteBtn.setText(muted ? '🔇' : '🔊')
     })
 
+    // bouton pause discret, juste à gauche du mute : ouvre le menu de pause par-dessus le jeu gelé
+    const pauseBtn = this.add.text(908, 6, '⏸', { fontSize: '20px' })
+      .setOrigin(1, 0).setDepth(50).setInteractive({ useHandCursor: true })
+    pauseBtn.on('pointerdown', () => {
+      audio.playSfx('ui-tap')
+      this.scene.launch('Pause')
+      this.scene.pause('Level')
+      this.scene.pause('UI')
+    })
+
     // Haut-droite : les 4 slots de skills côte à côte
     for (let i = 0; i < 4; i++) {
       const x = 706 + i * 60

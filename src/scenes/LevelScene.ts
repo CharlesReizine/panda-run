@@ -287,6 +287,46 @@ export class LevelScene extends Phaser.Scene {
       this.scene.stop('UI')
     })
     this.game.events.emit('hud-refresh')
+    this.showTutoOnce()
+  }
+
+  // tuto d'intro : au tout premier niveau joué, un panneau non bloquant rappelle les
+  // contrôles ; un tap le ferme ; un flag localStorage garantit qu'il n'apparaît qu'une fois
+  private showTutoOnce() {
+    const TUTO_KEY = 'panda-run:tuto-vu'
+    try {
+      if (typeof localStorage === 'undefined' || localStorage.getItem(TUTO_KEY) === '1') return
+      localStorage.setItem(TUTO_KEY, '1')
+    } catch { return } // localStorage inaccessible : pas de tuto plutôt que de risquer un boom
+
+    const depth = 40
+    const panel = this.add.rectangle(480, 270, 560, 340, 0x0d1b2a, 0.92)
+      .setScrollFactor(0).setDepth(depth).setStrokeStyle(2, 0xffd54f, 0.6)
+    const title = this.add.text(480, 130, 'Comment jouer', { fontSize: '28px', color: '#ffd54f', fontStyle: 'bold' })
+      .setOrigin(0.5).setScrollFactor(0).setDepth(depth + 1)
+    const lines = [
+      '• Déplacer : joystick / flèches',
+      '• Sauter : bouton SAUT / espace',
+      '• Attaquer : bouton ATTAQUE / X',
+      '• Compétences : slots 1-4 / touches 1-4',
+      '• Dash (esquive) : bouton DASH / Maj',
+      '• Potion : bouton potion / P',
+      '• Toucher la barre de vie : gérer les compétences',
+    ]
+    const body = this.add.text(230, 175, lines.join('\n'), { fontSize: '16px', color: '#ffffff', lineSpacing: 8 })
+      .setScrollFactor(0).setDepth(depth + 1)
+    const hint = this.add.text(480, 400, 'Tape pour fermer', { fontSize: '15px', color: '#b0bec5' })
+      .setOrigin(0.5).setScrollFactor(0).setDepth(depth + 1)
+
+    const parts = [panel, title, body, hint]
+    // capteur plein écran : un tap n'importe où ferme le panneau (sans bloquer le jeu dessous)
+    const catcher = this.add.rectangle(480, 270, 960, 540, 0xffffff, 0.001)
+      .setScrollFactor(0).setDepth(depth + 2).setInteractive()
+    catcher.once('pointerdown', () => {
+      audio.playSfx('ui-tap')
+      for (const p of parts) p.destroy()
+      catcher.destroy()
+    })
   }
 
   private addBackground() {
@@ -457,12 +497,33 @@ export class LevelScene extends Phaser.Scene {
       // un checkpoint atteint : on réapparaît sur place plutôt que de repartir à la carte
       if (this.lastCheckpoint) { this.respawnAtCheckpoint(); return }
       save(getPlayer())
-      // écran K.O. clair avant de renvoyer à la carte
-      this.add.rectangle(480, 270, 960, 540, 0x000000, 0.55).setScrollFactor(0).setDepth(20)
-      this.add.text(480, 250, 'K.O. !', { fontSize: '64px', color: '#ff5252', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
-      this.add.text(480, 310, 'Retour à la carte…', { fontSize: '20px', color: '#ffffff' }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
-      this.time.delayedCall(1400, () => this.scene.start('WorldMap'))
+      this.showGameOver()
     }
+  }
+
+  // écran K.O. avec choix « Réessayer » (relance le niveau à l'identique) ou « Carte »
+  private showGameOver() {
+    this.add.rectangle(480, 270, 960, 540, 0x000000, 0.6).setScrollFactor(0).setDepth(20)
+    this.add.text(480, 200, 'K.O. !', { fontSize: '64px', color: '#ff5252', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
+
+    const mkButton = (x: number, label: string, bg: number, onTap: () => void) => {
+      const t = this.add.text(x, 320, label, {
+        fontSize: '26px', color: '#ffffff', backgroundColor: `#${bg.toString(16).padStart(6, '0')}`,
+        padding: { x: 22, y: 12 },
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(21).setInteractive({ useHandCursor: true })
+      t.on('pointerdown', () => {
+        audio.playSfx('ui-tap')
+        onTap()
+      })
+    }
+
+    mkButton(360, 'Réessayer', 0x33691e, () => this.scene.restart({
+      levelId: this.levelDef.id,
+      fromNode: this.fromNode ?? undefined,
+      targetNode: this.targetNode ?? undefined,
+      dir: this.dir,
+    }))
+    mkButton(600, 'Carte', 0x455a64, () => this.scene.start('WorldMap'))
   }
 
   // réapparition au dernier checkpoint : PV pleins, brève invulnérabilité, sans retour carte
@@ -588,6 +649,8 @@ export class LevelScene extends Phaser.Scene {
     // rang investi : +25% de puissance par point au-delà du 1er
     const rank = p.skillLevels[skill.id] ?? 1
     const mult = skill.multiplier * (1 + 0.25 * (rank - 1))
+    // gros coup : bref gel d'impact pour le punch (hors soin)
+    if (mult >= 2.5 && skill.kind !== 'heal') this.hitStop(75)
     if (skill.kind === 'melee') {
       this.player.playAttack()
       // gros coup (rang inclus) : double croissant + tremblement de caméra
@@ -762,6 +825,7 @@ export class LevelScene extends Phaser.Scene {
   // écoute permanente (voir shutdown) ; ne consomme rien tant que ce n'est pas le boss en cours
   onBossDied(e: Enemy) {
     if (e !== this.boss) return
+    this.hitStop(90) // gel d'impact sur la mort du boss
     audio.playSfx('boss-victory')
     this.bossVolley?.remove()
     this.bossBarBg?.destroy()
@@ -775,6 +839,14 @@ export class LevelScene extends Phaser.Scene {
     const txt = this.add.text(480, 200, 'VICTOIRE !', { fontSize: '56px', color: '#ffd700', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0)
     this.tweens.add({ targets: txt, scale: 1.2, yoyo: true, repeat: 3, duration: 300 })
     this.createExit()
+  }
+
+  // hit-stop (juice) : gel très bref de la physique sur les gros impacts, puis reprise
+  // garantie via un timer d'horloge (indépendant de la pause physique)
+  private hitStop(ms: number) {
+    if (this.physics.world.isPaused) return
+    this.physics.world.pause()
+    this.time.delayedCall(ms, () => this.physics.world.resume())
   }
 
   update(_time: number, delta: number) {

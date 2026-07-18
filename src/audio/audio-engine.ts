@@ -4,6 +4,9 @@
 // - Déblocage iOS/Safari : appeler unlock() sur un geste utilisateur pour (re)démarrer le contexte.
 
 const MUTE_KEY = 'panda-run:muted'
+const VOLUME_KEY = 'panda-run:volume'
+// plafond de gain master historique (headroom) ; le volume utilisateur (0..1) le module
+const BASE_MASTER = 0.9
 
 export type SfxName =
   | 'jump' | 'attack' | 'hit' | 'enemy-death' | 'coin' | 'potion' | 'skill'
@@ -78,6 +81,7 @@ class AudioEngine {
   private sfxGain: GainNode | null = null
   private noiseBuffer: AudioBuffer | null = null
   private muted = false
+  private volume = 1 // volume utilisateur 0..1, appliqué en plus du BASE_MASTER
   private currentTrack: MusicTrack | null = null
   private schedulerTimer: ReturnType<typeof setInterval> | null = null
   private step = 0
@@ -86,9 +90,16 @@ class AudioEngine {
   constructor() {
     // lecture de l'état muet — sans effet de bord audio (localStorage seulement)
     try {
-      if (typeof localStorage !== 'undefined') this.muted = localStorage.getItem(MUTE_KEY) === '1'
+      if (typeof localStorage !== 'undefined') {
+        this.muted = localStorage.getItem(MUTE_KEY) === '1'
+        const v = parseFloat(localStorage.getItem(VOLUME_KEY) ?? '')
+        if (Number.isFinite(v)) this.volume = Math.min(1, Math.max(0, v))
+      }
     } catch { /* localStorage inaccessible (mode privé) : on reste non-muet */ }
   }
+
+  // gain effectif du bus master : 0 si muet, sinon headroom × volume utilisateur
+  private masterLevel() { return this.muted ? 0 : BASE_MASTER * this.volume }
 
   // crée l'AudioContext au premier vrai usage ; renvoie false si Web Audio indisponible (Node)
   private ensure(): boolean {
@@ -101,7 +112,7 @@ class AudioEngine {
     if (!Ctor) return false
     const ctx = new Ctor()
     const master = ctx.createGain()
-    master.gain.value = this.muted ? 0 : 0.9
+    master.gain.value = this.masterLevel()
     master.connect(ctx.destination)
     const music = ctx.createGain()
     music.gain.value = 0.22
@@ -132,13 +143,26 @@ class AudioEngine {
       if (typeof localStorage !== 'undefined') localStorage.setItem(MUTE_KEY, muted ? '1' : '0')
     } catch { /* ignore */ }
     if (this.master && this.ctx) {
-      this.master.gain.setTargetAtTime(muted ? 0 : 0.9, this.ctx.currentTime, 0.02)
+      this.master.gain.setTargetAtTime(this.masterLevel(), this.ctx.currentTime, 0.02)
     }
   }
 
   toggleMute(): boolean {
     this.setMuted(!this.muted)
     return this.muted
+  }
+
+  getVolume() { return this.volume }
+
+  // règle le volume master (0..1), persiste et applique en douceur au gain master
+  setVolume(v: number) {
+    this.volume = Math.min(1, Math.max(0, v))
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(VOLUME_KEY, String(this.volume))
+    } catch { /* ignore */ }
+    if (this.master && this.ctx) {
+      this.master.gain.setTargetAtTime(this.masterLevel(), this.ctx.currentTime, 0.02)
+    }
   }
 
   // ---- SFX -----------------------------------------------------------------
