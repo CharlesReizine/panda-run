@@ -206,6 +206,47 @@ export class PreloadScene extends Phaser.Scene {
     this.pandaFrame('panda', {}, 'novice')
   }
 
+  // panda K.O. : allongé sur le dos, pattes en l'air, yeux en croix et langue pendante.
+  // Format allongé (80×56) réutilisé dans le monde (il s'écroule) et sur l'écran K.O.
+  private drawPandaDead() {
+    const g = this.add.graphics()
+    const W = 0xf7f7f7, K = 0x2b2b2b, PINK = 0xff9ab0
+    // les quatre pattes pointées vers le haut (dessinées d'abord, derrière le corps)
+    g.fillStyle(K)
+    g.fillEllipse(26, 16, 7, 15) // bras avant
+    g.fillEllipse(37, 11, 8, 17)
+    g.fillEllipse(49, 10, 8, 17)
+    g.fillEllipse(60, 15, 8, 15) // patte arrière
+    // coussinets roses au bout des pattes en l'air
+    g.fillStyle(PINK, 0.85)
+    g.fillCircle(26, 10, 2.4).fillCircle(37, 4, 3).fillCircle(49, 3, 3).fillCircle(60, 9, 2.6)
+    // corps allongé sur le dos, ventre en l'air
+    g.fillStyle(K).fillEllipse(43, 35, 56, 34)
+    g.fillStyle(W).fillEllipse(43, 34, 50, 28)
+    g.fillStyle(0xe4e4e4).fillEllipse(45, 37, 32, 16) // ventre clair
+    // tête basculée à gauche
+    g.fillStyle(K).fillCircle(7, 20, 6).fillCircle(25, 18, 6) // oreilles
+    g.fillStyle(K).fillCircle(16, 30, 15)
+    g.fillStyle(W).fillCircle(16, 30, 12)
+    // yeux en croix (X X)
+    g.lineStyle(2.5, K)
+    const drawX = (cx: number, cy: number, s: number) => {
+      g.beginPath()
+      g.moveTo(cx - s, cy - s); g.lineTo(cx + s, cy + s)
+      g.moveTo(cx + s, cy - s); g.lineTo(cx - s, cy + s)
+      g.strokePath()
+    }
+    drawX(11, 28, 3.4)
+    drawX(21, 28, 3.4)
+    // joues roses + truffe + langue qui pend
+    g.fillStyle(PINK, 0.6).fillCircle(6, 33, 3).fillCircle(26, 33, 3)
+    g.fillStyle(0x333333).fillEllipse(16, 36, 5, 3.5)
+    g.fillStyle(PINK).fillRoundedRect(13, 38, 6, 8, 2.5) // langue pendante
+    g.fillStyle(0xd47a8f).fillRect(15, 40, 2, 6) // sillon de la langue
+    g.generateTexture('panda-mort', 80, 56)
+    g.destroy()
+  }
+
   private drawMonster(m: MonsterDef) {
     const s = m.boss ? 76 : m.mvp ? 56 : 40
     const r = s / 2
@@ -885,6 +926,7 @@ export class PreloadScene extends Phaser.Scene {
 
   create() {
     this.drawPandas()
+    this.drawPandaDead()
     this.drawDecor()
     for (const item of Object.values(ITEMS)) if (item.slot === 'hat') this.drawCosmetic(item.id)
     for (const m of Object.values(MONSTERS)) this.drawMonster(m)

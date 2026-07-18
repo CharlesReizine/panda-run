@@ -538,11 +538,36 @@ export class LevelScene extends Phaser.Scene {
 
   // écran K.O. avec choix « Réessayer » (relance le niveau à l'identique) ou « Carte »
   private showGameOver() {
+    // dans le monde : le panda s'écroule sur place, remplacé par l'illustration K.O. allongée.
+    // Objets de scène → détruits automatiquement au restart/retour carte (pas de résidu).
+    this.player.setVisible(false)
+    const fallen = this.add.image(this.player.x, this.player.y + 18, 'panda-mort')
+      .setDepth(this.player.depth).setFlipX(this.player.facing === -1)
+    this.tweens.add({ targets: fallen, y: fallen.y - 6, duration: 200, yoyo: true, ease: 'Quad.out' })
+
     this.add.rectangle(480, 270, 960, 540, 0x000000, 0.6).setScrollFactor(0).setDepth(20)
-    this.add.text(480, 200, 'K.O. !', { fontSize: '64px', color: '#ff5252', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
+    this.add.text(480, 90, 'K.O. !', { fontSize: '64px', color: '#ff5252', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
+
+    // grande illustration du panda mort, bien visible au centre, avec un petit rebond d'apparition
+    const dead = this.add.image(480, 250, 'panda-mort').setScrollFactor(0).setDepth(21).setScale(0.4)
+    this.tweens.add({ targets: dead, scale: 2.7, duration: 420, ease: 'Back.out' })
+
+    // petites étoiles qui tournent autour de la tête, façon cartoon
+    for (let i = 0; i < 3; i++) {
+      const star = this.add.text(480, 250, '✦', { fontSize: '26px', color: '#ffe082' })
+        .setOrigin(0.5).setScrollFactor(0).setDepth(22)
+      const orbit = { a: (i / 3) * Math.PI * 2 }
+      this.tweens.add({
+        targets: orbit, a: orbit.a + Math.PI * 2, duration: 2600, repeat: -1,
+        onUpdate: () => {
+          star.setPosition(480 + Math.cos(orbit.a) * 128, 220 + Math.sin(orbit.a) * 36)
+          star.setScale(0.6 + 0.5 * (Math.sin(orbit.a) * 0.5 + 0.5))
+        },
+      })
+    }
 
     const mkButton = (x: number, label: string, bg: number, onTap: () => void) => {
-      const t = this.add.text(x, 320, label, {
+      const t = this.add.text(x, 410, label, {
         fontSize: '26px', color: '#ffffff', backgroundColor: `#${bg.toString(16).padStart(6, '0')}`,
         padding: { x: 22, y: 12 },
       }).setOrigin(0.5).setScrollFactor(0).setDepth(21).setInteractive({ useHandCursor: true })
