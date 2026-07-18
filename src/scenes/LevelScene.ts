@@ -83,7 +83,11 @@ export class LevelScene extends Phaser.Scene {
     // ponts de planches : plateformes fines traversables
     for (const br of this.levelDef.bridges ?? []) {
       for (let i = 0; i < br.w; i++) {
-        platforms.create((br.x + i) * TILE + TILE / 2, br.y * TILE + 6, 'bridge')
+        const plank = platforms.create((br.x + i) * TILE + TILE / 2, br.y * TILE + 6, 'bridge') as Phaser.Physics.Arcade.Sprite
+        // le visuel ne fait que 12px de haut ; à grande vitesse de chute le joueur peut
+        // traverser cette fine tranche en un seul pas de physique (tunneling) — on épaissit
+        // donc le corps de collision sans toucher au rendu
+        ;(plank.body as Phaser.Physics.Arcade.StaticBody).setSize(TILE, 28)
       }
     }
 
@@ -104,7 +108,10 @@ export class LevelScene extends Phaser.Scene {
       this.enemies.add(new Enemy(this, s.x * TILE, GROUND_ROW * TILE - 40, MONSTERS[s.monsterId]!))
     }
 
-    this.props = this.physics.add.group()
+    // le groupe applique ses defaults (allowGravity: true, immovable: false) à chaque ajout et
+    // écraserait sinon les setAllowGravity(false)/setImmovable(true) posés dans Prop — sans ça,
+    // un coffre "tombe" (gravité réactivée) dès qu'il rejoint le groupe
+    this.props = this.physics.add.group({ allowGravity: false, immovable: true })
     for (const propDef of this.levelDef.props ?? []) {
       const yTile = propDef.y ?? GROUND_ROW - 1
       const prop = new Prop(this, propDef.x * TILE + TILE / 2, yTile * TILE + TILE / 2, PROPS[propDef.kind]!)
