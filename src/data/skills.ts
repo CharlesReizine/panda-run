@@ -33,6 +33,18 @@ const list: SkillDef[] = [
   { id: 'salve-ultime', name: 'Salve ultime', classId: 'archer', kind: 'aoe', multiplier: 3.2, cooldownMs: 16000, range: 180 },
   { id: 'tir-instinctif', name: 'Tir instinctif', classId: 'archer', kind: 'projectile', multiplier: 0.8, cooldownMs: 1000, range: 400 },
   { id: 'tir-en-cloche', name: 'Tir en cloche', classId: 'archer', kind: 'projectile', multiplier: 1.6, cooldownMs: 4500, range: 480, arc: true },
+  // Chevalier (évolution du Sabreur)
+  { id: 'jugement-royal', name: 'Jugement royal', classId: 'chevalier', kind: 'melee', multiplier: 4.5, cooldownMs: 12000, range: 90 },
+  { id: 'garde-imperiale', name: 'Garde impériale', classId: 'chevalier', kind: 'aoe', multiplier: 2.2, cooldownMs: 7000, range: 180 },
+  { id: 'sceau-du-heaume', name: 'Sceau du heaume', classId: 'chevalier', kind: 'projectile', multiplier: 2.8, cooldownMs: 6000, range: 460 },
+  // Sorcier (évolution du Mage)
+  { id: 'cataclysme', name: 'Cataclysme', classId: 'sorcier', kind: 'aoe', multiplier: 5.0, cooldownMs: 16000, range: 200 },
+  { id: 'faille-du-neant', name: 'Faille du néant', classId: 'sorcier', kind: 'projectile', multiplier: 3.5, cooldownMs: 7000, range: 620, pierce: true },
+  { id: 'benediction-du-panda', name: 'Bénédiction du panda', classId: 'sorcier', kind: 'heal', multiplier: 0.7, cooldownMs: 14000, range: 0 },
+  // Chasseur (évolution de l'Archer)
+  { id: 'fleche-mortelle', name: 'Flèche mortelle', classId: 'chasseur', kind: 'projectile', multiplier: 4.8, cooldownMs: 9000, range: 800, pierce: true },
+  { id: 'nuee-de-fleches', name: 'Nuée de flèches', classId: 'chasseur', kind: 'aoe', multiplier: 3.8, cooldownMs: 12000, range: 210 },
+  { id: 'tir-du-faucon', name: 'Tir du faucon', classId: 'chasseur', kind: 'projectile', multiplier: 2.4, cooldownMs: 3500, range: 560, arc: true },
 ]
 
 export const SKILLS: Record<string, SkillDef> = Object.fromEntries(list.map((s) => [s.id, s]))

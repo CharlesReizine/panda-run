@@ -25,4 +25,22 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     growth: { atk: 3, def: 1, maxHp: 20, attackSpeed: 0 },
     skillIds: ['fleche-percante', 'double-tir', 'pluie-de-fleches', 'tir-charge', 'fleche-de-bambou', 'salve-ultime', 'tir-instinctif', 'tir-en-cloche'],
   },
+  chevalier: {
+    id: 'chevalier', name: 'Chevalier', tint: 0xffcc44,
+    baseStats: { atk: 28, def: 10, maxHp: 280, attackSpeed: 1.7 },
+    growth: { atk: 5, def: 3, maxHp: 40, attackSpeed: 0 },
+    skillIds: ['jugement-royal', 'garde-imperiale', 'sceau-du-heaume', 'taillade', 'tourbillon', 'lame-ultime', 'onde-tranchante', 'cri-de-guerre'],
+  },
+  sorcier: {
+    id: 'sorcier', name: 'Sorcier', tint: 0xaa66ff,
+    baseStats: { atk: 36, def: 4, maxHp: 200, attackSpeed: 1.3 },
+    growth: { atk: 7, def: 2, maxHp: 26, attackSpeed: 0 },
+    skillIds: ['cataclysme', 'faille-du-neant', 'benediction-du-panda', 'boule-de-feu', 'meteore', 'tempete-arcanique', 'rayon-arcanique', 'soin-majeur'],
+  },
+  chasseur: {
+    id: 'chasseur', name: 'Chasseur', tint: 0x33aa55,
+    baseStats: { atk: 26, def: 6, maxHp: 230, attackSpeed: 2.2 },
+    growth: { atk: 5, def: 2, maxHp: 34, attackSpeed: 0 },
+    skillIds: ['fleche-mortelle', 'nuee-de-fleches', 'tir-du-faucon', 'fleche-percante', 'tir-charge', 'salve-ultime', 'pluie-de-fleches', 'double-tir'],
+  },
 }

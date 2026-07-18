@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import { WORLD_NODES, WORLD_EDGES, isNodeUnlocked, neighborsOf, type MapNode } from '../data/worldmap'
 import { getPlayer } from '../state'
-import { canChangeClass } from '../core/progression'
+import { canChangeClass, canEvolveClass } from '../core/progression'
 import { save } from '../core/save'
 import { audio } from '../audio/audio-engine'
 
@@ -97,6 +97,10 @@ export class WorldMapScene extends Phaser.Scene {
 
     if (canChangeClass(p)) {
       const t = this.add.text(480, 495, '★ Changer de classe ! ★', { fontSize: '22px', color: '#000000', backgroundColor: '#ffd700', padding: { x: 18, y: 8 } })
+        .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('ClassChange'))
+      this.tweens.add({ targets: t, scale: 1.08, yoyo: true, repeat: -1, duration: 500 })
+    } else if (canEvolveClass(p)) {
+      const t = this.add.text(480, 495, '★ Évolution disponible ! ★', { fontSize: '22px', color: '#000000', backgroundColor: '#ce93d8', padding: { x: 18, y: 8 } })
         .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('ClassChange'))
       this.tweens.add({ targets: t, scale: 1.08, yoyo: true, repeat: -1, duration: 500 })
     }

@@ -1,4 +1,4 @@
-export type ClassId = 'novice' | 'swordsman' | 'mage' | 'archer'
+export type ClassId = 'novice' | 'swordsman' | 'mage' | 'archer' | 'chevalier' | 'sorcier' | 'chasseur'
 export type EquipSlot = 'weapon' | 'armor' | 'accessory' | 'hat'
 
 export interface StatBlock {

@@ -34,10 +34,22 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'rayon-arcanique': { color: 0xba68c8, glyph: 'ray' },
   'tir-instinctif': { color: 0xd7a86e, glyph: 'quickshot' },
   'tir-en-cloche': { color: 0x9ccc65, glyph: 'lob' },
+  // Chevalier
+  'jugement-royal': { color: 0xffd700, glyph: 'sword' },
+  'garde-imperiale': { color: 0xffe082, glyph: 'target' },
+  'sceau-du-heaume': { color: 0xffca28, glyph: 'wave' },
+  // Sorcier
+  'cataclysme': { color: 0xff5252, glyph: 'fireball' },
+  'faille-du-neant': { color: 0x7e57c2, glyph: 'ray' },
+  'benediction-du-panda': { color: 0x81c784, glyph: 'heart' },
+  // Chasseur
+  'fleche-mortelle': { color: 0xd32f2f, glyph: 'arrow' },
+  'nuee-de-fleches': { color: 0xa5d6a7, glyph: 'rain' },
+  'tir-du-faucon': { color: 0xffb74d, glyph: 'lob' },
 }
 
-type ClassId = 'novice' | 'swordsman' | 'mage' | 'archer'
-const CLASSES: ClassId[] = ['novice', 'swordsman', 'mage', 'archer']
+type ClassId = 'novice' | 'swordsman' | 'mage' | 'archer' | 'chevalier' | 'sorcier' | 'chasseur'
+const CLASSES: ClassId[] = ['novice', 'swordsman', 'mage', 'archer', 'chevalier', 'sorcier', 'chasseur']
 
 interface Pose {
   bx?: number; by?: number
@@ -75,6 +87,29 @@ export class PreloadScene extends Phaser.Scene {
       g.fillStyle(0x2e7d32).fillTriangle(hx - 18, hy - 13, hx + 18, hy - 13, hx + 2, hy - 30)
       g.fillStyle(0x1b5e20).fillRect(hx - 18, hy - 14, 36, 4)
       g.fillStyle(0xffca28).fillTriangle(hx + 10, hy - 24, hx + 24, hy - 32, hx + 13, hy - 19) // plume
+    } else if (cls === 'chevalier') {
+      // heaume : calotte métallique + cimier + fente de visière
+      g.fillStyle(0xb0bec5).fillEllipse(hx, hy - 14, 44, 26)
+      g.fillStyle(0x90a4ae).fillEllipse(hx, hy - 10, 44, 18)
+      g.fillStyle(0x263238).fillRect(hx - 16, hy - 12, 32, 4) // fente de visière
+      g.fillStyle(0xeceff1).fillRect(hx - 2, hy - 30, 4, 12) // support du cimier
+      g.fillStyle(0xd32f2f).fillTriangle(hx - 10, hy - 40, hx + 10, hy - 40, hx, hy - 26) // panache rouge
+      g.fillStyle(0xffca28).fillCircle(hx, hy - 42, 3) // pommeau doré
+    } else if (cls === 'sorcier') {
+      // grand chapeau étoilé, plus imposant que celui du mage
+      g.fillStyle(0x4527a0).fillEllipse(hx, hy - 13, 52, 12) // large bord
+      g.fillStyle(0x5e35b1).fillTriangle(hx - 22, hy - 13, hx + 22, hy - 13, hx + 9, hy - 52) // cône haut, penché
+      g.fillStyle(0x311b6b).fillTriangle(hx + 1, hy - 30, hx + 22, hy - 13, hx + 9, hy - 52) // ombre du cône
+      g.fillStyle(0xffd54f).fillCircle(hx + 9, hy - 50, 3.5) // pompon doré
+      // étoiles scintillantes
+      g.fillStyle(0xfff59d).fillCircle(hx - 6, hy - 24, 2.2).fillCircle(hx + 4, hy - 34, 1.8).fillCircle(hx + 12, hy - 22, 1.6)
+    } else if (cls === 'chasseur') {
+      // capuche à grande plume
+      g.fillStyle(0x1b5e20).fillTriangle(hx - 20, hy - 10, hx + 20, hy - 10, hx, hy - 34) // capuche haute
+      g.fillStyle(0x2e7d32).fillTriangle(hx - 20, hy - 10, hx + 14, hy - 10, hx - 2, hy - 30)
+      g.fillStyle(0x0d3311).fillRect(hx - 20, hy - 12, 40, 4) // bandeau sombre
+      g.fillStyle(0xef5350).fillTriangle(hx + 8, hy - 30, hx + 30, hy - 44, hx + 12, hy - 24) // grande plume rouge
+      g.fillStyle(0xffcdd2).fillTriangle(hx + 11, hy - 30, hx + 24, hy - 40, hx + 13, hy - 26) // reflet de la plume
     } else {
       g.fillStyle(0x7cb342).fillEllipse(hx + 1, hy - 22, 7, 10) // petite pousse (novice)
       g.fillStyle(0x33691e).fillRect(hx, hy - 24, 2, 6)
@@ -94,6 +129,25 @@ export class PreloadScene extends Phaser.Scene {
     } else if (cls === 'mage') {
       g.lineStyle(3, 0x8d6e63).beginPath(); g.moveTo(hx, hy - 16); g.lineTo(hx + 1, hy + 6); g.strokePath()
       g.fillStyle(0x64b5f6).fillCircle(hx, hy - 19, 4); g.fillStyle(0xbbdefb).fillCircle(hx - 1, hy - 20, 1.5)
+    } else if (cls === 'chevalier') {
+      // grande épée à deux mains, lame large et longue
+      g.lineStyle(6, 0xeceff1).beginPath(); g.moveTo(hx, hy + 6); g.lineTo(hx + 9, hy - 34); g.strokePath()
+      g.lineStyle(2, 0xffffff).beginPath(); g.moveTo(hx + 1, hy + 2); g.lineTo(hx + 8, hy - 30); g.strokePath() // arête brillante
+      g.fillStyle(0xffca28).fillRect(hx - 5, hy + 2, 14, 4) // large garde dorée
+      g.fillStyle(0x8d6e63).fillRect(hx - 2, hy + 5, 5, 8) // poignée
+    } else if (cls === 'sorcier') {
+      // long bâton surmonté d'un grand orbe rayonnant
+      g.lineStyle(4, 0x5e35b1).beginPath(); g.moveTo(hx, hy - 24); g.lineTo(hx + 2, hy + 8); g.strokePath()
+      g.fillStyle(0xaa66ff, 0.35).fillCircle(hx, hy - 28, 9) // halo
+      g.fillStyle(0xba68c8).fillCircle(hx, hy - 28, 6)
+      g.fillStyle(0xe1bee7).fillCircle(hx - 2, hy - 30, 2.5) // reflet de l'orbe
+    } else if (cls === 'chasseur') {
+      // grand arc recourbé, plus large que celui de l'archer
+      g.lineStyle(4, 0x5d4037).beginPath(); g.arc(hx - 2, hy - 3, 15, Phaser.Math.DegToRad(-80), Phaser.Math.DegToRad(80), false); g.strokePath()
+      const c = Phaser.Math.DegToRad(-80), d = Phaser.Math.DegToRad(80)
+      g.lineStyle(1.5, 0xeeeeee).beginPath()
+      g.moveTo(hx - 2 + 15 * Math.cos(c), hy - 3 + 15 * Math.sin(c)); g.lineTo(hx - 2 + 15 * Math.cos(d), hy - 3 + 15 * Math.sin(d)); g.strokePath() // corde
+      g.fillStyle(0xffca28).fillCircle(hx + 12, hy - 3, 2) // renfort doré
     }
   }
 
