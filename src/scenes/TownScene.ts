@@ -5,6 +5,7 @@ import { buyPotion, buyItem } from '../core/shop'
 import { acceptQuest, refreshQuestProgress, claimQuest } from '../core/quests'
 import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, HAT_SHOP, QUESTS } from '../data/shops'
 import { ITEMS } from '../data/items'
+import { audio } from '../audio/audio-engine'
 
 const TOWN_SPEED = 170
 const INTERACT_RADIUS = 70
@@ -105,6 +106,8 @@ export class TownScene extends Phaser.Scene {
   create() {
     this.panel = undefined
     this.nearSpot = null
+
+    audio.playMusic('ville')
 
     this.physics.world.setBounds(0, 0, 960, 540)
     this.cameras.main.setBounds(0, 0, 960, 540)
@@ -268,6 +271,7 @@ export class TownScene extends Phaser.Scene {
     c.add(buyBtn)
     buyBtn.on('pointerdown', () => {
       if (onBuy()) {
+        audio.playSfx('buy')
         onBought()
         this.flash(c, x, y - h / 2 - 4, 'Acheté !', '#66bb6a')
         buyBtn.setBackgroundColor('#66bb6a')

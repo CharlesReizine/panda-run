@@ -20,6 +20,13 @@ import type { DropEntry } from '../core/types'
 import type { UIScene } from './UIScene'
 import { TILE, GROUND_ROW } from '../core/platforming'
 import { BIOMES } from '../data/biomes'
+import { audio, type MusicTrack } from '../audio/audio-engine'
+
+// biomes → piste musicale ; 'carriere' n'a pas d'ambiance dédiée → repli sur 'montagne'
+const BIOME_TRACKS: Record<string, MusicTrack> = {
+  plaine: 'plaine', foret: 'foret', desert: 'desert', cave: 'cave', jungle: 'jungle',
+  montagne: 'montagne', plage: 'plage', carriere: 'montagne', cimetiere: 'cimetiere', enfer: 'enfer',
+}
 
 export { TILE }
 
@@ -68,6 +75,8 @@ export class LevelScene extends Phaser.Scene {
     this.physics.world.setBounds(0, 0, widthPx, 540)
 
     this.addBackground()
+
+    audio.playMusic(this.levelDef.boss ? 'boss' : (BIOME_TRACKS[this.levelDef.biome] ?? 'plaine'))
 
     const platforms = (this.platforms = this.physics.add.staticGroup())
     const tileKey = `tile-${this.levelDef.biome}`
@@ -147,6 +156,7 @@ export class LevelScene extends Phaser.Scene {
     })
     this.physics.add.overlap(this.playerProjectiles, this.enemies, (projObj, eObj) => {
       const proj = projObj as Projectile, e = eObj as Enemy
+      audio.playSfx('hit')
       if (proj.pierce) {
         if (proj.hitEnemies.has(e)) return
         proj.hitEnemies.add(e)
@@ -208,9 +218,11 @@ export class LevelScene extends Phaser.Scene {
     this.jumpHeld = false
     this.game.events.on('input-jump-down', this.onJumpDown, this)
     this.game.events.on('input-jump-up', this.onJumpUp, this)
+    this.events.on('player-jump', this.onPlayerJump, this)
     this.events.once('shutdown', () => {
       this.game.events.off('input-jump-down', this.onJumpDown, this)
       this.game.events.off('input-jump-up', this.onJumpUp, this)
+      this.events.off('player-jump', this.onPlayerJump, this)
       this.game.events.off('input-attack', this.basicAttack, this)
       this.game.events.off('input-skill', this.castSkill, this)
       this.game.events.off('input-potion', this.usePotion, this)
@@ -256,6 +268,7 @@ export class LevelScene extends Phaser.Scene {
 
   private onJumpDown() { this.jumpHeld = true }
   private onJumpUp() { this.jumpHeld = false }
+  private onPlayerJump() { audio.playSfx('jump') }
 
   // apparition à gauche + sortie à droite en 'forward' (comportement historique) ;
   // en 'backward' (retour en arrière depuis la carte), on entre par la droite et on
@@ -308,6 +321,7 @@ export class LevelScene extends Phaser.Scene {
     this.invulnUntil = this.time.now + 800
     this.player.takeDamage(physicalDamage(rawAtk, this.player.stats.def))
     this.player.setVelocity(-this.player.facing * 200, -200)
+    audio.playSfx(this.player.hp <= 0 ? 'player-death' : 'player-hit')
     if (this.player.hp <= 0) {
       save(getPlayer())
       // écran K.O. clair avant de renvoyer à la carte
@@ -322,6 +336,7 @@ export class LevelScene extends Phaser.Scene {
     if (this.player.hp <= 0) return
     if (this.time.now < this.nextBasicAttackAt) return
     this.nextBasicAttackAt = this.time.now + 1000 / this.player.stats.attackSpeed
+    audio.playSfx('attack')
     this.player.playAttack()
     this.player.gainEnergy(ENERGY_ON_BASIC_HIT) // frapper recharge un peu l'énergie
 
@@ -421,6 +436,7 @@ export class LevelScene extends Phaser.Scene {
     }
     this.cooldowns.use(slot, this.time.now, skill.cooldownMs)
     this.game.events.emit('skill-cooldown', slot, this.time.now + skill.cooldownMs)
+    audio.playSfx('skill')
     this.announceSkill(skill.name)
 
     const { atk, maxHp } = this.player.stats
@@ -487,12 +503,15 @@ export class LevelScene extends Phaser.Scene {
   meleeHit(reach: number, multiplier: number) {
     const px = this.player.x, py = this.player.y, f = this.player.facing
     const atk = this.player.stats.atk
+    let touched = false
     for (const obj of this.enemies.getChildren()) {
       const e = obj as Enemy
       if (e.active && inMeleeReach((e.x - px) * f, Math.abs(e.y - py), reach)) {
         e.takeDamage(physicalDamage(atk, e.monster.def, multiplier))
+        touched = true
       }
     }
+    if (touched) audio.playSfx('hit')
     for (const obj of this.props.getChildren()) {
       const prop = obj as Prop
       if (prop.active && inMeleeReach((prop.x - px) * f, Math.abs(prop.y - py), reach)) prop.takeDamage(1)
@@ -502,6 +521,7 @@ export class LevelScene extends Phaser.Scene {
   // effet "level up" façon RO : rayons dorés + anneau + texte sur le perso
   private levelUpFx() {
     const x = this.player.x, y = this.player.y
+    audio.playSfx('level-up')
     this.aoeRing(x, y, 90, 0xffd54f)
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2
@@ -547,11 +567,13 @@ export class LevelScene extends Phaser.Scene {
     const materialId = s.getData('materialId') as string | undefined
     if (gold) {
       p.gold += gold
+      audio.playSfx('coin')
       const txt = this.add.text(s.x, s.y - 10, `+${gold} or`, { fontSize: '16px', color: '#ffd700' }).setOrigin(0.5)
       this.tweens.add({ targets: txt, y: txt.y - 30, alpha: 0, duration: 600, onComplete: () => txt.destroy() })
     }
     if (potion) {
       p.potions += potion
+      audio.playSfx('potion')
       const txt = this.add.text(s.x, s.y - 10, '♥', { fontSize: '20px', color: '#ff6b81' }).setOrigin(0.5)
       this.tweens.add({ targets: txt, y: txt.y - 30, alpha: 0, duration: 600, onComplete: () => txt.destroy() })
     }
@@ -580,6 +602,7 @@ export class LevelScene extends Phaser.Scene {
 
   onEnemyDied(e: Enemy) {
     const p = getPlayer()
+    audio.playSfx('enemy-death')
     p.monstersKilled += 1
     const { levelsGained } = grantXp(p, e.monster.xp)
     this.events.emit('enemy-loot', e) // consommé en Task 13
@@ -595,6 +618,7 @@ export class LevelScene extends Phaser.Scene {
   // écoute permanente (voir shutdown) ; ne consomme rien tant que ce n'est pas le boss en cours
   onBossDied(e: Enemy) {
     if (e !== this.boss) return
+    audio.playSfx('boss-victory')
     this.bossVolley?.remove()
     this.bossBarBg?.destroy()
     this.bossBar?.destroy()

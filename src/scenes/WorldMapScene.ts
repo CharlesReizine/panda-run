@@ -3,6 +3,7 @@ import { WORLD_NODES, WORLD_EDGES, isNodeUnlocked, neighborsOf, type MapNode } f
 import { getPlayer } from '../state'
 import { canChangeClass } from '../core/progression'
 import { save } from '../core/save'
+import { audio } from '../audio/audio-engine'
 
 const NODE_COLORS = { town: 0xffd700, level: 0x66bb6a, boss: 0xef5350 } as const
 const LOCKED_COLOR = 0x555555
@@ -23,6 +24,8 @@ export class WorldMapScene extends Phaser.Scene {
   constructor() { super('WorldMap') }
 
   create() {
+    audio.playMusic('carte')
+
     const byId = new Map(WORLD_NODES.map((n) => [n.id, n]))
     this.drawBackground(byId)
 
@@ -72,7 +75,10 @@ export class WorldMapScene extends Phaser.Scene {
 
       if (interactive) {
         const hit = this.add.circle(n.x, n.y, radius + 10, 0xffffff, 0.001).setInteractive({ useHandCursor: true })
-        hit.on('pointerdown', () => canEnterTown ? this.enterCurrentTown() : this.travelTo(n.id))
+        hit.on('pointerdown', () => {
+          audio.playSfx('ui-tap')
+          canEnterTown ? this.enterCurrentTown() : this.travelTo(n.id)
+        })
       }
     }
 

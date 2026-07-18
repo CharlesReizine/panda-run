@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { load, serialize, deserialize, save } from '../core/save'
 import { newPlayer, type PlayerState } from '../core/player-state'
 import { setPlayer } from '../state'
+import { audio } from '../audio/audio-engine'
 
 export class TitleScene extends Phaser.Scene {
   constructor() { super('Title') }
@@ -17,9 +18,21 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create() {
+    // déblocage audio iOS/Safari : le contexte ne peut (re)démarrer que sur un geste utilisateur
+    this.input.once('pointerdown', () => audio.unlock())
+    audio.playMusic('titre')
+
     this.add.text(480, 140, 'Panda-Run', { fontSize: '64px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
     // repère de version : dis-moi ce numéro pour qu'on sache si tu vois bien la dernière build
-    this.add.text(480, 95, 'build R35', { fontSize: '22px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0.5)
+    this.add.text(480, 95, 'build R36', { fontSize: '22px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0.5)
+
+    // bouton muet discret (coin haut-droit)
+    const muteBtn = this.add.text(944, 6, audio.isMuted() ? '🔇' : '🔊', { fontSize: '22px' })
+      .setOrigin(1, 0).setInteractive({ useHandCursor: true })
+    muteBtn.on('pointerdown', () => {
+      audio.unlock()
+      muteBtn.setText(audio.toggleMute() ? '🔇' : '🔊')
+    })
     this.add.image(480, 250, 'panda').setScale(3)
 
     const mkButton = (y: number, label: string, onTap: () => void) => {

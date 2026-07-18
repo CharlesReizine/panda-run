@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { VirtualJoystick } from '../ui/VirtualJoystick'
 import { getPlayer } from '../state'
 import { xpToNext } from '../core/progression'
+import { audio } from '../audio/audio-engine'
 import type { LevelScene } from './LevelScene'
 
 const BAR_W = 200
@@ -47,11 +48,20 @@ export class UIScene extends Phaser.Scene {
     // toucher la zone des barres (vie/énergie) ouvre la gestion des skills en jeu
     this.add.rectangle(12, 22, BAR_W + 4, 42, 0xffffff, 0.001).setOrigin(0).setInteractive()
       .on('pointerdown', () => {
+        audio.playSfx('ui-tap')
         this.scene.launch('SkillEquip')
         this.scene.pause('Level')
         this.scene.pause('UI')
       })
     this.add.text(12, 66, 'compétences ▸', { fontSize: '10px', color: '#b0bec5' })
+
+    // bouton muet discret (coin haut-droit), au-dessus des slots de compétences
+    const muteBtn = this.add.text(944, 6, audio.isMuted() ? '🔇' : '🔊', { fontSize: '20px' })
+      .setOrigin(1, 0).setDepth(50).setInteractive({ useHandCursor: true })
+    muteBtn.on('pointerdown', () => {
+      const muted = audio.toggleMute()
+      muteBtn.setText(muted ? '🔇' : '🔊')
+    })
 
     // Haut-droite : les 4 slots de skills côte à côte
     for (let i = 0; i < 4; i++) {
