@@ -3,7 +3,7 @@ import type { StatBlock } from '../core/types'
 import type { ControlsState } from '../core/controls'
 import { computeStats } from '../core/stats'
 import { getPlayer } from '../state'
-import { PANDA_BODY } from './player-body'
+import { PANDA_BODY, PANDA_HEAD_ANCHORS } from './player-body'
 import { JUMP_SPEED, RUN_SPEED } from '../core/platforming'
 
 const JUMP_VELOCITY = -JUMP_SPEED // source unique (partagée avec le test d'atteignabilité)
@@ -59,6 +59,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.emitHp()
     this.refreshHat()
     this.refreshWeapon()
+    // Les overlays (chapeau/arme/aura) sont recalés APRÈS la synchro physique de la frame
+    // (POST_UPDATE, après world.postUpdate) : positions/flip du panda finalisés → ancrage rigide,
+    // pas de traînée d'une frame en déplacement.
+    this.scene.events.on(Phaser.Scenes.Events.POST_UPDATE, this.syncOverlays, this)
   }
 
   // (ré)affiche le chapeau cosmétique équipé (ou le retire si le slot est vide)
@@ -78,15 +82,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       : null
   }
 
-  preUpdate(t: number, d: number) {
-    super.preUpdate(t, d)
+  // Recale les overlays sur le panda (appelé en POST_UPDATE, après la synchro physique) : ancrage
+  // RIGIDE, aucun lissage/tween. Le chapeau se colle sur l'ancre de tête de la POSE COURANTE
+  // (texture affichée) et non sur un offset fixe → il reste collé à la tête dans toutes les poses
+  // (idle/course/saut/attaque/échelle), dont la hauteur de tête diffère.
+  private syncOverlays() {
+    const flip = this.facing
     if (this.hatImage) {
-      this.hatImage.setPosition(this.x, this.y + HAT_OFFSET_Y)
-      this.hatImage.setFlipX(this.facing === -1)
+      const a = PANDA_HEAD_ANCHORS[this.texture.key] ?? { dx: 0, dy: HAT_OFFSET_Y }
+      this.hatImage.setPosition(this.x + a.dx * flip, this.y + a.dy)
+      this.hatImage.setFlipX(flip === -1)
     }
     if (this.weaponImage) {
-      this.weaponImage.setPosition(this.x + WEAPON_OFFSET_X * this.facing, this.y + WEAPON_OFFSET_Y)
-      this.weaponImage.setFlipX(this.facing === -1)
+      this.weaponImage.setPosition(this.x + WEAPON_OFFSET_X * flip, this.y + WEAPON_OFFSET_Y)
+      this.weaponImage.setFlipX(flip === -1)
     }
     // aura de buff : suit le panda tant que le buff est actif, puis se dissout à l'échéance
     if (this.auraImage) {
@@ -122,6 +131,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   destroy(fromScene?: boolean) {
+    this.scene.events.off(Phaser.Scenes.Events.POST_UPDATE, this.syncOverlays, this)
     this.hatImage?.destroy()
     this.weaponImage?.destroy()
     this.auraTween?.remove()
@@ -172,7 +182,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const runSpeed = this.inWater ? RUN_SPEED * SWIM_RUN_MULT : RUN_SPEED
     if (c.left) { this.setVelocityX(-runSpeed); this.facing = -1; this.setFlipX(true) }
     else if (c.right) { this.setVelocityX(runSpeed); this.facing = 1; this.setFlipX(false) }
-    else this.setVelocityX(0)
+    else { this.setVelocityX(0); this.setFlipX(this.facing === -1) } // aligne le flip sur l'orientation (corrige le miroir de grimpe résiduel)
 
     if (this.inWater) { this.updateSwim(c, body); return }
 
@@ -223,26 +233,35 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (!this.attacking) this.animateClimb(c)
   }
 
-  // Grimpe crédible : cycle de 2 poses à membres opposés (réutilise les 2 phases de course —
-  // base ↔ course pour l'art, run-0 ↔ run-2 pour le procédural, qui sont déjà des foulées
-  // inversées) + légère inclinaison alternée. Le cycle N'AVANCE QUE quand le panda se déplace
-  // vraiment (distance verticale accumulée), donc il fige dès qu'on lâche up/down. La rotation
-  // du sprite ne touche pas le corps physique Arcade (AABB) : hitbox et montée inchangées.
+  // Grimpe vue de dos : la pose `panda-<cls>-echelle` (un bras/jambe opposés levés) + son MIROIR
+  // horizontal (flipX) forment un cycle de 2 frames à membres alternés. Le cycle N'AVANCE QUE
+  // quand le panda se déplace vraiment (distance verticale accumulée) → il fige sur une frame dès
+  // qu'on lâche up/down. On pilote flipX/texture à la main : hitbox et montée (onLadder/climb)
+  // inchangées. Repli sur l'ancienne grimpe procédurale si la pose de dos manque.
   private animateClimb(c: ControlsState) {
     const cls = getPlayer().classId
-    const frames = this.scene.textures.exists(`panda-${cls}-course`)
-      ? [`panda-${cls}`, `panda-${cls}-course`]
-      : [`panda-${cls}-run-0`, `panda-${cls}-run-2`]
+    const ladderKey = `panda-${cls}-echelle`
     this.anims.stop() // on pilote les frames à la main plutôt que via une horloge d'animation
     const climbed = Math.abs(this.y - this.climbLastY)
     this.climbLastY = this.y
     if (c.up || c.down) {
       this.climbAccum += climbed
       if (this.climbAccum >= CLIMB_STRIDE) { this.climbAccum -= CLIMB_STRIDE; this.climbPhase ^= 1 }
+    }
+    if (this.scene.textures.exists(ladderKey)) {
+      this.setTexture(ladderKey)
+      this.setAngle(0)
+      this.setFlipX(this.climbPhase === 1) // frame 2 = miroir de la frame 1 (membres opposés)
+      return
+    }
+    // repli procédural : 2 poses de course inversées + légère inclinaison alternée
+    const frames = this.scene.textures.exists(`panda-${cls}-course`)
+      ? [`panda-${cls}`, `panda-${cls}-course`]
+      : [`panda-${cls}-run-0`, `panda-${cls}-run-2`]
+    if (c.up || c.down) {
       this.setTexture(frames[this.climbPhase] ?? frames[0]!)
       this.setAngle(this.climbPhase === 0 ? -CLIMB_TILT : CLIMB_TILT)
     } else {
-      // agrippé, immobile : pose neutre bien droite
       this.setTexture(frames[0]!)
       this.setAngle(0)
     }

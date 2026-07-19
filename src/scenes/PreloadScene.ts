@@ -5,7 +5,7 @@ import { BIOMES } from '../data/biomes'
 import { ITEMS } from '../data/items'
 import type { MonsterDef } from '../core/types'
 import { stripBorderBackground } from '../core/image-strip'
-import { PANDA_TEX } from '../entities/player-body'
+import { PANDA_TEX, PANDA_HEAD_ANCHORS } from '../entities/player-body'
 
 // icône par skill : couleur + glyphe
 const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
@@ -110,6 +110,8 @@ export class PreloadScene extends Phaser.Scene {
       this.load.image(`pandaart-${cls}-course`, `art/panda-${art}-course.png`)
       this.load.image(`pandaart-${cls}-saut`, `art/panda-${art}-saut.png`)
       this.load.image(`pandaart-${cls}-attaque`, `art/panda-${art}-attaque.png`)
+      // pose de grimpe (vue de dos, tête nue) : illustration dédiée par classe
+      this.load.image(`pandaart-${cls}-echelle`, `art/panda-${art}-echelle.png`)
     }
     // PNJ pandas de la ville + illustration K.O. — détourés/rognés en create() (bakeCropped)
     for (const id of NPC_IDS) this.load.image(`npcart-${id}`, `art/npc-${id}.png`)
@@ -361,6 +363,22 @@ export class PreloadScene extends Phaser.Scene {
       const scale = Math.min(STAND_H / bh, MAX_W / bw)
       const dw = bw * scale, dh = bh * scale
       const dx = (PANDA_TEX.w - dw) / 2, dy = FEET_Y - dh
+      // Ancre de tête de CETTE pose : centre horizontal de la bande supérieure du contenu
+      // (sommet = crâne/oreilles), transformé dans le repère de la texture bakée puis exprimé en
+      // offset depuis le centre du sprite. Le chapeau s'y colle → il suit la vraie hauteur de
+      // tête de chaque frame (plus de « saut » entre poses de hauteurs de tête différentes).
+      const bandH = Math.max(1, Math.round(bh * 0.18))
+      let hx0 = sw, hx1 = -1
+      for (let y = y0; y < y0 + bandH; y++) {
+        for (let x = x0; x <= x1; x++) {
+          if ((data[(y * sw + x) * 4 + 3] ?? 0) >= ALPHA_MIN) { if (x < hx0) hx0 = x; if (x > hx1) hx1 = x }
+        }
+      }
+      const headSrcX = hx1 >= hx0 ? (hx0 + hx1) / 2 : (x0 + x1) / 2
+      PANDA_HEAD_ANCHORS[destKey] = {
+        dx: dx + (headSrcX - x0) * scale - PANDA_TEX.w / 2,
+        dy: dy - PANDA_TEX.h / 2,
+      }
       const c = document.createElement('canvas')
       c.width = PANDA_TEX.w; c.height = PANDA_TEX.h
       const ctx = c.getContext('2d')
@@ -387,6 +405,9 @@ export class PreloadScene extends Phaser.Scene {
       this.bakePandaPose(this.pandaArtKey(cls, 'saut'), `panda-${cls}-saut`) &&
       this.bakePandaPose(this.pandaArtKey(cls, 'attaque'), `panda-${cls}-attaque`)
     if (!ok) return false
+    // pose de grimpe optionnelle (même détourage/rognage/ancrage-pieds → taille cohérente) ;
+    // absente = repli sur l'ancienne grimpe procédurale dans Player.animateClimb
+    this.bakePandaPose(this.pandaArtKey(cls, 'echelle'), `panda-${cls}-echelle`)
     if (!this.anims.exists(`panda-${cls}-run`)) {
       this.anims.create({ key: `panda-${cls}-idle`, frames: [{ key: `panda-${cls}` }], frameRate: 1, repeat: -1 })
       this.anims.create({ key: `panda-${cls}-run`, frames: [{ key: `panda-${cls}` }, { key: `panda-${cls}-course` }], frameRate: 7, repeat: -1 })
@@ -894,12 +915,21 @@ export class PreloadScene extends Phaser.Scene {
   private drawCosmetic(id: string) {
     const g = this.add.graphics()
     switch (id) {
-      case 'chapeau-poring':
-        g.fillStyle(0xff6fa8).fillEllipse(20, 18, 30, 22)
-        g.fillStyle(0xffffff).fillCircle(13, 15, 4).fillCircle(27, 15, 4)
-        g.fillStyle(0x2b2b2b).fillCircle(13, 16, 2).fillCircle(27, 16, 2)
-        g.fillStyle(0xffffff, 0.5).fillEllipse(14, 10, 10, 6) // brillance
+      case 'chapeau-poring': {
+        // petite tête de Poring : blob rose bombé, ventre plus clair, gros reflet, joues + frimousse
+        g.fillStyle(0xd94f8a).fillEllipse(20, 19, 33, 25) // liseré rose foncé (donne le volume)
+        g.fillStyle(0xff7fb2).fillEllipse(20, 17, 30, 22) // corps rose bombé
+        g.fillStyle(0xff9fc8).fillEllipse(20, 21, 22, 13) // bas plus clair (dégradé)
+        g.fillStyle(0xffffff, 0.55).fillEllipse(13, 9, 12, 7) // gros reflet brillant (haut-gauche)
+        g.fillStyle(0xffffff, 0.8).fillCircle(27, 8, 1.8) // petit éclat
+        g.fillStyle(0xff5a9e, 0.5).fillCircle(10, 21, 3).fillCircle(30, 21, 3) // joues roses
+        g.fillStyle(0x2b2b2b).fillEllipse(14, 17, 4.5, 6).fillEllipse(26, 17, 4.5, 6) // yeux mignons
+        g.fillStyle(0xffffff).fillCircle(12.6, 15, 1.5).fillCircle(24.6, 15, 1.5) // reflets des yeux
+        g.lineStyle(1.8, 0x2b2b2b).beginPath() // petit sourire
+        g.arc(20, 19, 4.5, Phaser.Math.DegToRad(25), Phaser.Math.DegToRad(155), false)
+        g.strokePath()
         break
+      }
       case 'ailes-angeling':
         g.lineStyle(2, 0xffd54f).strokeCircle(20, 6, 9) // auréole
         g.fillStyle(0xffffff, 0.95).fillEllipse(6, 22, 12, 20).fillEllipse(34, 22, 12, 20) // ailes
