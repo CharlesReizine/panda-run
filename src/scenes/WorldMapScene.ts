@@ -122,47 +122,128 @@ export class WorldMapScene extends Phaser.Scene {
     return revealed
   }
 
-  // Brouillard de guerre : un nuage sombre couvre chaque nœud NON révélé (+ son étiquette + le
-  // tronçon de chemin qui y mène). Les nœuds fraîchement révélés depuis la dernière visite voient
-  // leur nuage se dissiper (fondu) : le brouillard « se lève » au fil des complétions.
+  // Voile nuageux : par-dessus la carte NORMALE, un gros nuage gris semi-transparent masque les
+  // zones lointaines et se lève au fur et à mesure. Aucun noir opaque : un dégradé selon la
+  // distance (en sauts) au front de progression (nœuds révélés). Bord flou via un « puff » radial.
+  //   distance 0 (révélé)   → aucun voile
+  //   distance 1 (n+1)      → voile léger  (on devine le terrain)
+  //   distance 2 (n+2)      → voile moyen
+  //   distance ≥3 (lointain)→ voile plus dense mais JAMAIS opaque
+  private readonly VEIL_COLOR = 0x3a3f4a // gris bleuté, jamais 0x000000
+  private readonly BAND_ALPHA: Record<number, number> = { 1: 0.36, 2: 0.56, 3: 0.72 }
+
   private drawFog(byId: Map<string, MapNode>, revealed: Set<string>) {
-    const KEY = 'panda-run:map-revealed'
-    let prev: string[] = []
-    try { prev = JSON.parse(localStorage.getItem(KEY) ?? '[]') as string[] } catch { prev = [] }
-    const prevSet = new Set(prev)
-    for (const n of WORLD_NODES) {
-      if (!revealed.has(n.id)) this.drawCloud(n, byId) // nœud encore masqué
+    this.ensurePuffTexture()
+    const band = this.computeVeilBands(revealed)
+
+    const KEY = 'panda-run:map-fog-bands'
+    let prev: Record<string, number> = {}
+    try { prev = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Record<string, number> } catch { prev = {} }
+
+    // voile statique : chaque tranche est composée hors écran dans sa DynamicTexture (aplatie → les
+    // recouvrements d'une même tranche ne noircissent pas), puis affichée via une simple Image dont
+    // l'alpha global donne la transparence du voile (le lointain d'abord/dessous).
+    for (const b of [3, 2, 1]) {
+      const key = `fog-band-${b}`
+      const dt = this.getFogTexture(key)
+      let any = false
+      for (const n of WORLD_NODES) if (band.get(n.id) === b) { this.stampNodeVeil(dt, n, byId); any = true }
+      dt.render()
+      if (any) this.add.image(0, 0, key).setOrigin(0, 0).setDepth(6).setAlpha(this.BAND_ALPHA[b])
     }
-    // fondu de « lever du brouillard » sur les nœuds révélés depuis la dernière visite
-    if (prev.length > 0) {
+
+    // fondu d'allègement : pour chaque nœud passé dans une tranche PLUS PROCHE depuis la dernière
+    // visite, on re-dessine son ancien voile (par-dessus) et on le fait disparaître en douceur.
+    if (Object.keys(prev).length > 0) {
+      const closingByBand: Record<number, MapNode[]> = {}
       for (const n of WORLD_NODES) {
-        if (!revealed.has(n.id) || prevSet.has(n.id)) continue
-        const cloud = this.drawCloud(n, byId)
-        this.tweens.add({ targets: cloud, alpha: 0, duration: 900, delay: 200, ease: 'Sine.out', onComplete: () => cloud.destroy() })
+        const nb = band.get(n.id)!
+        const ob = prev[n.id] ?? nb
+        if (nb < ob && ob >= 1) (closingByBand[ob] ??= []).push(n)
+      }
+      for (const ob of Object.keys(closingByBand).map(Number)) {
+        const key = `fog-fade-${ob}`
+        const dt = this.getFogTexture(key)
+        for (const n of closingByBand[ob]!) this.stampNodeVeil(dt, n, byId)
+        dt.render()
+        const img = this.add.image(0, 0, key).setOrigin(0, 0).setDepth(7).setAlpha(this.BAND_ALPHA[ob])
+        this.tweens.add({ targets: img, alpha: 0, duration: 900, delay: 200, ease: 'Sine.out', onComplete: () => img.destroy() })
       }
     }
-    try { localStorage.setItem(KEY, JSON.stringify([...revealed])) } catch { /* stockage indispo : pas de persistance du fondu */ }
+
+    const next: Record<string, number> = {}
+    for (const n of WORLD_NODES) next[n.id] = band.get(n.id)!
+    try { localStorage.setItem(KEY, JSON.stringify(next)) } catch { /* stockage indispo : pas de persistance du fondu */ }
   }
 
-  // Amas de disques sombres façon nuage, couvrant le nœud + son étiquette (dessous) + la moitié
-  // des arêtes qui y mènent (côté brouillard). Renvoie l'objet pour pouvoir l'animer (fondu).
-  private drawCloud(n: MapNode, byId: Map<string, MapNode>): Phaser.GameObjects.Graphics {
-    const g = this.add.graphics().setDepth(6)
-    const dark = 0x1e1e30
-    g.lineStyle(16, dark, 0.9)
+  // Distance en sauts (BFS) de chaque nœud au set révélé (front). 0 = révélé, borné à 3 (lointain).
+  private computeVeilBands(revealed: Set<string>): Map<string, number> {
+    const dist = new Map<string, number>()
+    const queue: string[] = []
+    for (const n of WORLD_NODES) if (revealed.has(n.id)) { dist.set(n.id, 0); queue.push(n.id) }
+    while (queue.length) {
+      const cur = queue.shift()!
+      const d = dist.get(cur)!
+      for (const nb of neighborsOf(cur)) {
+        if (dist.has(nb)) continue
+        dist.set(nb, d + 1)
+        queue.push(nb)
+      }
+    }
+    const band = new Map<string, number>()
+    for (const n of WORLD_NODES) band.set(n.id, Math.min(dist.get(n.id) ?? 99, 3))
+    return band
+  }
+
+  // DynamicTexture pleine page (réutilisée entre scènes) sur laquelle composer une tranche de voile.
+  private getFogTexture(key: string): Phaser.Textures.DynamicTexture {
+    if (this.textures.exists(key)) {
+      const t = this.textures.get(key) as Phaser.Textures.DynamicTexture
+      t.clear()
+      return t
+    }
+    return this.textures.addDynamicTexture(key, 960, 540)!
+  }
+
+  // Estampille le voile d'un nœud dans une DynamicTexture : un gros puff sur le nœud, un sur son
+  // étiquette (dessous), et des puffs le long de la moitié des chemins qui y mènent → un nuage
+  // continu à bords flous, sans coupe nette.
+  private stampNodeVeil(dt: Phaser.Textures.DynamicTexture, n: MapNode, byId: Map<string, MapNode>) {
+    this.puff(dt, n.x, n.y, 78)
+    this.puff(dt, n.x, n.y + 34, 60)
     for (const nbId of neighborsOf(n.id)) {
       const m = byId.get(nbId)!
-      g.beginPath(); g.moveTo(n.x, n.y); g.lineTo((n.x + m.x) / 2, (n.y + m.y) / 2); g.strokePath()
+      for (let i = 1; i <= 4; i++) {
+        const t = (i / 4) * 0.5
+        this.puff(dt, n.x + (m.x - n.x) * t, n.y + (m.y - n.y) * t, 46)
+      }
     }
-    const puffs: [number, number, number][] = [
-      [n.x - 24, n.y - 4, 20], [n.x + 24, n.y - 4, 20], [n.x, n.y - 16, 24],
-      [n.x - 6, n.y + 12, 30], [n.x - 28, n.y + 26, 20], [n.x + 28, n.y + 26, 20], [n.x, n.y + 36, 24],
-    ]
-    g.fillStyle(0x45456a, 0.5)
-    for (const [cx, cy, r] of puffs) g.fillCircle(cx, cy, r * 1.18)
-    g.fillStyle(dark, 0.95)
-    for (const [cx, cy, r] of puffs) g.fillCircle(cx, cy, r)
-    return g
+  }
+
+  // dessine un disque de nuage flou de rayon `radius` (px) centré en (x,y) dans la DynamicTexture.
+  // Estampillé opaque au centre → les recouvrements plafonnent ; c'est l'alpha global de l'Image
+  // d'affichage (par tranche) qui donne la transparence finale du voile.
+  private puff(dt: Phaser.Textures.DynamicTexture, x: number, y: number, radius: number) {
+    dt.stamp('fog-puff', undefined, x, y, { scale: (radius * 2) / 128, originX: 0.5, originY: 0.5 })
+  }
+
+  // texture « puff » : disque gris bleuté à dégradé radial (opaque au centre → transparent au bord)
+  // → estampillé en masse, il compose un nuage doux aux contours adoucis (pas de rectangles nets).
+  private ensurePuffTexture() {
+    if (this.textures.exists('fog-puff')) return
+    const size = 128
+    const tex = this.textures.createCanvas('fog-puff', size, size)
+    if (!tex) return
+    const ctx = tex.getContext()
+    const r = (this.VEIL_COLOR >> 16) & 0xff, g = (this.VEIL_COLOR >> 8) & 0xff, b = this.VEIL_COLOR & 0xff
+    const grd = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+    grd.addColorStop(0, `rgba(${r},${g},${b},1)`)
+    grd.addColorStop(0.68, `rgba(${r},${g},${b},1)`)
+    grd.addColorStop(0.86, `rgba(${r},${g},${b},0.6)`)
+    grd.addColorStop(1, `rgba(${r},${g},${b},0)`)
+    ctx.fillStyle = grd
+    ctx.fillRect(0, 0, size, size)
+    tex.refresh()
   }
 
   // Fond illustré de la carte : la belle vue fantasy `map-monde.jpg`, mise à l'échelle « cover »
