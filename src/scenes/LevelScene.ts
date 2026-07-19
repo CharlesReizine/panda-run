@@ -109,6 +109,9 @@ export class LevelScene extends Phaser.Scene {
     // reste dans `platforms` et donc solide dans les deux sens.
     const oneWay = (this.oneWayPlatforms = this.physics.add.staticGroup())
     const tileKey = `tile-${this.levelDef.biome}`
+    // texture « dalle flottante » pour les plateformes surélevées (tranche de terre marquée) ;
+    // même taille 32×32 que le sol → corps de collision identique, seul le rendu change
+    const platformKey = `platform-${this.levelDef.biome}`
     for (let x = 0; x < this.levelDef.widthTiles; x++) {
       platforms.create(x * TILE + TILE / 2, GROUND_ROW * TILE + TILE, tileKey)
       platforms.create(x * TILE + TILE / 2, (GROUND_ROW + 1) * TILE + TILE, tileKey)
@@ -118,7 +121,7 @@ export class LevelScene extends Phaser.Scene {
     // autre (escaliers) fait cogner son dessous au joueur qui saute → il retombe.
     for (const p of this.levelDef.platforms) {
       for (let i = 0; i < p.w; i++) {
-        oneWay.create((p.x + i) * TILE + TILE / 2, p.y * TILE + TILE / 2, tileKey)
+        oneWay.create((p.x + i) * TILE + TILE / 2, p.y * TILE + TILE / 2, platformKey)
       }
     }
     // ponts de planches : plateformes fines, elles aussi traversables par le bas

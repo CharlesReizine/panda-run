@@ -1111,14 +1111,43 @@ export class PreloadScene extends Phaser.Scene {
     }
     for (const s of Object.values(SKILLS)) this.drawSkillIcon(s.id, SKILL_ICONS[s.id] ?? { color: 0xffd54f, glyph: 'sword' })
 
+    // Tuiles de terrain illustrées (32×32, réutilisées à l'identique par le sol et les
+    // plateformes) : dessus herbeux arrondi + terre en dessous. Le dessus (bande d'herbe) est
+    // calé sur le HAUT de la texture = haut du corps de collision, donc le panda pose ses pieds
+    // sur l'herbe. Le motif des touffes est régulier (pas de 8 px) → carrelage sans couture en
+    // largeur. Les couleurs viennent du biome (b.tile.*) → teinte adaptée automatiquement.
     for (const [id, b] of Object.entries(BIOMES)) {
+      const { soil, top, speck } = b.tile
+      // --- SOL : bloc de terre continu, dessus herbeux
       const g = this.add.graphics()
-      g.fillStyle(b.tile.soil).fillRect(0, 0, 32, 32)
-      g.fillStyle(b.tile.top).fillRect(0, 0, 32, 9)
-      g.fillStyle(b.tile.speck).fillEllipse(6, 5, 5, 4).fillEllipse(22, 6, 5, 4).fillEllipse(14, 3, 3, 3)
-      g.fillStyle(0x000000, 0.15).fillRect(0, 0, 32, 1).fillRect(0, 0, 1, 32)
+      g.fillStyle(soil).fillRect(0, 0, 32, 32)
+      // relief de terre : mouchetures + cailloux (loin des bords pour un raccord propre)
+      g.fillStyle(speck).fillEllipse(9, 21, 6, 4).fillEllipse(23, 27, 7, 4).fillEllipse(17, 15, 4, 3)
+      g.fillStyle(0x000000, 0.12).fillEllipse(23, 28, 5, 2)
+      g.fillStyle(0xffffff, 0.05).fillEllipse(9, 20, 4, 2)
+      // bande d'herbe (dessus) — calée sur le haut de la texture
+      g.fillStyle(top).fillRect(0, 0, 32, 10)
+      // touffes d'herbe qui débordent sur la terre + reflet clair au sommet
+      for (let tx = 0; tx < 32; tx += 8) g.fillTriangle(tx, 10, tx + 6, 10, tx + 3, 15)
+      g.fillStyle(0xffffff, 0.16).fillRect(0, 0, 32, 3)
+      g.fillStyle(0x000000, 0.10).fillRect(0, 8, 32, 2) // ombre douce sous l'herbe
+      g.fillStyle(0x000000, 0.10).fillRect(0, 30, 32, 2) // liseré bas (rangées empilées)
       g.generateTexture(`tile-${id}`, 32, 32)
       g.destroy()
+
+      // --- PLATEFORME flottante : même dessus herbeux, mais tranche de terre marquée par une
+      // sous-face sombre (effet de dalle qui flotte). Même taille 32×32 → corps identique.
+      const p = this.add.graphics()
+      p.fillStyle(soil).fillRect(0, 0, 32, 32)
+      p.fillStyle(speck).fillEllipse(10, 20, 6, 4).fillEllipse(22, 24, 6, 4)
+      p.fillStyle(0x000000, 0.16).fillRect(0, 24, 32, 8) // tranche de terre ombrée
+      p.fillStyle(0x000000, 0.28).fillRect(0, 30, 32, 2) // sous-face sombre
+      p.fillStyle(top).fillRect(0, 0, 32, 10) // dessus herbe = haut de collision
+      for (let tx = 0; tx < 32; tx += 8) p.fillTriangle(tx, 10, tx + 6, 10, tx + 3, 15)
+      p.fillStyle(0xffffff, 0.20).fillRect(0, 0, 32, 3)
+      p.fillStyle(0x000000, 0.10).fillRect(0, 8, 32, 2)
+      p.generateTexture(`platform-${id}`, 32, 32)
+      p.destroy()
     }
 
     const g = this.add.graphics()
@@ -1138,16 +1167,20 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0x1e88e5, 0.38).fillRect(0, 0, 32, 32)
     g.fillStyle(0x64b5f6, 0.45).fillRect(0, 0, 32, 5)
     g.fillStyle(0xbbdefb, 0.35).fillRect(4, 12, 8, 2).fillRect(18, 22, 9, 2); g.generateTexture('water', 32, 32); g.clear()
-    // échelle (montants + barreaux, répétée verticalement)
+    // échelle en bois (montants + barreaux, répétée verticalement)
     g.fillStyle(0x8d6e63).fillRect(4, 0, 5, 32).fillRect(23, 0, 5, 32) // montants
+    g.fillStyle(0xa1887f).fillRect(4, 0, 2, 32).fillRect(23, 0, 2, 32) // reflet clair des montants
     g.fillStyle(0xa1887f).fillRect(4, 4, 24, 4).fillRect(4, 20, 24, 4) // barreaux
-    g.fillStyle(0x6d4c41).fillRect(4, 4, 24, 1).fillRect(4, 20, 24, 1); g.generateTexture('ladder', 32, 32); g.clear()
+    g.fillStyle(0x6d4c41).fillRect(4, 7, 24, 1).fillRect(4, 23, 24, 1); g.generateTexture('ladder', 32, 32); g.clear()
     // drapeau de checkpoint (mât + fanion), teinté vert une fois activé
     g.fillStyle(0x9e9e9e).fillRect(3, 0, 3, 44)
     g.fillStyle(0xffffff).fillTriangle(6, 2, 6, 18, 26, 10); g.generateTexture('flag', 30, 44); g.clear()
-    // pont de planches
+    // pont de planches en bois
     g.fillStyle(0x8d6e63).fillRect(0, 0, 32, 12)
-    g.fillStyle(0x6d4c41).fillRect(0, 0, 32, 2).fillRect(7, 0, 2, 12).fillRect(22, 0, 2, 12); g.generateTexture('bridge', 32, 12); g.clear()
+    g.fillStyle(0xa1887f).fillRect(0, 0, 32, 3) // dessus clair (surface où l'on pose les pieds)
+    g.fillStyle(0x6d4c41).fillRect(0, 10, 32, 2) // ombre basse
+    g.fillStyle(0x5d4037).fillRect(10, 0, 2, 12).fillRect(21, 0, 2, 12) // séparations de planches
+    g.fillStyle(0x4e342e).fillCircle(3, 6, 1).fillCircle(29, 6, 1); g.generateTexture('bridge', 32, 12); g.clear()
     // sortie : portail lumineux
     g.fillStyle(0x00695c).fillRoundedRect(0, 4, 32, 44, 10)
     g.fillStyle(0x4db6ac).fillRoundedRect(4, 8, 24, 38, 8)
