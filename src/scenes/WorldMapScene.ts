@@ -24,6 +24,7 @@ export class WorldMapScene extends Phaser.Scene {
     const p = getPlayer()
     const current = byId.get(p.currentNode)!
     const neighbors = new Set(neighborsOf(p.currentNode))
+    const revealed = this.computeRevealed(p)
 
     this.drawRoads(byId)
 
@@ -31,10 +32,14 @@ export class WorldMapScene extends Phaser.Scene {
       const unlocked = isNodeUnlocked(n.id, p.completedLevels)
       const done = n.levelId ? p.completedLevels.includes(n.levelId) : false
       const isCurrent = n.id === p.currentNode
-      // règles d'interaction : un voisin débloqué se rejoint en un tap (voyage) ; le nœud
-      // courant, lui, ne se « rejoint » pas — sauf s'il s'agit d'une ville, qu'on peut alors
-      // ouvrir directement (entrée en ville) sans passer par un bouton séparé
-      const canTravel = unlocked && neighbors.has(n.id) && !isCurrent
+      // règles d'interaction : on n'avance QUE vers le front de progression (terrain voisin du
+      // nœud courant, débloqué, PAS encore complété) ; interdit de revenir sur un terrain déjà
+      // fait/derrière. EXCEPTION de VOYAGE : une ville déjà DÉCOUVERTE (révélée) et débloquée
+      // reste accessible pour y RETOURNER (achat/craft), même après avoir avancé. Le nœud courant
+      // ne se « rejoint » pas — sauf si c'est une ville, qu'on ouvre alors directement.
+      const isForwardTerrain = !isCurrent && unlocked && neighbors.has(n.id) && !done && n.type !== 'town'
+      const isReachedTown = !isCurrent && n.type === 'town' && unlocked && revealed.has(n.id)
+      const canTravel = isForwardTerrain || isReachedTown
       const canEnterTown = isCurrent && n.type === 'town'
       const interactive = canTravel || canEnterTown
       const radius = RADIUS[n.type]
@@ -75,34 +80,103 @@ export class WorldMapScene extends Phaser.Scene {
       }
     }
 
+    // brouillard de guerre : couvre les nœuds encore non révélés (dessiné APRÈS les nœuds/labels
+    // pour les masquer ; sous les boutons d'UI ci-dessous, remontés à un depth supérieur)
+    this.drawFog(byId, revealed)
+
     // marqueur du panda sur le nœud courant
-    const marker = this.add.image(current.x, current.y - RADIUS[current.type] - 14, `panda-${p.classId}`).setDisplaySize(26, 26).setDepth(5)
+    const marker = this.add.image(current.x, current.y - RADIUS[current.type] - 14, `panda-${p.classId}`).setDisplaySize(26, 26).setDepth(8)
     this.tweens.add({ targets: marker, y: marker.y - 5, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.inOut' })
 
-    this.add.text(30, 495, 'Menu', { fontSize: '20px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 14, y: 6 } })
+    this.add.text(30, 495, 'Menu', { fontSize: '20px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 14, y: 6 } }).setDepth(20)
       .setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('Menu'))
 
     // pastille : points de skill à dépenser
     if (p.skillPoints > 0) {
-      const b = this.add.text(96, 488, `${p.skillPoints}`, { fontSize: '14px', color: '#ffffff', backgroundColor: '#e53935', padding: { x: 6, y: 3 } }).setOrigin(0.5)
+      const b = this.add.text(96, 488, `${p.skillPoints}`, { fontSize: '14px', color: '#ffffff', backgroundColor: '#e53935', padding: { x: 6, y: 3 } }).setOrigin(0.5).setDepth(20)
       this.tweens.add({ targets: b, scale: 1.2, yoyo: true, repeat: -1, duration: 500 })
     }
 
     if (canChangeClass(p)) {
       const t = this.add.text(480, 495, '★ Changer de classe ! ★', { fontSize: '22px', color: '#000000', backgroundColor: '#ffd700', padding: { x: 18, y: 8 } })
-        .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('ClassChange'))
+        .setOrigin(0.5).setDepth(20).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('ClassChange'))
       this.tweens.add({ targets: t, scale: 1.08, yoyo: true, repeat: -1, duration: 500 })
     } else if (canEvolveClass(p)) {
       const t = this.add.text(480, 495, '★ Évolution disponible ! ★', { fontSize: '22px', color: '#000000', backgroundColor: '#ce93d8', padding: { x: 18, y: 8 } })
-        .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('ClassChange'))
+        .setOrigin(0.5).setDepth(20).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('ClassChange'))
       this.tweens.add({ targets: t, scale: 1.08, yoyo: true, repeat: -1, duration: 500 })
     }
   }
 
-  // fond façon parchemin : dégradé de base uni (bandes interpolées à la main —
-  // fillGradientStyle est WebGL only et ne s'affiche pas si le renderer bascule en Canvas).
-  // Pas de blocs de zone teintés : ils se chevauchaient et créaient des carrés superposés.
+  // Ensemble des nœuds RÉVÉLÉS (hors brouillard). MÊME règle pour villes ET terrains : un nœud est
+  // révélé s'il est complété, s'il est le nœud courant, ou s'il est adjacent à un nœud
+  // complété/courant (les prochains choix visibles). Les villes ne sont PAS pré-révélées : elles
+  // se découvrent comme le reste. (Une ville reste ensuite révélée en permanence car son terrain
+  // voisin complété la maintient adjacente à un nœud complété → on peut y re-voyager, voir plus bas.)
+  private computeRevealed(p: ReturnType<typeof getPlayer>): Set<string> {
+    const done = (n: MapNode) => (n.levelId ? p.completedLevels.includes(n.levelId) : false)
+    const anchors = new Set<string>()
+    for (const n of WORLD_NODES) if (done(n) || n.id === p.currentNode) anchors.add(n.id)
+    const revealed = new Set<string>(anchors)
+    for (const id of anchors) for (const nb of neighborsOf(id)) revealed.add(nb)
+    return revealed
+  }
+
+  // Brouillard de guerre : un nuage sombre couvre chaque nœud NON révélé (+ son étiquette + le
+  // tronçon de chemin qui y mène). Les nœuds fraîchement révélés depuis la dernière visite voient
+  // leur nuage se dissiper (fondu) : le brouillard « se lève » au fil des complétions.
+  private drawFog(byId: Map<string, MapNode>, revealed: Set<string>) {
+    const KEY = 'panda-run:map-revealed'
+    let prev: string[] = []
+    try { prev = JSON.parse(localStorage.getItem(KEY) ?? '[]') as string[] } catch { prev = [] }
+    const prevSet = new Set(prev)
+    for (const n of WORLD_NODES) {
+      if (!revealed.has(n.id)) this.drawCloud(n, byId) // nœud encore masqué
+    }
+    // fondu de « lever du brouillard » sur les nœuds révélés depuis la dernière visite
+    if (prev.length > 0) {
+      for (const n of WORLD_NODES) {
+        if (!revealed.has(n.id) || prevSet.has(n.id)) continue
+        const cloud = this.drawCloud(n, byId)
+        this.tweens.add({ targets: cloud, alpha: 0, duration: 900, delay: 200, ease: 'Sine.out', onComplete: () => cloud.destroy() })
+      }
+    }
+    try { localStorage.setItem(KEY, JSON.stringify([...revealed])) } catch { /* stockage indispo : pas de persistance du fondu */ }
+  }
+
+  // Amas de disques sombres façon nuage, couvrant le nœud + son étiquette (dessous) + la moitié
+  // des arêtes qui y mènent (côté brouillard). Renvoie l'objet pour pouvoir l'animer (fondu).
+  private drawCloud(n: MapNode, byId: Map<string, MapNode>): Phaser.GameObjects.Graphics {
+    const g = this.add.graphics().setDepth(6)
+    const dark = 0x1e1e30
+    g.lineStyle(16, dark, 0.9)
+    for (const nbId of neighborsOf(n.id)) {
+      const m = byId.get(nbId)!
+      g.beginPath(); g.moveTo(n.x, n.y); g.lineTo((n.x + m.x) / 2, (n.y + m.y) / 2); g.strokePath()
+    }
+    const puffs: [number, number, number][] = [
+      [n.x - 24, n.y - 4, 20], [n.x + 24, n.y - 4, 20], [n.x, n.y - 16, 24],
+      [n.x - 6, n.y + 12, 30], [n.x - 28, n.y + 26, 20], [n.x + 28, n.y + 26, 20], [n.x, n.y + 36, 24],
+    ]
+    g.fillStyle(0x45456a, 0.5)
+    for (const [cx, cy, r] of puffs) g.fillCircle(cx, cy, r * 1.18)
+    g.fillStyle(dark, 0.95)
+    for (const [cx, cy, r] of puffs) g.fillCircle(cx, cy, r)
+    return g
+  }
+
+  // Fond illustré de la carte : la belle vue fantasy `map-monde.jpg`, mise à l'échelle « cover »
+  // pour couvrir tout l'écran (960×540) centrée, très en arrière (depth -30). Un léger voile
+  // sombre par-dessus assoit le contraste des labels/nœuds. Repli sur le parchemin procédural
+  // si l'illustration manque au chargement.
   private drawBackground() {
+    if (this.textures.exists('map-monde')) {
+      const src = this.textures.get('map-monde').getSourceImage()
+      const cover = Math.max(960 / src.width, 540 / src.height)
+      this.add.image(480, 270, 'map-monde').setScale(cover).setDepth(-30)
+      this.add.rectangle(480, 270, 960, 540, 0x1a1208, 0.2).setDepth(-29)
+      return
+    }
     const bg = this.add.graphics()
     const top: [number, number, number] = [0xf1, 0xe2, 0xbd]
     const bottom: [number, number, number] = [0xc9, 0xa8, 0x6a]

@@ -98,6 +98,8 @@ export class PreloadScene extends Phaser.Scene {
 
   preload() {
     this.load.image('splash', 'art/splash.png')
+    // fond illustré de la carte du monde (vue du dessus fantasy), affiché par WorldMapScene
+    this.load.image('map-monde', 'art/map-monde.jpg')
     for (const id of ART_MONSTERS) this.load.image(`art-${id}`, `art/art-${id}.png`)
     // fonds de biome illustrés (public/art/biome-<clé>.jpg), affichés par LevelScene
     for (const id of Object.keys(BIOMES)) this.load.image(`biome-${id}`, `art/biome-${id}.jpg`)
