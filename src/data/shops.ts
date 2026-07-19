@@ -7,26 +7,26 @@ export interface ShopItemDef { itemId: string; price: number }
 export const POTION_PRICE = 20
 
 export const WEAPON_SHOP: ShopItemDef[] = [
-  { itemId: 'epee-bambou', price: 80 },
-  { itemId: 'arc-souple', price: 100 },
-  { itemId: 'baton-feuillu', price: 120 },
-  { itemId: 'griffe-royale', price: 300 },
+  { itemId: 'epee-bambou', price: 90 },
+  { itemId: 'arc-souple', price: 110 },
+  { itemId: 'baton-feuillu', price: 140 },
+  { itemId: 'griffe-royale', price: 850 },
 ]
 
 export const ARMOR_SHOP: ShopItemDef[] = [
-  { itemId: 'grelot-porte-bonheur', price: 120 },
-  { itemId: 'plastron-feuilles', price: 150 },
-  { itemId: 'amulette-pharaon', price: 250 },
-  { itemId: 'carapace-scarabee', price: 350 },
+  { itemId: 'grelot-porte-bonheur', price: 300 },
+  { itemId: 'plastron-feuilles', price: 180 },
+  { itemId: 'amulette-pharaon', price: 700 },
+  { itemId: 'carapace-scarabee', price: 650 },
 ]
 
 export const HAT_SHOP: ShopItemDef[] = [
-  { itemId: 'sakkat', price: 120 },
-  { itemId: 'chapeau-poring', price: 100 },
-  { itemId: 'bonnet-champi', price: 130 },
-  { itemId: 'casque-orc', price: 220 },
-  { itemId: 'ailes-angeling', price: 280 },
-  { itemId: 'couronne-royale', price: 400 },
+  { itemId: 'sakkat', price: 130 },
+  { itemId: 'chapeau-poring', price: 110 },
+  { itemId: 'bonnet-champi', price: 150 },
+  { itemId: 'casque-orc', price: 420 },
+  { itemId: 'ailes-angeling', price: 520 },
+  { itemId: 'couronne-royale', price: 1100 },
 ]
 
 export interface QuestDef {
