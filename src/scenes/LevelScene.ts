@@ -32,6 +32,15 @@ const BIOME_TRACKS: Record<string, MusicTrack> = {
 // largeur de la barre de vie du boss (centrée sous son nom)
 const BOSS_BAR_W = 440
 
+// Plongée sous l'eau : le panda peut s'enfoncer sous la surface (traversée verticale), mais tant
+// que sa TÊTE reste immergée il retient son souffle un court instant (apnée) puis se noie
+// PROGRESSIVEMENT — jamais de mort instantanée. Le souffle se recharge dès qu'il ressort la tête.
+const BREATH_MAX_MS = 1800 // délai de grâce d'apnée avant que la noyade douce ne commence
+const BREATH_RECHARGE_MULT = 3 // le souffle se recharge 3× plus vite qu'il ne se vide (retour surface = répit rapide)
+const DROWN_DPS = 7 // PV perdus par seconde une fois le souffle épuisé (traversée courte = sûre)
+const DROWN_TICK_MS = 250 // cadence des ticks de noyade : perte régulière, jamais d'un coup
+const BUBBLE_INTERVAL_MS = 170 // intervalle d'émission des bulles tant que la tête est sous l'eau
+
 export { TILE }
 
 export class LevelScene extends Phaser.Scene {
@@ -47,6 +56,14 @@ export class LevelScene extends Phaser.Scene {
   private oneWayPlatforms!: Phaser.Physics.Arcade.StaticGroup
   private ladderRects: Phaser.Geom.Rectangle[] = []
   private waterRects: Phaser.Geom.Rectangle[] = []
+  // Plongée : réserve d'apnée restante (ms), accumulateurs de ticks de noyade et d'émission de
+  // bulles, voile bleuté quand la tête est immergée, petite jauge d'apnée au-dessus de la tête.
+  private breathMs = BREATH_MAX_MS
+  private drownAccumMs = 0
+  private bubbleAccumMs = 0
+  private submergeVeil: Phaser.GameObjects.Rectangle | null = null
+  private breathBarBg: Phaser.GameObjects.Rectangle | null = null
+  private breathBar: Phaser.GameObjects.Rectangle | null = null
   private lastCheckpoint: { x: number; y: number } | null = null
   levelDef!: LevelDef
   private fromNode: string | null = null
@@ -99,6 +116,14 @@ export class LevelScene extends Phaser.Scene {
     // la scène est réutilisée entre niveaux : ces états doivent repartir de zéro
     this.ladderRects = []
     this.waterRects = []
+    // plongée : on entame chaque niveau souffle plein, sans dette de noyade ; les overlays
+    // (voile, jauge) sont recréés plus bas (la scène est réutilisée → références remises à zéro)
+    this.breathMs = BREATH_MAX_MS
+    this.drownAccumMs = 0
+    this.bubbleAccumMs = 0
+    this.submergeVeil = null
+    this.breathBarBg = null
+    this.breathBar = null
     this.lastCheckpoint = null
 
     const widthPx = this.levelDef.widthTiles * TILE
@@ -221,6 +246,11 @@ export class LevelScene extends Phaser.Scene {
       }
     }
     this.physics.add.overlap(this.player, spikes, () => this.hitPlayer(35))
+
+    // voile bleuté discret, épinglé à l'écran, affiché seulement quand la tête est immergée
+    // (alpha piloté dans updateWater). Sous les overlays de menu/K.O. (depth ≥ 20).
+    this.submergeVeil = this.add.rectangle(480, 270, 960, 540, 0x0a4a7a, 0)
+      .setScrollFactor(0).setDepth(15)
 
     // échelles : texture répétée + zone d'escalade (gérée dans update via ladderRects)
     for (const l of this.levelDef.ladders ?? []) {
@@ -686,6 +716,101 @@ export class LevelScene extends Phaser.Scene {
     this.player.clearTint()
     this.player.heal(this.player.stats.maxHp)
     this.invulnUntil = this.time.now + 1500
+  }
+
+  // Plongée sous l'eau (appelé chaque frame ; no-op sans bassin). Le panda est « submergé » quand
+  // le HAUT de sa hitbox (le crâne) est passé sous la surface du bassin courant. Tant qu'il l'est :
+  // le souffle se vide, des bulles montent depuis sa tête, et une fois le souffle épuisé il perd
+  // de la vie par ticks réguliers (noyade douce, jamais instantanée). Dès qu'il ressort la tête,
+  // la noyade s'arrête et le souffle se recharge vite. Respecte le god mode (via drownTick).
+  private updateWater(delta: number) {
+    const body = this.player.body as Phaser.Physics.Arcade.Body
+    const rect = this.waterRects.find((r) => r.contains(this.player.x, this.player.y))
+    // marge de 4px : on ne compte comme immergé que quand la tête est franchement sous la surface
+    const submerged = !!rect && body.top >= rect.top + 4
+
+    if (submerged) {
+      this.breathMs = Math.max(0, this.breathMs - delta)
+      this.bubbleAccumMs += delta
+      while (this.bubbleAccumMs >= BUBBLE_INTERVAL_MS) {
+        this.bubbleAccumMs -= BUBBLE_INTERVAL_MS
+        this.emitBubble(body.top)
+      }
+      // souffle épuisé : noyade douce par ticks réguliers (jamais de mort d'un seul coup)
+      if (this.breathMs <= 0) {
+        this.drownAccumMs += delta
+        while (this.drownAccumMs >= DROWN_TICK_MS) {
+          this.drownAccumMs -= DROWN_TICK_MS
+          this.drownTick((DROWN_DPS * DROWN_TICK_MS) / 1000)
+        }
+      }
+    } else {
+      // tête hors de l'eau : répit — le souffle se recharge vite et la noyade s'interrompt
+      this.breathMs = Math.min(BREATH_MAX_MS, this.breathMs + delta * BREATH_RECHARGE_MULT)
+      this.drownAccumMs = 0
+      this.bubbleAccumMs = 0
+    }
+
+    this.submergeVeil?.setAlpha(submerged ? 0.14 : 0)
+    this.updateBreathGauge(body, submerged)
+  }
+
+  // un tick de noyade : perte de PV régulière passant par le chemin de dégâts standard. Respecte
+  // le god mode (émulateur/tests → aucune perte) et déclenche le K.O. / checkpoint comme un coup.
+  private drownTick(amount: number) {
+    if ((globalThis as { __pandaGodMode?: boolean }).__pandaGodMode) return
+    if (this.player.hp <= 0) return
+    this.player.takeDamage(amount)
+    if (this.player.hp <= 0) {
+      audio.playSfx('player-death')
+      if (this.lastCheckpoint) { this.respawnAtCheckpoint(); return }
+      save(getPlayer())
+      this.showGameOver()
+    }
+  }
+
+  // une bulle qui monte depuis la tête du panda et s'estompe (réutilise la texture fx-bubble,
+  // mise à petite échelle). Effet léger : quelques bulles translucides qui remontent.
+  private emitBubble(headY: number) {
+    const bx = this.player.x + Phaser.Math.Between(-8, 8)
+    const b = this.add.image(bx, headY + 2, 'fx-bubble')
+      .setDepth(this.player.depth + 1)
+      .setScale(Phaser.Math.FloatBetween(0.2, 0.45))
+      .setAlpha(0.8)
+    this.tweens.add({
+      targets: b,
+      y: headY - Phaser.Math.Between(28, 48),
+      x: bx + Phaser.Math.Between(-7, 7),
+      scale: b.scale * 1.5,
+      alpha: 0,
+      duration: Phaser.Math.Between(560, 860),
+      ease: 'Sine.out',
+      onComplete: () => b.destroy(),
+    })
+  }
+
+  // petite jauge d'apnée au-dessus de la tête : visible seulement quand le souffle n'est pas plein
+  // (donc invisible hors de l'eau). Vire au rouge quand le souffle est presque épuisé.
+  private updateBreathGauge(body: Phaser.Physics.Arcade.Body, submerged: boolean) {
+    const show = submerged || this.breathMs < BREATH_MAX_MS - 1
+    if (!show) {
+      this.breathBarBg?.setVisible(false)
+      this.breathBar?.setVisible(false)
+      return
+    }
+    const w = 34
+    const x = this.player.x - w / 2
+    const y = body.top - 12
+    const frac = Phaser.Math.Clamp(this.breathMs / BREATH_MAX_MS, 0, 1)
+    if (!this.breathBarBg) {
+      this.breathBarBg = this.add.rectangle(0, 0, w + 2, 6, 0x000000, 0.5).setOrigin(0, 0.5).setDepth(9)
+      this.breathBar = this.add.rectangle(0, 0, w, 4, 0x4fc3f7).setOrigin(0, 0.5).setDepth(10)
+    }
+    this.breathBarBg.setVisible(true).setPosition(x - 1, y)
+    const bar = this.breathBar!
+    bar.setVisible(true).setPosition(x, y)
+    bar.setDisplaySize(Math.max(0.001, w * frac), 4)
+    bar.setFillStyle(frac > 0.3 ? 0x4fc3f7 : 0xff5252)
   }
 
   basicAttack() {
@@ -1981,6 +2106,7 @@ export class LevelScene extends Phaser.Scene {
     this.player.onLadder = !!onLad
     if (onLad) this.player.ladderCenterX = onLad.centerX
     this.player.inWater = this.waterRects.some((r) => r.contains(this.player.x, this.player.y))
+    this.updateWater(delta)
     if (this.time.now < this.dashUntil) {
       // pendant la roulade : vitesse imposée, contrôles suspendus (le saut/déplacement
       // reprennent la main dès la fin de la fenêtre)
