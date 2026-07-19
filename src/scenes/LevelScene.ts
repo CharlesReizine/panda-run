@@ -50,6 +50,7 @@ export class LevelScene extends Phaser.Scene {
   private targetNode: string | null = null
   private dir: 'forward' | 'backward' = 'forward'
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
+  private wasd!: Record<string, Phaser.Input.Keyboard.Key>
   private jumpHeld = false
   private invulnUntil = 0
   private dashUntil = 0
@@ -292,6 +293,9 @@ export class LevelScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1)
 
     this.cursors = this.input.keyboard!.createCursorKeys()
+    // clavier PC additionnel : ZQSD (AZERTY) et WASD (QWERTY) doublent les flèches —
+    // gauche = A/Q, droite = D, haut = W/Z, bas = S. Le saut reste sur ESPACE.
+    this.wasd = this.input.keyboard!.addKeys('W,A,S,D,Z,Q') as Record<string, Phaser.Input.Keyboard.Key>
 
     this.add.text(480, 8, this.levelDef.name, { fontSize: '15px', color: '#ffffff' }).setOrigin(0.5, 0).setScrollFactor(0)
 
@@ -399,14 +403,15 @@ export class LevelScene extends Phaser.Scene {
   }
 
   private keyboardControls(): ControlsState {
-    // saut = espace (le bouton tactile dédié double le saut) ; flèches haut/bas = vertical
-    // (échelles / nage), pour ne pas confondre grimper et sauter au clavier
+    // saut = espace (le bouton tactile dédié double le saut) ; flèches / WASD / ZQSD haut/bas =
+    // vertical (échelles / nage), pour ne pas confondre grimper et sauter au clavier
+    const k = this.wasd
     return {
-      left: this.cursors.left.isDown,
-      right: this.cursors.right.isDown,
+      left: this.cursors.left.isDown || !!(k.A?.isDown || k.Q?.isDown),
+      right: this.cursors.right.isDown || !!k.D?.isDown,
       jump: this.cursors.space.isDown,
-      up: this.cursors.up.isDown,
-      down: this.cursors.down.isDown,
+      up: this.cursors.up.isDown || !!(k.W?.isDown || k.Z?.isDown),
+      down: this.cursors.down.isDown || !!k.S?.isDown,
     }
   }
 
@@ -761,14 +766,21 @@ export class LevelScene extends Phaser.Scene {
     } else if (skill.kind === 'projectile') {
       const proj = this.spawnPlayerProjectile(atk * mult, skill.range)
       if (skill.arc) {
-        // lancé en cloche : gravité + rebond + rotation (bambou)
+        // lancé en cloche : gravité + rotation (bambou). Au contact d'une surface (sol plein
+        // ou plateforme), le boulet S'ARRÊTE et disparaît avec un petit impact — pas de rebond
+        // à l'infini ni de traversée du sol.
         const b = proj.body as Phaser.Physics.Arcade.Body
         b.setAllowGravity(true)
         b.setVelocity(this.player.facing * 340, -430)
-        b.setBounce(0.45)
         proj.setTexture('bamboo').setScale(1).setTint(color).setAngularVelocity(this.player.facing * 480)
-        this.physics.add.collider(proj, this.platforms)
-        this.physics.add.collider(proj, this.oneWayPlatforms)
+        const popOnGround: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (projObj) => {
+          const pp = projObj as Projectile
+          if (!pp.active) return
+          this.impactFx(pp.x, pp.y, color)
+          pp.destroy()
+        }
+        this.physics.add.collider(proj, this.platforms, popOnGround)
+        this.physics.add.collider(proj, this.oneWayPlatforms, popOnGround)
       } else if (skill.pierce) {
         // gros faisceau qui transperce tout sur son trajet
         proj.pierce = true

@@ -8,6 +8,11 @@ const CHARGE_COOLDOWN = 2500
 const SHOOT_COOLDOWN = 2000
 const CAST_COOLDOWN = 3200
 const CASTER_KEEP_DIST = 240 // distance de confort du lanceur de sorts
+// seuil d'hystérésis d'orientation : on ne retourne le sprite que si l'intention horizontale
+// est franche (|vx| > ce seuil). En deçà on garde la dernière orientation → plus de bascule
+// flip flou quand la vitesse oscille autour de 0 (lanceur qui garde ses distances, cible qui
+// alterne gauche/droite)
+const FLIP_THRESHOLD = 20
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   monster: MonsterDef
@@ -19,6 +24,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private lvlText: Phaser.GameObjects.Text
   private eliteAura: Phaser.GameObjects.Graphics | null = null
   private isCharging = false
+  private facingLeft = false // orientation retenue (mise à jour seulement au-delà de FLIP_THRESHOLD)
   private zzz: Phaser.GameObjects.Text | null = null
   private nextZzzToggleAt = 0
 
@@ -102,8 +108,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     // marche : dandinement + regarde dans son sens de déplacement ; sinon respiration
     const vx = (this.body as Phaser.Physics.Arcade.Body).velocity.x
+    // orientation avec hystérésis : ne bascule que sur une intention franche, sinon garde
+    // la dernière → supprime le tremblement de flip quand vx oscille près de 0
+    if (Math.abs(vx) > FLIP_THRESHOLD) this.facingLeft = vx < 0
+    this.setFlipX(this.facingLeft)
     if (Math.abs(vx) > 5) {
-      this.setFlipX(vx < 0)
       this.setRotation(Math.sin(t / 70) * 0.12)
       this.setScale(1, 1 + 0.04 * Math.sin(t / 70))
     } else {
