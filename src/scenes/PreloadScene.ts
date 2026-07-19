@@ -189,7 +189,7 @@ export class PreloadScene extends Phaser.Scene {
 
   // bake l'illustration fournie dans la texture monster-<id> à la taille standard (carrée, centrée)
   private artMonster(id: string, big: boolean) {
-    const s = big ? 76 : 40
+    const s = big ? 100 : 56
     const h = s + 6
     const img = this.add.image(0, 0, this.cleanArtTexture(id)).setOrigin(0, 0).setDisplaySize(s, s)
     img.setPosition(0, (h - s) / 2)
