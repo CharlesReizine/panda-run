@@ -18,7 +18,7 @@ import { SKILLS } from '../data/skills'
 import { rollDrops } from '../core/loot'
 import type { DropEntry } from '../core/types'
 import type { UIScene } from './UIScene'
-import { TILE, GROUND_ROW, landsOnOneWayPlatform } from '../core/platforming'
+import { TILE, GROUND_ROW, GRAVITY, landsOnOneWayPlatform } from '../core/platforming'
 import { BIOMES } from '../data/biomes'
 import { audio, type MusicTrack } from '../audio/audio-engine'
 
@@ -145,8 +145,12 @@ export class LevelScene extends Phaser.Scene {
     this.physics.add.collider(this.enemies, platforms)
     this.physics.add.collider(this.enemies, oneWay)
 
-    this.enemyProjectiles = this.physics.add.group()
-    this.playerProjectiles = this.physics.add.group()
+    // allowGravity: false par défaut — SINON le groupe réapplique son défaut (gravité ON) à
+    // chaque `add()` et écrase le setAllowGravity(false) du constructeur de Projectile : les tirs
+    // horizontaux se mettaient alors à TOMBER à la verticale. Les tirs en cloche (bambou,
+    // mandragore) réactivent explicitement la gravité APRÈS l'ajout au groupe.
+    this.enemyProjectiles = this.physics.add.group({ allowGravity: false })
+    this.playerProjectiles = this.physics.add.group({ allowGravity: false })
 
     this.pickups = this.physics.add.group()
     this.physics.add.collider(this.pickups, platforms)
@@ -488,13 +492,17 @@ export class LevelScene extends Phaser.Scene {
           // éventail de 5 projectiles + slam de zone télégraphié sous le joueur
           for (const dy of [-0.5, -0.25, 0, 0.25, 0.5]) {
             const proj = new Projectile(this, boss.x, boss.y - 20, this.player.x - boss.x, this.player.y - boss.y + dy * 260, def.atk, false, 650)
+            proj.setTexture('fx-shot').clearTint()
             this.enemyProjectiles.add(proj)
+            proj.launch()
           }
           this.enemyGroundSpell(this.player.x, def.atk)
         } else {
           for (const dy of [-0.3, 0, 0.3]) {
             const proj = new Projectile(this, boss.x, boss.y - 20, this.player.x - boss.x, this.player.y - boss.y + dy * 200, def.atk, false, 600)
+            proj.setTexture('fx-shot').clearTint()
             this.enemyProjectiles.add(proj)
+            proj.launch()
           }
         }
       },
@@ -653,10 +661,14 @@ export class LevelScene extends Phaser.Scene {
     this.player.gainEnergy(ENERGY_ON_BASIC_HIT) // frapper recharge un peu l'énergie
 
     const cls = getPlayer().classId
-    if (cls === 'archer' || cls === 'mage') {
-      // attaque de base à distance : flèche (archer) ou orbe (mage)
-      const proj = this.spawnPlayerProjectile(this.player.stats.atk * this.player.outgoingMult(), 420)
-      proj.setTint(cls === 'archer' ? 0xd7a86e : 0x64b5f6)
+    const isMageType = cls === 'mage' || cls === 'sorcier'
+    const isArcherType = cls === 'archer' || cls === 'chasseur'
+    if (isMageType || isArcherType) {
+      // attaque de base à distance, HORIZONTALE (sens du regard), sans gravité : petite boule
+      // de feu bleue (mage/sorcier) ou flèche (archer/chasseur). S'arrête au 1er ennemi ou à ~440px.
+      const proj = this.spawnPlayerProjectile(this.player.stats.atk * this.player.outgoingMult(), 440)
+      if (isMageType) proj.setTexture('fx-fireball').clearTint().setScale(1.3)
+      else proj.setTexture('fx-arrow').clearTint().setScale(1.2)
     } else {
       this.slashFx(this.player.x + this.player.facing * 30, this.player.y, 60, 0xffffff)
       this.meleeHit(70, 1)
@@ -668,7 +680,32 @@ export class LevelScene extends Phaser.Scene {
     const proj = new Projectile(this, this.player.x + this.player.facing * 22, this.player.y + 16, this.player.facing, 0, damage, true, rangePx)
     proj.setScale(1.5) // bien visible
     this.playerProjectiles.add(proj)
+    proj.launch() // relance la vélocité (le groupe l'a remise à 0 sur add)
     return proj
+  }
+
+  // projectile ennemi lancé EN CLOCHE (mandragore) : soumis à la gravité, décrit un arc vers le
+  // joueur, puis retombe et S'ARRÊTE au sol (collision plateformes → petit impact, pas de rebond).
+  spawnEnemyLob(x: number, y: number, targetX: number, damage: number) {
+    const proj = new Projectile(this, x, y, 1, 0, damage, false, 1400)
+    proj.setTexture('fx-lob').clearTint().setScale(1)
+    // ajout au groupe D'ABORD (il remet la gravité au défaut du groupe = OFF), puis on réactive
+    // la gravité et on impose la vélocité d'arc → la cloche n'est pas écrasée par le groupe
+    this.enemyProjectiles.add(proj)
+    const dx = targetX - x
+    const T = 0.75 // temps de vol visé → hauteur d'arc ≈ 84px
+    const body = proj.body as Phaser.Physics.Arcade.Body
+    body.setAllowGravity(true)
+    body.setVelocity(Phaser.Math.Clamp(dx / T, -520, 520), -0.5 * GRAVITY * T)
+    proj.setAngularVelocity((Math.sign(dx) || 1) * 320) // tourne sur elle-même (comme le bambou)
+    const popOnGround: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (projObj) => {
+      const pp = projObj as Projectile
+      if (!pp.active) return
+      this.impactFx(pp.x, pp.y, 0x7bc86c)
+      pp.destroy()
+    }
+    this.physics.add.collider(proj, this.platforms, popOnGround)
+    this.physics.add.collider(proj, this.oneWayPlatforms, popOnGround)
   }
 
   // croissant de coup visible même dans le vide + petit élan du panda ; en mode "intense"
@@ -781,7 +818,10 @@ export class LevelScene extends Phaser.Scene {
       }
       this.aoeRing(this.player.x, this.player.y, skill.range, color, true)
     } else if (skill.kind === 'projectile') {
-      const proj = this.spawnPlayerProjectile(atk * mult, skill.range)
+      // skills perçants (flèche perçante / laser) : traversent TOUT sur toute la largeur visible
+      // → portée forcée à au moins la largeur caméra (~960px)
+      const range = skill.pierce ? Math.max(skill.range, this.scale.width) : skill.range
+      const proj = this.spawnPlayerProjectile(atk * mult, range)
       if (skill.arc) {
         // lancé en cloche : gravité + rotation (bambou). Au contact d'une surface (sol plein
         // ou plateforme), le boulet S'ARRÊTE et disparaît avec un petit impact — pas de rebond
@@ -799,13 +839,20 @@ export class LevelScene extends Phaser.Scene {
         this.physics.add.collider(proj, this.platforms, popOnGround)
         this.physics.add.collider(proj, this.oneWayPlatforms, popOnGround)
       } else if (skill.pierce) {
-        // gros faisceau qui transperce tout sur son trajet
+        // transperce tout sur toute la largeur visible : grande flèche perçante (archer/chasseur)
+        // ou faisceau laser (mage/sorcier). Texture blanche → teintée par la couleur du skill.
         proj.pierce = true
-        proj.setTexture('beam').setTint(color).setDisplaySize(52, 16)
+        const isArrow = skill.classId === 'archer' || skill.classId === 'chasseur'
+          || skill.id.includes('fleche') || skill.id.includes('tir')
+        proj.setTexture(isArrow ? 'fx-arrow-pierce' : 'fx-laser').setTint(color).setScale(1)
       } else {
-        proj.setTint(color)
-        if (skill.multiplier >= 2.5) proj.setScale(1.8)
-        else if (skill.multiplier >= 1.6) proj.setScale(1.3)
+        // projectile simple : boule de feu (mage/sorcier) ou flèche (archer/chasseur), sinon orbe
+        const mageType = skill.classId === 'mage' || skill.classId === 'sorcier'
+        const archerType = skill.classId === 'archer' || skill.classId === 'chasseur'
+        if (mageType) proj.setTexture('fx-fireball').clearTint()
+        else if (archerType) proj.setTexture('fx-arrow').clearTint()
+        else proj.setTint(color)
+        proj.setScale(skill.multiplier >= 2.5 ? 1.6 : skill.multiplier >= 1.6 ? 1.25 : 1.05)
       }
     } else if (skill.kind === 'heal') {
       this.player.heal(Math.round(maxHp * mult))

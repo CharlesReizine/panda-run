@@ -70,6 +70,25 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
+  // tir d'un projectile vers le joueur, propre et cohérent selon le monstre :
+  //  - mandragore : boule verte EN CLOCHE (gravité, retombe et s'arrête au sol)
+  //  - mage noir : bolt magique violet HORIZONTAL ; rocker : petite pierre HORIZONTALE
+  //  - autres : orbe d'attaque générique HORIZONTAL (dirY = 0, sans gravité)
+  private fireProjectile() {
+    const player = this.levelScene.player
+    if (this.monster.id === 'mandragore') {
+      this.levelScene.spawnEnemyLob(this.x, this.y - 10, player.x, this.monster.atk)
+      return
+    }
+    const dir = Math.sign(player.x - this.x) || 1
+    const p = new Projectile(this.scene, this.x + dir * 12, this.y - 10, dir, 0, this.monster.atk, false, 620)
+    if (this.monster.id === 'mage-noir') p.setTexture('fx-bolt').clearTint().setScale(1.1)
+    else if (this.monster.id === 'rocker') p.setTexture('fx-rock').clearTint().setScale(1.1)
+    else p.setTexture('fx-shot').clearTint().setScale(1)
+    this.levelScene.enemyProjectiles.add(p)
+    p.launch() // relance la vélocité (le groupe l'a remise à 0 sur add)
+  }
+
   preUpdate(t: number, d: number) {
     super.preUpdate(t, d)
     const player = this.levelScene.player
@@ -93,8 +112,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           this.setVelocityX(dist > stopDist ? dir * this.monster.speed : 0)
         }
       } else if (this.monster.behavior === 'projectile' && t > this.nextActionAt) {
-        const p = new Projectile(this.scene, this.x, this.y - 10, player.x - this.x, player.y - this.y, this.monster.atk, false, 500)
-        this.levelScene.enemyProjectiles.add(p)
+        this.fireProjectile()
         this.nextActionAt = t + SHOOT_COOLDOWN
       } else if (this.monster.behavior === 'caster') {
         // garde ses distances : recule si le joueur s'approche, avance s'il fuit
@@ -108,8 +126,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         }
         // + projectile occasionnel pour harceler pendant le rechargement du sort
         if (t > this.nextShootAt) {
-          const p = new Projectile(this.scene, this.x, this.y - 10, player.x - this.x, player.y - this.y, this.monster.atk, false, 500)
-          this.levelScene.enemyProjectiles.add(p)
+          this.fireProjectile()
           this.nextShootAt = t + SHOOT_COOLDOWN * 1.5
         }
       } else if (this.monster.behavior !== 'projectile') {

@@ -8,6 +8,8 @@ export class Projectile extends Phaser.Physics.Arcade.Sprite {
   private startX: number
   private startY: number
   private rangePx: number
+  private readonly launchVX: number
+  private readonly launchVY: number
   private trailSinceMs = 0
   private readonly trailEveryMs = 35
 
@@ -17,6 +19,8 @@ export class Projectile extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this)
     ;(this.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
     const v = new Phaser.Math.Vector2(dirX, dirY).normalize().scale(420)
+    this.launchVX = v.x
+    this.launchVY = v.y
     this.setVelocity(v.x, v.y)
     this.setRotation(Math.atan2(v.y, v.x)) // oriente le sprite dans l'axe du tir dès le départ
     this.damage = damage
@@ -25,6 +29,14 @@ export class Projectile extends Phaser.Physics.Arcade.Sprite {
     this.startY = y
     this.rangePx = rangePx
     if (!fromPlayer) this.setTint(0xff5252)
+  }
+
+  // À rappeler APRÈS l'ajout à un groupe physique : un Phaser.Physics.Arcade.Group réapplique
+  // ses défauts (vélocité 0) à chaque add(), ce qui écrase la vélocité posée au constructeur.
+  // Sans ce relancement, les tirs restaient immobiles (puis tombaient si la gravité était ON).
+  launch(): this {
+    this.setVelocity(this.launchVX, this.launchVY)
+    return this
   }
 
   preUpdate(t: number, d: number) {

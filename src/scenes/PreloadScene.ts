@@ -1245,6 +1245,53 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0x33691e).fillRoundedRect(0, 3, 26, 8, 3)
     g.fillStyle(0x7cb342).fillRoundedRect(1, 4, 24, 5, 2)
     g.fillStyle(0x33691e).fillRect(8, 3, 2, 8).fillRect(17, 3, 2, 8); g.generateTexture('bamboo', 26, 14); g.clear()
+    // ─── Projectiles « refonte » (attaques à distance) ─────────────────────────
+    // Tous orientés vers la DROITE par défaut (la trajectoire horizontale) ; Projectile les
+    // fait pivoter dans l'axe de la vélocité, donc un tir vers la gauche est simplement retourné.
+    // fx-fireball : petite boule de feu BLEUE (attaque de base du mage/sorcier) — halo + cœur
+    // chaud + queue de flamme derrière (à gauche = arrière quand elle file vers la droite)
+    g.fillStyle(0x90caf9, 0.35).fillCircle(18, 9, 9) // halo diffus
+    g.fillStyle(0x1e88e5, 0.85).fillTriangle(0, 9, 12, 5, 12, 13) // queue de flamme (arrière)
+    g.fillStyle(0x64b5f6, 0.9).fillTriangle(3, 9, 13, 6, 13, 12)
+    g.fillStyle(0x1e88e5).fillCircle(18, 9, 7) // cœur bleu
+    g.fillStyle(0x64b5f6).fillCircle(18, 9, 5)
+    g.fillStyle(0xe3f2fd).fillCircle(16, 7, 2.5); g.generateTexture('fx-fireball', 28, 18); g.clear()
+    // fx-arrow : flèche (attaque de base archer/chasseur) — pointe acier à droite, empennage rouge
+    g.fillStyle(0x8d6e63).fillRect(3, 5, 19, 2) // hampe bois
+    g.fillStyle(0xa1887f).fillRect(3, 5, 19, 1)
+    g.fillStyle(0xcfd8dc).fillTriangle(20, 1, 30, 6, 20, 11) // pointe
+    g.fillStyle(0xeceff1).fillTriangle(22, 4, 28, 6, 22, 8)
+    g.fillStyle(0xe53935).fillTriangle(0, 2, 8, 6, 0, 6) // empennage (arrière)
+    g.fillStyle(0xef5350).fillTriangle(0, 6, 8, 6, 0, 10); g.generateTexture('fx-arrow', 30, 12); g.clear()
+    // fx-arrow-pierce : GRANDE flèche perçante (skill) — dessinée en blanc → teintée par la couleur
+    // du skill à l'usage ; traverse tout sur toute la largeur visible
+    g.fillStyle(0xffffff, 0.3).fillRoundedRect(0, 6, 52, 6, 3) // halo
+    g.fillStyle(0xffffff).fillRect(6, 7, 34, 4) // hampe brillante
+    g.fillStyle(0xffffff).fillTriangle(36, 1, 52, 9, 36, 17) // grande pointe
+    g.fillStyle(0xffffff).fillTriangle(0, 2, 12, 9, 0, 16); g.generateTexture('fx-arrow-pierce', 52, 18); g.clear()
+    // fx-laser : faisceau horizontal (skill perçant) — capsule blanche lumineuse, teintée à l'usage
+    g.fillStyle(0xffffff, 0.28).fillRoundedRect(0, 0, 72, 16, 8) // halo large
+    g.fillStyle(0xffffff, 0.7).fillRoundedRect(0, 3, 72, 10, 5)
+    g.fillStyle(0xffffff).fillRoundedRect(0, 6, 72, 4, 2); g.generateTexture('fx-laser', 72, 16); g.clear()
+    // fx-lob : boule verte lancée en cloche (mandragore) — retombe et éclate au sol
+    g.fillStyle(0x2e5e1e, 0.4).fillCircle(9, 9, 9)
+    g.fillStyle(0x33691e).fillCircle(9, 9, 7)
+    g.fillStyle(0x7bc86c).fillCircle(9, 9, 5)
+    g.fillStyle(0xc5e1a5).fillCircle(7, 7, 2); g.generateTexture('fx-lob', 18, 18); g.clear()
+    // fx-bolt : éclair/bolt magique HORIZONTAL du mage noir (losange violet lumineux)
+    g.fillStyle(0xb388ff, 0.4).fillEllipse(12, 6, 26, 12)
+    g.fillStyle(0x7e57c2).fillTriangle(2, 6, 13, 1, 13, 11)
+    g.fillStyle(0x7e57c2).fillTriangle(22, 6, 11, 1, 11, 11)
+    g.fillStyle(0xd1c4e9).fillEllipse(12, 6, 9, 4); g.generateTexture('fx-bolt', 24, 12); g.clear()
+    // fx-rock : petit projectile de pierre (rocker)
+    g.fillStyle(0x616161).fillCircle(7, 7, 6)
+    g.fillStyle(0x9e9e9e).fillCircle(6, 6, 4)
+    g.fillStyle(0xbdbdbd).fillCircle(5, 5, 1.6); g.generateTexture('fx-rock', 14, 14); g.clear()
+    // fx-shot : orbe d'attaque ennemi générique (rouge-orange, bien lisible comme un danger)
+    g.fillStyle(0xff7043, 0.35).fillCircle(9, 9, 9)
+    g.fillStyle(0xe53935).fillCircle(9, 9, 6)
+    g.fillStyle(0xff8a65).fillCircle(9, 9, 3.5)
+    g.fillStyle(0xfff3e0).fillCircle(7, 7, 1.8); g.generateTexture('fx-shot', 18, 18); g.clear()
     // pics (rangée de pointes) — piège
     g.fillStyle(0x9e9e9e); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8, 16, i * 8 + 4, 2, i * 8 + 8, 16)
     g.fillStyle(0xcfd8dc); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 + 2, 16, i * 8 + 4, 6, i * 8 + 6, 16)
