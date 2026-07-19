@@ -299,6 +299,43 @@ export class TownScene extends Phaser.Scene {
     this.panel = undefined
   }
 
+  // Croix de fermeture, position ÉCRAN FIXE en haut à droite du panneau (coordonnées absolues,
+  // au-dessus de l'en-tête) : garantit une sortie du menu quel que soit le contenu. Ajoutée en
+  // dernier dans le container pour rester au-dessus (rendu ET input).
+  private drawCloseCross(c: Phaser.GameObjects.Container, w: number, h: number) {
+    const x = 480 + w / 2 - 22
+    const y = 270 - h / 2 + 22
+    const bg = this.add.circle(x, y, 15, 0x8e2f2f, 1).setStrokeStyle(2, 0xffd54f, 0.95)
+    const txt = this.add.text(x, y, '✕', { fontSize: '18px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
+    bg.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel())
+    txt.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel())
+    c.add(bg)
+    c.add(txt)
+  }
+
+  // Contrôles de pagination (◀ Page x/y ▶) centrés dans le pied du panneau. N'affiche rien s'il
+  // n'y a qu'une page. `go(nouvellePage)` re-render le panneau sur la page demandée. La pagination
+  // borne le contenu à ce qui tient à l'écran (Phaser 4 WebGL ne supporte pas les masques géo).
+  private drawPager(
+    c: Phaser.GameObjects.Container, cx: number, y: number,
+    page: number, pageCount: number, go: (page: number) => void,
+  ) {
+    if (pageCount <= 1) return
+    const arrow = (dx: number, glyph: string, target: number, enabled: boolean) => {
+      const t = this.add.text(cx + dx, y, glyph, {
+        fontSize: '18px', color: enabled ? '#ffd54f' : '#6d5b52', fontStyle: 'bold',
+        backgroundColor: '#3a2b28', padding: { x: 10, y: 4 },
+      }).setOrigin(0.5)
+      c.add(t)
+      if (enabled) t.setInteractive({ useHandCursor: true }).on('pointerdown', () => go(target))
+    }
+    arrow(-96, '◀', page - 1, page > 0)
+    c.add(this.add.text(cx, y, `Page ${page + 1}/${pageCount}`, {
+      fontSize: '14px', color: '#cfd8dc', fontStyle: 'bold',
+    }).setOrigin(0.5))
+    arrow(96, '▶', page + 1, page < pageCount - 1)
+  }
+
   private flash(container: Phaser.GameObjects.Container, x: number, y: number, msg: string, color: string) {
     const txt = this.add.text(x, y, msg, { fontSize: '14px', color, fontStyle: 'bold' }).setOrigin(0.5).setDepth(60)
     container.add(txt)
@@ -393,6 +430,7 @@ export class TownScene extends Phaser.Scene {
       this.add.text(480, top + h - 30, '← Fermer', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 } })
         .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()),
     )
+    this.drawCloseCross(c, w, h)
   }
 
   // icône par emplacement d'objet : on privilégie l'icône illustrée item-<id> si elle a été
@@ -410,15 +448,24 @@ export class TownScene extends Phaser.Scene {
     return bySlot[item.slot]
   }
 
-  private openItemShop(kind: 'armes' | 'vetements', list: { itemId: string; price: number }[]) {
+  private openItemShop(kind: 'armes' | 'vetements', list: { itemId: string; price: number }[], page = 0) {
     this.closePanel()
     const title = kind === 'armes' ? 'Armurerie' : 'Boutique de vêtements'
     const cols = list.length <= 1 ? 1 : list.length <= 4 ? 2 : 3
-    const rows = Math.ceil(list.length / cols)
     const cardW = 168, cardH = 128, gapX = 16, gapY = 14
-    const w = Math.max(360, cols * cardW + (cols - 1) * gapX + 60)
-    const headerH = 100, footerH = 60
-    const h = headerH + rows * cardH + (rows - 1) * gapY + footerH
+    // pagination : au plus 2 rangées visibles par page pour que le panneau tienne dans le
+    // viewport 960×540 (hauteur bornée ≤ 500, largeur ≤ 920, centré).
+    const rowsPerPage = 2
+    const perPage = cols * rowsPerPage
+    const pageCount = Math.max(1, Math.ceil(list.length / perPage))
+    page = Phaser.Math.Clamp(page, 0, pageCount - 1)
+    const pageItems = list.slice(page * perPage, page * perPage + perPage)
+    const rowsThis = Math.ceil(pageItems.length / cols)
+    const rowsForH = pageCount > 1 ? rowsPerPage : rowsThis
+
+    const w = Math.min(920, Math.max(360, cols * cardW + (cols - 1) * gapX + 60))
+    const headerH = 100, footerH = 64
+    const h = Math.min(500, headerH + rowsForH * cardH + (rowsForH - 1) * gapY + footerH)
     const c = this.add.container(0, 0).setDepth(50)
     this.panel = c
     const top = this.drawPanelFrame(c, w, h, title)
@@ -427,7 +474,7 @@ export class TownScene extends Phaser.Scene {
 
     const gridTop = top + headerH
     const gridLeft = 480 - (cols * cardW + (cols - 1) * gapX) / 2 + cardW / 2
-    list.forEach((entry, i) => {
+    pageItems.forEach((entry, i) => {
       const item = ITEMS[entry.itemId]!
       const col = i % cols
       const row = Math.floor(i / cols)
@@ -442,11 +489,13 @@ export class TownScene extends Phaser.Scene {
       )
     })
 
+    this.drawPager(c, 480, top + h - 44, page, pageCount, (pg) => this.openItemShop(kind, list, pg))
     c.add(
-      this.add.text(480, top + h - 28, '← Fermer', {
+      this.add.text(480, top + h - 18, '← Fermer', {
         fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
       }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()),
     )
+    this.drawCloseCross(c, w, h)
   }
 
   private openQuestNpc() {
@@ -494,6 +543,7 @@ export class TownScene extends Phaser.Scene {
         this.add.text(480, 380, '← Fermer', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 } })
           .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()),
       )
+      this.drawCloseCross(c, 560, 280)
     }
     render()
   }
@@ -508,13 +558,13 @@ export class TownScene extends Phaser.Scene {
   // pièce) et Vendre (revendre un objet de l'inventaire). openForge() ouvre l'onglet craft.
   private openForge() { this.openForgePanel('craft') }
 
-  private openForgePanel(tab: 'craft' | 'reforge' | 'sell') {
+  private openForgePanel(tab: 'craft' | 'reforge' | 'sell', page = 0) {
     this.closePanel()
     const c = this.add.container(0, 0).setDepth(50)
     this.panel = c
-    if (tab === 'craft') this.renderCraft(c)
-    else if (tab === 'reforge') this.renderReforge(c)
-    else this.renderSell(c)
+    if (tab === 'craft') this.renderCraft(c, page)
+    else if (tab === 'reforge') this.renderReforge(c, page)
+    else this.renderSell(c, page)
   }
 
   // barre d'onglets commune aux trois panneaux de la forge, sous le titre
@@ -543,97 +593,103 @@ export class TownScene extends Phaser.Scene {
   // Forger : transforme les matériaux collectés en équipement. Une ligne par recette avec
   // icône du résultat, nom + bonus, coût (possédé/requis en vert/rouge + or) et bouton Forger
   // actif seulement si canCraft. renderCraft() reconstruit tout après un craft pour rafraîchir.
-  private renderCraft(c: Phaser.GameObjects.Container, msg?: string, ok?: boolean) {
+  private renderCraft(c: Phaser.GameObjects.Container, page = 0, msg?: string, ok?: boolean) {
+    c.removeAll(true)
     const w = 860
     const rowH = 44
-    const headerH = 140, footerH = 56
-    const h = headerH + RECIPES.length * rowH + footerH
+    const headerH = 140, footerH = 90
+    // pagination : autant de rangées que la hauteur bornée (≤ 500) le permet
+    const rowsPerPage = Math.max(1, Math.floor((500 - headerH - footerH) / rowH))
+    const pageCount = Math.max(1, Math.ceil(RECIPES.length / rowsPerPage))
+    page = Phaser.Math.Clamp(page, 0, pageCount - 1)
+    const pageRecipes = RECIPES.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+    const rowsForH = pageCount > 1 ? rowsPerPage : pageRecipes.length
+    const h = Math.min(500, headerH + rowsForH * rowH + footerH)
+    const top = this.drawPanelFrame(c, w, h, 'Forge')
+    const p = getPlayer()
+    this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
+    this.drawForgeTabs(c, top, 'craft')
 
-    {
-      c.removeAll(true)
-      const top = this.drawPanelFrame(c, w, h, 'Forge')
-      const p = getPlayer()
-      this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
-      this.drawForgeTabs(c, top, 'craft')
+    // récap des matériaux possédés
+    const owned = Object.entries(p.materials).filter(([, q]) => q > 0)
+    const recap = owned.length
+      ? owned.map(([id, q]) => `${this.shortMat(id)} x${q}`).join('   ·   ')
+      : 'Aucun matériau collecté — va combattre pour en récolter !'
+    c.add(this.add.text(480, top + 108, recap, {
+      fontSize: '12px', color: '#cfd8dc', align: 'center', wordWrap: { width: w - 48 },
+    }).setOrigin(0.5))
 
-      // récap des matériaux possédés
-      const owned = Object.entries(p.materials).filter(([, q]) => q > 0)
-      const recap = owned.length
-        ? owned.map(([id, q]) => `${this.shortMat(id)} x${q}`).join('   ·   ')
-        : 'Aucun matériau collecté — va combattre pour en récolter !'
-      c.add(this.add.text(480, top + 108, recap, {
-        fontSize: '12px', color: '#cfd8dc', align: 'center', wordWrap: { width: w - 48 },
-      }).setOrigin(0.5))
+    const render = (m?: string, o?: boolean) => this.renderCraft(c, page, m, o)
+    const rowsTop = top + headerH
+    const rowLeft = 480 - w / 2 + 16
 
-      const render = (m?: string, o?: boolean) => this.renderCraft(c, m, o)
-      const rowsTop = top + headerH
-      const rowLeft = 480 - w / 2 + 16
-      RECIPES.forEach((recipe, i) => {
-        const y = rowsTop + i * rowH + rowH / 2
-        const item = ITEMS[recipe.resultItemId]!
-        const craftable = canCraft(p, recipe)
+    pageRecipes.forEach((recipe, i) => {
+      const y = rowsTop + i * rowH + rowH / 2
+      const item = ITEMS[recipe.resultItemId]!
+      const craftable = canCraft(p, recipe)
 
-        if (i > 0) c.add(this.add.rectangle(480, y - rowH / 2, w - 40, 1, 0xffffff, 0.08))
+      if (i > 0) c.add(this.add.rectangle(480, y - rowH / 2, w - 40, 1, 0xffffff, 0.08))
 
-        // icône du résultat
-        const icon = this.iconFor(recipe.resultItemId)
-        if ('texture' in icon) c.add(this.add.image(rowLeft + 18, y, icon.texture).setDisplaySize(28, 28))
-        else {
-          c.add(this.add.circle(rowLeft + 18, y, 13, icon.pastille).setStrokeStyle(2, 0xffffff, 0.6))
-          c.add(this.add.text(rowLeft + 18, y, icon.glyph, { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
-        }
+      // icône du résultat
+      const icon = this.iconFor(recipe.resultItemId)
+      if ('texture' in icon) c.add(this.add.image(rowLeft + 18, y, icon.texture).setDisplaySize(28, 28))
+      else {
+        c.add(this.add.circle(rowLeft + 18, y, 13, icon.pastille).setStrokeStyle(2, 0xffffff, 0.6))
+        c.add(this.add.text(rowLeft + 18, y, icon.glyph, { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
+      }
 
-        // nom + bonus
-        c.add(this.add.text(rowLeft + 42, y - 10, item.name, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0, 0.5))
-        const bonus = Object.entries(item.bonus).map(([k, v]) => `${k} +${v}`).join(' / ')
-        c.add(this.add.text(rowLeft + 42, y + 9, bonus, { fontSize: '10px', color: '#90a4ae' }).setOrigin(0, 0.5))
+      // nom + bonus
+      c.add(this.add.text(rowLeft + 42, y - 10, item.name, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0, 0.5))
+      const bonus = Object.entries(item.bonus).map(([k, v]) => `${k} +${v}`).join(' / ')
+      c.add(this.add.text(rowLeft + 42, y + 9, bonus, { fontSize: '10px', color: '#90a4ae' }).setOrigin(0, 0.5))
 
-        // coût : puces matériaux + or
-        let cx = rowLeft + 250
-        for (const [matId, qty] of Object.entries(recipe.materials)) {
-          const have = p.materials[matId] ?? 0
-          const enough = have >= qty
-          const t = this.add.text(cx, y, `${this.shortMat(matId)} ${have}/${qty}`, {
-            fontSize: '11px', color: enough ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
-          }).setOrigin(0, 0.5)
-          c.add(t)
-          cx += t.width + 14
-        }
-        if (recipe.gold) {
-          const t = this.add.text(cx, y, `${recipe.gold} or`, {
-            fontSize: '11px', color: p.gold >= recipe.gold ? '#ffd54f' : '#ff5252', fontStyle: 'bold',
-          }).setOrigin(0, 0.5)
-          c.add(t)
-        }
+      // coût : puces matériaux + or
+      let cx = rowLeft + 250
+      for (const [matId, qty] of Object.entries(recipe.materials)) {
+        const have = p.materials[matId] ?? 0
+        const enough = have >= qty
+        const t = this.add.text(cx, y, `${this.shortMat(matId)} ${have}/${qty}`, {
+          fontSize: '11px', color: enough ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
+        }).setOrigin(0, 0.5)
+        c.add(t)
+        cx += t.width + 14
+      }
+      if (recipe.gold) {
+        const t = this.add.text(cx, y, `${recipe.gold} or`, {
+          fontSize: '11px', color: p.gold >= recipe.gold ? '#ffd54f' : '#ff5252', fontStyle: 'bold',
+        }).setOrigin(0, 0.5)
+        c.add(t)
+      }
 
-        // bouton Forger
-        const btn = this.add.text(480 + w / 2 - 24, y, 'Forger', {
-          fontSize: '13px', color: craftable ? '#ffffff' : '#9e9e9e',
-          backgroundColor: craftable ? '#2e7d32' : '#3a2b28', padding: { x: 12, y: 6 },
-        }).setOrigin(1, 0.5)
-        c.add(btn)
-        if (craftable) {
-          btn.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-            if (doCraft(p, recipe)) {
-              audio.playSfx('buy')
-              save(p)
-              render(`Forgé : ${item.name} !`, true)
-            } else render('Ressources insuffisantes', false)
-          })
-        } else {
-          btn.setInteractive({ useHandCursor: true }).on('pointerdown', () => render('Ressources insuffisantes', false))
-        }
-      })
+      // bouton Forger
+      const btn = this.add.text(480 + w / 2 - 24, y, 'Forger', {
+        fontSize: '13px', color: craftable ? '#ffffff' : '#9e9e9e',
+        backgroundColor: craftable ? '#2e7d32' : '#3a2b28', padding: { x: 12, y: 6 },
+      }).setOrigin(1, 0.5)
+      c.add(btn)
+      if (craftable) {
+        btn.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+          if (doCraft(p, recipe)) {
+            audio.playSfx('buy')
+            save(p)
+            render(`Forgé : ${item.name} !`, true)
+          } else render('Ressources insuffisantes', false)
+        })
+      } else {
+        btn.setInteractive({ useHandCursor: true }).on('pointerdown', () => render('Ressources insuffisantes', false))
+      }
+    })
 
-      // message de retour (résultat du dernier craft)
-      if (msg) c.add(this.add.text(480, top + h - 54, msg, {
-        fontSize: '14px', color: ok ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
-      }).setOrigin(0.5))
+    // message de retour (résultat du dernier craft)
+    if (msg) c.add(this.add.text(480, top + h - 74, msg, {
+      fontSize: '14px', color: ok ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
+    }).setOrigin(0.5))
 
-      c.add(this.add.text(480, top + h - 28, '← Fermer', {
-        fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
-      }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()))
-    }
+    this.drawPager(c, 480, top + h - 46, page, pageCount, (pg) => this.renderCraft(c, pg))
+    c.add(this.add.text(480, top + h - 18, '← Fermer', {
+      fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()))
+    this.drawCloseCross(c, w, h)
   }
 
   // pièces réforçables : itemIds uniques de l'équipement porté + de l'inventaire
@@ -646,14 +702,18 @@ export class TownScene extends Phaser.Scene {
   // Réforger : améliore une pièce d'un cran (+20 % de bonus / niveau, cap au niveau max). Une
   // ligne par pièce avec son niveau, l'effet actuel → suivant, le coût (or + matériaux) et un
   // bouton actif si canReforge. renderReforge() reconstruit tout après une réforge.
-  private renderReforge(c: Phaser.GameObjects.Container, msg?: string, ok?: boolean) {
+  private renderReforge(c: Phaser.GameObjects.Container, page = 0, msg?: string, ok?: boolean) {
     c.removeAll(true)
     const w = 860
     const rowH = 46
-    const headerH = 140, footerH = 56
-    const ids = this.reforgeableIds()
-    const rows = Math.max(ids.length, 1)
-    const h = headerH + rows * rowH + footerH
+    const headerH = 140, footerH = 90
+    const allIds = this.reforgeableIds()
+    const rowsPerPage = Math.max(1, Math.floor((500 - headerH - footerH) / rowH))
+    const pageCount = Math.max(1, Math.ceil(Math.max(allIds.length, 1) / rowsPerPage))
+    page = Phaser.Math.Clamp(page, 0, pageCount - 1)
+    const ids = allIds.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+    const rowsForH = pageCount > 1 ? rowsPerPage : Math.max(ids.length, 1)
+    const h = Math.min(500, headerH + rowsForH * rowH + footerH)
     const top = this.drawPanelFrame(c, w, h, 'Forge')
     const p = getPlayer()
     this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
@@ -667,11 +727,11 @@ export class TownScene extends Phaser.Scene {
       fontSize: '12px', color: '#cfd8dc', align: 'center', wordWrap: { width: w - 48 },
     }).setOrigin(0.5))
 
-    const render = (m?: string, o?: boolean) => this.renderReforge(c, m, o)
+    const render = (m?: string, o?: boolean) => this.renderReforge(c, page, m, o)
     const rowsTop = top + headerH
     const rowLeft = 480 - w / 2 + 16
 
-    if (ids.length === 0) {
+    if (allIds.length === 0) {
       c.add(this.add.text(480, rowsTop + rowH / 2, 'Aucune pièce à réforger.', {
         fontSize: '14px', color: '#90a4ae',
       }).setOrigin(0.5))
@@ -743,25 +803,32 @@ export class TownScene extends Phaser.Scene {
       })
     })
 
-    if (msg) c.add(this.add.text(480, top + h - 54, msg, {
+    if (msg) c.add(this.add.text(480, top + h - 74, msg, {
       fontSize: '14px', color: ok ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
     }).setOrigin(0.5))
 
-    c.add(this.add.text(480, top + h - 28, '← Fermer', {
+    this.drawPager(c, 480, top + h - 46, page, pageCount, (pg) => this.renderReforge(c, pg))
+    c.add(this.add.text(480, top + h - 18, '← Fermer', {
       fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()))
+    this.drawCloseCross(c, w, h)
   }
 
   // Vendre : revend un objet de l'inventaire contre de l'or (selon sa rareté). Une ligne par
   // objet avec son prix de vente et un bouton Vendre. renderSell() reconstruit tout après une vente.
-  private renderSell(c: Phaser.GameObjects.Container, msg?: string, ok?: boolean) {
+  private renderSell(c: Phaser.GameObjects.Container, page = 0, msg?: string, ok?: boolean) {
     c.removeAll(true)
     const w = 860
     const rowH = 44
-    const headerH = 132, footerH = 56
+    const headerH = 132, footerH = 90
     const p = getPlayer()
-    const rows = Math.max(p.inventory.length, 1)
-    const h = headerH + rows * rowH + footerH
+    const rowsPerPage = Math.max(1, Math.floor((500 - headerH - footerH) / rowH))
+    const pageCount = Math.max(1, Math.ceil(Math.max(p.inventory.length, 1) / rowsPerPage))
+    page = Phaser.Math.Clamp(page, 0, pageCount - 1)
+    const start = page * rowsPerPage
+    const pageItems = p.inventory.slice(start, start + rowsPerPage)
+    const rowsForH = pageCount > 1 ? rowsPerPage : Math.max(pageItems.length, 1)
+    const h = Math.min(500, headerH + rowsForH * rowH + footerH)
     const top = this.drawPanelFrame(c, w, h, 'Forge')
     this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
     this.drawForgeTabs(c, top, 'sell')
@@ -769,7 +836,7 @@ export class TownScene extends Phaser.Scene {
       fontSize: '12px', color: '#cfd8dc', align: 'center',
     }).setOrigin(0.5))
 
-    const render = (m?: string, o?: boolean) => this.renderSell(c, m, o)
+    const render = (m?: string, o?: boolean) => this.renderSell(c, page, m, o)
     const rowsTop = top + headerH
     const rowLeft = 480 - w / 2 + 16
 
@@ -779,7 +846,8 @@ export class TownScene extends Phaser.Scene {
       }).setOrigin(0.5))
     }
 
-    p.inventory.forEach((id, i) => {
+    pageItems.forEach((id, i) => {
+      const invIndex = start + i // index réel dans p.inventory (nécessaire pour sellItem)
       const y = rowsTop + i * rowH + rowH / 2
       const item = ITEMS[id]!
       const level = p.upgrades[id] ?? 0
@@ -808,7 +876,7 @@ export class TownScene extends Phaser.Scene {
       c.add(btn)
       btn.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
         const value = sellValue(item)
-        if (sellItem(p, i)) {
+        if (sellItem(p, invIndex)) {
           audio.playSfx('buy')
           save(p)
           render(`Vendu : ${item.name} (+${value} or)`, true)
@@ -816,12 +884,14 @@ export class TownScene extends Phaser.Scene {
       })
     })
 
-    if (msg) c.add(this.add.text(480, top + h - 54, msg, {
+    if (msg) c.add(this.add.text(480, top + h - 74, msg, {
       fontSize: '14px', color: ok ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
     }).setOrigin(0.5))
 
-    c.add(this.add.text(480, top + h - 28, '← Fermer', {
+    this.drawPager(c, 480, top + h - 46, page, pageCount, (pg) => this.renderSell(c, pg))
+    c.add(this.add.text(480, top + h - 18, '← Fermer', {
       fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()))
+    this.drawCloseCross(c, w, h)
   }
 }
