@@ -390,7 +390,7 @@ export class WorldMapScene extends Phaser.Scene {
       return
     }
 
-    const dir: 'forward' | 'backward' = target.x > currentNode.x ? 'forward' : 'backward'
+    const dir = 'forward' as const // toujours gauche→droite : jouer un niveau « à l'envers » était contre-nature
     const data = { levelId: target.levelId, fromNode: p.currentNode, targetNode: targetId, dir }
     // Première entrée dans ce terrain → écran d'intro (présentation des monstres et loots).
     // Les fois suivantes → directement le jeu, pas de re-présentation.

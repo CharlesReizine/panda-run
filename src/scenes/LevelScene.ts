@@ -431,8 +431,9 @@ export class LevelScene extends Phaser.Scene {
   // apparition à gauche + sortie à droite en 'forward' (comportement historique) ;
   // en 'backward' (retour en arrière depuis la carte), on entre par la droite et on
   // ressort à gauche, vers le nœud d'où l'on vient
-  private spawnX(): number { return this.dir === 'backward' ? (this.levelDef.widthTiles - 3) * TILE : 2 * TILE }
-  private exitX(): number { return this.dir === 'backward' ? 2 * TILE : this.levelDef.widthTiles * TILE - 2 * TILE }
+  // toujours gauche→droite : apparition à gauche, sortie à droite (plus de niveau « à l'envers »)
+  private spawnX(): number { return 2 * TILE }
+  private exitX(): number { return this.levelDef.widthTiles * TILE - 2 * TILE }
 
   // processCallback des plateformes one-way : la collision n'est retenue que si le panda
   // descend (velocity.y >= 0) ET que ses pieds (début de frame) ne sont pas passés sous le
