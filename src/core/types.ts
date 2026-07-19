@@ -17,7 +17,7 @@ export interface ClassDef {
   skillIds: string[]
 }
 
-export type SkillKind = 'melee' | 'projectile' | 'aoe' | 'heal'
+export type SkillKind = 'melee' | 'projectile' | 'aoe' | 'heal' | 'charge' | 'dive' | 'buff'
 
 export interface SkillDef {
   id: string
@@ -31,6 +31,7 @@ export interface SkillDef {
   pierce?: boolean // projectile qui traverse tout (ne s'arrête pas au premier impact)
   arc?: boolean // projectile lancé en cloche (soumis à la gravité, rebondit)
   buff?: { atkMult: number; durationMs: number } // cri de guerre : booste l'ATK sortante un temps donné
+  flame?: boolean // épée enflammée : pendant le buff, la lame s'embrase → +dégâts + brûlure (DoT) sur les coups
   minLevel?: number // niveau joueur minimum pour débloquer/monter ce skill (défaut : aucun)
   requires?: string // id d'un skill prérequis à débloquer avant celui-ci (défaut : aucun)
 }

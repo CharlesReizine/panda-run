@@ -54,6 +54,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private facingLeft = false // orientation retenue (mise à jour seulement au-delà de FLIP_THRESHOLD)
   private zzz: Phaser.GameObjects.Text | null = null
   private nextZzzToggleAt = 0
+  // Brûlure (Épée enflammée) : dégâts périodiques sur une durée ; un seul timer, on prolonge
+  // l'échéance si on ré-enflamme.
+  private burnUntil = 0
+  private burnTimer: Phaser.Time.TimerEvent | null = null
 
   constructor(scene: LevelScene, x: number, y: number, def: MonsterDef) {
     super(scene, x, y, `monster-${def.id}`)
@@ -94,8 +98,29 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.lvlText.destroy()
       this.eliteAura?.destroy()
       this.zzz?.destroy()
+      this.burnTimer?.remove()
       this.destroy()
     }
+  }
+
+  // Applique/prolonge une brûlure : dégâts par palier toutes les 500 ms pendant durationMs,
+  // avec petite flammèche à chaque tic. Le timer s'arrête à l'échéance ou à la mort.
+  applyBurn(dmgPerTick: number, durationMs: number) {
+    if (!this.active) return
+    this.burnUntil = Math.max(this.burnUntil, this.scene.time.now + durationMs)
+    if (this.burnTimer) return
+    this.burnTimer = this.scene.time.addEvent({
+      delay: 500, loop: true, callback: () => {
+        if (!this.active || this.scene.time.now >= this.burnUntil) {
+          this.burnTimer?.remove(); this.burnTimer = null
+          return
+        }
+        const fl = this.scene.add.rectangle(this.x + Phaser.Math.Between(-8, 8), this.y, 5, 11, Phaser.Math.RND.pick([0xffca28, 0xff7043]))
+          .setBlendMode(Phaser.BlendModes.ADD).setDepth(6).setAlpha(0.95)
+        this.scene.tweens.add({ targets: fl, y: this.y - 22, scaleY: 0.4, alpha: 0, duration: 380, onComplete: () => fl.destroy() })
+        this.takeDamage(Math.max(1, Math.round(dmgPerTick)))
+      },
+    })
   }
 
   // tir d'un projectile vers le joueur, propre et cohérent selon le monstre :

@@ -6,15 +6,15 @@ const list: SkillDef[] = [
   { id: 'calin-brutal', name: 'Câlin brutal', description: 'Une étreinte si vigoureuse qu\'elle assomme l\'ennemi au corps à corps.', classId: 'novice', kind: 'melee', multiplier: 1.5, cooldownMs: 2000, range: 50 },
   { id: 'bambou-jete', name: 'Bambou jeté', description: 'Lance un bambou en cloche qui retombe lourdement sur l\'ennemi.', classId: 'novice', kind: 'projectile', multiplier: 1.2, cooldownMs: 3000, range: 520, arc: true },
   { id: 'rugissement-panda', name: 'Rugissement du panda', description: 'Un cri qui galvanise : frappe autour de soi et booste les dégâts un instant.', classId: 'novice', kind: 'aoe', multiplier: 0.7, cooldownMs: 4500, range: 90, buff: { atkMult: 1.4, durationMs: 6000 } },
-  // Sabreur
-  { id: 'taillade', name: 'Taillade', description: 'Un coup d\'épée fulgurant qui fend la garde adverse.', classId: 'swordsman', kind: 'melee', multiplier: 1.8, cooldownMs: 2000, range: 60 },
-  { id: 'tourbillon', name: 'Tourbillon', description: 'Le sabreur pivote, lames au vent, et frappe tout autour de lui.', classId: 'swordsman', kind: 'aoe', multiplier: 1.3, cooldownMs: 6000, range: 110 },
-  { id: 'charge-bambou', name: 'Charge bambou', description: 'Une charge lancée pleine puissance qui embroche l\'ennemi de plein fouet.', classId: 'swordsman', kind: 'melee', multiplier: 2.2, cooldownMs: 8000, range: 90 },
-  { id: 'cri-de-guerre', name: 'Cri de guerre', description: 'Un rugissement guerrier qui ébranle tous les ennemis alentour.', classId: 'swordsman', kind: 'aoe', multiplier: 0.8, cooldownMs: 5000, range: 140 },
-  { id: 'provocation', name: 'Provocation', description: 'Une provocation cinglante qui secoue les ennemis sur un large rayon.', classId: 'swordsman', kind: 'aoe', multiplier: 0.5, cooldownMs: 4000, range: 160 },
-  { id: 'lame-ultime', name: 'Lame ultime', description: 'Un unique coup dévastateur, l\'aboutissement de l\'art du sabre.', classId: 'swordsman', kind: 'melee', multiplier: 3.5, cooldownMs: 15000, range: 70 },
-  { id: 'estoc-rapide', name: 'Estoc rapide', description: 'Une botte vive et répétée qui harcèle l\'ennemi sans répit.', classId: 'swordsman', kind: 'melee', multiplier: 1.4, cooldownMs: 1500, range: 55 },
-  { id: 'onde-tranchante', name: 'Onde tranchante', description: 'Projette une lame d\'air tranchante qui file droit sur la cible.', classId: 'swordsman', kind: 'projectile', multiplier: 1.6, cooldownMs: 4000, range: 380 },
+  // Sabreur — arbre de compétences (les dévastateurs verrouillés par niveau / prérequis)
+  { id: 'taillade', name: 'Taillade', description: 'Un coup d\'épée fulgurant qui fend la garde adverse d\'un grand arc lumineux.', classId: 'swordsman', kind: 'melee', multiplier: 1.8, cooldownMs: 2000, range: 70 },
+  { id: 'estoc-rapide', name: 'Estoc rapide', description: 'Une botte vive et perçante qui harcèle l\'ennemi sans répit.', classId: 'swordsman', kind: 'melee', multiplier: 1.4, cooldownMs: 1500, range: 55 },
+  { id: 'tourbillon', name: 'Tourbillon', description: 'Le sabreur pivote, lames au vent, et frappe tout autour de lui.', classId: 'swordsman', kind: 'aoe', multiplier: 1.5, cooldownMs: 6000, range: 120, minLevel: 6 },
+  { id: 'attaque-chargee', name: 'Attaque chargée', description: 'Le panda concentre sa force un court instant, aura grandissante, puis lâche un coup dévastateur : onde de choc, flash et tremblement.', classId: 'swordsman', kind: 'charge', multiplier: 3.0, cooldownMs: 9000, range: 100, minLevel: 8 },
+  { id: 'lancer-epee', name: 'Lancer d\'épée', description: 'Projette sa lame tournoyante droit devant : elle traverse la ligne ennemie de part en part.', classId: 'swordsman', kind: 'projectile', multiplier: 2.2, cooldownMs: 5000, range: 560, pierce: true, minLevel: 10 },
+  { id: 'epee-enflammee', name: 'Épée enflammée', description: 'La lame s\'embrase : dégâts renforcés et chaque coup enflamme l\'ennemi qui brûle dans la durée.', classId: 'swordsman', kind: 'buff', multiplier: 1.2, cooldownMs: 12000, range: 0, buff: { atkMult: 1.5, durationMs: 8000 }, flame: true, minLevel: 12 },
+  { id: 'plongeon', name: 'Plongeon dévastateur', description: 'En plein saut, le panda pique vers le sol : à l\'impact, une explosion en cercle d\'autant plus large et brutale que la chute fut haute.', classId: 'swordsman', kind: 'dive', multiplier: 2.8, cooldownMs: 8000, range: 130, minLevel: 15 },
+  { id: 'lame-ultime', name: 'Lame ultime', description: 'L\'aboutissement de l\'art du sabre : double arc géant, flash aveuglant, onde de choc et gel du temps.', classId: 'swordsman', kind: 'melee', multiplier: 4.0, cooldownMs: 15000, range: 80, minLevel: 25, requires: 'attaque-chargee' },
   // Mage
   { id: 'boule-de-feu', name: 'Boule de feu', description: 'Une sphère de flammes lancée droit devant, brûlante à souhait.', classId: 'mage', kind: 'projectile', multiplier: 1.8, cooldownMs: 3000, range: 450 },
   { id: 'eclair', name: 'Éclair', description: 'Un trait de foudre véloce qui frappe l\'ennemi en un éclair.', classId: 'mage', kind: 'projectile', multiplier: 1.4, cooldownMs: 1500, range: 500 },
@@ -33,10 +33,10 @@ const list: SkillDef[] = [
   { id: 'salve-ultime', name: 'Salve ultime', description: 'Une nuée de flèches déversée d\'un coup sur un large secteur.', classId: 'archer', kind: 'aoe', multiplier: 3.2, cooldownMs: 16000, range: 180 },
   { id: 'tir-instinctif', name: 'Tir instinctif', description: 'Des tirs réflexes enchaînés à la vitesse de l\'instinct.', classId: 'archer', kind: 'projectile', multiplier: 0.8, cooldownMs: 1000, range: 400 },
   { id: 'tir-en-cloche', name: 'Tir en cloche', description: 'Une flèche lobée qui retombe par-dessus la garde adverse.', classId: 'archer', kind: 'projectile', multiplier: 1.6, cooldownMs: 4500, range: 480, arc: true },
-  // Chevalier (évolution du Sabreur)
-  { id: 'jugement-royal', name: 'Jugement royal', description: 'Un verdict d\'acier qui s\'abat, implacable, sur l\'ennemi.', classId: 'chevalier', kind: 'melee', multiplier: 4.5, cooldownMs: 12000, range: 90 },
-  { id: 'garde-imperiale', name: 'Garde impériale', description: 'Balaye large d\'un revers impérial qui refoule les assaillants.', classId: 'chevalier', kind: 'aoe', multiplier: 2.2, cooldownMs: 7000, range: 180 },
-  { id: 'sceau-du-heaume', name: 'Sceau du heaume', description: 'Projette un sceau sacré qui percute la cible de plein fouet.', classId: 'chevalier', kind: 'projectile', multiplier: 2.8, cooldownMs: 6000, range: 460 },
+  // Chevalier (évolution du Sabreur) — arbre royal, dévastateurs verrouillés haut
+  { id: 'garde-imperiale', name: 'Garde impériale', description: 'Un revers impérial qui balaye large : anneaux dorés et couronne de lames dressées refoulent les assaillants.', classId: 'chevalier', kind: 'aoe', multiplier: 2.4, cooldownMs: 7000, range: 180, minLevel: 30 },
+  { id: 'sceau-du-heaume', name: 'Sceau du heaume', description: 'Projette un sceau héraldique tournoyant qui percute la cible de plein fouet.', classId: 'chevalier', kind: 'projectile', multiplier: 3.0, cooldownMs: 6000, range: 480, minLevel: 31 },
+  { id: 'jugement-royal', name: 'Jugement royal', description: 'Un verdict d\'acier appelé du ciel : colonne de lumière, arc géant et onde de choc s\'abattent, implacables.', classId: 'chevalier', kind: 'melee', multiplier: 4.8, cooldownMs: 12000, range: 100, minLevel: 32, requires: 'garde-imperiale' },
   // Sorcier (évolution du Mage)
   { id: 'cataclysme', name: 'Cataclysme', description: 'Un cataclysme dévastateur qui anéantit tout dans un vaste rayon.', classId: 'sorcier', kind: 'aoe', multiplier: 5.0, cooldownMs: 16000, range: 200 },
   { id: 'faille-du-neant', name: 'Faille du néant', description: 'Ouvre une déchirure du néant qui embroche tous les ennemis.', classId: 'sorcier', kind: 'projectile', multiplier: 3.5, cooldownMs: 7000, range: 620, pierce: true },

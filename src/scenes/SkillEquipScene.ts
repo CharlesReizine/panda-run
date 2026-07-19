@@ -162,6 +162,9 @@ export class SkillEquipScene extends Phaser.Scene {
     const base = s.kind === 'melee' ? 'Mêlée'
       : s.kind === 'projectile' ? 'Projectile'
       : s.kind === 'aoe' ? 'Zone'
+      : s.kind === 'charge' ? 'Charge'
+      : s.kind === 'dive' ? 'Plongeon'
+      : s.kind === 'buff' ? 'Amélioration'
       : 'Soin'
     const tags: string[] = []
     if (s.pierce) tags.push('perçant')

@@ -67,6 +67,9 @@ export class LevelScene extends Phaser.Scene {
   private bgNear?: Phaser.GameObjects.TileSprite
   private bgClouds?: Phaser.GameObjects.TileSprite
   private hitStopTimer: Phaser.Time.TimerEvent | null = null
+  // Plongeon : paramètres d'explosion réservés au lancer, consommés à l'atterrissage
+  // ('player-dive-land') → dégâts/rayon proportionnels à la hauteur de chute.
+  private pendingDive: { range: number; mult: number; color: number } | null = null
 
   constructor() { super('Level') }
 
@@ -312,10 +315,12 @@ export class LevelScene extends Phaser.Scene {
     this.game.events.on('input-jump-down', this.onJumpDown, this)
     this.game.events.on('input-jump-up', this.onJumpUp, this)
     this.events.on('player-jump', this.onPlayerJump, this)
+    this.events.on('player-dive-land', this.onDiveLand, this)
     this.events.once('shutdown', () => {
       this.game.events.off('input-jump-down', this.onJumpDown, this)
       this.game.events.off('input-jump-up', this.onJumpUp, this)
       this.events.off('player-jump', this.onPlayerJump, this)
+      this.events.off('player-dive-land', this.onDiveLand, this)
       this.game.events.off('input-attack', this.basicAttack, this)
       this.game.events.off('input-skill', this.castSkill, this)
       this.game.events.off('input-potion', this.usePotion, this)
@@ -791,6 +796,64 @@ export class LevelScene extends Phaser.Scene {
     }
   }
 
+  // ===== Helpers FX réutilisables (généreux) — partagés par toutes les classes =====
+  // Amples volontairement : explosions larges, éclats nombreux, secousses franches. Les futurs
+  // skills (archer/mage) sont censés s'appuyer dessus plutôt que de réinventer chaque effet.
+
+  // Secousse de caméra : intensité 0..1 (fraction de l'écran), durée en ms.
+  screenShake(intensity: number, ms: number) {
+    this.cameras.main.shake(ms, intensity)
+  }
+
+  // Flash plein écran additif d'une couleur donnée qui se dissout ; alpha = pic d'intensité.
+  flashScreen(color: number, alpha: number, ms: number) {
+    const rect = this.add.rectangle(480, 270, 960, 540, color, alpha)
+      .setScrollFactor(0).setDepth(50).setBlendMode(Phaser.BlendModes.ADD)
+    this.tweens.add({ targets: rect, alpha: 0, duration: ms, onComplete: () => rect.destroy() })
+  }
+
+  // Gerbe de particules additives autour de (x,y). spreadUp = éventail vers le haut (jets/flammes),
+  // sinon 360°. gravity = les particules retombent un peu. speed règle la portée.
+  burstParticles(
+    x: number, y: number, count: number, color: number,
+    opts: { speed?: number; size?: number; durationMs?: number; spreadUp?: boolean; gravity?: boolean } = {},
+  ) {
+    const { speed = 60, size = 4, durationMs = 400, spreadUp = false, gravity = false } = opts
+    for (let i = 0; i < count; i++) {
+      const a = spreadUp
+        ? -Math.PI / 2 + Phaser.Math.FloatBetween(-0.9, 0.9)
+        : (i / count) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.2, 0.2)
+      const reach = speed * Phaser.Math.FloatBetween(0.5, 1)
+      const pcl = this.add.rectangle(x, y, size, size, color).setBlendMode(Phaser.BlendModes.ADD).setDepth(6).setRotation(a)
+      const ty = y + Math.sin(a) * reach + (gravity ? reach * 0.45 : 0)
+      this.tweens.add({ targets: pcl, x: x + Math.cos(a) * reach, y: ty, alpha: 0, scale: 0.3, duration: durationMs, ease: 'Cubic.out', onComplete: () => pcl.destroy() })
+    }
+  }
+
+  // GROSSE explosion en cercle : cœur incandescent + doubles ondes de choc + boules de feu
+  // projetées + éclats + secousse proportionnelle au rayon. Le grand effet « qui claque ».
+  explosionFx(x: number, y: number, radius: number, color: number) {
+    const ADD = Phaser.BlendModes.ADD
+    // cœur blanc incandescent qui gonfle et s'éteint
+    const core = this.add.image(x, y, 'ring').setTint(0xffffff).setBlendMode(ADD).setDepth(7).setScale(0.1)
+    this.tweens.add({ targets: core, scale: (radius / 28) * 0.55, alpha: 0, duration: 200, ease: 'Cubic.out', onComplete: () => core.destroy() })
+    // deux ondes de choc concentriques
+    for (let i = 0; i < 2; i++) {
+      const ring = this.add.image(x, y, 'ring').setTint(color).setBlendMode(ADD).setDepth(6).setScale(0.15).setAlpha(0.85)
+      this.tweens.add({ targets: ring, scale: (radius / 28) * (1 + i * 0.4), alpha: 0, duration: 360 + i * 140, delay: i * 60, ease: 'Cubic.out', onComplete: () => ring.destroy() })
+    }
+    // boules de feu projetées vers l'extérieur (dégradé jaune/couleur)
+    const blobs = Math.round(8 + radius / 16)
+    for (let i = 0; i < blobs; i++) {
+      const a = (i / blobs) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.25, 0.25)
+      const dist = radius * Phaser.Math.FloatBetween(0.45, 1)
+      const blob = this.add.circle(x, y, Phaser.Math.Between(5, 10), i % 3 === 0 ? 0xffe082 : color).setBlendMode(ADD).setDepth(6).setAlpha(0.95)
+      this.tweens.add({ targets: blob, x: x + Math.cos(a) * dist, y: y + Math.sin(a) * dist - dist * 0.15, scale: 0.2, alpha: 0, duration: Phaser.Math.Between(320, 480), ease: 'Cubic.out', onComplete: () => blob.destroy() })
+    }
+    this.burstParticles(x, y, Math.round(radius / 10) + 6, color, { speed: radius, size: 4, durationMs: 420 })
+    this.screenShake(Math.min(0.02, radius * 0.00012), 180)
+  }
+
   private announceSkill(name: string, color = 0xffd700) {
     const hex = `#${color.toString(16).padStart(6, '0')}`
     const txt = this.add.text(this.player.x, this.player.y - 55, name + ' !', {
@@ -820,8 +883,8 @@ export class LevelScene extends Phaser.Scene {
     // rang investi : +25% de puissance par point au-delà du 1er
     const rank = p.skillLevels[skill.id] ?? 1
     const mult = skill.multiplier * (1 + 0.25 * (rank - 1))
-    // gros coup : bref gel d'impact pour le punch (hors soin)
-    if (mult >= 2.5 && skill.kind !== 'heal') this.hitStop(75)
+    // gros coup instantané : bref gel d'impact pour le punch (charge/dive/buff gèrent le leur)
+    if (mult >= 2.5 && (skill.kind === 'melee' || skill.kind === 'aoe' || skill.kind === 'projectile')) this.hitStop(75)
     if (skill.kind === 'melee') {
       this.player.playAttack()
       // gros coup (rang inclus) : double croissant + tremblement de caméra
@@ -864,6 +927,9 @@ export class LevelScene extends Phaser.Scene {
         }
         this.physics.add.collider(proj, this.platforms, popOnGround)
         this.physics.add.collider(proj, this.oneWayPlatforms, popOnGround)
+      } else if (skill.id === 'lancer-epee') {
+        // Lancer d'épée : la lame elle-même part en tournoyant et traverse la ligne ennemie
+        this.swordThrowProjectile(proj, color)
       } else if (skill.pierce) {
         // transperce tout sur toute la largeur visible : grande flèche perçante (archer/chasseur)
         // ou faisceau laser (mage/sorcier). Texture blanche → teintée par la couleur du skill.
@@ -871,9 +937,6 @@ export class LevelScene extends Phaser.Scene {
         const isArrow = skill.classId === 'archer' || skill.classId === 'chasseur'
           || skill.id.includes('fleche') || skill.id.includes('tir')
         proj.setTexture(isArrow ? 'fx-arrow-pierce' : 'fx-laser').setTint(color).setScale(1)
-      } else if (skill.id === 'onde-tranchante') {
-        // onde de tranchant du sabreur : croissant lumineux qui file en laissant une traînée de lames
-        this.bladeWaveProjectile(proj, color)
       } else if (skill.id === 'sceau-du-heaume') {
         // sceau du chevalier : sigil héraldique tournoyant, doré et lumineux
         this.sealProjectile(proj, color)
@@ -901,11 +964,21 @@ export class LevelScene extends Phaser.Scene {
         ).setOrigin(0.5).setDepth(6)
         this.tweens.add({ targets: spark, y: spark.y - Phaser.Math.Between(45, 75), alpha: 0, duration: 750, delay: i * 45, onComplete: () => spark.destroy() })
       }
+    } else if (skill.kind === 'charge') {
+      // Attaque chargée : windup télégraphié puis coup dévastateur frontal (dégâts différés)
+      this.castChargeAttack(skill, color, mult)
+    } else if (skill.kind === 'dive') {
+      // Plongeon : piqué depuis les airs → explosion à l'impact (proportionnelle à la chute)
+      this.castDive(skill, color, mult)
     }
-    // Cri de guerre : tout skill porteur d'un buff booste l'ATK sortante du panda + onde de cri
+    // buff : rien à faire ici, l'effet est appliqué par le bloc buff ci-dessous (ATK + flamme)
+
+    // Tout skill porteur d'un buff booste l'ATK sortante ; l'Épée enflammée y ajoute la flamme
+    // (lame embrasée + brûlure sur les coups), sinon onde de cri dorée classique.
     if (skill.buff) {
       this.player.applyAtkBuff(skill.buff.atkMult, skill.buff.durationMs)
-      this.warCryFx()
+      if (skill.flame) { this.player.applyFlameBuff(skill.buff.durationMs); this.flameEnchantFx(color) }
+      else this.warCryFx()
     }
     // couche d'effets stylés propre à chaque skill sabreur / chevalier (par-dessus le générique)
     this.swordsmanFx(skill, color)
@@ -925,28 +998,24 @@ export class LevelScene extends Phaser.Scene {
         this.lungeFx(48)
         this.thrustFx(px + f * 24, py, color)
         break
-      case 'charge-bambou': // charge : dash marqué + arc large + onde de choc au sol
-        this.lungeFx(90)
-        this.bladeArcFx(px + f * skill.range * 0.55, py, skill.range * 1.5, color, true)
-        this.shockwaveFx(px + f * 36, py + 22, 100, color)
-        break
       case 'lame-ultime': // ultime : double arc géant, flash, onde de choc, gros hit-stop
+        this.flashScreen(0xfffae0, 0.35, 130)
         this.cameras.main.flash(110, 255, 250, 210)
-        this.bladeArcFx(px + f * skill.range * 0.5, py, skill.range * 2.1, color, true)
-        this.time.delayedCall(80, () => { if (this.player.active) this.bladeArcFx(px + f * skill.range * 0.5, py, skill.range * 2.1, 0xffffff, true) })
-        this.shockwaveFx(px + f * 30, py + 22, 140, color)
-        this.hitStop(110)
+        this.bladeArcFx(px + f * skill.range * 0.5, py, skill.range * 2.4, color, true)
+        this.time.delayedCall(80, () => { if (this.player.active) this.bladeArcFx(px + f * skill.range * 0.5, py, skill.range * 2.4, 0xffffff, true) })
+        this.shockwaveFx(px + f * 30, py + 22, 160, color)
+        this.explosionFx(px + f * skill.range * 0.7, py, skill.range * 1.2, color)
+        this.hitStop(130)
         break
       case 'tourbillon': // lames tournoyantes tout autour du panda
         this.whirlwindFx(px, py, skill.range, color)
-        break
-      case 'provocation': // onde de provocation rouge + « ! » au-dessus des ennemis ciblés
-        this.tauntFx(px, py, skill.range, color)
         break
       case 'jugement-royal': // colonne de lumière céleste + arc géant + onde + flash + hit-stop
         this.beamStrikeFx(px + f * skill.range * 0.35, py, color)
         this.bladeArcFx(px + f * skill.range * 0.5, py, skill.range * 1.9, color, true)
         this.shockwaveFx(px + f * 30, py + 22, 150, color)
+        this.explosionFx(px + f * skill.range * 0.4, py, skill.range * 1.1, color)
+        this.flashScreen(0xfff3c0, 0.3, 140)
         this.cameras.main.flash(130, 255, 240, 170)
         this.hitStop(120)
         break
@@ -954,6 +1023,118 @@ export class LevelScene extends Phaser.Scene {
         this.guardBurstFx(px, py, skill.range, color)
         break
     }
+  }
+
+  // ===== Attaque chargée, Plongeon & Épée enflammée =====
+
+  // Attaque chargée : court WINDUP télégraphié (aura grandissante, étincelles convergentes), puis
+  // un coup DÉVASTATEUR frontal — arc géant, onde de choc, explosion, flash, secousse, hit-stop.
+  private castChargeAttack(skill: SkillDef, color: number, mult: number) {
+    const WINDUP = 480
+    this.chargeWindupFx(color, WINDUP)
+    this.time.delayedCall(WINDUP, () => {
+      if (!this.player.active || this.player.hp <= 0) return
+      const px = this.player.x, py = this.player.y, f = this.player.facing
+      this.player.playAttack()
+      this.lungeFx(70)
+      this.bladeArcFx(px + f * skill.range * 0.6, py, skill.range * 1.7, color, true)
+      this.shockwaveFx(px + f * 40, py + 22, skill.range * 1.2, color)
+      this.explosionFx(px + f * skill.range * 0.7, py, skill.range * 0.95, color)
+      this.flashScreen(color, 0.22, 120)
+      this.screenShake(0.012, 220)
+      this.hitStop(110)
+      this.meleeHit(skill.range * 1.3, mult)
+    })
+  }
+
+  // Télégraphe de charge : aura qui enfle autour du panda + étincelles aspirées vers lui, avec
+  // une petite anticipation de secousse juste avant la libération.
+  private chargeWindupFx(color: number, ms: number) {
+    const p = this.player
+    const aura = this.add.image(p.x, p.y, 'ring').setTint(color).setBlendMode(Phaser.BlendModes.ADD).setDepth(p.depth - 1).setScale(0.3).setAlpha(0.2)
+    this.tweens.add({
+      targets: aura, scale: 2.2, alpha: 0.85, duration: ms, ease: 'Cubic.in',
+      onUpdate: () => aura.setPosition(p.x, p.y),
+      onComplete: () => this.tweens.add({ targets: aura, scale: 0.2, alpha: 0, duration: 90, onComplete: () => aura.destroy() }),
+    })
+    this.time.addEvent({
+      delay: 45, repeat: Math.floor(ms / 45), callback: () => {
+        if (!p.active) return
+        const a = Phaser.Math.FloatBetween(0, Math.PI * 2)
+        const sh = this.add.rectangle(p.x + Math.cos(a) * 58, p.y + Math.sin(a) * 58, 4, 4, color).setBlendMode(Phaser.BlendModes.ADD).setDepth(p.depth + 1)
+        this.tweens.add({ targets: sh, x: p.x, y: p.y, alpha: 0, duration: 220, onComplete: () => sh.destroy() })
+      },
+    })
+    this.time.delayedCall(Math.max(0, ms - 120), () => { if (this.player.active) this.screenShake(0.004, 130) })
+  }
+
+  // Plongeon : amorce le piqué s'il y a de la hauteur ; sinon (au sol) petite explosion immédiate.
+  private castDive(skill: SkillDef, color: number, mult: number) {
+    if (this.player.startDive()) {
+      this.pendingDive = { range: skill.range, mult, color }
+      this.diveTrailFx()
+    } else {
+      this.doDiveImpact(this.player.x, this.player.y, 0, skill.range, mult, color)
+    }
+  }
+
+  // sillage orangé du panda pendant le piqué (rémanences qui s'estompent)
+  private diveTrailFx() {
+    const p = this.player
+    const ev = this.time.addEvent({
+      delay: 30, loop: true, callback: () => {
+        if (!p.active || !p.diving) { ev.remove(); return }
+        const echo = this.add.image(p.x, p.y, p.texture.key, p.frame.name)
+          .setFlipX(p.flipX).setAlpha(0.4).setTint(0xff8a65).setDepth(p.depth - 1)
+          .setDisplaySize(p.displayWidth, p.displayHeight)
+        this.tweens.add({ targets: echo, alpha: 0, duration: 200, onComplete: () => echo.destroy() })
+      },
+    })
+  }
+
+  // atterrissage du Plongeon : consomme les paramètres réservés au lancer
+  private onDiveLand(x: number, y: number, fall: number) {
+    const d = this.pendingDive
+    this.pendingDive = null
+    if (!d) return
+    this.doDiveImpact(x, y, fall, d.range, d.mult, d.color)
+  }
+
+  // impact du Plongeon : rayon ET dégâts PROPORTIONNELS à la hauteur de chute + grosse explosion.
+  private doDiveImpact(x: number, y: number, fall: number, baseRange: number, mult: number, color: number) {
+    const heightFactor = Phaser.Math.Clamp(fall / 200, 0.5, 2.6)
+    const radius = baseRange * (0.6 + heightFactor * 0.8)
+    const dmgMult = mult * (0.6 + heightFactor * 0.7)
+    const atk = this.player.stats.atk * this.player.outgoingMult()
+    const flaming = this.player.isFlaming()
+    for (const obj of this.enemies.getChildren()) {
+      const e = obj as Enemy
+      if (e.active && Phaser.Math.Distance.Between(x, y, e.x, e.y) <= radius) {
+        e.takeDamage(physicalDamage(atk, e.monster.def, dmgMult))
+        if (flaming) e.applyBurn(atk * 0.35, 3000)
+      }
+    }
+    for (const obj of this.props.getChildren()) {
+      const prop = obj as Prop
+      if (prop.active && Phaser.Math.Distance.Between(x, y, prop.x, prop.y) <= radius) prop.takeDamage(1)
+    }
+    this.explosionFx(x, y, radius, color)
+    this.shockwaveFx(x, y, radius, color)
+    this.screenShake(Math.min(0.022, 0.006 + heightFactor * 0.006), 240)
+    this.hitStop(90)
+    audio.playSfx('hit')
+  }
+
+  // Épée enflammée : gerbe de flammes + anneaux + flash orangé au moment de l'embrasement.
+  private flameEnchantFx(color: number) {
+    const x = this.player.x, y = this.player.y
+    this.flashScreen(0xff7043, 0.16, 160)
+    for (let i = 0; i < 2; i++) {
+      const ring = this.add.image(x, y, 'ring').setTint(color).setBlendMode(Phaser.BlendModes.ADD).setDepth(4).setScale(0.3).setAlpha(0.8)
+      this.tweens.add({ targets: ring, scale: 3 + i, alpha: 0, duration: 420 + i * 120, delay: i * 80, onComplete: () => ring.destroy() })
+    }
+    this.burstParticles(x, y - 10, 14, color, { speed: 60, size: 6, durationMs: 500, spreadUp: true })
+    this.screenShake(0.005, 160)
   }
 
   // volée de cœurs roses qui s'envolent (montée + fondu) autour du point d'impact du Câlin brutal
@@ -1104,38 +1285,12 @@ export class LevelScene extends Phaser.Scene {
     this.cameras.main.shake(90, 0.004)
   }
 
-  // Provocation : onde rouge + « ! » qui jaillit au-dessus de chaque ennemi dans la portée.
-  private tauntFx(x: number, y: number, radius: number, _color: number) {
-    for (let i = 0; i < 2; i++) {
-      const r = this.add.image(x, y, 'ring').setTint(0xff5252).setDepth(4).setBlendMode(Phaser.BlendModes.ADD).setScale(0.2).setAlpha(0.8)
-      this.tweens.add({ targets: r, scale: (radius / 28) * (1 + i * 0.2), alpha: 0, duration: 420 + i * 100, delay: i * 80, onComplete: () => r.destroy() })
-    }
-    for (const obj of this.enemies.getChildren()) {
-      const e = obj as Enemy
-      if (e.active && Phaser.Math.Distance.Between(x, y, e.x, e.y) <= radius) {
-        const mark = this.add.text(e.x, e.y - 40, '!', { fontSize: '26px', color: '#ff5252', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5).setDepth(7).setScale(0.4)
-        this.tweens.add({ targets: mark, scale: 1.2, duration: 200, ease: 'Back.out' })
-        this.tweens.add({ targets: mark, y: mark.y - 20, alpha: 0, delay: 450, duration: 400, onComplete: () => mark.destroy() })
-      }
-    }
-  }
-
-  // Onde tranchante : le projectile devient un croissant lumineux tournoyant qui laisse une
-  // traînée de petites lames le long de sa course (traînée nettoyée à la mort du projectile).
-  private bladeWaveProjectile(proj: Projectile, color: number) {
-    const f = this.player.facing
-    proj.setTexture('ring').setTint(color).setScale(0.7).setBlendMode(Phaser.BlendModes.ADD).setAngularVelocity(f * 720)
-    const trail = this.time.addEvent({
-      delay: 40, loop: true, callback: () => {
-        if (!proj.active) { trail.remove(); return }
-        const g = this.add.graphics({ x: proj.x, y: proj.y }).setDepth(5).setBlendMode(Phaser.BlendModes.ADD)
-        g.lineStyle(5, color, 0.7).beginPath()
-        g.arc(0, 0, 16, Phaser.Math.DegToRad(-70), Phaser.Math.DegToRad(70), false)
-        g.strokePath()
-        g.setScale(f, 1)
-        this.tweens.add({ targets: g, alpha: 0, scaleX: 1.6 * f, scaleY: 1.6, duration: 200, onComplete: () => g.destroy() })
-      },
-    })
+  // Lancer d'épée : la lame part en tournoyant et transperce toute la ligne ennemie (perçant).
+  // Utilise la texture d'arme du sabreur si dispo, avec une forte rotation propre.
+  private swordThrowProjectile(proj: Projectile, _color: number) {
+    proj.pierce = true
+    const key = this.textures.exists('weapon-swordsman') ? 'weapon-swordsman' : 'projectile'
+    proj.setTexture(key).clearTint().setScale(1.3).setAngularVelocity(this.player.facing * 900)
   }
 
   // Sceau du heaume : le projectile devient un sigil héraldique tournoyant (anneau + croix) qui
@@ -1159,11 +1314,13 @@ export class LevelScene extends Phaser.Scene {
   meleeHit(reach: number, multiplier: number) {
     const px = this.player.x, py = this.player.y, f = this.player.facing
     const atk = this.player.stats.atk * this.player.outgoingMult()
+    const flaming = this.player.isFlaming() // Épée enflammée : les coups appliquent une brûlure
     let touched = false
     for (const obj of this.enemies.getChildren()) {
       const e = obj as Enemy
       if (e.active && inMeleeReach((e.x - px) * f, Math.abs(e.y - py), reach)) {
         e.takeDamage(physicalDamage(atk, e.monster.def, multiplier))
+        if (flaming) e.applyBurn(atk * 0.35, 3000)
         touched = true
       }
     }

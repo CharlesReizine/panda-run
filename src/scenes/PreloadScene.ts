@@ -12,10 +12,12 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'calin-brutal': { color: 0xff9ab0, glyph: 'paw' },
   'bambou-jete': { color: 0x9ccc65, glyph: 'bamboo' },
   'taillade': { color: 0xcfd8dc, glyph: 'sword' },
+  'estoc-rapide': { color: 0xe0e0e0, glyph: 'thrust' },
   'tourbillon': { color: 0x90caf9, glyph: 'tornado' },
-  'charge-bambou': { color: 0xffcc80, glyph: 'dash' },
-  'cri-de-guerre': { color: 0xffe082, glyph: 'shout' },
-  'provocation': { color: 0xef9a9a, glyph: 'target' },
+  'attaque-chargee': { color: 0xffcc80, glyph: 'dash' },
+  'lancer-epee': { color: 0xb0bec5, glyph: 'sword' },
+  'epee-enflammee': { color: 0xff7043, glyph: 'fireball' },
+  'plongeon': { color: 0xff8a65, glyph: 'slam' },
   'lame-ultime': { color: 0xffd54f, glyph: 'sword' },
   'boule-de-feu': { color: 0xff7043, glyph: 'fireball' },
   'eclair': { color: 0xfff176, glyph: 'bolt' },
@@ -30,8 +32,6 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'fleche-de-bambou': { color: 0x9ccc65, glyph: 'arrow' },
   'salve-ultime': { color: 0xffd54f, glyph: 'rain' },
   'rugissement-panda': { color: 0xffb300, glyph: 'roar' },
-  'estoc-rapide': { color: 0xe0e0e0, glyph: 'thrust' },
-  'onde-tranchante': { color: 0x80deea, glyph: 'wave' },
   'soin-majeur': { color: 0x66bb6a, glyph: 'heart' },
   'rayon-arcanique': { color: 0xba68c8, glyph: 'ray' },
   'tir-instinctif': { color: 0xd7a86e, glyph: 'quickshot' },
@@ -1165,6 +1165,11 @@ export class PreloadScene extends Phaser.Scene {
         break
       case 'wave':
         g.lineStyle(3, c); for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(8 + i * 2, 22, 9 + i * 6, Phaser.Math.DegToRad(-50), Phaser.Math.DegToRad(50), false); g.strokePath() }
+        break
+      case 'slam': // plongeon : flèche vers le bas percutant une onde au sol
+        g.lineStyle(4, c).beginPath(); g.moveTo(cx, 6); g.lineTo(cx, 26); g.strokePath()
+        g.fillStyle(c).fillTriangle(cx - 6, 24, cx + 6, 24, cx, 32)
+        g.lineStyle(2, c); for (let i = 0; i < 2; i++) { g.beginPath(); g.arc(cx, 34, 6 + i * 6, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340), false); g.strokePath() }
         break
       case 'heart':
         g.fillStyle(c).fillCircle(cx - 5, cy - 3, 6).fillCircle(cx + 5, cy - 3, 6).fillTriangle(cx - 10, cy - 1, cx + 10, cy - 1, cx, cy + 11)

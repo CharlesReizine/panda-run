@@ -16,6 +16,9 @@ const SWIM_RUN_MULT = 0.7 // déplacement horizontal ralenti dans l'eau
 const MAX_ENERGY = 100
 const ENERGY_REGEN_PER_SEC = 22
 const ENERGY_PER_BASIC_HIT = 6
+const DIVE_SPEED = 1400 // vitesse de piqué vertical du Plongeon (px/s)
+// Lignée du sabreur : ces classes disposent du DOUBLE SAUT (2 sauts). Les autres restent à 1.
+const DOUBLE_JUMP_CLASSES = new Set<string>(['swordsman', 'chevalier'])
 const HAT_OFFSET_Y = -38 // place le chapeau au-dessus de la tête du panda illustré (crown haute)
 const WEAPON_OFFSET_X = 11 // décalage horizontal de l'arme (patte avant), mirroré selon l'orientation
 const WEAPON_OFFSET_Y = 12 // décalage vertical de l'arme (hauteur de la patte avant)
@@ -46,6 +49,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private climbAccum = 0
   private climbLastY = 0
   private wasGrounded = true
+  // Sauts : compteur remis à 0 à l'atterrissage ; front montant de `jump` détecté via jumpWasDown
+  // (l'input est maintenu, pas événementiel) → un appui = un saut. maxJumps() = 2 pour la lignée
+  // du sabreur (double saut), 1 sinon.
+  private jumpsUsed = 0
+  private jumpWasDown = false
+  // Plongeon : piqué vertical verrouillé déclenché en l'air ; l'atterrissage émet 'player-dive-land'
+  // (x, y, hauteur de chute) → LevelScene fait l'explosion proportionnelle à la hauteur.
+  diving = false
+  private diveStartY = 0
+  // Épée enflammée : buff temporaire ; pendant ce temps la lame flambe et les coups brûlent.
+  private flameUntil = 0
+  private flameTimer: Phaser.Time.TimerEvent | null = null
   private attacking = false
   private hatImage: Phaser.GameObjects.Image | null = null
   private weaponImage: Phaser.GameObjects.Image | null = null
@@ -157,6 +172,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   destroy(fromScene?: boolean) {
     this.scene?.events?.off(Phaser.Scenes.Events.POST_UPDATE, this.syncOverlays, this)
     this.swingTween?.remove()
+    this.flameTimer?.remove()
     this.hatImage?.destroy()
     this.weaponImage?.destroy()
     this.auraTween?.remove()
@@ -210,6 +226,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   updateFromControls(c: ControlsState) {
     const body = this.body as Phaser.Physics.Arcade.Body
 
+    // PLONGEON en cours : piqué vertical verrouillé, aucun autre contrôle jusqu'à l'impact.
+    if (this.diving) { this.updateDive(body); return }
+
     // ESCALADE : entrer en mode grimpe en poussant up/down sur une échelle ;
     // en sortir en sautant ou en quittant l'échelle.
     const wasClimbing = this.climbing
@@ -232,10 +251,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     if (this.inWater) { this.updateSwim(c, body); return }
 
-    if (c.jump && body.blocked.down) {
+    // SAUT + DOUBLE SAUT : compteur remis à 0 dès qu'on touche le sol ; on ne consomme un saut
+    // que sur le FRONT MONTANT de `jump` (input maintenu). La lignée du sabreur peut sauter une
+    // seconde fois en l'air (maxJumps = 2) ; les autres classes restent à un seul saut.
+    if (body.blocked.down) this.jumpsUsed = 0
+    const jumpPressed = c.jump && !this.jumpWasDown
+    if (jumpPressed && this.jumpsUsed < this.maxJumps()) {
+      const airborneJump = this.jumpsUsed >= 1
       this.setVelocityY(JUMP_VELOCITY)
+      this.jumpsUsed += 1
       this.scene.events.emit('player-jump')
+      if (airborneJump) this.doubleJumpFx() // souffle bleuté sous les pattes au 2e saut
     }
+    this.jumpWasDown = c.jump
 
     // Petit « splat » d'atterrissage : uniquement HORIZONTAL (scaleY reste 1). En Arcade
     // (Phaser 4) le corps physique suit l'échelle du sprite ; l'ancien squash vertical
@@ -328,6 +356,82 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       if (c.left || c.right) this.play(this.anim('run'), true)
       else this.play(this.anim('jump'), true)
     }
+  }
+
+  // nombre de sauts autorisés selon la classe : 2 pour la lignée du sabreur (double saut), 1 sinon
+  private maxJumps(): number {
+    return DOUBLE_JUMP_CLASSES.has(getPlayer().classId) ? 2 : 1
+  }
+
+  // souffle du 2e saut : anneau bleuté aplati sous le panda + fines traînées vers le bas
+  private doubleJumpFx() {
+    const y = this.y + PANDA_BODY.h / 2
+    const ring = this.scene.add.image(this.x, y, 'ring').setTint(0xb3e5fc)
+      .setBlendMode(Phaser.BlendModes.ADD).setDepth(this.depth - 1).setScale(0.15).setAlpha(0.9)
+    this.scene.tweens.add({ targets: ring, scaleX: 1.5, scaleY: 0.7, alpha: 0, duration: 300, ease: 'Cubic.out', onComplete: () => ring.destroy() })
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI + (i / 5) * Math.PI // éventail dirigé vers le bas
+      const sh = this.scene.add.rectangle(this.x, y, 3, 9, 0xe1f5fe).setDepth(this.depth - 1).setBlendMode(Phaser.BlendModes.ADD)
+      this.scene.tweens.add({ targets: sh, x: this.x + Math.cos(a) * 28, y: y - Math.sin(a) * 22, alpha: 0, duration: 260, onComplete: () => sh.destroy() })
+    }
+  }
+
+  // Plongeon : ne s'amorce qu'EN L'AIR. Verrouille les contrôles et impose un piqué vertical
+  // rapide ; l'atterrissage (updateDive) émet 'player-dive-land'. Renvoie false au sol.
+  startDive(): boolean {
+    const body = this.body as Phaser.Physics.Arcade.Body
+    if (this.diving || body.blocked.down) return false
+    this.diving = true
+    this.diveStartY = this.y
+    body.setAllowGravity(true)
+    this.setVelocity(0, DIVE_SPEED)
+    this.play(this.anim('attack'), true)
+    return true
+  }
+
+  // piqué du Plongeon : chute verticale imposée jusqu'à l'impact, puis émission de l'événement
+  // d'atterrissage avec la hauteur de chute (dégâts/rayon proportionnels côté LevelScene)
+  private updateDive(body: Phaser.Physics.Arcade.Body) {
+    body.setAllowGravity(true)
+    this.setVelocityX(0)
+    if (body.velocity.y < DIVE_SPEED) this.setVelocityY(DIVE_SPEED)
+    if (body.blocked.down) {
+      const fall = Math.max(0, this.y - this.diveStartY)
+      this.diving = false
+      this.jumpsUsed = 0
+      this.wasGrounded = true
+      this.scene.events.emit('player-dive-land', this.x, this.y, fall)
+    }
+  }
+
+  // Épée enflammée : embrase la lame pour un temps donné → flammes visibles sur l'arme et
+  // brûlure appliquée par les coups (test isFlaming côté LevelScene).
+  applyFlameBuff(durationMs: number) {
+    this.flameUntil = this.scene.time.now + durationMs
+    this.weaponImage?.setTint(0xff7043)
+    if (!this.flameTimer) {
+      this.flameTimer = this.scene.time.addEvent({ delay: 55, loop: true, callback: () => this.emitFlame() })
+    }
+  }
+
+  isFlaming(): boolean {
+    return this.scene.time.now < this.flameUntil
+  }
+
+  // flammèche qui monte depuis la lame tant que le buff est actif ; s'auto-éteint à l'échéance
+  private emitFlame() {
+    if (!this.isFlaming()) {
+      this.flameTimer?.remove(); this.flameTimer = null
+      this.weaponImage?.clearTint()
+      return
+    }
+    const w = this.weaponImage
+    if (!w) return
+    const fx = w.x + Phaser.Math.Between(-7, 7)
+    const fy = w.y - Phaser.Math.Between(4, 18)
+    const col = Phaser.Math.RND.pick([0xffca28, 0xff7043, 0xff5252])
+    const fl = this.scene.add.rectangle(fx, fy, 5, 10, col).setDepth(this.depth + 2).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.95)
+    this.scene.tweens.add({ targets: fl, y: fy - Phaser.Math.Between(16, 26), scaleX: 0.3, scaleY: 0.4, alpha: 0, duration: 300, ease: 'Sine.out', onComplete: () => fl.destroy() })
   }
 
   takeDamage(amount: number) {
