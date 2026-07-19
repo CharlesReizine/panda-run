@@ -17,7 +17,7 @@ export interface ClassDef {
   skillIds: string[]
 }
 
-export type SkillKind = 'melee' | 'projectile' | 'aoe' | 'heal' | 'charge' | 'dive' | 'buff' | 'zone' | 'trap'
+export type SkillKind = 'melee' | 'projectile' | 'aoe' | 'heal' | 'charge' | 'dive' | 'buff' | 'zone' | 'trap' | 'lightning' | 'passive'
 
 export interface SkillDef {
   id: string
@@ -41,6 +41,11 @@ export interface SkillDef {
   explodeRadius?: number // rayon de l'explosion (px) pour un projectile `explode`
   root?: number // piège : durée d'immobilisation (ms) infligée à l'ennemi qui le déclenche
   rain?: number // zone : nombre de flèches déversées du ciel sur la zone visée (densité de la pluie)
+  // ── Mage / Sorcier ─────────────────────────────────────────────────────────
+  blast?: number // projectile : rayon de la petite explosion déclenchée à l'impact (grosse boule de feu)
+  meteors?: number // zone : nombre de météores qui tombent et explosent sur la zone visée
+  wall?: { durationMs: number; height: number } // zone : mur de flammes temporaire (brûle + bloque les ennemis)
+  passive?: Partial<Pick<StatBlock, 'atk' | 'def' | 'maxHp' | 'attackSpeed'>> // passif : bonus de stat par rang appris (jamais équipé)
 }
 
 export type Rarity = 'commun' | 'rare' | 'epique' | 'legendaire'

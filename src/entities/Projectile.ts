@@ -8,6 +8,8 @@ export class Projectile extends Phaser.Physics.Arcade.Sprite {
   burn: { dmgPerTick: number; durationMs: number } | null = null
   // Flèche explosive : au lieu des dégâts directs, détone en zone à l'impact (sol ou ennemi).
   explosive: { radius: number; damage: number; color: number } | null = null
+  // Grosse boule de feu : dégâts directs PUIS petite explosion (gerbe de feu) à l'impact sur un ennemi.
+  blast: { radius: number; color: number } | null = null
   readonly hitEnemies = new Set<object>() // pour ne toucher chaque cible qu'une fois
   private startX: number
   private startY: number

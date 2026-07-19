@@ -2,6 +2,7 @@ import type { StatBlock } from './types'
 import type { PlayerState } from './player-state'
 import { CLASSES } from '../data/classes'
 import { ITEMS } from '../data/items'
+import { SKILLS } from '../data/skills'
 import { upgradedBonus } from './reforge'
 
 // Effet d'un point de stat réparti sur les stats dérivées.
@@ -36,5 +37,16 @@ export function computeStats(p: PlayerState): StatBlock {
   s.attackSpeed += AGI_ATTACK_SPEED_PER_POINT * a.agi
   s.def += AGI_DEF_PER_POINT * a.agi
   s.maxHp += INT_MAX_HP_PER_POINT * a.int
+  // Passifs de compétence (mage/sorcier) : chaque passif APPRIS (rang > 0) ajoute son bonus de
+  // stat × son rang, en permanence — sans occuper de slot équipé. Sans passif appris, aucun effet.
+  for (const [id, rank] of Object.entries(p.skillLevels)) {
+    if (rank <= 0) continue
+    const passive = SKILLS[id]?.passive
+    if (!passive) continue
+    s.atk += (passive.atk ?? 0) * rank
+    s.def += (passive.def ?? 0) * rank
+    s.maxHp += (passive.maxHp ?? 0) * rank
+    s.attackSpeed += (passive.attackSpeed ?? 0) * rank
+  }
   return s
 }

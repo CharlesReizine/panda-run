@@ -4,6 +4,7 @@ import { Player } from '../entities/Player'
 import { Enemy } from '../entities/Enemy'
 import { Projectile } from '../entities/Projectile'
 import { Prop } from '../entities/Prop'
+import { FlameWall } from '../entities/FlameWall'
 import { MONSTERS } from '../data/monsters'
 import { PROPS } from '../data/props'
 import { MATERIALS } from '../data/materials'
@@ -40,6 +41,8 @@ export class LevelScene extends Phaser.Scene {
   playerProjectiles!: Phaser.Physics.Arcade.Group
   pickups!: Phaser.Physics.Arcade.Group
   props!: Phaser.Physics.Arcade.Group
+  // Murs de flamme (Mage/Sorcier) : barrières statiques temporaires qui bloquent + brûlent les ennemis
+  private flameWalls!: Phaser.Physics.Arcade.StaticGroup
   private platforms!: Phaser.Physics.Arcade.StaticGroup
   private oneWayPlatforms!: Phaser.Physics.Arcade.StaticGroup
   private ladderRects: Phaser.Geom.Rectangle[] = []
@@ -156,6 +159,15 @@ export class LevelScene extends Phaser.Scene {
     this.physics.add.collider(this.enemies, platforms)
     this.physics.add.collider(this.enemies, oneWay)
 
+    // Murs de flamme : groupe statique. Collider → les ennemis butent dessus (passage bloqué) ;
+    // overlap → tout ennemi au contact prend une brûlure. Les membres détruits quittent le groupe.
+    this.flameWalls = this.physics.add.staticGroup()
+    this.physics.add.collider(this.enemies, this.flameWalls)
+    this.physics.add.overlap(this.enemies, this.flameWalls, (eObj, wObj) => {
+      const e = eObj as Enemy, w = wObj as FlameWall
+      if (e.active) e.applyBurn(w.dmgPerTick, 900)
+    })
+
     // allowGravity: false par défaut — SINON le groupe réapplique son défaut (gravité ON) à
     // chaque `add()` et écrase le setAllowGravity(false) du constructeur de Projectile : les tirs
     // horizontaux se mettaient alors à TOMBER à la verticale. Les tirs en cloche (bambou,
@@ -265,7 +277,9 @@ export class LevelScene extends Phaser.Scene {
       } else {
         e.takeDamage(physicalDamage(proj.damage, e.monster.def))
         if (proj.burn) e.applyBurn(proj.burn.dmgPerTick, proj.burn.durationMs)
-        this.impactFx(proj.x, proj.y, proj.tintTopLeft)
+        // grosse boule de feu : petite explosion (gerbe + splash) à l'impact, en plus du coup direct
+        if (proj.blast) this.doFireballBlast(proj)
+        else this.impactFx(proj.x, proj.y, proj.tintTopLeft)
         proj.destroy()
       }
     })
@@ -977,12 +991,14 @@ export class LevelScene extends Phaser.Scene {
         // sceau du chevalier : sigil héraldique tournoyant, doré et lumineux
         this.sealProjectile(proj, color)
       } else {
-        // projectile simple : boule de feu (mage/sorcier) ou flèche (archer/chasseur), sinon orbe
-        const projScale = skill.multiplier >= 2.5 ? 1.6 : skill.multiplier >= 1.6 ? 1.25 : 1.05
+        // projectile simple : boule de feu (mage/sorcier) ou flèche (archer/chasseur), sinon orbe.
+        // Grosse boule de feu (skill.blast) : nettement plus imposante que les autres tirs.
+        const projScale = skill.blast ? 2.4 : skill.multiplier >= 2.5 ? 1.6 : skill.multiplier >= 1.6 ? 1.25 : 1.05
         const styleSimple = (pr: Projectile) => {
           if (mageType) { pr.setTexture('fx-fireball').clearTint(); this.fireballShimmer(pr, projScale) }
           else if (archerType) pr.setTexture('fx-arrow').clearTint().setScale(projScale)
           else pr.setTint(color).setScale(projScale)
+          if (skill.blast) pr.blast = { radius: skill.blast, color }
         }
         styleSimple(proj)
         // Double flèche : on tire les flèches supplémentaires TOUT contre la première (léger
@@ -1016,6 +1032,9 @@ export class LevelScene extends Phaser.Scene {
     } else if (skill.kind === 'dive') {
       // Plongeon : piqué depuis les airs → explosion à l'impact (proportionnelle à la chute)
       this.castDive(skill, color, mult)
+    } else if (skill.kind === 'lightning') {
+      // Éclairs foudroyants : décharge frontale à courte portée, dévastatrice
+      this.castLightning(skill, mult)
     }
     // buff : rien à faire ici, l'effet est appliqué par le bloc buff ci-dessous (ATK + flamme)
 
@@ -1527,7 +1546,11 @@ export class LevelScene extends Phaser.Scene {
     // clamp de la cible dans les bornes du monde pour rester jouable
     const cx = Phaser.Math.Clamp(x, 40, this.levelDef.widthTiles * TILE - 40)
     const cy = Phaser.Math.Clamp(y, 80, GROUND_ROW * TILE - 4)
-    this.executeArrowRain(skill, cx, cy, mult, color)
+    // dispatch selon la nature du sort de zone : cataclysme (ultime) > météores > mur de flamme > pluie de flèches
+    if (skill.id === 'cataclysme') this.executeCataclysm(skill, cx, cy, mult, color)
+    else if (skill.meteors) this.executeMeteorRain(skill, cx, cy, mult, color)
+    else if (skill.wall) this.executeFlameWall(skill, cx, mult)
+    else this.executeArrowRain(skill, cx, cy, mult, color)
   }
 
   // Pluie de flèches / Nuée de flèches : ~40-64 mini-flèches s'abattent du ciel sur la zone visée,
@@ -1578,6 +1601,204 @@ export class LevelScene extends Phaser.Scene {
     }
     this.screenShake(0.004, 220)
     audio.playSfx('hit')
+  }
+
+  // ===== Mage / Sorcier : boule de feu, éclairs, mur de flamme, pluie de météores, cataclysme =====
+
+  // Petite explosion (gerbe de feu) à l'impact de la grosse boule de feu : effet + splash aux alentours.
+  private doFireballBlast(proj: Projectile) {
+    const data = proj.blast
+    if (!data) return
+    const x = proj.x, y = proj.y
+    this.explosionFx(x, y, data.radius, data.color)
+    this.screenShake(0.005, 130)
+    for (const obj of this.enemies.getChildren()) {
+      const e = obj as Enemy
+      if (e.active && Phaser.Math.Distance.Between(x, y, e.x, e.y) <= data.radius) {
+        e.takeDamage(physicalDamage(proj.damage * 0.5, e.monster.def))
+      }
+    }
+    for (const obj of this.props.getChildren()) {
+      const prop = obj as Prop
+      if (prop.active && Phaser.Math.Distance.Between(x, y, prop.x, prop.y) <= data.radius) prop.takeDamage(1)
+    }
+  }
+
+  // Éclairs foudroyants : décharge FRONTALE à courte portée. Dégâts dévastateurs à tous les ennemis
+  // devant le mage dans la portée + gros éclairs bleus zigzaguants ramifiés, flash et secousse.
+  private castLightning(skill: SkillDef, mult: number) {
+    const px = this.player.x, py = this.player.y, f = this.player.facing
+    const atk = this.player.stats.atk * this.player.outgoingMult()
+    const reach = skill.range
+    this.player.playAttack()
+    let touched = false
+    for (const obj of this.enemies.getChildren()) {
+      const e = obj as Enemy
+      if (!e.active) continue
+      const dx = (e.x - px) * f
+      if (dx >= -24 && dx <= reach && Math.abs(e.y - py) <= 140) {
+        e.takeDamage(physicalDamage(atk, e.monster.def, mult))
+        touched = true
+      }
+    }
+    for (const obj of this.props.getChildren()) {
+      const prop = obj as Prop
+      const dx = (prop.x - px) * f
+      if (prop.active && dx >= -24 && dx <= reach && Math.abs(prop.y - py) <= 140) prop.takeDamage(1)
+    }
+    this.lightningFx(px + f * 14, py, reach)
+    this.flashScreen(0xcfe8ff, 0.32, 130)
+    this.screenShake(0.013, 210)
+    this.hitStop(70)
+    if (touched) audio.playSfx('hit')
+  }
+
+  // Gros éclairs bleus zigzaguants (avec branches) projetés devant le mage + cœur blanc + halo + éclats.
+  private lightningFx(x: number, y: number, reach: number) {
+    const f = this.player.facing
+    const bolt = (yJitter: number, thick: number, col: number, alpha: number) => {
+      const g = this.add.graphics().setDepth(7).setBlendMode(Phaser.BlendModes.ADD)
+      g.lineStyle(thick, col, alpha).beginPath()
+      let cx = x, cy = y + yJitter
+      g.moveTo(cx, cy)
+      const segs = 7
+      for (let i = 1; i <= segs; i++) {
+        cx = x + f * (reach * i) / segs
+        cy = y + yJitter + Phaser.Math.Between(-36, 36)
+        g.lineTo(cx, cy)
+        if (i % 2 === 0) { g.lineTo(cx + f * 20, cy + Phaser.Math.Between(-26, 26)); g.moveTo(cx, cy) } // branche
+      }
+      g.strokePath()
+      this.tweens.add({ targets: g, alpha: 0, duration: 220, delay: 50, onComplete: () => g.destroy() })
+    }
+    for (let b = 0; b < 3; b++) bolt(Phaser.Math.Between(-32, 32), 6, 0x64b5ff, 0.9)
+    bolt(0, 3, 0xffffff, 1) // cœur blanc éclatant
+    this.burstParticles(x, y, 14, 0x64b5ff, { speed: 95, size: 5, durationMs: 320 })
+    const flash = this.add.image(x, y, 'ring').setTint(0x64b5ff).setBlendMode(Phaser.BlendModes.ADD).setDepth(7).setScale(0.1).setAlpha(0.9)
+    this.tweens.add({ targets: flash, scale: 0.75, alpha: 0, duration: 200, onComplete: () => flash.destroy() })
+  }
+
+  // Mur de flamme : invoque une barrière de feu STATIQUE à l'endroit visé (entité FlameWall). Elle
+  // brûle et bloque les ennemis tant qu'elle dure ; ici on gère l'embrasement d'invocation + FX.
+  private executeFlameWall(skill: SkillDef, cx: number, mult: number) {
+    const cfg = skill.wall!
+    const groundY = GROUND_ROW * TILE - 4
+    const width = skill.range * 2
+    const atk = this.player.stats.atk * this.player.outgoingMult()
+    const dmgPerTick = Math.max(1, atk * mult * 0.3)
+    const wall = new FlameWall(this, cx, groundY, width, cfg.height, dmgPerTick)
+    this.flameWalls.add(wall)
+    wall.activate(cfg.durationMs)
+    this.aoeRing(cx, groundY, skill.range, 0xff7043, true)
+    this.screenShake(0.006, 180)
+    this.flashScreen(0xff7043, 0.12, 150)
+  }
+
+  // Pluie de météores : quelques (5-8) météores enflammés tombent du ciel sur la zone visée et
+  // EXPLOSENT à l'impact (explosionFx + secousse + dégâts de zone + brûlure). Spectaculaire.
+  private executeMeteorRain(skill: SkillDef, cx: number, cy: number, mult: number, color: number) {
+    const radius = skill.range
+    const count = skill.meteors ?? 6
+    const atk = this.player.stats.atk * this.player.outgoingMult()
+    const f = this.player.facing
+
+    // marqueur de zone au sol pendant la pluie
+    const marker = this.add.graphics().setDepth(3)
+    const drawMarker = (a: number) => {
+      marker.clear()
+      marker.fillStyle(color, 0.12 * a).fillCircle(cx, cy, radius)
+      marker.lineStyle(3, color, 0.4 + 0.4 * a).strokeCircle(cx, cy, radius)
+    }
+    drawMarker(1)
+    this.tweens.addCounter({ from: 1, to: 0, duration: 1500, onUpdate: (tw) => drawMarker(tw.getValue() ?? 0), onComplete: () => marker.destroy() })
+
+    for (let i = 0; i < count; i++) {
+      this.time.delayedCall(Phaser.Math.Between(0, 900), () => {
+        const mx = cx + Phaser.Math.FloatBetween(-radius, radius)
+        const landY = cy + Phaser.Math.Between(-8, 12)
+        const startY = landY - 400
+        const startX = mx - f * 130 // chute en biais
+        // météore ARDENT : halo ADD + corps OPAQUE rouge/orange + cœur jaune vif (lisible sur ciel clair)
+        const meteor = this.add.container(startX, startY, [
+          this.add.circle(0, 0, 22, 0xff7043).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.55),
+          this.add.circle(0, 0, 15, 0xe64a19).setAlpha(0.98),
+          this.add.circle(0, 0, 9, 0xff7043).setAlpha(0.98),
+          this.add.circle(0, 0, 4.5, 0xffee58).setAlpha(1),
+        ]).setDepth(8)
+        const trail = this.time.addEvent({
+          delay: 18, loop: true, callback: () => {
+            if (!meteor.active) { trail.remove(); return }
+            const col = Phaser.Math.RND.pick([0xffee58, 0xffca28, 0xff7043, 0xff5252])
+            const pcl = this.add.circle(meteor.x, meteor.y, Phaser.Math.Between(4, 8), col).setDepth(7).setAlpha(0.9)
+            this.tweens.add({ targets: pcl, alpha: 0, scale: 0.2, duration: 340, onComplete: () => pcl.destroy() })
+          },
+        })
+        this.tweens.add({
+          targets: meteor, x: mx, y: landY, duration: Phaser.Math.Between(360, 470), ease: 'Quad.in',
+          onComplete: () => {
+            trail.remove(); meteor.destroy()
+            const blast = 86
+            this.explosionFx(mx, landY, blast, 0xff7043)
+            this.screenShake(0.008, 150)
+            audio.playSfx('hit')
+            for (const obj of this.enemies.getChildren()) {
+              const e = obj as Enemy
+              if (e.active && Phaser.Math.Distance.Between(mx, landY, e.x, e.y) <= blast) {
+                e.takeDamage(physicalDamage(atk, e.monster.def, mult * 0.6))
+                e.applyBurn(atk * 0.15, 2200)
+              }
+            }
+            for (const obj of this.props.getChildren()) {
+              const prop = obj as Prop
+              if (prop.active && Phaser.Math.Distance.Between(mx, landY, prop.x, prop.y) <= blast) prop.takeDamage(1)
+            }
+          },
+        })
+      })
+    }
+    this.flashScreen(0xff7043, 0.12, 200)
+  }
+
+  // Cataclysme (ultime du Sorcier) : le ciel se déchire sur la zone — pluie de météores massive +
+  // colonnes de feu qui jaillissent du sol + déflagrations en chaîne + flash rouge et grosse secousse.
+  private executeCataclysm(skill: SkillDef, cx: number, cy: number, mult: number, color: number) {
+    this.flashScreen(0xff3b30, 0.4, 240)
+    this.cameras.main.flash(170, 255, 170, 110)
+    this.screenShake(0.02, 620)
+    this.hitStop(90)
+    this.executeMeteorRain(skill, cx, cy, mult, color)
+    const radius = skill.range
+    const groundY = GROUND_ROW * TILE - 4
+    // colonnes de feu en travers de la zone
+    for (let i = 0; i < 6; i++) {
+      this.time.delayedCall(i * 140, () => this.firePillarFx(cx + Phaser.Math.FloatBetween(-radius, radius), groundY))
+    }
+    // déflagrations en chaîne qui ravagent le secteur
+    for (let i = 0; i < 4; i++) {
+      this.time.delayedCall(300 + i * 200, () => {
+        const bx = cx + Phaser.Math.FloatBetween(-radius, radius)
+        const by = cy + Phaser.Math.Between(-30, 20)
+        this.explosionFx(bx, by, 118, 0xff5252)
+        const atk = this.player.stats.atk * this.player.outgoingMult()
+        for (const obj of this.enemies.getChildren()) {
+          const e = obj as Enemy
+          if (e.active && Phaser.Math.Distance.Between(bx, by, e.x, e.y) <= 122) e.takeDamage(physicalDamage(atk, e.monster.def, mult * 0.4))
+        }
+      })
+    }
+  }
+
+  // Colonne de feu qui jaillit du sol (cataclysme) : gaine orangée + cœur jaune vif qui montent
+  // d'un coup puis s'estompent, avec gerbe de braises au sommet.
+  private firePillarFx(x: number, groundY: number) {
+    const h = Phaser.Math.Between(150, 220)
+    const pillar = this.add.rectangle(x, groundY, 26, h, 0xff7043).setOrigin(0.5, 1).setDepth(6).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.9).setScale(1, 0.2)
+    const core = this.add.rectangle(x, groundY, 10, h, 0xffee58).setOrigin(0.5, 1).setDepth(7).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.95).setScale(1, 0.2)
+    this.tweens.add({
+      targets: [pillar, core], scaleY: 1, duration: 160, ease: 'Cubic.out',
+      onComplete: () => this.tweens.add({ targets: [pillar, core], alpha: 0, scaleY: 1.15, duration: 260, onComplete: () => { pillar.destroy(); core.destroy() } }),
+    })
+    this.burstParticles(x, groundY - h * 0.4, 12, 0xffca28, { speed: 80, size: 6, durationMs: 400, spreadUp: true })
   }
 
   // Touche les ennemis/props devant le panda (ou pile sur lui), avec grande tolérance

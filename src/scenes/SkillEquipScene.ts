@@ -145,7 +145,10 @@ export class SkillEquipScene extends Phaser.Scene {
           p.skillPoints--; p.skillLevels[s.id] = rank + 1; save(p); this.render()
         })
       }
-      if (unlocked && !equipped) {
+      // Les passifs ne s'équipent JAMAIS : appris = actif en permanence (via computeStats), hors des 4 slots.
+      if (s.kind === 'passive') {
+        if (unlocked) this.add.text(x + colW - 54, y + 44, 'Passif actif ✓', { fontSize: '11px', color: '#ce93d8' }).setOrigin(0.5)
+      } else if (unlocked && !equipped) {
         btn(x + colW - 54, y + 44, 'Équiper', 0x33691e, () => {
           const free = p.equippedSkills.indexOf(null)
           p.equippedSkills[free >= 0 ? free : 3] = s.id; save(p); this.render()
@@ -167,6 +170,8 @@ export class SkillEquipScene extends Phaser.Scene {
       : s.kind === 'buff' ? 'Amélioration'
       : s.kind === 'zone' ? 'Zone visée'
       : s.kind === 'trap' ? 'Piège'
+      : s.kind === 'lightning' ? 'Foudre'
+      : s.kind === 'passive' ? 'Passif'
       : 'Soin'
     const tags: string[] = []
     if (s.pierce) tags.push('perçant')
@@ -208,7 +213,16 @@ export class SkillEquipScene extends Phaser.Scene {
     panel.add(this.add.text(left, y, rankTxt, { fontSize: '13px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0, 0))
     y += 24
 
-    if (s.kind === 'heal') {
+    if (s.kind === 'passive') {
+      const parts: string[] = []
+      if (s.passive?.atk) parts.push(`+${s.passive.atk} ATK`)
+      if (s.passive?.maxHp) parts.push(`+${s.passive.maxHp} PV max`)
+      if (s.passive?.def) parts.push(`+${s.passive.def} DÉF`)
+      if (s.passive?.attackSpeed) parts.push(`+${s.passive.attackSpeed} vit. att.`)
+      panel.add(this.add.text(left, y, 'Passif — toujours actif une fois appris (hors slots)', { fontSize: '13px', color: '#ce93d8' }).setOrigin(0, 0))
+      y += 20
+      panel.add(this.add.text(left, y, `Bonus par rang : ${parts.join('   ') || '—'}${rank > 0 ? `   (rang ${rank})` : ''}`, { fontSize: '13px', color: '#e1bee7', fontStyle: 'bold' }).setOrigin(0, 0))
+    } else if (s.kind === 'heal') {
       const heal = Math.round(stats.maxHp * s.multiplier * rankMult)
       panel.add(this.add.text(left, y, `Soin : ${Math.round(s.multiplier * 100)}% des PV max`, { fontSize: '13px', color: '#a5d6a7' }).setOrigin(0, 0))
       y += 20
@@ -242,7 +256,10 @@ export class SkillEquipScene extends Phaser.Scene {
 
     panel.add(this.add.text(left, y, 'Comment l\'utiliser', { fontSize: '13px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0, 0))
     y += 20
-    panel.add(this.add.text(left, y, 'Équipe-la dans un slot 1-4, puis touche l\'icône du slot ou la touche 1-4 en jeu.', { fontSize: '12px', color: '#b0bec5', wordWrap: { width: 500 } }).setOrigin(0, 0))
+    const howto = s.kind === 'passive'
+      ? 'Débloque-la avec un point de compétence : son bonus s\'applique alors en permanence, sans occuper de slot.'
+      : 'Équipe-la dans un slot 1-4, puis touche l\'icône du slot ou la touche 1-4 en jeu.'
+    panel.add(this.add.text(left, y, howto, { fontSize: '12px', color: '#b0bec5', wordWrap: { width: 500 } }).setOrigin(0, 0))
 
     const closeBtn = this.add.text(480, 470, 'Fermer', { fontSize: '14px', color: '#ffffff', backgroundColor: '#455a64', padding: { x: 14, y: 6 } })
       .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => panel.destroy())
