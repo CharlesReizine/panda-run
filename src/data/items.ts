@@ -9,6 +9,7 @@ const list: ItemDef[] = [
   { id: 'carapace-scarabee', name: 'Carapace de scarabée', slot: 'armor', bonus: { def: 9, maxHp: 40 }, rarity: 'rare' },
   { id: 'grelot-porte-bonheur', name: 'Grelot porte-bonheur', slot: 'accessory', bonus: { maxHp: 30 }, rarity: 'rare' },
   { id: 'amulette-pharaon', name: 'Amulette du pharaon', slot: 'accessory', bonus: { atk: 6, maxHp: 25 }, rarity: 'epique' },
+  { id: 'sakkat', name: 'Sakkat', slot: 'hat', bonus: { maxHp: 8 }, rarity: 'commun' },
   { id: 'chapeau-poring', name: 'Chapeau Poring', slot: 'hat', bonus: { maxHp: 5 }, rarity: 'commun' },
   { id: 'ailes-angeling', name: "Ailes d'Angeling", slot: 'hat', bonus: { maxHp: 15 }, rarity: 'rare' },
   { id: 'couronne-royale', name: 'Couronne royale', slot: 'hat', bonus: { atk: 4, def: 4 }, rarity: 'epique' },

@@ -969,6 +969,29 @@ export class PreloadScene extends Phaser.Scene {
         g.strokePath()
         break
       }
+      case 'sakkat': {
+        // sakkat : chapeau conique en bambou/paille tressé, large bord, teintes beige/tan
+        g.fillStyle(0x8d6e4a).fillEllipse(20, 26, 40, 11) // dessous du bord (ombre portée)
+        g.fillStyle(0xd2b48c).fillEllipse(20, 24, 40, 10) // large bord tressé
+        g.fillStyle(0xe8d3a8, 0.5).fillEllipse(18, 23, 26, 5) // reflet clair sur le bord
+        g.fillStyle(0xc19a6b).fillTriangle(3, 25, 37, 25, 20, 2) // cône (face)
+        g.fillStyle(0xdcbd8e).fillTriangle(20, 2, 37, 25, 20, 25) // moitié droite plus claire (volume)
+        // brins de bambou rayonnant du sommet vers le bord
+        g.lineStyle(1, 0x8d6e4a, 0.7).beginPath()
+        g.moveTo(20, 3); g.lineTo(6, 24)
+        g.moveTo(20, 3); g.lineTo(13, 25)
+        g.moveTo(20, 3); g.lineTo(20, 25)
+        g.moveTo(20, 3); g.lineTo(27, 25)
+        g.moveTo(20, 3); g.lineTo(34, 24)
+        g.strokePath()
+        // cerclages du tressage
+        g.lineStyle(1, 0x8d6e4a, 0.45).beginPath()
+        g.moveTo(12, 14); g.lineTo(28, 14)
+        g.moveTo(8, 20); g.lineTo(32, 20)
+        g.strokePath()
+        g.fillStyle(0x8d6e4a).fillCircle(20, 3, 2) // pointe du sommet
+        break
+      }
       case 'ailes-angeling':
         g.lineStyle(2, 0xffd54f).strokeCircle(20, 6, 9) // auréole
         g.fillStyle(0xffffff, 0.95).fillEllipse(6, 22, 12, 20).fillEllipse(34, 22, 12, 20) // ailes

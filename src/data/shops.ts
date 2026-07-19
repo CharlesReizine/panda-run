@@ -21,6 +21,7 @@ export const ARMOR_SHOP: ShopItemDef[] = [
 ]
 
 export const HAT_SHOP: ShopItemDef[] = [
+  { itemId: 'sakkat', price: 120 },
   { itemId: 'chapeau-poring', price: 100 },
   { itemId: 'bonnet-champi', price: 130 },
   { itemId: 'casque-orc', price: 220 },
