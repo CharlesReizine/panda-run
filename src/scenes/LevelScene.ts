@@ -567,39 +567,35 @@ export class LevelScene extends Phaser.Scene {
 
   // écran K.O. avec choix « Réessayer » (relance le niveau à l'identique) ou « Carte »
   private showGameOver() {
-    // dans le monde : le panda s'écroule sur place, remplacé par l'illustration K.O. allongée.
-    // Objets de scène → détruits automatiquement au restart/retour carte (pas de résidu).
+    // Fige la caméra sur place. Sans ça, le suivi continue de lerper vers le panda projeté par
+    // le knockback (puis en chute), ce qui fait « scroller » l'écran juste avant le K.O.
+    this.cameras.main.stopFollow()
+    // stoppe net le corps du joueur (plus de dérive de la physique sous l'overlay) et le masque :
+    // l'illustration K.O. le remplace, épinglée à l'écran (indépendante du scroll du monde).
+    this.player.setVelocity(0, 0)
+    ;(this.player.body as Phaser.Physics.Arcade.Body).stop()
     this.player.setVisible(false)
-    const fallen = this.add.image(this.player.x, this.player.y + 18, 'panda-mort')
-      .setDepth(this.player.depth).setFlipX(this.player.facing === -1)
-    this.tweens.add({ targets: fallen, y: fallen.y - 6, duration: 200, yoyo: true, ease: 'Quad.out' })
 
-    this.add.rectangle(480, 270, 960, 540, 0x000000, 0.6).setScrollFactor(0).setDepth(20)
-    this.add.text(480, 90, 'K.O. !', { fontSize: '64px', color: '#ff5252', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(21)
+    // voile sombre plein écran, épinglé à l'écran
+    this.add.rectangle(480, 270, 960, 540, 0x0b0b12, 0.72).setScrollFactor(0).setDepth(20)
+    this.add.text(480, 78, 'K.O. !', {
+      fontSize: '64px', color: '#ff5252', fontStyle: 'bold', stroke: '#000000', strokeThickness: 6,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(22)
 
-    // grande illustration du panda mort, bien visible au centre, avec un petit rebond d'apparition
-    const dead = this.add.image(480, 250, 'panda-mort').setScrollFactor(0).setDepth(21).setScale(0.4)
-    this.tweens.add({ targets: dead, scale: 2.7, duration: 420, ease: 'Back.out' })
-
-    // petites étoiles qui tournent autour de la tête, façon cartoon
-    for (let i = 0; i < 3; i++) {
-      const star = this.add.text(480, 250, '✦', { fontSize: '26px', color: '#ffe082' })
-        .setOrigin(0.5).setScrollFactor(0).setDepth(22)
-      const orbit = { a: (i / 3) * Math.PI * 2 }
-      this.tweens.add({
-        targets: orbit, a: orbit.a + Math.PI * 2, duration: 2600, repeat: -1,
-        onUpdate: () => {
-          star.setPosition(480 + Math.cos(orbit.a) * 128, 220 + Math.sin(orbit.a) * 36)
-          star.setScale(0.6 + 0.5 * (Math.sin(orbit.a) * 0.5 + 0.5))
-        },
-      })
-    }
+    // illustration K.O. (panda sur le dos + étoiles), centrée, avec fondu + léger zoom d'arrivée
+    const dead = this.add.image(480, 258, 'death-panda').setScrollFactor(0).setDepth(21)
+    const targetH = 250
+    dead.setDisplaySize(targetH * (dead.width / dead.height), targetH)
+    const sx = dead.scaleX, sy = dead.scaleY
+    dead.setScale(sx * 0.7, sy * 0.7).setAlpha(0)
+    this.tweens.add({ targets: dead, alpha: 1, duration: 320, ease: 'Quad.out' })
+    this.tweens.add({ targets: dead, scaleX: sx, scaleY: sy, duration: 440, ease: 'Back.out' })
 
     const mkButton = (x: number, label: string, bg: number, onTap: () => void) => {
-      const t = this.add.text(x, 410, label, {
+      const t = this.add.text(x, 448, label, {
         fontSize: '26px', color: '#ffffff', backgroundColor: `#${bg.toString(16).padStart(6, '0')}`,
         padding: { x: 22, y: 12 },
-      }).setOrigin(0.5).setScrollFactor(0).setDepth(21).setInteractive({ useHandCursor: true })
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(22).setInteractive({ useHandCursor: true })
       t.on('pointerdown', () => {
         audio.playSfx('ui-tap')
         onTap()

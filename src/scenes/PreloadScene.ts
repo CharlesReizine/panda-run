@@ -53,6 +53,10 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
 type ClassId = 'novice' | 'swordsman' | 'mage' | 'archer' | 'chevalier' | 'sorcier' | 'chasseur'
 const CLASSES: ClassId[] = ['novice', 'swordsman', 'mage', 'archer', 'chevalier', 'sorcier', 'chasseur']
 
+// PNJ pandas de la ville (illustrations fond clair à détourer) : le garde de quête + les
+// quatre boutiquiers. Bakés en textures npc-<id> (détourées + rognées) réutilisées par TownScene.
+const NPC_IDS = ['garde', 'herboriste', 'forgeron', 'armurier', 'tailleur'] as const
+
 // nom de fichier d'illustration par classe (public/art/panda-<nom>*.png) : le sabreur
 // s'appelle « sabreur » côté art ; les autres classes gardent leur id.
 const ART_NAME: Record<ClassId, string> = {
@@ -106,6 +110,53 @@ export class PreloadScene extends Phaser.Scene {
       this.load.image(`pandaart-${cls}-course`, `art/panda-${art}-course.png`)
       this.load.image(`pandaart-${cls}-saut`, `art/panda-${art}-saut.png`)
       this.load.image(`pandaart-${cls}-attaque`, `art/panda-${art}-attaque.png`)
+    }
+    // PNJ pandas de la ville + illustration K.O. — détourés/rognés en create() (bakeCropped)
+    for (const id of NPC_IDS) this.load.image(`npcart-${id}`, `art/npc-${id}.png`)
+    this.load.image('deathart-panda', 'art/death-panda.png')
+  }
+
+  // Détoure (fond uni des bords → transparent, flood-fill) puis rogne une illustration chargée
+  // à sa boîte englobante non transparente, et l'enregistre sous destKey à sa résolution native
+  // (nette une fois mise à l'échelle). Sert aux PNJ pandas de la ville et à l'illustration K.O.
+  // Renvoie false si la source manque ou si le canvas 2D échoue.
+  private bakeCropped(srcKey: string, destKey: string): boolean {
+    if (this.textures.exists(destKey)) return true
+    if (!this.textures.exists(srcKey)) return false
+    try {
+      const src = this.textures.get(srcKey).getSourceImage() as HTMLImageElement | HTMLCanvasElement
+      const w = src.width, h = src.height
+      const work = document.createElement('canvas')
+      work.width = w; work.height = h
+      const wctx = work.getContext('2d')
+      if (!wctx) return false
+      wctx.drawImage(src as CanvasImageSource, 0, 0)
+      const imageData = wctx.getImageData(0, 0, w, h)
+      stripBorderBackground(imageData)
+      const data = imageData.data
+      let x0 = w, y0 = h, x1 = -1, y1 = -1
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          if ((data[(y * w + x) * 4 + 3] ?? 0) >= 16) {
+            if (x < x0) x0 = x
+            if (x > x1) x1 = x
+            if (y < y0) y0 = y
+            if (y > y1) y1 = y
+          }
+        }
+      }
+      const bw = x1 - x0 + 1, bh = y1 - y0 + 1
+      if (bw <= 0 || bh <= 0) return false
+      wctx.putImageData(imageData, 0, 0)
+      const out = document.createElement('canvas')
+      out.width = bw; out.height = bh
+      const octx = out.getContext('2d')
+      if (!octx) return false
+      octx.drawImage(work, x0, y0, bw, bh, 0, 0, bw, bh)
+      this.textures.addCanvas(destKey, out)
+      return true
+    } catch {
+      return false
     }
   }
 
@@ -1102,6 +1153,9 @@ export class PreloadScene extends Phaser.Scene {
     this.drawPandas()
     this.bakeClassWeapons()
     this.drawPandaDead()
+    // PNJ pandas de la ville + illustration K.O. (détourés + rognés)
+    for (const id of NPC_IDS) this.bakeCropped(`npcart-${id}`, `npc-${id}`)
+    this.bakeCropped('deathart-panda', 'death-panda')
     this.drawDecor()
     for (const item of Object.values(ITEMS)) if (item.slot === 'hat') this.drawCosmetic(item.id)
     for (const m of Object.values(MONSTERS)) {

@@ -85,16 +85,22 @@ interface TownBuilding {
   wallColor: number
 }
 
+// Disposition « place de village » : 4 boutiques aux quatre coins (toutes entièrement visibles
+// dans le viewport 960×540), château décoratif au centre en fond, garde de quête planté au
+// centre devant. Les zones d'interaction (SPOTS) suivent automatiquement ces coordonnées.
 const BUILDINGS: TownBuilding[] = [
-  { id: 'potions', name: 'Herboristerie', x: 190, y: 150, w: 160, h: 110, roofColor: 0xc62828, wallColor: 0xffca28 },
-  { id: 'armes', name: 'Armurerie', x: 480, y: 130, w: 180, h: 120, roofColor: 0x455a64, wallColor: 0xb0bec5 },
-  { id: 'vetements', name: 'Boutique de vêtements', x: 770, y: 150, w: 160, h: 110, roofColor: 0x6a1b9a, wallColor: 0xce93d8 },
-  { id: 'forge', name: 'Forge', x: 780, y: 390, w: 170, h: 108, roofColor: 0x37474f, wallColor: 0x8d6e63 },
+  { id: 'potions', name: 'Herboristerie', x: 150, y: 195, w: 148, h: 100, roofColor: 0xc62828, wallColor: 0xffca28 },
+  { id: 'vetements', name: 'Boutique de vêtements', x: 810, y: 195, w: 148, h: 100, roofColor: 0x6a1b9a, wallColor: 0xce93d8 },
+  { id: 'forge', name: 'Forge', x: 240, y: 405, w: 150, h: 98, roofColor: 0x37474f, wallColor: 0x8d6e63 },
+  { id: 'armes', name: 'Armurerie', x: 720, y: 405, w: 150, h: 98, roofColor: 0x455a64, wallColor: 0xb0bec5 },
 ]
+
+// zone d'interaction du garde, centrée sur son sprite (le PNJ personnage npc-garde)
+const QUEST_DOOR = { x: 480, y: 385 }
 
 const SPOTS: TownSpot[] = [
   ...BUILDINGS.map((b) => ({ id: b.id, label: b.name, doorX: b.x, doorY: b.y + b.h / 2 + 10 })),
-  { id: 'quete', label: QUESTS['chasse-aux-monstres']!.npcName, doorX: 480, doorY: 360 },
+  { id: 'quete', label: QUESTS['chasse-aux-monstres']!.npcName, doorX: QUEST_DOOR.x, doorY: QUEST_DOOR.y },
 ]
 
 // illustration rastérisée (public/art/town-*.png) associée à chaque bâtiment ; la porte de
@@ -104,6 +110,14 @@ const BUILDING_TEXTURE: Record<'potions' | 'armes' | 'vetements' | 'forge', stri
   armes: 'town-armes',
   vetements: 'town-vetements',
   forge: 'town-forge',
+}
+
+// boutiquier posté devant chaque façade (illustration panda détourée npc-<id>, bakée en Preload)
+const SHOP_NPC: Record<'potions' | 'armes' | 'vetements' | 'forge', string> = {
+  potions: 'npc-herboriste',
+  armes: 'npc-armurier',
+  vetements: 'npc-tailleur',
+  forge: 'npc-forgeron',
 }
 
 export class TownScene extends Phaser.Scene {
@@ -124,7 +138,6 @@ export class TownScene extends Phaser.Scene {
     this.load.image('town-armes', 'art/town-armes.png')
     this.load.image('town-vetements', 'art/town-vetements.png')
     this.load.image('town-forge', 'art/town-forge.png')
-    this.load.image('town-quetes', 'art/town-quetes.png')
     this.load.image('town-chateau', 'art/town-chateau.png')
     this.load.image('town-maison', 'art/town-maison.png')
   }
@@ -148,12 +161,14 @@ export class TownScene extends Phaser.Scene {
       const img = this.add.image(x, baseY, key).setOrigin(0.5, 1)
       img.setDisplaySize(width, width * (img.height / img.width))
     }
-    placeDecor('town-chateau', 480, 96, 300)
-    placeDecor('town-maison', 330, 214, 96)
-    placeDecor('town-maison', 630, 214, 96)
+    // château central entièrement visible (taille/baseline bornées sous la bannière) + deux
+    // maisons dans les intervalles hauts pour équilibrer la place
+    placeDecor('town-chateau', 480, 258, 205)
+    placeDecor('town-maison', 320, 182, 104)
+    placeDecor('town-maison', 640, 182, 104)
 
-    // bannière du bourg, calée en haut au-dessus du toit du bâtiment central
-    this.add.text(480, 10, 'Prontera', {
+    // bannière du bourg, calée tout en haut au-dessus du château (aucun chevauchement)
+    this.add.text(480, 8, 'Prontera', {
       fontSize: '26px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 4,
     }).setOrigin(0.5, 0)
 
@@ -177,22 +192,26 @@ export class TownScene extends Phaser.Scene {
       this.add.text(b.x, bottom - dispH - 4, b.name, {
         fontSize: '13px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 3,
       }).setOrigin(0.5, 1)
+      // boutiquier PNJ décoratif planté devant la façade (aucune collision : l'interaction
+      // reste sur la zone du bâtiment). Ajouté après la façade → rendu par-dessus.
+      this.placeNpc(SHOP_NPC[b.id as keyof typeof SHOP_NPC], b.x, bottom + 34, 96)
     }
 
-    // PNJ de quête (illustration) — position et zone d'interaction inchangées (480, 360)
-    const npc = this.add.image(480, 366, 'town-quetes').setOrigin(0.5, 0.5)
-    npc.setDisplaySize(72, 72 * (npc.height / npc.width))
-    this.add.text(480, 302, QUESTS['chasse-aux-monstres']!.npcName, {
-      fontSize: '12px', color: '#ffffff', stroke: '#3e2723', strokeThickness: 3,
+    // PNJ de quête : le PERSONNAGE garde (panda à la lance), planté au centre devant sa zone.
+    // Décor uniquement — la zone d'interaction reste QUEST_DOOR (voir SPOTS).
+    this.placeNpc('npc-garde', QUEST_DOOR.x, 452, 120)
+    this.add.text(QUEST_DOOR.x, 328, QUESTS['chasse-aux-monstres']!.npcName, {
+      fontSize: '13px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 3,
     }).setOrigin(0.5)
 
-    // panneau de sortie — toujours accessible, ramène directement à la carte
-    this.add.text(895, 24, 'Sortie →', { fontSize: '18px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 10, y: 6 } })
+    // panneau de sortie — toujours accessible, ramène directement à la carte (coin haut-droit,
+    // au-dessus des façades ; le label « Boutique de vêtements » passe nettement dessous)
+    this.add.text(900, 22, 'Sortie →', { fontSize: '18px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 10, y: 6 } })
       .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('WorldMap'))
 
-    // panda joueur
+    // panda joueur — posé un peu en avant du garde pour ne pas le masquer à l'arrivée
     const p = getPlayer()
-    this.player = this.physics.add.sprite(480, 460, `panda-${p.classId}`)
+    this.player = this.physics.add.sprite(560, 480, `panda-${p.classId}`)
     ;(this.player.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
     this.player.setCollideWorldBounds(true)
     this.player.setSize(34, 40).setOffset(15, 46)
@@ -208,6 +227,14 @@ export class TownScene extends Phaser.Scene {
       this.interactBtn?.destroy()
       this.feedback?.destroy()
     })
+  }
+
+  // pose un PNJ panda (texture détourée npc-<id>) planté au sol (origine bas-centre), à la
+  // hauteur cible voulue en px, aspect conservé. Sans collision : purement décoratif.
+  private placeNpc(key: string, x: number, footY: number, height: number) {
+    if (!this.textures.exists(key)) return
+    const img = this.add.image(x, footY, key).setOrigin(0.5, 1)
+    img.setDisplaySize(height * (img.width / img.height), height)
   }
 
   private readControls(): Town2DState {
