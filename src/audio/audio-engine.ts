@@ -113,26 +113,32 @@ class AudioEngine {
         ? (globalThis as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
         : undefined
     if (!Ctor) return false
-    const ctx = new Ctor()
-    const master = ctx.createGain()
-    master.gain.value = this.masterLevel()
-    master.connect(ctx.destination)
-    const music = ctx.createGain()
-    music.gain.value = 0.18 // musique volontairement sous les SFX
-    // filtre passe-bas doux sur tout le bus musique : arrondit le timbre, retire la dureté aiguë
-    const musicFilter = ctx.createBiquadFilter()
-    musicFilter.type = 'lowpass'
-    musicFilter.frequency.value = 2800
-    musicFilter.Q.value = 0.7
-    music.connect(musicFilter).connect(master)
-    const sfx = ctx.createGain()
-    sfx.gain.value = 0.5
-    sfx.connect(master)
-    this.ctx = ctx
-    this.master = master
-    this.musicGain = music
-    this.sfxGain = sfx
-    return true
+    // toute défaillance Web Audio (matériel indispo, « failed to start audio device » iOS, quota
+    // de contextes) NE DOIT jamais planter le jeu : on échoue silencieusement et le jeu reste muet
+    try {
+      const ctx = new Ctor()
+      const master = ctx.createGain()
+      master.gain.value = this.masterLevel()
+      master.connect(ctx.destination)
+      const music = ctx.createGain()
+      music.gain.value = 0.18 // musique volontairement sous les SFX
+      // filtre passe-bas doux sur tout le bus musique : arrondit le timbre, retire la dureté aiguë
+      const musicFilter = ctx.createBiquadFilter()
+      musicFilter.type = 'lowpass'
+      musicFilter.frequency.value = 2800
+      musicFilter.Q.value = 0.7
+      music.connect(musicFilter).connect(master)
+      const sfx = ctx.createGain()
+      sfx.gain.value = 0.5
+      sfx.connect(master)
+      this.ctx = ctx
+      this.master = master
+      this.musicGain = music
+      this.sfxGain = sfx
+      return true
+    } catch {
+      return false
+    }
   }
 
   // à appeler sur un geste utilisateur (iOS/Safari bloquent le son sinon)

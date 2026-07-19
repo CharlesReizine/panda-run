@@ -66,7 +66,7 @@ export class UIScene extends Phaser.Scene {
     // Badge « points à dépenser » : JUSTE à droite du panneau de vie, pastille dorée pulsante
     // avec une flèche qui pointe vers le panneau (où l'on ouvre le menu). Masqué s'il n'y a
     // aucun point. Cliquer dessus ouvre le même menu des compétences que la barre de vie.
-    this.spBadge = this.add.container(BAR_W + 30, 24).setDepth(60)
+    this.spBadge = this.add.container(BAR_W + 90, 24).setDepth(60)
     const badgeBg = this.add.rectangle(76, 0, 152, 32, 0xffca28, 0.97).setStrokeStyle(2, 0x7a4f00, 1)
     const badgeArrow = this.add.text(-4, 0, '◀', { fontSize: '20px', color: '#ffca28', fontStyle: 'bold', stroke: '#3a2600', strokeThickness: 4 }).setOrigin(1, 0.5)
     this.spBadgeText = this.add.text(14, 0, '', { fontSize: '15px', color: '#3a2600', fontStyle: 'bold' }).setOrigin(0, 0.5)
@@ -133,10 +133,10 @@ export class UIScene extends Phaser.Scene {
     potion.on('pointerdown', () => { this.pressFx(potion); this.game.events.emit('input-potion') })
     this.potionText = this.add.text(70, 490, '', { fontSize: '16px', color: '#ffffff' })
 
-    // bouton inventaire (icône « tenue ») : ouvre l'écran d'inventaire dédié par-dessus le jeu en pause
-    const invBtn = this.add.image(130, 500, 'ui-inventory').setDisplaySize(42, 42).setInteractive({ useHandCursor: true })
+    // bouton inventaire (icône « tenue ») : EN HAUT À GAUCHE, juste à droite du panneau de vie
+    const invBtn = this.add.image(248, 40, 'ui-inventory').setDisplaySize(42, 42).setDepth(50).setInteractive({ useHandCursor: true })
     invBtn.on('pointerdown', () => { this.pressFx(invBtn); this.openInventoryMenu() })
-    this.add.text(130, 524, 'SAC', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
+    this.add.text(248, 64, 'SAC', { fontSize: '10px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5).setDepth(50)
 
     // Écoute des mises à jour émises par LevelScene
     const level = this.scene.get('Level')

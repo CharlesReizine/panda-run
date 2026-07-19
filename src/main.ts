@@ -56,6 +56,9 @@ try {
     backgroundColor: '#87ceeb',
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     physics: { default: 'arcade', arcade: { gravity: { x: 0, y: GRAVITY } } },
+    // on gère TOUT l'audio via notre moteur Web Audio (src/audio) → on désactive le gestionnaire
+    // de son de Phaser, qui créait un 2e AudioContext (échec « failed to start audio device » sur iOS)
+    audio: { noAudio: true },
     scene: [BootScene, PreloadScene, TitleScene, WorldMapScene, LevelIntroScene, TownScene, LevelScene, UIScene, PauseScene, MenuScene, InventoryScene, ClassChangeScene, SkillEquipScene, BestiaryScene],
   })
 } catch (err) {
