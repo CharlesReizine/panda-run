@@ -25,6 +25,9 @@ export class UIScene extends Phaser.Scene {
   private buffBar!: Phaser.GameObjects.Rectangle
   private buffUntil = 0
   private buffDuration = 0
+  // badge « points à dépenser » : pastille dorée pulsante collée au panneau de vie
+  private spBadge!: Phaser.GameObjects.Container
+  private spBadgeText!: Phaser.GameObjects.Text
 
   constructor() { super('UI') }
 
@@ -57,14 +60,22 @@ export class UIScene extends Phaser.Scene {
 
     // toucher le panneau (barres) ouvre la gestion des skills en jeu
     this.add.rectangle(8, 2, BAR_W + 16, 78, 0xffffff, 0.001).setOrigin(0).setInteractive()
-      .on('pointerdown', () => {
-        audio.playSfx('ui-tap')
-        this.freezeLevelForOverlay()
-        this.scene.launch('SkillEquip')
-        this.scene.pause('Level')
-        this.scene.pause('UI')
-      })
+      .on('pointerdown', () => this.openSkillMenu())
     this.add.text(16, 68, 'compétences ▸', { fontSize: '10px', color: '#b0bec5' })
+
+    // Badge « points à dépenser » : JUSTE à droite du panneau de vie, pastille dorée pulsante
+    // avec une flèche qui pointe vers le panneau (où l'on ouvre le menu). Masqué s'il n'y a
+    // aucun point. Cliquer dessus ouvre le même menu des compétences que la barre de vie.
+    this.spBadge = this.add.container(BAR_W + 30, 24).setDepth(60)
+    const badgeBg = this.add.rectangle(76, 0, 152, 32, 0xffca28, 0.97).setStrokeStyle(2, 0x7a4f00, 1)
+    const badgeArrow = this.add.text(-4, 0, '◀', { fontSize: '20px', color: '#ffca28', fontStyle: 'bold', stroke: '#3a2600', strokeThickness: 4 }).setOrigin(1, 0.5)
+    this.spBadgeText = this.add.text(14, 0, '', { fontSize: '15px', color: '#3a2600', fontStyle: 'bold' }).setOrigin(0, 0.5)
+    this.spBadge.add([badgeBg, badgeArrow, this.spBadgeText])
+    badgeBg.setInteractive({ useHandCursor: true }).on('pointerdown', () => { if (this.spBadge.visible) this.openSkillMenu() })
+    this.spBadge.setVisible(false)
+    // pulsation permanente (clignotement + gonflement) : impossible à rater sur tous les biomes
+    this.tweens.add({ targets: this.spBadge, scale: 1.14, duration: 460, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+    this.tweens.add({ targets: badgeBg, fillAlpha: 0.55, duration: 460, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
 
     // pastille de buff ATK : masquée par défaut, affichée avec un compte à rebours tant que le buff est actif
     const bx = 12, by = 86, bw = 104, bh = 24
@@ -157,6 +168,23 @@ export class UIScene extends Phaser.Scene {
     level?.physics?.world?.resume()
   }
 
+  // ouvre la gestion des compétences en jeu (partagé : clic sur le panneau de vie ET sur le badge)
+  private openSkillMenu() {
+    audio.playSfx('ui-tap')
+    this.freezeLevelForOverlay()
+    this.scene.launch('SkillEquip')
+    this.scene.pause('Level')
+    this.scene.pause('UI')
+  }
+
+  // affiche/masque le badge selon les points non dépensés (compétence + stat) et met le compteur à jour
+  private updateSkillPointBadge() {
+    const p = getPlayer()
+    const n = p.skillPoints + p.statPoints
+    this.spBadge.setVisible(n > 0)
+    if (n > 0) this.spBadgeText.setText(`⚠ ${n} point${n > 1 ? 's' : ''} !`)
+  }
+
   // pulse visuel au tap pour que chaque bouton réponde sous le doigt
   private pressFx(target: Phaser.GameObjects.Shape | Phaser.GameObjects.Image | Phaser.GameObjects.Text) {
     this.tweens.add({ targets: target, scale: target.scale * 0.85, duration: 60, yoyo: true })
@@ -184,6 +212,7 @@ export class UIScene extends Phaser.Scene {
     bg.setScale(0.2, 1)
     this.tweens.add({ targets: bg, scaleX: 1, duration: 200, ease: 'Back.out' })
     this.tweens.add({ targets: [bg, txt], alpha: 0, delay: 2200, duration: 700, onComplete: () => { bg.destroy(); txt.destroy() } })
+    this.updateSkillPointBadge()
   }
 
   refresh() {
@@ -198,6 +227,7 @@ export class UIScene extends Phaser.Scene {
       if (sid) icon.setTexture(`skill-${sid}`).setDisplaySize(SLOT_SIZE - 8, SLOT_SIZE - 8).setVisible(true)
       else icon.setVisible(false)
     }
+    this.updateSkillPointBadge()
   }
 
   update(time: number) {

@@ -537,6 +537,9 @@ export class LevelScene extends Phaser.Scene {
 
   completeLevel() {
     if (this.player.hp <= 0) return
+    // niveau terminé : PV + énergie remis au maximum (on entame le niveau suivant plein).
+    // Un nouveau Player est instancié à chaque niveau (déjà plein), c'est la garantie explicite.
+    this.player.restoreFull()
     const p = getPlayer()
     if (!p.completedLevels.includes(this.levelDef.id)) p.completedLevels.push(this.levelDef.id)
     // avance le marqueur vers le nœud visé ; si absent (accès direct/ancienne save), on ne le déplace pas

@@ -8,6 +8,8 @@ import { JUMP_SPEED, RUN_SPEED } from '../core/platforming'
 
 const JUMP_VELOCITY = -JUMP_SPEED // source unique (partagée avec le test d'atteignabilité)
 const CLIMB_SPEED = 150 // vitesse verticale sur une échelle (up/down)
+const CLIMB_STRIDE = 13 // px parcourus entre deux poses du cycle de grimpe (avance au mouvement réel)
+const CLIMB_TILT = 6 // légère inclinaison alternée (degrés) pour vendre l'effort de montée
 const SWIM_SPEED = 150 // vitesse verticale de nage dans l'eau (up/down)
 const SWIM_DRIFT = 40 // léger enfoncement quand on ne nage pas activement
 const SWIM_RUN_MULT = 0.7 // déplacement horizontal ralenti dans l'eau
@@ -28,6 +30,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   onLadder = false
   inWater = false
   private climbing = false
+  // cycle d'escalade : phase (0/1) alternant deux poses de membres opposés, avancée par la
+  // distance verticale réellement parcourue (climbAccum), pas par une horloge → fige à l'arrêt
+  private climbPhase = 0
+  private climbAccum = 0
+  private climbLastY = 0
   private wasGrounded = true
   private attacking = false
   private hatImage: Phaser.GameObjects.Image | null = null
@@ -149,11 +156,17 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // ESCALADE : entrer en mode grimpe en poussant up/down sur une échelle ;
     // en sortir en sautant ou en quittant l'échelle.
+    const wasClimbing = this.climbing
     if (this.onLadder && (c.up || c.down)) this.climbing = true
     if (this.climbing && !this.onLadder) this.climbing = false
-    if (this.climbing) { this.updateClimb(c, body); return }
+    if (this.climbing) {
+      // à l'entrée sur l'échelle : repart d'une pose neutre, cycle remis à zéro
+      if (!wasClimbing) { this.climbPhase = 0; this.climbAccum = 0; this.climbLastY = this.y }
+      this.updateClimb(c, body); return
+    }
 
     body.setAllowGravity(true)
+    this.setAngle(0) // hors échelle : plus d'inclinaison de grimpe
 
     // horizontale (ralentie dans l'eau)
     const runSpeed = this.inWater ? RUN_SPEED * SWIM_RUN_MULT : RUN_SPEED
@@ -194,6 +207,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (c.jump) {
       this.climbing = false
       body.setAllowGravity(true)
+      this.setAngle(0)
       this.setVelocityY(JUMP_VELOCITY)
       this.scene.events.emit('player-jump')
       return
@@ -206,9 +220,31 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     else if (c.right) { this.setVelocityX(RUN_SPEED); this.facing = 1; this.setFlipX(false) }
     else this.setVelocityX(0)
     this.wasGrounded = false
-    if (!this.attacking) {
-      if (c.up || c.down) this.play(this.anim('jump'), true)
-      else this.play(this.anim('idle'), true)
+    if (!this.attacking) this.animateClimb(c)
+  }
+
+  // Grimpe crédible : cycle de 2 poses à membres opposés (réutilise les 2 phases de course —
+  // base ↔ course pour l'art, run-0 ↔ run-2 pour le procédural, qui sont déjà des foulées
+  // inversées) + légère inclinaison alternée. Le cycle N'AVANCE QUE quand le panda se déplace
+  // vraiment (distance verticale accumulée), donc il fige dès qu'on lâche up/down. La rotation
+  // du sprite ne touche pas le corps physique Arcade (AABB) : hitbox et montée inchangées.
+  private animateClimb(c: ControlsState) {
+    const cls = getPlayer().classId
+    const frames = this.scene.textures.exists(`panda-${cls}-course`)
+      ? [`panda-${cls}`, `panda-${cls}-course`]
+      : [`panda-${cls}-run-0`, `panda-${cls}-run-2`]
+    this.anims.stop() // on pilote les frames à la main plutôt que via une horloge d'animation
+    const climbed = Math.abs(this.y - this.climbLastY)
+    this.climbLastY = this.y
+    if (c.up || c.down) {
+      this.climbAccum += climbed
+      if (this.climbAccum >= CLIMB_STRIDE) { this.climbAccum -= CLIMB_STRIDE; this.climbPhase ^= 1 }
+      this.setTexture(frames[this.climbPhase] ?? frames[0]!)
+      this.setAngle(this.climbPhase === 0 ? -CLIMB_TILT : CLIMB_TILT)
+    } else {
+      // agrippé, immobile : pose neutre bien droite
+      this.setTexture(frames[0]!)
+      this.setAngle(0)
     }
   }
 
@@ -234,6 +270,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   heal(amount: number) {
     this.hp = Math.min(this.stats.maxHp, this.hp + amount)
+    this.emitHp()
+  }
+
+  // PV + énergie au maximum (appelé au passage de niveau : on entame chaque niveau plein)
+  restoreFull() {
+    this.hp = this.stats.maxHp
+    this.energy = this.maxEnergy
     this.emitHp()
   }
 
