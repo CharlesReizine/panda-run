@@ -31,6 +31,8 @@ export interface SkillDef {
   pierce?: boolean // projectile qui traverse tout (ne s'arrête pas au premier impact)
   arc?: boolean // projectile lancé en cloche (soumis à la gravité, rebondit)
   buff?: { atkMult: number; durationMs: number } // cri de guerre : booste l'ATK sortante un temps donné
+  minLevel?: number // niveau joueur minimum pour débloquer/monter ce skill (défaut : aucun)
+  requires?: string // id d'un skill prérequis à débloquer avant celui-ci (défaut : aucun)
 }
 
 export type Rarity = 'commun' | 'rare' | 'epique' | 'legendaire'

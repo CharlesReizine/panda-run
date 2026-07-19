@@ -5,14 +5,19 @@ import { skillsOf, SKILLS } from '../data/skills'
 import { MAX_SKILL_RANK } from '../core/player-state'
 import { computeStats } from '../core/stats'
 import { energyCostOf } from '../core/skill-executor'
-import type { SkillDef } from '../core/types'
+import { EVOLUTIONS } from '../core/progression'
+import { CLASSES } from '../data/classes'
+import type { ClassId, SkillDef } from '../core/types'
 
 // Gestion des compétences DIRECTEMENT en jeu (pas besoin de la carte).
 // Lancée par-dessus le niveau en pause ; à la fermeture, on reprend le jeu.
 export class SkillEquipScene extends Phaser.Scene {
+  private tab: ClassId | null = null
+
   constructor() { super('SkillEquip') }
 
   create() {
+    this.tab = null
     this.render()
   }
 
@@ -23,43 +28,82 @@ export class SkillEquipScene extends Phaser.Scene {
     this.scene.stop('SkillEquip')
   }
 
+  // Lignée de la classe : novice → classe de base → classe évoluée.
+  // Si le joueur est déjà évolué, on retrouve la classe de base en inversant EVOLUTIONS.
+  private lineageTabs(classId: ClassId): ClassId[] {
+    const tabs: ClassId[] = ['novice']
+    let baseClass: ClassId | undefined
+    let evolvedClass: ClassId | undefined
+    if (classId === 'novice') {
+      // rien de plus
+    } else if (classId in EVOLUTIONS) {
+      baseClass = classId
+      evolvedClass = EVOLUTIONS[classId]
+    } else {
+      baseClass = (Object.keys(EVOLUTIONS) as ClassId[]).find((k) => EVOLUTIONS[k] === classId)
+      evolvedClass = classId
+    }
+    if (baseClass) tabs.push(baseClass)
+    if (evolvedClass) tabs.push(evolvedClass)
+    // n'afficher qu'un onglet qui possède des skills
+    return tabs.filter((id) => skillsOf(id).length > 0)
+  }
+
+  // Verrou d'arbre : un skill est débloquable/améliorable si le niveau est atteint et le prérequis appris.
+  private lockReason(p: ReturnType<typeof getPlayer>, s: SkillDef): string | null {
+    const minLevel = s.minLevel ?? 1
+    if (p.level < minLevel) return `Niveau ${minLevel} requis`
+    if (s.requires && (p.skillLevels[s.requires] ?? 0) <= 0) {
+      const req = SKILLS[s.requires]
+      return `Nécessite : ${req ? req.name : s.requires}`
+    }
+    return null
+  }
+
   private render() {
     for (const child of [...this.children.list]) child.destroy()
     const p = getPlayer()
     this.add.rectangle(480, 270, 960, 540, 0x0d1b2a, 0.96)
-    this.add.text(480, 20, 'Compétences', { fontSize: '26px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
-    this.add.text(480, 48, `Points à dépenser : ${p.skillPoints}`, { fontSize: '15px', color: '#ffd54f' }).setOrigin(0.5)
+    this.add.text(480, 16, 'Compétences', { fontSize: '24px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
+    this.add.text(480, 40, `Points à dépenser : ${p.skillPoints}`, { fontSize: '14px', color: '#ffd54f' }).setOrigin(0.5)
 
     const btn = (x: number, y: number, label: string, bg: number, onTap: () => void) =>
       this.add.text(x, y, label, { fontSize: '13px', color: '#ffffff', backgroundColor: `#${bg.toString(16)}`, padding: { x: 8, y: 4 } })
         .setOrigin(0.5).setInteractive().on('pointerdown', onTap)
 
+    // Onglets de lignée — Novice / classe de base / classe évoluée. Défaut = classe actuelle.
+    const tabs = this.lineageTabs(p.classId)
+    if (!this.tab || !tabs.includes(this.tab)) this.tab = tabs.includes(p.classId) ? p.classId : tabs[0]!
+    const tabW = 150
+    const tabsWidth = tabs.length * tabW
+    tabs.forEach((id, i) => {
+      const x = 480 - tabsWidth / 2 + tabW / 2 + i * tabW
+      const active = id === this.tab
+      this.add.rectangle(x, 68, tabW - 8, 26, active ? 0x33691e : 0x000000, active ? 0.9 : 0.4)
+        .setStrokeStyle(1, active ? 0x80cbc4 : 0xffffff, active ? 0.9 : 0.25)
+        .setInteractive({ useHandCursor: true }).on('pointerdown', () => { this.tab = id; this.render() })
+      this.add.text(x, 68, CLASSES[id].name, { fontSize: '13px', color: active ? '#ffffff' : '#90a4ae', fontStyle: active ? 'bold' : 'normal' }).setOrigin(0.5)
+    })
+
     // Rangée des 4 slots équipés (tap = retirer) — icônes agrandies, cases surlignées quand pleines
-    this.add.text(480, 74, 'Équipé (tape pour retirer)', { fontSize: '12px', color: '#b0bec5' }).setOrigin(0.5)
+    this.add.text(480, 92, 'Équipé (tape pour retirer)', { fontSize: '12px', color: '#b0bec5' }).setOrigin(0.5)
     for (let i = 0; i < 4; i++) {
       const x = 360 + i * 80
       const sid = p.equippedSkills[i]
-      this.add.rectangle(x, 116, 68, 68, 0x000000, 0.5).setStrokeStyle(2, sid ? 0xffd54f : 0xffffff, sid ? 0.9 : 0.5)
-      this.add.text(x, 88, `${i + 1}`, { fontSize: '12px', color: '#ffd54f' }).setOrigin(0.5)
+      this.add.rectangle(x, 132, 60, 60, 0x000000, 0.5).setStrokeStyle(2, sid ? 0xffd54f : 0xffffff, sid ? 0.9 : 0.5)
+      this.add.text(x, 108, `${i + 1}`, { fontSize: '12px', color: '#ffd54f' }).setOrigin(0.5)
       if (sid) {
-        this.add.image(x, 116, `skill-${sid}`).setDisplaySize(56, 56)
+        this.add.image(x, 134, `skill-${sid}`).setDisplaySize(48, 48)
           .setInteractive().on('pointerdown', () => { p.equippedSkills[i] = null; save(p); this.render() })
       }
     }
 
-    // Grille des compétences de la classe — 2 colonnes dès que ça ne tient plus en 1
-    this.add.text(480, 168, 'Compétences de la classe', { fontSize: '12px', color: '#b0bec5' }).setOrigin(0.5)
-    // liste = skills de la classe actuelle + skills NOVICE + tout skill déjà appris (skillLevels>0)
-    // → on ne perd JAMAIS un skill développé (novice, ou classe pré-évolution). Dédup par id.
-    const shown = new Map<string, SkillDef>()
-    for (const s of skillsOf(p.classId)) shown.set(s.id, s)
-    for (const s of skillsOf('novice')) shown.set(s.id, s)
-    for (const id of Object.keys(p.skillLevels)) { const s = SKILLS[id]; if (s && (p.skillLevels[id] ?? 0) > 0) shown.set(id, s) }
-    const skills = [...shown.values()]
-    const columns = skills.length > 6 ? 3 : skills.length > 3 ? 2 : 1
+    // Grille des compétences de l'onglet actif — colonnes selon le nombre de skills.
+    const skills = skillsOf(this.tab)
+    const columns = skills.length > 6 ? 3 : skills.length > 1 ? 2 : 1
     const colW = columns === 3 ? 293 : columns === 2 ? 440 : 860
     const colX = columns === 3 ? [26, 333, 640] : columns === 2 ? [50, 500] : [50]
-    const rowH = 78
+    const rowH = 76
     const gridTop = 184
 
     skills.forEach((s, i) => {
@@ -72,41 +116,46 @@ export class SkillEquipScene extends Phaser.Scene {
       const rank = p.skillLevels[s.id] ?? 0
       const unlocked = rank > 0
       const equipped = p.equippedSkills.includes(s.id)
+      const lock = unlocked ? null : this.lockReason(p, s)
+      const locked = lock !== null
+      const dim = !unlocked
 
-      this.add.rectangle(x, y, colW, cardH, 0x000000, equipped ? 0.55 : 0.32).setOrigin(0, 0)
+      this.add.rectangle(x, y, colW, cardH, 0x000000, equipped ? 0.55 : locked ? 0.22 : 0.32).setOrigin(0, 0)
         .setStrokeStyle(1, equipped ? 0x80cbc4 : 0xffffff, equipped ? 0.8 : 0.22)
 
-      const icon = this.add.image(x + 34, y + cardH / 2, `skill-${s.id}`).setDisplaySize(46, 46)
-      if (!unlocked) icon.setAlpha(0.35)
+      const icon = this.add.image(x + 34, y + cardH / 2, `skill-${s.id}`).setDisplaySize(44, 44)
+      if (dim) icon.setAlpha(locked ? 0.28 : 0.4)
       // Tap sur l'icône = ouvre la fiche de détail
       icon.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showDetail(s))
 
-      const rankTxt = unlocked ? `Nv ${rank}/${MAX_SKILL_RANK}` : 'Verrouillé'
-      this.add.text(x + 64, y + 6, s.name, { fontSize: '13px', color: unlocked ? '#ffffff' : '#78909c', fontStyle: 'bold' })
-      this.add.text(x + 64, y + 24, rankTxt, { fontSize: '11px', color: unlocked ? '#ffd54f' : '#607d8b' })
-      // Phrase de description du skill, sous le nom, en gris clair (wordWrap pour ne pas déborder)
-      this.add.text(x + 64, y + 40, s.description, { fontSize: '10px', color: '#b0bec5', wordWrap: { width: colW - 178 }, lineSpacing: -1 })
+      // Aperçu = NOM SEUL (+ rang / état). Pas de description ici — elle est dans la fiche détail.
+      const nameColor = unlocked ? '#ffffff' : locked ? '#607d8b' : '#b0bec5'
+      this.add.text(x + 62, y + 8, s.name, { fontSize: '13px', color: nameColor, fontStyle: 'bold', wordWrap: { width: colW - 168 }, lineSpacing: -2 })
+      const stateTxt = unlocked ? `Nv ${rank}/${MAX_SKILL_RANK}` : locked ? lock! : 'À débloquer'
+      const stateColor = unlocked ? '#ffd54f' : locked ? '#ef9a9a' : '#90caf9'
+      this.add.text(x + 62, y + 40, stateTxt, { fontSize: '11px', color: stateColor })
 
       // Bouton info (fiche de détail) — discret, à droite de l'icône
-      this.add.text(x + 46, y + cardH / 2 + 12, 'ℹ', { fontSize: '13px', color: '#4fc3f7', backgroundColor: '#0b2536', padding: { x: 4, y: 1 } })
+      this.add.text(x + 46, y + cardH / 2 + 14, 'ℹ', { fontSize: '13px', color: '#4fc3f7', backgroundColor: '#0b2536', padding: { x: 4, y: 1 } })
         .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showDetail(s))
 
-      if (p.skillPoints > 0 && rank < MAX_SKILL_RANK) {
-        btn(x + colW - 74, y + 17, unlocked ? '+1 pt' : 'Débloquer', 0x8d6e00, () => {
+      // Débloquer / +1 : masqué si verrouillé par l'arbre.
+      if (!locked && p.skillPoints > 0 && rank < MAX_SKILL_RANK) {
+        btn(x + colW - 54, y + 16, unlocked ? '+1 pt' : 'Débloquer', 0x8d6e00, () => {
           p.skillPoints--; p.skillLevels[s.id] = rank + 1; save(p); this.render()
         })
       }
       if (unlocked && !equipped) {
-        btn(x + colW - 74, y + 45, 'Équiper', 0x33691e, () => {
+        btn(x + colW - 54, y + 44, 'Équiper', 0x33691e, () => {
           const free = p.equippedSkills.indexOf(null)
           p.equippedSkills[free >= 0 ? free : 3] = s.id; save(p); this.render()
         })
       } else if (equipped) {
-        this.add.text(x + colW - 74, y + 45, 'Équipé ✓', { fontSize: '12px', color: '#80cbc4' }).setOrigin(0.5)
+        this.add.text(x + colW - 54, y + 44, 'Équipé ✓', { fontSize: '12px', color: '#80cbc4' }).setOrigin(0.5)
       }
     })
 
-    btn(480, 505, 'Reprendre ▶', 0x33691e, () => this.close())
+    btn(480, 508, 'Reprendre ▶', 0x33691e, () => this.close())
   }
 
   private kindLabel(s: SkillDef): string {
@@ -118,17 +167,6 @@ export class SkillEquipScene extends Phaser.Scene {
     if (s.pierce) tags.push('perçant')
     if (s.arc) tags.push('en cloche')
     return tags.length ? `${base} (${tags.join(', ')})` : base
-  }
-
-  private effectText(s: SkillDef): string {
-    if (s.kind === 'heal') return 'Rend des PV instantanément.'
-    if (s.kind === 'melee') return 'Frappe les ennemis devant vous.'
-    if (s.kind === 'aoe') return 'Touche tout autour de vous.'
-    // projectile
-    let t = 'Tir à distance.'
-    if (s.pierce) t += ' Traverse tous les ennemis.'
-    if (s.arc) t += ' Trajectoire en cloche (soumise à la gravité).'
-    return t
   }
 
   private showDetail(s: SkillDef) {
@@ -145,19 +183,20 @@ export class SkillEquipScene extends Phaser.Scene {
     panel.add([backdrop, card])
 
     const left = 230
-    let y = 70
+    let y = 62
 
-    panel.add(this.add.image(480, y + 18, `skill-${s.id}`).setDisplaySize(52, 52))
-    y += 52
+    panel.add(this.add.image(480, y + 16, `skill-${s.id}`).setDisplaySize(48, 48))
+    y += 48
     panel.add(this.add.text(480, y, s.name, { fontSize: '20px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
     y += 24
     panel.add(this.add.text(480, y, this.kindLabel(s), { fontSize: '13px', color: '#4fc3f7' }).setOrigin(0.5))
     y += 30
 
-    panel.add(this.add.text(left, y, this.effectText(s), { fontSize: '13px', color: '#cfd8dc', wordWrap: { width: 500 } }).setOrigin(0, 0))
-    y += 44
+    // Description « lore » du skill
+    panel.add(this.add.text(left, y, s.description, { fontSize: '13px', color: '#cfd8dc', wordWrap: { width: 500 } }).setOrigin(0, 0))
+    y += 46
 
-    const rankTxt = rank > 0 ? `Nv ${rank}/${MAX_SKILL_RANK}` : `Verrouillé (aperçu au Nv 1)`
+    const rankTxt = rank > 0 ? `Nv ${rank}/${MAX_SKILL_RANK}` : 'Non débloquée (aperçu au Nv 1)'
     panel.add(this.add.text(left, y, rankTxt, { fontSize: '13px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0, 0))
     y += 24
 
@@ -172,10 +211,26 @@ export class SkillEquipScene extends Phaser.Scene {
       y += 20
       panel.add(this.add.text(left, y, `Dégâts estimés (rang courant) : ~${dmg}`, { fontSize: '13px', color: '#ffab91', fontStyle: 'bold' }).setOrigin(0, 0))
     }
-    y += 30
+    y += 26
+
+    if (s.buff) {
+      panel.add(this.add.text(left, y, `Buff : ATK ×${s.buff.atkMult} pendant ${(s.buff.durationMs / 1000).toFixed(0)} s`, { fontSize: '13px', color: '#fff59d' }).setOrigin(0, 0))
+      y += 22
+    }
 
     panel.add(this.add.text(left, y, `Portée : ${s.range} px    Recharge : ${(s.cooldownMs / 1000).toFixed(1)} s    Énergie : ${energyCostOf(s)}`, { fontSize: '12px', color: '#90caf9' }).setOrigin(0, 0))
-    y += 34
+    y += 30
+
+    // Condition de déblocage (arbre) si présente
+    if (s.minLevel !== undefined || s.requires !== undefined) {
+      const parts: string[] = []
+      if (s.minLevel !== undefined) parts.push(`Niveau ${s.minLevel}`)
+      if (s.requires !== undefined) { const req = SKILLS[s.requires]; parts.push(`Prérequis : ${req ? req.name : s.requires}`) }
+      const lock = this.lockReason(p, s)
+      const color = lock ? '#ef9a9a' : '#a5d6a7'
+      panel.add(this.add.text(left, y, `Déblocage — ${parts.join('   ')}${lock ? '' : ' ✓'}`, { fontSize: '12px', color, wordWrap: { width: 500 } }).setOrigin(0, 0))
+      y += 26
+    }
 
     panel.add(this.add.text(left, y, 'Comment l\'utiliser', { fontSize: '13px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0, 0))
     y += 20
