@@ -28,6 +28,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   facing: 1 | -1 = 1
   // renseignés chaque frame par LevelScene selon les zones chevauchées
   onLadder = false
+  ladderCenterX = 0 // centre x de l'échelle courante : sert à recentrer le panda en grimpant
   inWater = false
   private climbing = false
   // cycle d'escalade : phase (0/1) alternant deux poses de membres opposés, avancée par la
@@ -228,10 +229,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (c.up) this.setVelocityY(-CLIMB_SPEED)
     else if (c.down) this.setVelocityY(CLIMB_SPEED)
     else this.setVelocityY(0)
-    // on peut se décaler pour quitter l'échelle
+    // gauche/droite : on peut se décaler volontairement pour quitter l'échelle
     if (c.left) { this.setVelocityX(-RUN_SPEED); this.facing = -1; this.setFlipX(true) }
     else if (c.right) { this.setVelocityX(RUN_SPEED); this.facing = 1; this.setFlipX(false) }
-    else this.setVelocityX(0)
+    else {
+      // sans input latéral : recentrage doux sur l'échelle → plus de décrochage accidentel
+      const dx = this.ladderCenterX - this.x
+      this.setVelocityX(Math.abs(dx) > 1 ? Phaser.Math.Clamp(dx * 8, -RUN_SPEED, RUN_SPEED) : 0)
+    }
     this.wasGrounded = false
     if (!this.attacking) this.animateClimb(c)
   }

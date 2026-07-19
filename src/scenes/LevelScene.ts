@@ -201,8 +201,10 @@ export class LevelScene extends Phaser.Scene {
         this.add.image(l.x * TILE + TILE / 2, (l.y + i) * TILE + TILE / 2, 'ladder').setDepth(-1)
       }
       // on descend d'une tuile sous le bas de l'échelle pour pouvoir l'attraper depuis le sol
+      // zone d'accroche large de 2 tuiles (centrée sur l'échelle) : plus de décrochage au moindre
+      // décalage (avant : 1 tuile, testée sur le centre du panda → « casse-gueule »)
       this.ladderRects.push(new Phaser.Geom.Rectangle(
-        l.x * TILE, l.y * TILE, TILE, (l.h + 1) * TILE,
+        l.x * TILE - TILE / 2, l.y * TILE, TILE * 2, (l.h + 1) * TILE,
       ))
     }
 
@@ -1031,7 +1033,9 @@ export class LevelScene extends Phaser.Scene {
     if (this.player.hp <= 0) return
     this.player.regenEnergy(delta)
     // zones verticales chevauchées (échelle / eau) lues sur le centre du panda
-    this.player.onLadder = this.ladderRects.some((r) => r.contains(this.player.x, this.player.y))
+    const onLad = this.ladderRects.find((r) => r.contains(this.player.x, this.player.y))
+    this.player.onLadder = !!onLad
+    if (onLad) this.player.ladderCenterX = onLad.centerX
     this.player.inWater = this.waterRects.some((r) => r.contains(this.player.x, this.player.y))
     if (this.time.now < this.dashUntil) {
       // pendant la roulade : vitesse imposée, contrôles suspendus (le saut/déplacement
