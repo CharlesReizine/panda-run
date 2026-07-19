@@ -168,8 +168,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.scene.events.emit('player-jump')
     }
 
+    // Petit « splat » d'atterrissage : uniquement HORIZONTAL (scaleY reste 1). En Arcade
+    // (Phaser 4) le corps physique suit l'échelle du sprite ; l'ancien squash vertical
+    // (scaleY 0.9 puis retour à 1) rétrécissait puis regrandissait le corps pile en se posant
+    // sur une dalle one-way, ce qui rompait le contact et faisait RETRAVERSER le panda jusqu'au
+    // sol (bug du « 2e étage » d'un escalier de plateformes). En ne touchant qu'à l'axe X, la
+    // hauteur et la position verticale du corps restent canoniques → atterrissage fiable.
     if (body.blocked.down && !this.wasGrounded) {
-      this.setScale(1.1, 0.9)
+      this.setScale(1.12, 1)
       this.scene.time.delayedCall(100, () => this.setScale(1, 1))
     }
     this.wasGrounded = body.blocked.down

@@ -421,12 +421,13 @@ export class LevelScene extends Phaser.Scene {
   private exitX(): number { return this.dir === 'backward' ? 2 * TILE : this.levelDef.widthTiles * TILE - 2 * TILE }
 
   // processCallback des plateformes one-way : la collision n'est retenue que si le panda
-  // descend (velocity.y >= 0) ET que ses pieds venaient d'au-dessus du haut de la
-  // plateforme. On monte donc librement à travers, puis on se pose dessus en retombant.
+  // descend (velocity.y >= 0) ET que ses pieds (début de frame) ne sont pas passés sous le
+  // DESSOUS de la dalle. On monte donc librement à travers, puis on se pose dessus en retombant
+  // sans risquer de retraverser en s'enfonçant d'un poil (voir landsOnOneWayPlatform).
   private readonly landsFromAbove: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (playerObj, platObj) => {
     const pb = (playerObj as Phaser.Physics.Arcade.Sprite).body as Phaser.Physics.Arcade.Body
     const plat = (platObj as Phaser.Physics.Arcade.Sprite).body as Phaser.Physics.Arcade.StaticBody
-    return landsOnOneWayPlatform(pb.prev.y + pb.height, pb.velocity.y, plat.top)
+    return landsOnOneWayPlatform(pb.prev.y + pb.height, pb.velocity.y, plat.bottom)
   }
 
   createExit() {

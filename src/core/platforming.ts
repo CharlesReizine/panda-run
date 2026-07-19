@@ -24,12 +24,19 @@ export function ladderTooShort(h: number): boolean {
   return h < MIN_LADDER_TILES
 }
 
-// Prédicat de collision « one-way » (plateformes traversables par le bas) : on ne retient
-// la collision que si le joueur descend (velocityY >= 0) ET que ses pieds venaient d'au-dessus
-// du haut de la plateforme. On monte donc librement à travers, puis on se pose dessus en
-// retombant. Le processCallback du collider dans LevelScene s'appuie dessus.
-export function landsOnOneWayPlatform(prevBottom: number, velocityY: number, platformTop: number, margin = 8): boolean {
-  return velocityY >= 0 && prevBottom <= platformTop + margin
+// Prédicat de collision « one-way » (plateformes traversables par le bas) : on ne retient la
+// collision que si le joueur DESCEND (velocityY >= 0). Tant qu'il monte, il traverse librement
+// par le bas ; en retombant, il se pose dessus. On le retient tant que ses pieds (mesurés au
+// DÉBUT de la frame, d'où prevBottom) ne sont pas passés SOUS le dessous de la dalle.
+//
+// On borne sur le DESSOUS de la dalle (et non sur « le dessus + 8px ») par ROBUSTESSE : dès que
+// les pieds chevauchent la dalle en descendant, chaque frame les re-pose, sans risque qu'un
+// enfoncement de quelques pixels franchisse une limite trop serrée et laisse le panda repartir
+// en chute libre. (La vraie cause de la traversée du 2e étage d'un escalier était ailleurs — un
+// squash d'atterrissage vertical qui déformait le corps physique, corrigé dans Player ; ce
+// seuil élargi est un filet supplémentaire.) Le processCallback dans LevelScene s'appuie dessus.
+export function landsOnOneWayPlatform(prevBottom: number, velocityY: number, platformBottom: number, margin = 0): boolean {
+  return velocityY >= 0 && prevBottom <= platformBottom + margin
 }
 
 export interface Plat { x: number; y: number; w: number }
