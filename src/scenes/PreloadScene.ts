@@ -1333,6 +1333,42 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0xe53935).fillCircle(9, 9, 6)
     g.fillStyle(0xff8a65).fillCircle(9, 9, 3.5)
     g.fillStyle(0xfff3e0).fillCircle(7, 7, 1.8); g.generateTexture('fx-shot', 18, 18); g.clear()
+    // fx-bubble : bulle d'eau bleue translucide (méduse) — membrane cerclée + reflet
+    g.fillStyle(0x4fc3f7, 0.30).fillCircle(9, 9, 8) // halo aqueux
+    g.fillStyle(0x29b6f6, 0.45).fillCircle(9, 9, 6) // corps translucide
+    g.lineStyle(1.5, 0xb3e5fc, 0.9).strokeCircle(9, 9, 6) // membrane
+    g.fillStyle(0xe1f5fe, 0.9).fillCircle(6, 6, 2) // reflet
+    g.generateTexture('fx-bubble', 18, 18); g.clear()
+    // fx-spectral : orbe spectral bleu pâle vaporeux (fantôme, spectre ancien) — traînée arrière
+    g.fillStyle(0x80deea, 0.22).fillCircle(11, 9, 9) // brume large
+    g.fillStyle(0xb2ebf2, 0.45).fillCircle(10, 9, 6) // orbe vaporeux
+    g.fillStyle(0xe0f7fa, 0.85).fillCircle(9, 8, 3) // cœur pâle
+    g.fillStyle(0xb2ebf2, 0.35).fillTriangle(0, 9, 6, 6, 6, 12) // traînée (arrière)
+    g.generateTexture('fx-spectral', 20, 18); g.clear()
+    // fx-scream : onde de cri (banshee) — arcs violet pâle concentriques ouverts vers la droite
+    g.lineStyle(3, 0xb39ddb, 0.9).beginPath(); g.arc(2, 8, 7, Phaser.Math.DegToRad(-60), Phaser.Math.DegToRad(60), false); g.strokePath()
+    g.lineStyle(2.5, 0xd1c4e9, 0.8).beginPath(); g.arc(-2, 8, 10, Phaser.Math.DegToRad(-55), Phaser.Math.DegToRad(55), false); g.strokePath()
+    g.lineStyle(2, 0xede7f6, 0.7).beginPath(); g.arc(-6, 8, 13, Phaser.Math.DegToRad(-50), Phaser.Math.DegToRad(50), false); g.strokePath()
+    g.generateTexture('fx-scream', 22, 16); g.clear()
+    // fx-spore : épine / spore verte (flora vorace) — pointe acérée vers la droite + reflet
+    g.fillStyle(0x33691e).fillTriangle(0, 3, 16, 7, 0, 11) // épine
+    g.fillStyle(0x7cb342).fillTriangle(2, 5, 12, 7, 2, 9) // cœur clair
+    g.fillStyle(0xc5e1a5, 0.85).fillCircle(4, 7, 1.6) // spore
+    g.generateTexture('fx-spore', 18, 14); g.clear()
+    // fx-sand : projectile de sable doré (pharaon scarabée) — nuée de grains dorés
+    g.fillStyle(0xffca28, 0.35).fillEllipse(9, 7, 18, 12) // nuage doré
+    g.fillStyle(0xffb300).fillCircle(11, 7, 4)
+    g.fillStyle(0xffe082).fillCircle(9, 6, 2.5)
+    g.fillStyle(0xfff8e1).fillCircle(6, 5, 1.4)
+    g.fillStyle(0xffb300).fillCircle(4, 9, 1.6).fillCircle(14, 9, 1.4) // grains dispersés
+    g.generateTexture('fx-sand', 18, 14); g.clear()
+    // fx-necro : bolt nécrotique violet sombre (roi liche, prêtre-goule) — orbe ténébreux + orbites
+    g.fillStyle(0x4527a0, 0.35).fillCircle(10, 8, 8) // halo nécrotique
+    g.fillStyle(0x311b92).fillCircle(10, 8, 6) // orbe violet sombre
+    g.fillStyle(0x1a0e40).fillCircle(10, 8, 4) // cœur ténébreux
+    g.fillStyle(0xb39ddb, 0.9).fillCircle(8, 6, 2) // lueur froide
+    g.fillStyle(0xd1c4e9, 0.85).fillCircle(9, 8, 1).fillCircle(12, 8, 1) // orbites (petit crâne suggéré)
+    g.generateTexture('fx-necro', 20, 16); g.clear()
     // pics (rangée de pointes) — piège
     g.fillStyle(0x9e9e9e); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8, 16, i * 8 + 4, 2, i * 8 + 8, 16)
     g.fillStyle(0xcfd8dc); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 + 2, 16, i * 8 + 4, 6, i * 8 + 6, 16)

@@ -2,6 +2,33 @@ import Phaser from 'phaser'
 import type { MonsterDef } from '../core/types'
 import { Projectile } from './Projectile'
 import type { LevelScene } from '../scenes/LevelScene'
+import { getPlayer } from '../state'
+
+// Texture de projectile thématique par monstre à distance (fireProjectile). La mandragore tire
+// en cloche (fx-lob, géré à part) ; tout id absent retombe sur l'orbe générique fx-shot.
+const ENEMY_PROJECTILE_TEX: Record<string, string> = {
+  'mage-noir': 'fx-bolt', // bolt magique violet
+  'rocker': 'fx-rock', // éclat de pierre
+  'gobelin-mineur': 'fx-rock', // éclat de pierre
+  'meduse': 'fx-bubble', // bulle d'eau bleue translucide
+  'fantome': 'fx-spectral', // orbe spectral bleu pâle vaporeux
+  'spectre-ancien': 'fx-spectral', // orbe spectral bleu pâle vaporeux
+  'banshee': 'fx-scream', // onde de cri (arc violet pâle)
+  'flora-vorace': 'fx-spore', // épine / spore verte
+  'pharaon-scarabee': 'fx-sand', // projectile de sable doré
+  'roi-liche': 'fx-necro', // bolt nécrotique violet sombre
+  'pretre-goule': 'fx-necro', // bolt nécrotique violet sombre
+}
+
+// Couleur de la plaque de niveau selon le DANGER = écart entre le niveau du monstre et celui du
+// joueur (rouge = très au-dessus, orange = au-dessus, blanc = à portée). Le monstre reste tuable
+// quel que soit l'écart : c'est un simple indicateur visuel.
+function levelGapColor(monsterLevel: number): string {
+  const gap = monsterLevel - getPlayer().level
+  if (gap >= 15) return '#ff3b3b'
+  if (gap >= 10) return '#ffa726'
+  return '#ffffff'
+}
 
 const AGGRO_RANGE = 350
 const CHARGE_COOLDOWN = 2500
@@ -46,9 +73,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.monster = def
     this.hp = def.hp
     this.bar = scene.add.graphics()
-    // plaque de niveau au-dessus du monstre (couleur selon boss / MVP / normal)
-    const lvlColor = def.boss ? '#ff5252' : def.mvp ? '#ffd54f' : '#ffffff'
-    this.lvlText = scene.add.text(x, y, `Nv ${def.level}`, { fontSize: '11px', color: lvlColor, fontStyle: 'bold' }).setOrigin(0.5)
+    // plaque de niveau au-dessus du monstre : couleur selon l'écart de niveau avec le joueur
+    // (danger). Les boss/MVP gardent leur indice distinct via la barre de vie large et le halo
+    // d'élite ci-dessous — la COULEUR du nom, elle, suit l'écart.
+    this.lvlText = scene.add.text(x, y, `Nv ${def.level}`, { fontSize: '11px', color: levelGapColor(def.level), fontStyle: 'bold' }).setOrigin(0.5)
     if (def.mvp) this.eliteAura = scene.add.graphics()
   }
 
@@ -82,9 +110,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     const dir = Math.sign(player.x - this.x) || 1
     const p = new Projectile(this.scene, this.x + dir * 12, this.y - 10, dir, 0, this.monster.atk, false, 620)
-    if (this.monster.id === 'mage-noir') p.setTexture('fx-bolt').clearTint().setScale(1.1)
-    else if (this.monster.id === 'rocker') p.setTexture('fx-rock').clearTint().setScale(1.1)
-    else p.setTexture('fx-shot').clearTint().setScale(1)
+    // texture thématique selon le monstre (repli fx-shot), horizontale et sans gravité (dirY = 0),
+    // s'arrête au 1er ennemi/à portée comme tout projectile
+    p.setTexture(ENEMY_PROJECTILE_TEX[this.monster.id] ?? 'fx-shot').clearTint().setScale(1.1)
     this.levelScene.enemyProjectiles.add(p)
     p.launch() // relance la vélocité (le groupe l'a remise à 0 sur add)
   }

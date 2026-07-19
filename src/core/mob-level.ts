@@ -23,6 +23,15 @@ export const ZONE_XP_FACTOR = 1.5
 // Bonus de niveau du monstre le plus fort d'une zone (boss / MVP / mob le plus coûteux).
 export const APEX_LEVEL_BONUS = 3
 
+// Bonus de niveau des GARDIENS : ce sont des « boss de palier » postés en obstacle, calibrés
+// nettement au-dessus des mobs de leur zone (increvables sans effort, mais tuables). On les
+// exclut du calcul d'apex (ils ne « volent » pas le +3 au mob le plus coûteux de la zone) et on
+// leur ajoute ce bonus fixe à la place.
+export const GARDIEN_LEVEL_BONUS = 12
+
+// Un gardien = obstacle immobile de très haut niveau (id préfixé « gardien- »).
+const isGardien = (id: string): boolean => id.startsWith('gardien-')
+
 // Ordre de progression : l'ordre du tableau `list` de levels.ts (préservé par Object.values,
 // insertion order). Les routes alternatives (cave, plage, carrière) sont intercalées à leur
 // place dans la progression, comme dans le fichier.
@@ -42,7 +51,10 @@ export function playerLevelForXp(totalXp: number): number {
 // XP totale distribuée par un niveau = somme de l'XP de ses spawns + celle du boss s'il y en a un.
 export function levelXp(level: LevelDef): number {
   let sum = 0
-  for (const s of level.spawns) sum += MONSTERS[s.monsterId]?.xp ?? 0
+  // les gardiens sont des obstacles optionnels (contournables par les plateformes) : leur XP ne
+  // compte pas dans le calibrage de zone, sinon leur gros XP gonflerait le niveau de tous les
+  // mobs des zones suivantes.
+  for (const s of level.spawns) { if (!isGardien(s.monsterId)) sum += MONSTERS[s.monsterId]?.xp ?? 0 }
   if (level.boss) sum += MONSTERS[level.boss]?.xp ?? 0
   return sum
 }
@@ -79,11 +91,14 @@ export function computeMonsterLevels(): Record<string, number> {
   LEVEL_ORDER.forEach((level, index) => {
     const roster = levelRoster(level)
     if (roster.length === 0) return
-    const maxXp = Math.max(...roster.map((m) => m.xp))
+    // les gardiens sont exclus de l'apex : on ne veut pas qu'un gardien (XP élevée) prive le vrai
+    // mob le plus coûteux de la zone de son +3, ni qu'il cumule apex + bonus gardien.
+    const ranked = roster.filter((m) => !isGardien(m.id))
+    const maxXp = ranked.length ? Math.max(...ranked.map((m) => m.xp)) : Infinity
     for (const m of roster) {
       if (firstSeen[m.id] === undefined) {
         firstSeen[m.id] = index
-        apexAt[m.id] = m.xp === maxXp
+        apexAt[m.id] = !isGardien(m.id) && m.xp === maxXp
       }
     }
   })
@@ -92,7 +107,8 @@ export function computeMonsterLevels(): Record<string, number> {
     const index = firstSeen[m.id]
     if (index === undefined) { result[m.id] = 1; continue }
     const base = mobLevelForZone(cumXpBelow(index))
-    result[m.id] = base + (apexAt[m.id] ? APEX_LEVEL_BONUS : 0)
+    const bonus = isGardien(m.id) ? GARDIEN_LEVEL_BONUS : apexAt[m.id] ? APEX_LEVEL_BONUS : 0
+    result[m.id] = base + bonus
   }
   return result
 }
