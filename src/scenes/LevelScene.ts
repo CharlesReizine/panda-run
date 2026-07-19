@@ -957,15 +957,20 @@ export class LevelScene extends Phaser.Scene {
 
   spawnDrops(x: number, y: number, drops: DropEntry[]) {
     const result = rollDrops(drops)
-    const spawn = (texture: string, data: Record<string, unknown>, tint?: number) => {
+    const spawn = (texture: string, data: Record<string, unknown>, tint?: number, size?: number) => {
       const s = this.pickups.create(x + Phaser.Math.Between(-20, 20), y - 10, texture) as Phaser.Physics.Arcade.Sprite
       s.setVelocity(Phaser.Math.Between(-80, 80), -200)
       s.setData(data)
       if (tint !== undefined) s.setTint(tint)
+      if (size !== undefined) s.setDisplaySize(size, size)
     }
     if (result.gold > 0) spawn('coin', { gold: result.gold })
     for (let i = 0; i < result.potions; i++) spawn('potion-drop', { potion: 1 })
-    for (const itemId of result.items) spawn('item-drop', { itemId })
+    // objet lâché : icône illustrée item-<id> (dimensionnée) si dispo, sinon la pastille générique
+    for (const itemId of result.items) {
+      if (this.textures.exists(`item-${itemId}`)) spawn(`item-${itemId}`, { itemId }, undefined, 22)
+      else spawn('item-drop', { itemId })
+    }
     for (const materialId of result.materials) spawn('material-drop', { materialId }, MATERIALS[materialId]!.color)
   }
 

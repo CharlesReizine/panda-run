@@ -94,6 +94,11 @@ export class WorldMapScene extends Phaser.Scene {
     this.add.text(30, 495, 'Menu', { fontSize: '20px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 14, y: 6 } }).setDepth(20)
       .setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('Menu'))
 
+    // accès à l'inventaire dédié (icône « tenue ») — à droite du bouton Menu
+    this.add.circle(148, 505, 24, 0x263238, 0.9).setStrokeStyle(2, 0xffca28, 0.8).setDepth(20)
+      .setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('Inventory', { return: 'WorldMap' }))
+    this.add.image(148, 505, 'ui-inventory').setDisplaySize(34, 34).setDepth(21)
+
     // pastille : points de skill à dépenser
     if (p.skillPoints > 0) {
       const b = this.add.text(96, 488, `${p.skillPoints}`, { fontSize: '14px', color: '#ffffff', backgroundColor: '#e53935', padding: { x: 6, y: 3 } }).setOrigin(0.5).setDepth(20)

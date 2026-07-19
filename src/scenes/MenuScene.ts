@@ -2,14 +2,9 @@ import Phaser from 'phaser'
 import { getPlayer } from '../state'
 import { save } from '../core/save'
 import { skillsOf } from '../data/skills'
-import { ITEMS, rarityColor } from '../data/items'
 import { MATERIALS } from '../data/materials'
-import type { EquipSlot } from '../core/types'
 import { computeStats } from '../core/stats'
 import { MAX_SKILL_RANK } from '../core/player-state'
-
-const SLOTS: EquipSlot[] = ['weapon', 'armor', 'accessory', 'hat']
-const SLOT_LABELS: Record<EquipSlot, string> = { weapon: 'Arme', armor: 'Armure', accessory: 'Accessoire', hat: 'Chapeau' }
 
 export class MenuScene extends Phaser.Scene {
   constructor() { super('Menu') }
@@ -23,7 +18,6 @@ export class MenuScene extends Phaser.Scene {
     this.add.rectangle(480, 270, 960, 540, 0x1b2631, 0.95)
     const p = getPlayer()
     const stats = computeStats(p)
-    const css = (n: number) => `#${n.toString(16).padStart(6, '0')}`
     this.add.text(30, 20, `${p.name} — Nv ${p.level} — ATK ${stats.atk} / DEF ${Math.round(stats.def)} / PV ${stats.maxHp} / VIT ${stats.attackSpeed.toFixed(2)}`, { fontSize: '18px', color: '#ffffff' })
     this.add.text(30, 50, `Points de skill : ${p.skillPoints}`, { fontSize: '16px', color: '#ffd700' })
 
@@ -80,33 +74,8 @@ export class MenuScene extends Phaser.Scene {
       }
     })
 
-    // Colonne équipement
-    this.add.text(520, 85, 'ÉQUIPEMENT', { fontSize: '18px', color: '#80cbc4' })
-    SLOTS.forEach((slot, i) => {
-      const itemId = p.equipment[slot]
-      const item = itemId ? ITEMS[itemId]! : null
-      const color = item ? css(rarityColor(item.rarity)) : '#ffffff'
-      const up = itemId ? (p.upgrades[itemId] ?? 0) : 0
-      const upTxt = up > 0 ? ` +${up}` : ''
-      this.add.text(520, 115 + i * 30, `${SLOT_LABELS[slot]} : ${item ? item.name : '—'}${upTxt}`, { fontSize: '16px', color })
-    })
-    this.add.text(520, 220, 'Inventaire (tap = équiper) :', { fontSize: '14px', color: '#b0bec5' })
-    p.inventory.forEach((itemId, i) => {
-      const item = ITEMS[itemId]!
-      const y = 245 + i * 26
-      const up = p.upgrades[itemId] ?? 0
-      const upTxt = up > 0 ? ` +${up}` : ''
-      this.add.circle(526, y + 8, 4, rarityColor(item.rarity))
-      this.add.text(536, y, `${item.name}${upTxt} (${SLOT_LABELS[item.slot]})`, { fontSize: '14px', color: css(rarityColor(item.rarity)) })
-        .setInteractive()
-        .on('pointerdown', () => {
-          const prev = p.equipment[item.slot]
-          p.equipment[item.slot] = itemId
-          p.inventory.splice(i, 1)
-          if (prev) p.inventory.push(prev)
-          save(p); this.render()
-        })
-    })
+    // L'équipement et l'inventaire se gèrent désormais dans l'écran Inventaire dédié
+    // (InventoryScene), accessible depuis la carte et en jeu — retirés d'ici.
 
     // Colonne matériaux — collection pure en V1, le craft viendra plus tard
     this.add.text(520, 350, 'MATÉRIAUX', { fontSize: '18px', color: '#80cbc4' })

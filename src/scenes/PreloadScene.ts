@@ -118,6 +118,9 @@ export class PreloadScene extends Phaser.Scene {
     // PNJ pandas de la ville + illustration K.O. — détourés/rognés en create() (bakeCropped)
     for (const id of NPC_IDS) this.load.image(`npcart-${id}`, `art/npc-${id}.png`)
     this.load.image('deathart-panda', 'art/death-panda.png')
+    // icônes d'objet (public/art/item-<id>.png, fond transparent) : une par entrée d'ITEMS,
+    // rognées à leur boîte englobante en create() → textures item-<id> (boutiques, forge, inventaire).
+    for (const id of Object.keys(ITEMS)) this.load.image(`itemart-${id}`, `art/item-${id}.png`)
   }
 
   // Détoure (fond uni des bords → transparent, flood-fill) puis rogne une illustration chargée
@@ -463,6 +466,33 @@ export class PreloadScene extends Phaser.Scene {
 
   // panda K.O. : allongé sur le dos, pattes en l'air, yeux en croix et langue pendante.
   // Format allongé (80×56) réutilisé dans le monde (il s'écroule) et sur l'écran K.O.
+  // Icône d'accès à l'inventaire : une « tenue » schématisée (chapeau + t-shirt + pantalon)
+  // dessinée en code, texture ui-inventory (44×44, fond transparent). Affichée dans le HUD en
+  // jeu et sur la carte du monde ; un clic ouvre la scène Inventory.
+  private bakeUiInventory() {
+    const g = this.add.graphics()
+    const LINE = 0xffffff, FILL = 0xffca28
+    // chapeau (petit galure en haut)
+    g.fillStyle(FILL).fillEllipse(22, 9, 22, 5) // bord
+    g.fillStyle(FILL).fillRoundedRect(15, 1, 14, 7, 2) // calotte
+    g.lineStyle(1.5, LINE, 0.9).strokeRoundedRect(15, 1, 14, 7, 2)
+    // t-shirt (corps + manches)
+    g.fillStyle(0x42a5f5)
+    g.fillRoundedRect(14, 15, 16, 13, 2) // buste
+    g.fillTriangle(14, 15, 8, 22, 12, 24) // manche gauche
+    g.fillTriangle(30, 15, 36, 22, 32, 24) // manche droite
+    g.fillTriangle(18, 15, 26, 15, 22, 19) // encolure
+    g.lineStyle(1.5, LINE, 0.9).strokeRoundedRect(14, 15, 16, 13, 2)
+    // pantalon (deux jambes)
+    g.fillStyle(0x8d6e63)
+    g.fillRoundedRect(15, 29, 6, 13, 1.5) // jambe gauche
+    g.fillRoundedRect(23, 29, 6, 13, 1.5) // jambe droite
+    g.lineStyle(1.5, LINE, 0.9)
+    g.strokeRoundedRect(15, 29, 6, 13, 1.5).strokeRoundedRect(23, 29, 6, 13, 1.5)
+    g.generateTexture('ui-inventory', 44, 44)
+    g.destroy()
+  }
+
   private drawPandaDead() {
     const g = this.add.graphics()
     const W = 0xf7f7f7, K = 0x2b2b2b, PINK = 0xff9ab0
@@ -1195,6 +1225,10 @@ export class PreloadScene extends Phaser.Scene {
     // PNJ pandas de la ville + illustration K.O. (détourés + rognés)
     for (const id of NPC_IDS) this.bakeCropped(`npcart-${id}`, `npc-${id}`)
     this.bakeCropped('deathart-panda', 'death-panda')
+    // icônes d'objet : rognées à leur boîte englobante → item-<id> (repli sur l'affichage
+    // existant partout où la texture manque, cf. iconFor/InventoryScene)
+    for (const id of Object.keys(ITEMS)) this.bakeCropped(`itemart-${id}`, `item-${id}`)
+    this.bakeUiInventory()
     this.drawDecor()
     for (const item of Object.values(ITEMS)) if (item.slot === 'hat') this.drawCosmetic(item.id)
     for (const m of Object.values(MONSTERS)) {

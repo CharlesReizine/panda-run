@@ -20,6 +20,7 @@ import { LevelScene } from './scenes/LevelScene'
 import { UIScene } from './scenes/UIScene'
 import { PauseScene } from './scenes/PauseScene'
 import { MenuScene } from './scenes/MenuScene'
+import { InventoryScene } from './scenes/InventoryScene'
 import { ClassChangeScene } from './scenes/ClassChangeScene'
 import { SkillEquipScene } from './scenes/SkillEquipScene'
 import { BestiaryScene } from './scenes/BestiaryScene'
@@ -55,7 +56,7 @@ try {
     backgroundColor: '#87ceeb',
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     physics: { default: 'arcade', arcade: { gravity: { x: 0, y: GRAVITY } } },
-    scene: [BootScene, PreloadScene, TitleScene, WorldMapScene, LevelIntroScene, TownScene, LevelScene, UIScene, PauseScene, MenuScene, ClassChangeScene, SkillEquipScene, BestiaryScene],
+    scene: [BootScene, PreloadScene, TitleScene, WorldMapScene, LevelIntroScene, TownScene, LevelScene, UIScene, PauseScene, MenuScene, InventoryScene, ClassChangeScene, SkillEquipScene, BestiaryScene],
   })
 } catch (err) {
   logError('boot', err)

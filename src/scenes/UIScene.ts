@@ -133,6 +133,11 @@ export class UIScene extends Phaser.Scene {
     potion.on('pointerdown', () => { this.pressFx(potion); this.game.events.emit('input-potion') })
     this.potionText = this.add.text(70, 490, '', { fontSize: '16px', color: '#ffffff' })
 
+    // bouton inventaire (icône « tenue ») : ouvre l'écran d'inventaire dédié par-dessus le jeu en pause
+    const invBtn = this.add.image(130, 500, 'ui-inventory').setDisplaySize(42, 42).setInteractive({ useHandCursor: true })
+    invBtn.on('pointerdown', () => { this.pressFx(invBtn); this.openInventoryMenu() })
+    this.add.text(130, 524, 'SAC', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
+
     // Écoute des mises à jour émises par LevelScene
     const level = this.scene.get('Level')
     level.events.on('player-hp', this.onPlayerHp)
@@ -167,6 +172,15 @@ export class UIScene extends Phaser.Scene {
     audio.playSfx('ui-tap')
     this.freezeLevelForOverlay()
     this.scene.launch('SkillEquip')
+    this.scene.pause('Level')
+    this.scene.pause('UI')
+  }
+
+  // ouvre l'écran d'inventaire dédié en jeu (overlay par-dessus le niveau en pause)
+  private openInventoryMenu() {
+    audio.playSfx('ui-tap')
+    this.freezeLevelForOverlay()
+    this.scene.launch('Inventory', { return: 'game', overlay: true })
     this.scene.pause('Level')
     this.scene.pause('UI')
   }

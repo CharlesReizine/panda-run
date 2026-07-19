@@ -394,9 +394,11 @@ export class TownScene extends Phaser.Scene {
     )
   }
 
-  // icône par emplacement d'objet : les chapeaux ont un visuel dédié (cosmetic-<id>) ; les
-  // armes/armures/accessoires n'ont pas de sprite propre, donc pastille colorée + glyphe par slot
+  // icône par emplacement d'objet : on privilégie l'icône illustrée item-<id> si elle a été
+  // bakée ; à défaut les chapeaux ont un visuel dédié (cosmetic-<id>) ; les armes/armures/
+  // accessoires retombent sur une pastille colorée + glyphe par slot.
   private iconFor(itemId: string): { texture: string } | { pastille: number; glyph: string } {
+    if (this.textures.exists(`item-${itemId}`)) return { texture: `item-${itemId}` }
     const item = ITEMS[itemId]!
     if (item.slot === 'hat') return { texture: `cosmetic-${itemId}` }
     const bySlot = {
