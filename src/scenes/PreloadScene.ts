@@ -5,6 +5,7 @@ import { BIOMES } from '../data/biomes'
 import { ITEMS } from '../data/items'
 import type { MonsterDef } from '../core/types'
 import { stripBorderBackground } from '../core/image-strip'
+import { PANDA_TEX } from '../entities/player-body'
 
 // icône par skill : couleur + glyphe
 const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
@@ -52,6 +53,13 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
 type ClassId = 'novice' | 'swordsman' | 'mage' | 'archer' | 'chevalier' | 'sorcier' | 'chasseur'
 const CLASSES: ClassId[] = ['novice', 'swordsman', 'mage', 'archer', 'chevalier', 'sorcier', 'chasseur']
 
+// nom de fichier d'illustration par classe (public/art/panda-<nom>*.png) : le sabreur
+// s'appelle « sabreur » côté art ; les autres classes gardent leur id.
+const ART_NAME: Record<ClassId, string> = {
+  novice: 'novice', swordsman: 'sabreur', mage: 'mage', archer: 'archer',
+  chevalier: 'chevalier', sorcier: 'sorcier', chasseur: 'chasseur',
+}
+
 interface Pose {
   bx?: number; by?: number
   lf?: [number, number]; rf?: [number, number]
@@ -89,6 +97,16 @@ export class PreloadScene extends Phaser.Scene {
     for (const id of ART_MONSTERS) this.load.image(`art-${id}`, `art/art-${id}.png`)
     // fonds de biome illustrés (public/art/biome-<clé>.png), affichés par LevelScene
     for (const id of Object.keys(BIOMES)) this.load.image(`biome-${id}`, `art/biome-${id}.png`)
+    // illustrations du panda joueur : 4 poses par classe (idle/course/saut/attaque).
+    // Chargées ici puis « bakées » (rognées + mises à l'échelle + ancrées pieds au sol) en
+    // textures panda-<classe>* par bakePandaClassFromArt ; repli sur le dessin procédural si absentes.
+    for (const cls of CLASSES) {
+      const art = ART_NAME[cls]
+      this.load.image(`pandaart-${cls}`, `art/panda-${art}.png`)
+      this.load.image(`pandaart-${cls}-course`, `art/panda-${art}-course.png`)
+      this.load.image(`pandaart-${cls}-saut`, `art/panda-${art}-saut.png`)
+      this.load.image(`pandaart-${cls}-attaque`, `art/panda-${art}-attaque.png`)
+    }
   }
 
   // Retire le fond uni (gris/blanc « polaroïd ») autour de l'illustration en effaçant
@@ -243,27 +261,123 @@ export class PreloadScene extends Phaser.Scene {
 
   private drawPandas() {
     for (const cls of CLASSES) {
-      for (const [pose, opts] of Object.entries(POSES)) {
-        const key = pose ? `panda-${cls}-${pose}` : `panda-${cls}`
-        this.pandaFrame(key, opts, cls)
-      }
-      if (!this.anims.exists(`panda-${cls}-run`)) {
-        this.anims.create({ key: `panda-${cls}-idle`, frames: [{ key: `panda-${cls}` }], frameRate: 1, repeat: -1 })
-        this.anims.create({
-          key: `panda-${cls}-run`,
-          frames: [{ key: `panda-${cls}-run-0` }, { key: `panda-${cls}-run-1` }, { key: `panda-${cls}-run-2` }, { key: `panda-${cls}-run-1` }],
-          frameRate: 12, repeat: -1,
-        })
-        this.anims.create({
-          key: `panda-${cls}-attack`,
-          frames: [{ key: `panda-${cls}-attack-0` }, { key: `panda-${cls}-attack-1` }],
-          frameRate: 14, repeat: 0,
-        })
-        this.anims.create({ key: `panda-${cls}-jump`, frames: [{ key: `panda-${cls}-jump` }], frameRate: 1, repeat: -1 })
-      }
+      // illustration par classe si dispo, sinon panda dessiné en code (fallback complet)
+      if (!this.bakePandaClassFromArt(cls)) this.drawProceduralClass(cls)
     }
-    // alias pour les menus (écran titre) : le panda novice
-    this.pandaFrame('panda', {}, 'novice')
+    // alias pour les menus (écran titre) : le panda novice (illustration si dispo)
+    if (!this.bakePandaPose(this.pandaArtKey('novice', ''), 'panda')) this.pandaFrame('panda', {}, 'novice')
+  }
+
+  // clé de la texture d'illustration chargée pour une classe/pose
+  private pandaArtKey(cls: ClassId, pose: string): string {
+    return pose ? `pandaart-${cls}-${pose}` : `pandaart-${cls}`
+  }
+
+  // « Bake » d'une illustration dans une texture 64×92 (PANDA_TEX) identique en dimensions à la
+  // frame procédurale — donc hitbox PANDA_BODY inchangée. On rogne l'art à sa boîte englobante
+  // non-transparente (comme cleanArtTexture le fait via getImageData), on le met à l'échelle
+  // uniformément vers une hauteur cible constante (STAND_H) en bornant la largeur (MAX_W, pas de
+  // débordement), puis on l'ANCRE BAS-CENTRE (pieds sur la ligne FEET_Y=86, la même que la hitbox)
+  // pour une baseline identique dans toutes les poses → pieds stables, pas de tremblement.
+  // Renvoie false si l'art manque ou si le canvas 2D échoue (repli procédural).
+  private bakePandaPose(srcKey: string, destKey: string): boolean {
+    if (this.textures.exists(destKey)) return true
+    if (!this.textures.exists(srcKey)) return false
+    try {
+      const STAND_H = 80, MAX_W = 62, FEET_Y = 86, ALPHA_MIN = 16
+      const src = this.textures.get(srcKey).getSourceImage() as HTMLImageElement | HTMLCanvasElement
+      const sw = src.width, sh = src.height
+      const probe = document.createElement('canvas')
+      probe.width = sw; probe.height = sh
+      const pctx = probe.getContext('2d')
+      if (!pctx) return false
+      pctx.drawImage(src as CanvasImageSource, 0, 0)
+      const data = pctx.getImageData(0, 0, sw, sh).data
+      // boîte englobante des pixels non (quasi) transparents (ignore les halos très légers)
+      let x0 = sw, y0 = sh, x1 = -1, y1 = -1
+      for (let y = 0; y < sh; y++) {
+        for (let x = 0; x < sw; x++) {
+          if ((data[(y * sw + x) * 4 + 3] ?? 0) >= ALPHA_MIN) {
+            if (x < x0) x0 = x
+            if (x > x1) x1 = x
+            if (y < y0) y0 = y
+            if (y > y1) y1 = y
+          }
+        }
+      }
+      const bw = x1 - x0 + 1, bh = y1 - y0 + 1
+      if (bw <= 0 || bh <= 0) return false
+      const scale = Math.min(STAND_H / bh, MAX_W / bw)
+      const dw = bw * scale, dh = bh * scale
+      const dx = (PANDA_TEX.w - dw) / 2, dy = FEET_Y - dh
+      const c = document.createElement('canvas')
+      c.width = PANDA_TEX.w; c.height = PANDA_TEX.h
+      const ctx = c.getContext('2d')
+      if (!ctx) return false
+      ctx.imageSmoothingEnabled = true
+      ctx.drawImage(src as CanvasImageSource, x0, y0, bw, bh, dx, dy, dw, dh)
+      this.textures.addCanvas(destKey, c)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  // Bake les 4 poses illustrées d'une classe + crée ses anims (mêmes clés que le procédural :
+  // idle / run / jump / attack). Marche = alternance idle ↔ course (effet de pas, ~7 fps), pieds
+  // ancrés au sol donc pas de tremblement. Renvoie false si une pose manque (repli procédural).
+  private bakePandaClassFromArt(cls: ClassId): boolean {
+    for (const p of ['', 'course', 'saut', 'attaque']) {
+      if (!this.textures.exists(this.pandaArtKey(cls, p))) return false
+    }
+    const ok =
+      this.bakePandaPose(this.pandaArtKey(cls, ''), `panda-${cls}`) &&
+      this.bakePandaPose(this.pandaArtKey(cls, 'course'), `panda-${cls}-course`) &&
+      this.bakePandaPose(this.pandaArtKey(cls, 'saut'), `panda-${cls}-saut`) &&
+      this.bakePandaPose(this.pandaArtKey(cls, 'attaque'), `panda-${cls}-attaque`)
+    if (!ok) return false
+    if (!this.anims.exists(`panda-${cls}-run`)) {
+      this.anims.create({ key: `panda-${cls}-idle`, frames: [{ key: `panda-${cls}` }], frameRate: 1, repeat: -1 })
+      this.anims.create({ key: `panda-${cls}-run`, frames: [{ key: `panda-${cls}` }, { key: `panda-${cls}-course` }], frameRate: 7, repeat: -1 })
+      this.anims.create({ key: `panda-${cls}-jump`, frames: [{ key: `panda-${cls}-saut` }], frameRate: 1, repeat: -1 })
+      this.anims.create({ key: `panda-${cls}-attack`, frames: [{ key: `panda-${cls}-attaque` }], frameRate: 1, repeat: 0 })
+    }
+    return true
+  }
+
+  // panda dessiné en code (fallback quand l'illustration d'une classe manque)
+  private drawProceduralClass(cls: ClassId) {
+    for (const [pose, opts] of Object.entries(POSES)) {
+      const key = pose ? `panda-${cls}-${pose}` : `panda-${cls}`
+      this.pandaFrame(key, opts, cls)
+    }
+    if (!this.anims.exists(`panda-${cls}-run`)) {
+      this.anims.create({ key: `panda-${cls}-idle`, frames: [{ key: `panda-${cls}` }], frameRate: 1, repeat: -1 })
+      this.anims.create({
+        key: `panda-${cls}-run`,
+        frames: [{ key: `panda-${cls}-run-0` }, { key: `panda-${cls}-run-1` }, { key: `panda-${cls}-run-2` }, { key: `panda-${cls}-run-1` }],
+        frameRate: 12, repeat: -1,
+      })
+      this.anims.create({
+        key: `panda-${cls}-attack`,
+        frames: [{ key: `panda-${cls}-attack-0` }, { key: `panda-${cls}-attack-1` }],
+        frameRate: 14, repeat: 0,
+      })
+      this.anims.create({ key: `panda-${cls}-jump`, frames: [{ key: `panda-${cls}-jump` }], frameRate: 1, repeat: -1 })
+    }
+  }
+
+  // arme cosmétique par classe (overlay dessiné par-dessus l'illustration, patte avant du panda).
+  // Grip (point de préhension) ancré en (20,44) dans une texture 40×60 ; Player positionne
+  // l'image sur la patte avant. Le novice n'a pas d'arme (drawClassWeapon ne dessine rien).
+  private bakeClassWeapons() {
+    for (const cls of CLASSES) {
+      if (cls === 'novice') continue
+      const g = this.add.graphics()
+      this.drawClassWeapon(g, cls, 20, 44)
+      g.generateTexture(`weapon-${cls}`, 40, 60)
+      g.destroy()
+    }
   }
 
   // panda K.O. : allongé sur le dos, pattes en l'air, yeux en croix et langue pendante.
@@ -986,6 +1100,7 @@ export class PreloadScene extends Phaser.Scene {
 
   create() {
     this.drawPandas()
+    this.bakeClassWeapons()
     this.drawPandaDead()
     this.drawDecor()
     for (const item of Object.values(ITEMS)) if (item.slot === 'hat') this.drawCosmetic(item.id)

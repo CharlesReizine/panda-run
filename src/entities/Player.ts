@@ -14,7 +14,9 @@ const SWIM_RUN_MULT = 0.7 // déplacement horizontal ralenti dans l'eau
 const MAX_ENERGY = 100
 const ENERGY_REGEN_PER_SEC = 22
 const ENERGY_PER_BASIC_HIT = 6
-const HAT_OFFSET_Y = -34 // place le chapeau au-dessus de la tête du panda
+const HAT_OFFSET_Y = -38 // place le chapeau au-dessus de la tête du panda illustré (crown haute)
+const WEAPON_OFFSET_X = 11 // décalage horizontal de l'arme (patte avant), mirroré selon l'orientation
+const WEAPON_OFFSET_Y = 10 // décalage vertical de l'arme (hauteur de la patte avant)
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   stats: StatBlock
@@ -29,6 +31,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private wasGrounded = true
   private attacking = false
   private hatImage: Phaser.GameObjects.Image | null = null
+  private weaponImage: Phaser.GameObjects.Image | null = null
   // buff d'attaque (Cri de guerre) : multiplicateur temporaire des dégâts sortants + aura dorée suivie
   private buffUntil = 0
   private buffMult = 1
@@ -48,6 +51,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.play(this.anim('idle'))
     this.emitHp()
     this.refreshHat()
+    this.refreshWeapon()
   }
 
   // (ré)affiche le chapeau cosmétique équipé (ou le retire si le slot est vide)
@@ -57,11 +61,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.hatImage = hatId ? this.scene.add.image(this.x, this.y + HAT_OFFSET_Y, `cosmetic-${hatId}`).setDepth(this.depth + 1) : null
   }
 
+  // (ré)affiche l'arme de classe en overlay dans la patte avant (le panda illustré a les mains
+  // vides) ; retirée si la classe n'a pas d'arme (novice). Suivie/mirrorée chaque frame.
+  private refreshWeapon() {
+    const key = `weapon-${getPlayer().classId}`
+    this.weaponImage?.destroy()
+    this.weaponImage = this.scene.textures.exists(key)
+      ? this.scene.add.image(this.x + WEAPON_OFFSET_X, this.y + WEAPON_OFFSET_Y, key).setOrigin(0.5, 44 / 60).setDepth(this.depth + 1)
+      : null
+  }
+
   preUpdate(t: number, d: number) {
     super.preUpdate(t, d)
     if (this.hatImage) {
       this.hatImage.setPosition(this.x, this.y + HAT_OFFSET_Y)
       this.hatImage.setFlipX(this.facing === -1)
+    }
+    if (this.weaponImage) {
+      this.weaponImage.setPosition(this.x + WEAPON_OFFSET_X * this.facing, this.y + WEAPON_OFFSET_Y)
+      this.weaponImage.setFlipX(this.facing === -1)
     }
     // aura de buff : suit le panda tant que le buff est actif, puis se dissout à l'échéance
     if (this.auraImage) {
@@ -98,6 +116,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   destroy(fromScene?: boolean) {
     this.hatImage?.destroy()
+    this.weaponImage?.destroy()
     this.auraTween?.remove()
     this.auraImage?.destroy()
     super.destroy(fromScene)
@@ -122,6 +141,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.play(this.anim('idle')) // reprend l'allure de la nouvelle classe
     this.emitHp()
     this.refreshHat()
+    this.refreshWeapon()
   }
 
   updateFromControls(c: ControlsState) {
