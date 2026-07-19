@@ -75,6 +75,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const player = this.levelScene.player
     const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y)
     const dir = Math.sign(player.x - this.x) || 1
+    // distance de corps-à-corps : au-delà on avance vers le joueur, en deçà on S'ARRÊTE
+    // (on reste planté à infliger les dégâts de contact) au lieu de foncer/pousser sans fin
+    const stopDist = this.width * 0.5 + 16
 
     if (dist < AGGRO_RANGE) {
       if (this.monster.behavior === 'charge') {
@@ -85,8 +88,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           this.scene.time.delayedCall(400, () => { this.isCharging = false })
         } else if (!this.isCharging) {
           // entre deux charges : on marche vers le joueur au lieu de conserver la vitesse de la
-          // charge précédente (sinon dérive infinie hors de la zone → le boss « s'enfuit »)
-          this.setVelocityX(dir * this.monster.speed)
+          // charge précédente (sinon dérive infinie hors de la zone → le boss « s'enfuit »),
+          // mais on s'arrête au corps-à-corps au lieu de le pousser sans fin
+          this.setVelocityX(dist > stopDist ? dir * this.monster.speed : 0)
         }
       } else if (this.monster.behavior === 'projectile' && t > this.nextActionAt) {
         const p = new Projectile(this.scene, this.x, this.y - 10, player.x - this.x, player.y - this.y, this.monster.atk, false, 500)
@@ -109,8 +113,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           this.nextShootAt = t + SHOOT_COOLDOWN * 1.5
         }
       } else if (this.monster.behavior !== 'projectile') {
-        // 'contact' (et tout behavior inconnu non géré au-dessus) : repli sûr, fonce au contact
-        this.setVelocityX(dir * this.monster.speed)
+        // 'contact' (et tout behavior inconnu non géré au-dessus) : avance vers le joueur puis
+        // S'ARRÊTE au corps-à-corps (dégâts de contact) au lieu de foncer/pousser sans fin
+        this.setVelocityX(dist > stopDist ? dir * this.monster.speed : 0)
       }
     } else if (this.monster.boss) {
       // hors aggro, le boss revient TOUJOURS vers le joueur tant qu'il est vivant : il ne
