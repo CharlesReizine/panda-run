@@ -7,6 +7,9 @@ const MUTE_KEY = 'panda-run:muted'
 const VOLUME_KEY = 'panda-run:volume'
 // plafond de gain master historique (headroom) ; le volume utilisateur (0..1) le module
 const BASE_MASTER = 0.9
+// piste de fond unique (fichier), doux par défaut ; modulé par le volume utilisateur
+const MUSIC_URL = `${import.meta.env.BASE_URL}audio/bgm.m4a`
+const MUSIC_VOLUME = 0.35
 
 export type SfxName =
   | 'jump' | 'attack' | 'hit' | 'enemy-death' | 'coin' | 'potion' | 'skill'
@@ -89,6 +92,9 @@ class AudioEngine {
   private schedulerTimer: ReturnType<typeof setInterval> | null = null
   private step = 0
   private nextStepTime = 0
+  // musique de fond : élément média HTML (robuste iOS), une seule piste pour tout le jeu
+  private music: HTMLAudioElement | null = null
+  private musicWanted = false // playMusic a été demandé au moins une fois
 
   constructor() {
     // lecture de l'état muet — sans effet de bord audio (localStorage seulement)
@@ -143,6 +149,8 @@ class AudioEngine {
 
   // à appeler sur un geste utilisateur (iOS/Safari bloquent le son sinon)
   unlock() {
+    // reprend la musique de fond si elle est demandée (le 1er tap débloque la lecture média iOS)
+    this.applyMusicState()
     if (!this.ensure() || !this.ctx) return
     if (this.ctx.state === 'suspended') void this.ctx.resume()
   }
@@ -159,6 +167,7 @@ class AudioEngine {
     if (this.master && this.ctx) {
       this.master.gain.setTargetAtTime(this.masterLevel(), this.ctx.currentTime, 0.02)
     }
+    this.applyMusicState() // muet → pause la piste de fond ; démute → la reprend
   }
 
   toggleMute(): boolean {
@@ -177,6 +186,7 @@ class AudioEngine {
     if (this.master && this.ctx) {
       this.master.gain.setTargetAtTime(this.masterLevel(), this.ctx.currentTime, 0.02)
     }
+    this.applyMusicState() // répercute le volume utilisateur sur la piste de fond
   }
 
   // ---- SFX -----------------------------------------------------------------
@@ -284,18 +294,44 @@ class AudioEngine {
   // ---- Musique -------------------------------------------------------------
 
   playMusic(_track: MusicTrack) {
-    // Musique synthétisée DÉSACTIVÉE (elle sonnait « synthé » et déplaisait) : en attente d'une vraie
-    // piste instrumentale (fichier audio) qui la remplacera ici. On coupe toute musique en cours ;
-    // les bruitages (SFX) restent actifs.
-    this.stopMusic()
+    // Musique synthétisée remplacée par une vraie piste instrumentale (fichier audio), jouée en
+    // boucle. Une seule piste pour tout le jeu : le paramètre `track`/biome est ignoré pour l'instant.
+    // La lecture média n'aboutit qu'après un geste utilisateur (iOS/Safari) : unlock() la relancera.
+    this.musicWanted = true
+    this.applyMusicState()
   }
 
   stopMusic() {
+    // ancien séquenceur synthé (plus alimenté) : on garde l'arrêt propre par sécurité
     if (this.schedulerTimer !== null) {
       clearInterval(this.schedulerTimer)
       this.schedulerTimer = null
     }
     this.currentTrack = null
+    this.musicWanted = false
+    if (this.music) this.music.pause()
+  }
+
+  // crée (au besoin) l'élément média et aligne son état sur muet / volume / demande de lecture.
+  // Robuste : pas d'`Audio` en Node (vitest), fichier absent ou lecture bloquée ne plantent pas.
+  private applyMusicState() {
+    if (typeof Audio === 'undefined') return // environnement sans média (Node/vitest)
+    try {
+      if (!this.music && this.musicWanted) {
+        const el = new Audio(MUSIC_URL)
+        el.loop = true
+        el.preload = 'auto'
+        this.music = el
+      }
+      if (!this.music) return
+      this.music.volume = MUSIC_VOLUME * this.volume
+      if (this.muted || !this.musicWanted) {
+        this.music.pause()
+      } else {
+        // play() renvoie une promesse rejetée tant qu'aucun geste utilisateur n'a eu lieu : on ignore
+        void this.music.play().catch(() => { /* lecture différée jusqu'au prochain unlock() */ })
+      }
+    } catch { /* fichier introuvable / média indisponible : le jeu continue sans musique de fond */ }
   }
 
   // séquenceur à horizon glissant : planifie les pas à venir en avance de phase
