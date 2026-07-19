@@ -38,18 +38,6 @@
   <ellipse cx="480" cy="300" rx="405" ry="205" fill="url(#plaza)"/>
   <ellipse cx="480" cy="300" rx="405" ry="205" fill="none" stroke="#c9b184" stroke-width="6"/>
 
-  <!-- joints des pavés -->
-  <g stroke="#c9b184" stroke-width="2" opacity="0.6">
-    <line x1="180" y1="230" x2="780" y2="230"/>
-    <line x1="150" y1="290" x2="810" y2="290"/>
-    <line x1="150" y1="350" x2="810" y2="350"/>
-    <line x1="200" y1="410" x2="760" y2="410"/>
-    <line x1="300" y1="200" x2="300" y2="440"/>
-    <line x1="420" y1="185" x2="420" y2="450"/>
-    <line x1="540" y1="185" x2="540" y2="450"/>
-    <line x1="660" y1="200" x2="660" y2="440"/>
-  </g>
-
   <!-- fontaine ronde suggérée au centre (repère décoratif) -->
   <ellipse cx="480" cy="300" rx="46" ry="24" fill="#bcdff0" opacity="0.55"/>
   <ellipse cx="480" cy="300" rx="46" ry="24" fill="none" stroke="#c9b184" stroke-width="4"/>
