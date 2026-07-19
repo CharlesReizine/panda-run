@@ -113,8 +113,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     // "zzz" hors aggro, caché dès que le monstre repère le joueur
     if (dist >= AGGRO_RANGE) {
-      if (!this.zzz) this.zzz = this.scene.add.text(this.x, this.y - this.height / 2 - 24, 'zzz', { fontSize: '14px', color: '#ffffff' }).setOrigin(0.5)
-      this.zzz.setPosition(this.x, this.y - this.height / 2 - 24)
+      // placé bien au-dessus de la plaque « Nv X » (y - height/2 - 22) pour ne pas la recouvrir
+      if (!this.zzz) this.zzz = this.scene.add.text(this.x, this.y - this.height / 2 - 42, 'zzz', { fontSize: '14px', color: '#ffffff' }).setOrigin(0.5)
+      this.zzz.setPosition(this.x, this.y - this.height / 2 - 42)
       if (t > this.nextZzzToggleAt) {
         this.zzz.setVisible(!this.zzz.visible)
         this.nextZzzToggleAt = t + 2000

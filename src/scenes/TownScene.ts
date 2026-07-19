@@ -152,9 +152,10 @@ export class TownScene extends Phaser.Scene {
     placeDecor('town-maison', 330, 214, 96)
     placeDecor('town-maison', 630, 214, 96)
 
-    this.add.text(480, 20, 'Prontera', {
+    // bannière du bourg, calée en haut au-dessus du toit du bâtiment central
+    this.add.text(480, 10, 'Prontera', {
       fontSize: '26px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 4,
-    }).setOrigin(0.5)
+    }).setOrigin(0.5, 0)
 
     const wallsGroup = this.physics.add.staticGroup()
     for (const b of BUILDINGS) {
@@ -162,12 +163,18 @@ export class TownScene extends Phaser.Scene {
       const wall = this.add.rectangle(b.x, b.y, b.w, b.h).setVisible(false)
       this.physics.add.existing(wall, true)
       wallsGroup.add(wall)
-      // illustration du bâtiment, base (porte) calée sur le bas de la façade
-      const img = this.add.image(b.x, b.y + b.h / 2 + 12, BUILDING_TEXTURE[b.id as keyof typeof BUILDING_TEXTURE]).setOrigin(0.5, 1)
-      const dispW = b.w + 40
-      const dispH = dispW * (img.height / img.width)
+      // illustration du bâtiment, base (porte) calée sur le bas de la façade (aligne l'entrée
+      // visuelle sur la zone d'interaction — inchangée). Hauteur bornée pour que le toit ET le
+      // label tiennent dans le viewport (le bâtiment central laisse de la place sous « Prontera »).
+      const bottom = b.y + b.h / 2 + 12
+      const img = this.add.image(b.x, bottom, BUILDING_TEXTURE[b.id as keyof typeof BUILDING_TEXTURE]).setOrigin(0.5, 1)
+      const topClearance = b.x === 480 ? 74 : 40
+      const maxH = bottom - topClearance
+      let dispW = b.w + 40
+      let dispH = dispW * (img.height / img.width)
+      if (dispH > maxH) { const s = maxH / dispH; dispW *= s; dispH *= s }
       img.setDisplaySize(dispW, dispH)
-      this.add.text(b.x, b.y + b.h / 2 + 12 - dispH - 4, b.name, {
+      this.add.text(b.x, bottom - dispH - 4, b.name, {
         fontSize: '13px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 3,
       }).setOrigin(0.5, 1)
     }
@@ -180,7 +187,7 @@ export class TownScene extends Phaser.Scene {
     }).setOrigin(0.5)
 
     // panneau de sortie — toujours accessible, ramène directement à la carte
-    this.add.text(880, 30, 'Sortie →', { fontSize: '18px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 10, y: 6 } })
+    this.add.text(895, 24, 'Sortie →', { fontSize: '18px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 10, y: 6 } })
       .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('WorldMap'))
 
     // panda joueur
