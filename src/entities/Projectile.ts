@@ -63,6 +63,14 @@ export class Projectile extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
+  // On tue les tweens visant ce projectile avant destruction : certains tirs (boule de feu)
+  // portent un tween de scintillement en repeat:-1 qui, sans ça, continuerait de modifier un
+  // sprite détruit à chaque frame (fuite / accès invalide).
+  destroy(fromScene?: boolean) {
+    this.scene?.tweens?.killTweensOf(this)
+    super.destroy(fromScene)
+  }
+
   // traînée lumineuse : échos de la texture courante qui s'estompent derrière le projectile
   private spawnTrailEcho() {
     if (!this.scene) return

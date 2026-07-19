@@ -668,7 +668,7 @@ export class LevelScene extends Phaser.Scene {
       // attaque de base à distance, HORIZONTALE (sens du regard), sans gravité : petite boule
       // de feu bleue (mage/sorcier) ou flèche (archer/chasseur). S'arrête au 1er ennemi ou à ~440px.
       const proj = this.spawnPlayerProjectile(this.player.stats.atk * this.player.outgoingMult(), 440)
-      if (isMageType) proj.setTexture('fx-fireball').clearTint().setScale(1.3)
+      if (isMageType) { proj.setTexture('fx-fireball').clearTint().setScale(1.3); this.fireballShimmer(proj, 1.3) }
       else proj.setTexture('fx-arrow').clearTint().setScale(1.2)
     } else {
       this.slashFx(this.player.x + this.player.facing * 30, this.player.y, 60, 0xffffff)
@@ -709,6 +709,18 @@ export class LevelScene extends Phaser.Scene {
     this.physics.add.collider(proj, this.oneWayPlatforms, popOnGround)
   }
 
+  // scintillement de flamme : fait vibrer la boule de feu (échelle X/Y alternée) comme du vrai
+  // feu. Le tween est en repeat:-1 mais Projectile.destroy tue les tweens du projectile → pas de
+  // fuite quand le tir s'éteint (portée atteinte ou impact).
+  private fireballShimmer(proj: Projectile, base: number) {
+    proj.setScale(base)
+    this.tweens.add({
+      targets: proj,
+      scaleX: base * 1.22, scaleY: base * 0.86,
+      duration: 90, yoyo: true, repeat: -1, ease: 'Sine.inOut',
+    })
+  }
+
   // croissant de coup visible même dans le vide + petit élan du panda ; en mode "intense"
   // (gros coup), double croissant + léger tremblement de caméra
   private slashFx(cx: number, cy: number, w: number, color: number, intense = false) {
@@ -721,6 +733,19 @@ export class LevelScene extends Phaser.Scene {
     }
     drawCrescent(0, 1, 0.95)
     if (intense) drawCrescent(16, 0.72, 0.55)
+    // éclat de tranchant + petites étincelles projetées vers l'avant, pour un coup qui « claque »
+    const flash = this.add.image(cx, cy, 'ring').setTint(color).setDepth(6).setScale(0.06).setAlpha(0.9)
+    this.tweens.add({ targets: flash, scale: intense ? 0.5 : 0.35, alpha: 0, duration: 150, onComplete: () => flash.destroy() })
+    const sparks = intense ? 6 : 4
+    for (let i = 0; i < sparks; i++) {
+      const a = Phaser.Math.DegToRad(-45 + (90 / sparks) * i) // éventail vers l'avant (sens du regard)
+      const spark = this.add.rectangle(cx, cy, 3, 3, color).setDepth(6)
+      const reach = intense ? 34 : 24
+      this.tweens.add({
+        targets: spark, x: cx + Math.cos(a) * reach * this.player.facing, y: cy + Math.sin(a) * reach,
+        alpha: 0, duration: 220, onComplete: () => spark.destroy(),
+      })
+    }
     this.tweens.add({ targets: this.player, x: this.player.x + this.player.facing * (intense ? 10 : 6), duration: 60, yoyo: true })
     if (intense) this.cameras.main.shake(60, 0.004)
   }
@@ -853,7 +878,9 @@ export class LevelScene extends Phaser.Scene {
         if (mageType) proj.setTexture('fx-fireball').clearTint()
         else if (archerType) proj.setTexture('fx-arrow').clearTint()
         else proj.setTint(color)
-        proj.setScale(skill.multiplier >= 2.5 ? 1.6 : skill.multiplier >= 1.6 ? 1.25 : 1.05)
+        const projScale = skill.multiplier >= 2.5 ? 1.6 : skill.multiplier >= 1.6 ? 1.25 : 1.05
+        proj.setScale(projScale)
+        if (mageType) this.fireballShimmer(proj, projScale)
       }
     } else if (skill.kind === 'heal') {
       this.player.heal(Math.round(maxHp * mult))

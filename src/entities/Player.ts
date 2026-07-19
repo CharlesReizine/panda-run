@@ -18,7 +18,16 @@ const ENERGY_REGEN_PER_SEC = 22
 const ENERGY_PER_BASIC_HIT = 6
 const HAT_OFFSET_Y = -38 // place le chapeau au-dessus de la tête du panda illustré (crown haute)
 const WEAPON_OFFSET_X = 11 // décalage horizontal de l'arme (patte avant), mirroré selon l'orientation
-const WEAPON_OFFSET_Y = 10 // décalage vertical de l'arme (hauteur de la patte avant)
+const WEAPON_OFFSET_Y = 12 // décalage vertical de l'arme (hauteur de la patte avant)
+// Inclinaison de l'arme tenue dans la patte avant (degrés, panda tourné vers la droite). Positif =
+// sommet penché vers l'AVANT (× facing), ce qui dégage la tête : l'arme n'est plus plantée à la
+// verticale dans le crâne mais tenue en biais comme dans la main. Réglée par classe (le bâton du
+// mage/sorcier, long, penche le plus fort ; l'épée un peu moins ; l'arc reste presque droit).
+const WEAPON_TILT_DEG: Record<string, number> = {
+  mage: 40, sorcier: 42,
+  swordsman: 30, chevalier: 26,
+  archer: 16, chasseur: 18,
+}
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   stats: StatBlock
@@ -100,6 +109,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.weaponImage) {
       this.weaponImage.setPosition(this.x + WEAPON_OFFSET_X * flip, this.y + WEAPON_OFFSET_Y)
       this.weaponImage.setFlipX(flip === -1)
+      // arme tenue en biais dans la patte (pas plantée à la verticale dans la tête) ; l'angle suit
+      // le flip pour rester penchée vers l'avant quel que soit le sens du regard
+      const tilt = WEAPON_TILT_DEG[getPlayer().classId] ?? 0
+      this.weaponImage.setRotation(Phaser.Math.DegToRad(tilt) * flip)
     }
     // aura de buff : suit le panda tant que le buff est actif, puis se dissout à l'échéance
     if (this.auraImage) {

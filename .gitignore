@@ -2,3 +2,5 @@ node_modules/
 dist/
 scripts/_measure.mjs
 scripts/_verify.mjs
+
+scripts/_capture.mjs

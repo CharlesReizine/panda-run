@@ -196,7 +196,7 @@ export class PreloadScene extends Phaser.Scene {
 
   // bake l'illustration fournie dans la texture monster-<id> à la taille standard (carrée, centrée)
   private artMonster(id: string, big: boolean) {
-    const s = big ? 100 : 56
+    const s = big ? 120 : 70
     const h = s + 6
     const img = this.add.image(0, 0, this.cleanArtTexture(id)).setOrigin(0, 0).setDisplaySize(s, s)
     img.setPosition(0, (h - s) / 2)
@@ -1289,31 +1289,47 @@ export class PreloadScene extends Phaser.Scene {
     // ─── Projectiles « refonte » (attaques à distance) ─────────────────────────
     // Tous orientés vers la DROITE par défaut (la trajectoire horizontale) ; Projectile les
     // fait pivoter dans l'axe de la vélocité, donc un tir vers la gauche est simplement retourné.
-    // fx-fireball : petite boule de feu BLEUE (attaque de base du mage/sorcier) — halo + cœur
-    // chaud + queue de flamme derrière (à gauche = arrière quand elle file vers la droite)
-    g.fillStyle(0x90caf9, 0.35).fillCircle(18, 9, 9) // halo diffus
-    g.fillStyle(0x1e88e5, 0.85).fillTriangle(0, 9, 12, 5, 12, 13) // queue de flamme (arrière)
-    g.fillStyle(0x64b5f6, 0.9).fillTriangle(3, 9, 13, 6, 13, 12)
-    g.fillStyle(0x1e88e5).fillCircle(18, 9, 7) // cœur bleu
-    g.fillStyle(0x64b5f6).fillCircle(18, 9, 5)
-    g.fillStyle(0xe3f2fd).fillCircle(16, 7, 2.5); g.generateTexture('fx-fireball', 28, 18); g.clear()
-    // fx-arrow : flèche (attaque de base archer/chasseur) — pointe acier à droite, empennage rouge
+    // fx-fireball : VRAIE flamme vive (attaque de base mage/sorcier) — dégradé cœur blanc-chaud →
+    // cyan → bleu → halo diffus, avec une longue queue de flamme dégradée derrière (à gauche =
+    // arrière quand elle file vers la droite) et de petites étincelles. Un scintillement d'échelle
+    // est ajouté à l'usage (LevelScene.fireballShimmer) pour la faire vibrer comme du feu.
+    g.fillStyle(0x40c4ff, 0.28).fillCircle(19, 9, 10) // halo cyan large et diffus
+    g.fillStyle(0x82b1ff, 0.22).fillCircle(19, 9, 8) // halo interne bleuté
+    g.fillStyle(0x1565c0, 0.85).fillTriangle(0, 9, 14, 4, 14, 14) // queue de flamme profonde (bleu foncé)
+    g.fillStyle(0x2196f3, 0.9).fillTriangle(3, 9, 15, 6, 15, 12) // langue de flamme bleue
+    g.fillStyle(0x4fc3f7, 0.95).fillTriangle(6, 9, 15, 7, 15, 11) // cœur de la traînée cyan
+    g.fillStyle(0x1e88e5).fillCircle(19, 9, 7) // manteau bleu
+    g.fillStyle(0x40c4ff).fillCircle(19, 9, 5.2) // couche cyan
+    g.fillStyle(0xb3e5fc).fillCircle(18, 8, 3.2) // cœur clair
+    g.fillStyle(0xffffff).fillCircle(17, 7, 1.7) // point blanc-chaud
+    g.fillStyle(0xe1f5fe, 0.95).fillCircle(23, 11, 1) // étincelle
+    g.fillStyle(0x81d4fa, 0.9).fillCircle(22, 6, 0.9) // étincelle
+    g.generateTexture('fx-fireball', 30, 18); g.clear()
+    // fx-arrow : flèche (attaque de base archer/chasseur) — traînée de vitesse dorée, hampe bois,
+    // pointe acier brillante à droite, empennage rouge à l'arrière
+    g.fillStyle(0xffe082, 0.25).fillTriangle(0, 6, 22, 3, 22, 9) // traînée de vitesse (halo doré)
     g.fillStyle(0x8d6e63).fillRect(3, 5, 19, 2) // hampe bois
-    g.fillStyle(0xa1887f).fillRect(3, 5, 19, 1)
+    g.fillStyle(0xa1887f).fillRect(3, 5, 19, 1) // reflet de la hampe
     g.fillStyle(0xcfd8dc).fillTriangle(20, 1, 30, 6, 20, 11) // pointe
-    g.fillStyle(0xeceff1).fillTriangle(22, 4, 28, 6, 22, 8)
+    g.fillStyle(0xeceff1).fillTriangle(22, 4, 28, 6, 22, 8) // arête brillante de la pointe
+    g.fillStyle(0xffffff).fillCircle(29, 6, 1) // éclat au bout de la pointe
     g.fillStyle(0xe53935).fillTriangle(0, 2, 8, 6, 0, 6) // empennage (arrière)
     g.fillStyle(0xef5350).fillTriangle(0, 6, 8, 6, 0, 10); g.generateTexture('fx-arrow', 30, 12); g.clear()
-    // fx-arrow-pierce : GRANDE flèche perçante (skill) — dessinée en blanc → teintée par la couleur
-    // du skill à l'usage ; traverse tout sur toute la largeur visible
-    g.fillStyle(0xffffff, 0.3).fillRoundedRect(0, 6, 52, 6, 3) // halo
-    g.fillStyle(0xffffff).fillRect(6, 7, 34, 4) // hampe brillante
-    g.fillStyle(0xffffff).fillTriangle(36, 1, 52, 9, 36, 17) // grande pointe
-    g.fillStyle(0xffffff).fillTriangle(0, 2, 12, 9, 0, 16); g.generateTexture('fx-arrow-pierce', 52, 18); g.clear()
-    // fx-laser : faisceau horizontal (skill perçant) — capsule blanche lumineuse, teintée à l'usage
-    g.fillStyle(0xffffff, 0.28).fillRoundedRect(0, 0, 72, 16, 8) // halo large
-    g.fillStyle(0xffffff, 0.7).fillRoundedRect(0, 3, 72, 10, 5)
-    g.fillStyle(0xffffff).fillRoundedRect(0, 6, 72, 4, 2); g.generateTexture('fx-laser', 72, 16); g.clear()
+    // fx-arrow-pierce : GRANDE flèche perçante d'énergie (skill) — dessinée en blanc → teintée par la
+    // couleur du skill à l'usage ; halo lumineux + traînée dégradée + grande pointe rayonnante
+    g.fillStyle(0xffffff, 0.18).fillTriangle(0, 9, 40, 2, 40, 16) // large traînée d'énergie
+    g.fillStyle(0xffffff, 0.32).fillRoundedRect(0, 5, 52, 8, 4) // halo
+    g.fillStyle(0xffffff, 0.85).fillRect(4, 7, 38, 4) // hampe brillante
+    g.fillStyle(0xffffff).fillRect(8, 8, 30, 2) // cœur incandescent
+    g.fillStyle(0xffffff).fillTriangle(36, 0, 52, 9, 36, 18) // grande pointe rayonnante
+    g.fillStyle(0xffffff, 0.5).fillTriangle(0, 2, 14, 9, 0, 16); g.generateTexture('fx-arrow-pierce', 52, 18); g.clear()
+    // fx-laser : faisceau d'énergie horizontal (skill perçant) — capsule blanche lumineuse teintée à
+    // l'usage ; halo large dégradé + cœur blanc incandescent + tête plus vive
+    g.fillStyle(0xffffff, 0.22).fillRoundedRect(0, 0, 72, 16, 8) // halo large diffus
+    g.fillStyle(0xffffff, 0.45).fillRoundedRect(0, 2, 72, 12, 6) // halo interne
+    g.fillStyle(0xffffff, 0.8).fillRoundedRect(0, 5, 72, 6, 3) // corps du faisceau
+    g.fillStyle(0xffffff).fillRoundedRect(2, 6, 70, 4, 2) // cœur incandescent
+    g.fillStyle(0xffffff).fillCircle(70, 8, 4); g.generateTexture('fx-laser', 72, 16); g.clear()
     // fx-lob : boule verte lancée en cloche (mandragore) — retombe et éclate au sol
     g.fillStyle(0x2e5e1e, 0.4).fillCircle(9, 9, 9)
     g.fillStyle(0x33691e).fillCircle(9, 9, 7)
