@@ -1443,10 +1443,23 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0xb39ddb, 0.9).fillCircle(8, 6, 2) // lueur froide
     g.fillStyle(0xd1c4e9, 0.85).fillCircle(9, 8, 1).fillCircle(12, 8, 1) // orbites (petit crâne suggéré)
     g.generateTexture('fx-necro', 20, 16); g.clear()
-    // pics (rangée de pointes) — piège
-    g.fillStyle(0x9e9e9e); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8, 16, i * 8 + 4, 2, i * 8 + 8, 16)
-    g.fillStyle(0xcfd8dc); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 + 2, 16, i * 8 + 4, 6, i * 8 + 6, 16)
-    g.generateTexture('spikes', 32, 16); g.clear()
+    // pics MORTELS (rangée de pointes) — piège clairement dangereux : hautes pointes de métal
+    // sombre à extrémité ROUGE vif, socle rocheux, halo rouge d'avertissement. Texture plus haute
+    // (32×28 au lieu de 32×16) → pics nettement plus gros, on voit tout de suite que ça tue.
+    const SH = 28
+    // halo d'avertissement (lueur rouge diffuse derrière chaque pointe)
+    g.fillStyle(0xff1744, 0.16); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 - 1, SH, i * 8 + 4, 0, i * 8 + 9, SH)
+    // grande pointe : triangle de métal sombre, base au socle, sommet acéré tout en haut
+    g.fillStyle(0x546e7a); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8, SH - 3, i * 8 + 4, 1, i * 8 + 8, SH - 3)
+    // arête claire (relief métallique) sur toute la hauteur
+    g.fillStyle(0xb0bec5); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 + 2, SH - 3, i * 8 + 4, 4, i * 8 + 6, SH - 3)
+    // extrémité ROUGE vif (danger) sur le tiers supérieur de chaque pointe
+    g.fillStyle(0xff1744); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 + 1.4, 11, i * 8 + 4, 1, i * 8 + 6.6, 11)
+    g.fillStyle(0xff8a80); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 + 3, 7, i * 8 + 4, 1, i * 8 + 5, 7) // éclat sur la pointe
+    // socle rocheux sombre au pied des pointes
+    g.fillStyle(0x37474f).fillRect(0, SH - 5, 32, 5)
+    g.fillStyle(0x263238).fillRect(0, SH - 2, 32, 2)
+    g.generateTexture('spikes', 32, SH); g.clear()
     // eau (zone nageable, translucide : on voit le panda dedans)
     g.fillStyle(0x1e88e5, 0.38).fillRect(0, 0, 32, 32)
     g.fillStyle(0x64b5f6, 0.45).fillRect(0, 0, 32, 5)
