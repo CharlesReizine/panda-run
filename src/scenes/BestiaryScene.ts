@@ -121,10 +121,12 @@ export class BestiaryScene extends Phaser.Scene {
     this.clear()
     const { label: kindLabel } = monsterKind(m)
 
-    // Colonne gauche : gros sprite, nom, type
-    this.add.image(160, 175, `monster-${m.id}`).setDisplaySize(130, 130)
-    this.add.text(160, 265, m.name, { fontSize: '26px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: 280 } }).setOrigin(0.5, 0)
-    this.badge(160, 330, m, '15px')
+    // Colonne gauche : gros sprite, nom, type, phrase de bestiaire
+    this.add.image(160, 160, `monster-${m.id}`).setDisplaySize(120, 120)
+    this.add.text(160, 240, m.name, { fontSize: '26px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: 280 } }).setOrigin(0.5, 0)
+    this.badge(160, 300, m, '15px')
+    // Lore : phrase qui vend du rêve sur le caractère du monstre
+    this.add.text(160, 328, m.lore, { fontSize: '13px', color: '#cfd8dc', align: 'center', fontStyle: 'italic', wordWrap: { width: 290 }, lineSpacing: 2 }).setOrigin(0.5, 0)
 
     // Stats
     this.add.text(360, 70, 'CARACTÉRISTIQUES', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' })

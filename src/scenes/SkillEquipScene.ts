@@ -53,7 +53,7 @@ export class SkillEquipScene extends Phaser.Scene {
     const columns = skills.length > 4 ? 2 : 1
     const colW = columns === 2 ? 440 : 860
     const colX = columns === 2 ? [50, 500] : [50]
-    const rowH = 70
+    const rowH = 78
     const gridTop = 184
 
     skills.forEach((s, i) => {
@@ -76,8 +76,10 @@ export class SkillEquipScene extends Phaser.Scene {
       icon.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showDetail(s))
 
       const rankTxt = unlocked ? `Nv ${rank}/${MAX_SKILL_RANK}` : 'Verrouillé'
-      this.add.text(x + 64, y + 8, s.name, { fontSize: '13px', color: unlocked ? '#ffffff' : '#78909c', fontStyle: 'bold' })
-      this.add.text(x + 64, y + 27, rankTxt, { fontSize: '11px', color: unlocked ? '#ffd54f' : '#607d8b' })
+      this.add.text(x + 64, y + 6, s.name, { fontSize: '13px', color: unlocked ? '#ffffff' : '#78909c', fontStyle: 'bold' })
+      this.add.text(x + 64, y + 24, rankTxt, { fontSize: '11px', color: unlocked ? '#ffd54f' : '#607d8b' })
+      // Phrase de description du skill, sous le nom, en gris clair (wordWrap pour ne pas déborder)
+      this.add.text(x + 64, y + 40, s.description, { fontSize: '10px', color: '#b0bec5', wordWrap: { width: colW - 178 }, lineSpacing: -1 })
 
       // Bouton info (fiche de détail) — discret, à droite de l'icône
       this.add.text(x + 46, y + cardH / 2 + 12, 'ℹ', { fontSize: '13px', color: '#4fc3f7', backgroundColor: '#0b2536', padding: { x: 4, y: 1 } })

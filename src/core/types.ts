@@ -22,6 +22,7 @@ export type SkillKind = 'melee' | 'projectile' | 'aoe' | 'heal'
 export interface SkillDef {
   id: string
   name: string
+  description: string // phrase courte décrivant l'effet du skill (affichée en jeu)
   classId: ClassId
   kind: SkillKind
   multiplier: number // × ATK (heal : fraction de maxHp)
@@ -56,6 +57,7 @@ export type MonsterBehavior = 'contact' | 'projectile' | 'charge' | 'caster'
 export interface MonsterDef {
   id: string
   name: string
+  lore: string // phrase de bestiaire décrivant le caractère du monstre (affichée en jeu)
   color: number // couleur placeholder
   hp: number
   atk: number
