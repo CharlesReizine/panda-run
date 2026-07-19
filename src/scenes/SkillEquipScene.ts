@@ -49,10 +49,16 @@ export class SkillEquipScene extends Phaser.Scene {
 
     // Grille des compétences de la classe — 2 colonnes dès que ça ne tient plus en 1
     this.add.text(480, 168, 'Compétences de la classe', { fontSize: '12px', color: '#b0bec5' }).setOrigin(0.5)
-    const skills = skillsOf(p.classId)
-    const columns = skills.length > 4 ? 2 : 1
-    const colW = columns === 2 ? 440 : 860
-    const colX = columns === 2 ? [50, 500] : [50]
+    // liste = skills de la classe actuelle + skills NOVICE + tout skill déjà appris (skillLevels>0)
+    // → on ne perd JAMAIS un skill développé (novice, ou classe pré-évolution). Dédup par id.
+    const shown = new Map<string, SkillDef>()
+    for (const s of skillsOf(p.classId)) shown.set(s.id, s)
+    for (const s of skillsOf('novice')) shown.set(s.id, s)
+    for (const id of Object.keys(p.skillLevels)) { const s = SKILLS[id]; if (s && (p.skillLevels[id] ?? 0) > 0) shown.set(id, s) }
+    const skills = [...shown.values()]
+    const columns = skills.length > 6 ? 3 : skills.length > 3 ? 2 : 1
+    const colW = columns === 3 ? 293 : columns === 2 ? 440 : 860
+    const colX = columns === 3 ? [26, 333, 640] : columns === 2 ? [50, 500] : [50]
     const rowH = 78
     const gridTop = 184
 

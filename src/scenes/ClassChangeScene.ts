@@ -62,8 +62,13 @@ export class ClassChangeScene extends Phaser.Scene {
     const p = getPlayer()
     changeClass(p, id)
     const firstSkill = CLASSES[id].skillIds[0]!
-    p.skillLevels[firstSkill] = 1
-    p.equippedSkills = [firstSkill, null, null, null]
+    if (!p.skillLevels[firstSkill]) p.skillLevels[firstSkill] = 1
+    // on GARDE les skills déjà appris/équipés (novice…) : on ajoute juste le 1er skill de la
+    // nouvelle classe dans un slot LIBRE, sans écraser la barre
+    if (!p.equippedSkills.includes(firstSkill)) {
+      const free = p.equippedSkills.indexOf(null)
+      if (free >= 0) p.equippedSkills[free] = firstSkill
+    }
     save(p)
     this.finish(`Tu es maintenant ${CLASSES[id].name} !`)
   }

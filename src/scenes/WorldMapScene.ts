@@ -23,7 +23,6 @@ export class WorldMapScene extends Phaser.Scene {
 
     const p = getPlayer()
     const current = byId.get(p.currentNode)!
-    const neighbors = new Set(neighborsOf(p.currentNode))
     const revealed = this.computeRevealed(p)
 
     this.drawRoads(byId)
@@ -37,10 +36,10 @@ export class WorldMapScene extends Phaser.Scene {
       // fait/derrière. EXCEPTION de VOYAGE : une ville déjà DÉCOUVERTE (révélée) et débloquée
       // reste accessible pour y RETOURNER (achat/craft), même après avoir avancé. Le nœud courant
       // ne se « rejoint » pas — sauf si c'est une ville, qu'on ouvre alors directement.
-      // voyage vers TOUT voisin débloqué + révélé (1 pas) : évite tout SOFT-LOCK (branches
-      // parallèles, terrains voisins déjà faits, retour vers une ville). Le brouillard cache le
-      // lointain et l'adjacence empêche de sauter à l'autre bout de la carte.
-      const canTravel = !isCurrent && neighbors.has(n.id) && unlocked && revealed.has(n.id)
+      // voyage LIBRE vers tout nœud DÉBLOQUÉ + RÉVÉLÉ (plus seulement les voisins) : on peut faire
+      // les branches parallèles (Orée ↔ Champs) et revisiter sans détour forcé. Le brouillard cache
+      // toujours le lointain non découvert → pas de « balade » vers l'inconnu.
+      const canTravel = !isCurrent && unlocked && revealed.has(n.id)
       const canEnterTown = isCurrent && n.type === 'town'
       const interactive = canTravel || canEnterTown
       const radius = RADIUS[n.type]
