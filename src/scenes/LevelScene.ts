@@ -266,6 +266,9 @@ export class LevelScene extends Phaser.Scene {
     this.events.on('enemy-loot', this.onEnemyLoot, this)
     this.events.on('prop-broken', this.onPropBroken, this)
     this.game.events.on('input-attack', this.basicAttack, this)
+    // clavier PC : ESPACE = attaque de base (même effet que le bouton ATTAQUE tactile). X reste
+    // un raccourci d'attaque secondaire. Le SAUT est porté par la flèche HAUT (voir keyboardControls).
+    this.input.keyboard!.on('keydown-SPACE', this.basicAttack, this)
     this.input.keyboard!.on('keydown-X', this.basicAttack, this)
     this.game.events.on('input-skill', this.castSkill, this)
     this.game.events.on('input-potion', this.usePotion, this)
@@ -294,7 +297,8 @@ export class LevelScene extends Phaser.Scene {
 
     this.cursors = this.input.keyboard!.createCursorKeys()
     // clavier PC additionnel : ZQSD (AZERTY) et WASD (QWERTY) doublent les flèches —
-    // gauche = A/Q, droite = D, haut = W/Z, bas = S. Le saut reste sur ESPACE.
+    // gauche = A/Q, droite = D, haut = W/Z, bas = S. HAUT = saut (hors échelle) ou grimpe (sur
+    // échelle) ; ESPACE = attaque ; MAJ = dash.
     this.wasd = this.input.keyboard!.addKeys('W,A,S,D,Z,Q') as Record<string, Phaser.Input.Keyboard.Key>
 
     this.add.text(480, 8, this.levelDef.name, { fontSize: '15px', color: '#ffffff' }).setOrigin(0.5, 0).setScrollFactor(0)
@@ -341,9 +345,9 @@ export class LevelScene extends Phaser.Scene {
     const title = this.add.text(480, 130, 'Comment jouer', { fontSize: '28px', color: '#ffd54f', fontStyle: 'bold' })
       .setOrigin(0.5).setScrollFactor(0).setDepth(depth + 1)
     const lines = [
-      '• Déplacer : joystick / flèches',
-      '• Sauter : bouton SAUT / espace',
-      '• Attaquer : bouton ATTAQUE / X',
+      '• Déplacer : joystick / flèches gauche-droite',
+      '• Sauter : bouton SAUT / flèche HAUT',
+      '• Attaquer : bouton ATTAQUE / ESPACE',
       '• Compétences : slots 1-4 / touches 1-4',
       '• Dash (esquive) : bouton DASH / Maj',
       '• Potion : bouton potion / P',
@@ -403,14 +407,17 @@ export class LevelScene extends Phaser.Scene {
   }
 
   private keyboardControls(): ControlsState {
-    // saut = espace (le bouton tactile dédié double le saut) ; flèches / WASD / ZQSD haut/bas =
-    // vertical (échelles / nage), pour ne pas confondre grimper et sauter au clavier
+    // clavier PC : gauche/droite (+ A/Q, D) = déplacement ; FLÈCHE HAUT (+ W/Z) = saut HORS
+    // échelle, grimpe SUR échelle ; BAS (+ S) = descendre l'échelle / nager. Le saut est donc
+    // porté par « up », mais activé comme jump uniquement hors échelle (sinon up sert à grimper).
+    // ESPACE (attaque) et MAJ (dash) sont gérés par leurs propres écouteurs keydown.
     const k = this.wasd
+    const up = this.cursors.up.isDown || !!(k.W?.isDown || k.Z?.isDown)
     return {
       left: this.cursors.left.isDown || !!(k.A?.isDown || k.Q?.isDown),
       right: this.cursors.right.isDown || !!k.D?.isDown,
-      jump: this.cursors.space.isDown,
-      up: this.cursors.up.isDown || !!(k.W?.isDown || k.Z?.isDown),
+      jump: up && !this.player.onLadder,
+      up,
       down: this.cursors.down.isDown || !!k.S?.isDown,
     }
   }
