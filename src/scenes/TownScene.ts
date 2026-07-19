@@ -214,7 +214,8 @@ export class TownScene extends Phaser.Scene {
     this.player = this.physics.add.sprite(560, 480, `panda-${p.classId}`)
     ;(this.player.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
     this.player.setCollideWorldBounds(true)
-    this.player.setSize(34, 40).setOffset(15, 46)
+    // hitbox recentrée dans le cadre élargi PANDA_TEX (w 96) : (96-34)/2 = 31
+    this.player.setSize(34, 40).setOffset(31, 46)
     this.player.play(`panda-${p.classId}-idle`)
     this.physics.add.collider(this.player, wallsGroup)
 
