@@ -32,6 +32,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     super(scene, x, y, `monster-${def.id}`)
     scene.add.existing(this)
     scene.physics.add.existing(this)
+    // borne tout ennemi dans l'arène : les bornes du monde physique valent (0..widthPx). Sans ça,
+    // un chargeur lancé (vitesse persistante, drag nul) glisse hors de la zone jouable et ne revient
+    // jamais — c'est le bug du boss « parti tout seul » hors écran.
+    this.setCollideWorldBounds(true)
     // hitbox = la créature seule (la texture a de la marge : ombre au sol + place au-dessus),
     // pour qu'elle repose au sol au même niveau que le panda
     const bw = this.width * 0.8
@@ -73,11 +77,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const dir = Math.sign(player.x - this.x) || 1
 
     if (dist < AGGRO_RANGE) {
-      if (this.monster.behavior === 'charge' && t > this.nextActionAt) {
-        this.setVelocityX(dir * this.monster.speed * 3)
-        this.nextActionAt = t + CHARGE_COOLDOWN
-        this.isCharging = true
-        this.scene.time.delayedCall(400, () => { this.isCharging = false })
+      if (this.monster.behavior === 'charge') {
+        if (t > this.nextActionAt) {
+          this.setVelocityX(dir * this.monster.speed * 3)
+          this.nextActionAt = t + CHARGE_COOLDOWN
+          this.isCharging = true
+          this.scene.time.delayedCall(400, () => { this.isCharging = false })
+        } else if (!this.isCharging) {
+          // entre deux charges : on marche vers le joueur au lieu de conserver la vitesse de la
+          // charge précédente (sinon dérive infinie hors de la zone → le boss « s'enfuit »)
+          this.setVelocityX(dir * this.monster.speed)
+        }
       } else if (this.monster.behavior === 'projectile' && t > this.nextActionAt) {
         const p = new Projectile(this.scene, this.x, this.y - 10, player.x - this.x, player.y - this.y, this.monster.atk, false, 500)
         this.levelScene.enemyProjectiles.add(p)
@@ -98,11 +108,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           this.levelScene.enemyProjectiles.add(p)
           this.nextShootAt = t + SHOOT_COOLDOWN * 1.5
         }
-      } else if (this.monster.behavior !== 'charge' && this.monster.behavior !== 'projectile') {
-        // 'contact' et tout behavior inconnu : repli sûr, fonce au contact
+      } else if (this.monster.behavior !== 'projectile') {
+        // 'contact' (et tout behavior inconnu non géré au-dessus) : repli sûr, fonce au contact
         this.setVelocityX(dir * this.monster.speed)
       }
-    } else if (this.monster.behavior !== 'charge') {
+    } else if (this.monster.boss) {
+      // hors aggro, le boss revient TOUJOURS vers le joueur tant qu'il est vivant : il ne
+      // « s'endort » jamais hors écran et rejoint l'arène du joueur
+      this.setVelocityX(dir * this.monster.speed)
+    } else {
+      // hors aggro : les autres ennemis (y compris chargeurs) s'arrêtent net — pas de dérive
       this.setVelocityX(0)
     }
 
