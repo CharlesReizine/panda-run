@@ -283,18 +283,11 @@ class AudioEngine {
 
   // ---- Musique -------------------------------------------------------------
 
-  playMusic(track: MusicTrack) {
-    // Musique synthétisée DÉSACTIVÉE : elle sonnait « synthé » et déplaisait. En attente d'une vraie
-    // piste instrumentale (fichier audio) qui la remplacera ici. Les bruitages (SFX) restent actifs.
-    return
-    if (!this.ensure() || !this.ctx) return
-    if (this.ctx.state === 'suspended') void this.ctx.resume()
-    if (this.currentTrack === track && this.schedulerTimer !== null) return
+  playMusic(_track: MusicTrack) {
+    // Musique synthétisée DÉSACTIVÉE (elle sonnait « synthé » et déplaisait) : en attente d'une vraie
+    // piste instrumentale (fichier audio) qui la remplacera ici. On coupe toute musique en cours ;
+    // les bruitages (SFX) restent actifs.
     this.stopMusic()
-    this.currentTrack = track
-    this.step = 0
-    this.nextStepTime = this.ctx.currentTime + 0.1
-    this.schedulerTimer = setInterval(() => this.scheduleAhead(), 25)
   }
 
   stopMusic() {
