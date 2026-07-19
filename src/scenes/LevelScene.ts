@@ -16,7 +16,7 @@ import { CooldownTracker, energyCostOf } from '../core/skill-executor'
 import { ENERGY_ON_BASIC_HIT } from '../entities/Player'
 import { SKILLS } from '../data/skills'
 import { rollDrops } from '../core/loot'
-import type { DropEntry } from '../core/types'
+import type { DropEntry, SkillDef } from '../core/types'
 import type { UIScene } from './UIScene'
 import { TILE, GROUND_ROW, GRAVITY, landsOnOneWayPlatform } from '../core/platforming'
 import { BIOMES } from '../data/biomes'
@@ -871,6 +871,12 @@ export class LevelScene extends Phaser.Scene {
         const isArrow = skill.classId === 'archer' || skill.classId === 'chasseur'
           || skill.id.includes('fleche') || skill.id.includes('tir')
         proj.setTexture(isArrow ? 'fx-arrow-pierce' : 'fx-laser').setTint(color).setScale(1)
+      } else if (skill.id === 'onde-tranchante') {
+        // onde de tranchant du sabreur : croissant lumineux qui file en laissant une traînée de lames
+        this.bladeWaveProjectile(proj, color)
+      } else if (skill.id === 'sceau-du-heaume') {
+        // sceau du chevalier : sigil héraldique tournoyant, doré et lumineux
+        this.sealProjectile(proj, color)
       } else {
         // projectile simple : boule de feu (mage/sorcier) ou flèche (archer/chasseur), sinon orbe
         const mageType = skill.classId === 'mage' || skill.classId === 'sorcier'
@@ -900,6 +906,53 @@ export class LevelScene extends Phaser.Scene {
     if (skill.buff) {
       this.player.applyAtkBuff(skill.buff.atkMult, skill.buff.durationMs)
       this.warCryFx()
+    }
+    // couche d'effets stylés propre à chaque skill sabreur / chevalier (par-dessus le générique)
+    this.swordsmanFx(skill, color)
+  }
+
+  // Effets signature des skills sabreur / chevalier : chacun a une identité visuelle distincte
+  // (grand arc lumineux, tourbillon, dash, onde de choc, colonne de lumière, garde…). Le
+  // comportement (dégâts/portée) reste géré par le chemin générique ci-dessus ; ici on ne fait
+  // qu'ajouter du feel et du spectacle.
+  private swordsmanFx(skill: SkillDef, color: number) {
+    const px = this.player.x, py = this.player.y, f = this.player.facing
+    switch (skill.id) {
+      case 'taillade': // grand arc de tranchant franc
+        this.bladeArcFx(px + f * skill.range * 0.55, py, skill.range * 1.4, color)
+        break
+      case 'estoc-rapide': // fente rapide : petit bond en avant + trait perçant
+        this.lungeFx(48)
+        this.thrustFx(px + f * 24, py, color)
+        break
+      case 'charge-bambou': // charge : dash marqué + arc large + onde de choc au sol
+        this.lungeFx(90)
+        this.bladeArcFx(px + f * skill.range * 0.55, py, skill.range * 1.5, color, true)
+        this.shockwaveFx(px + f * 36, py + 22, 100, color)
+        break
+      case 'lame-ultime': // ultime : double arc géant, flash, onde de choc, gros hit-stop
+        this.cameras.main.flash(110, 255, 250, 210)
+        this.bladeArcFx(px + f * skill.range * 0.5, py, skill.range * 2.1, color, true)
+        this.time.delayedCall(80, () => { if (this.player.active) this.bladeArcFx(px + f * skill.range * 0.5, py, skill.range * 2.1, 0xffffff, true) })
+        this.shockwaveFx(px + f * 30, py + 22, 140, color)
+        this.hitStop(110)
+        break
+      case 'tourbillon': // lames tournoyantes tout autour du panda
+        this.whirlwindFx(px, py, skill.range, color)
+        break
+      case 'provocation': // onde de provocation rouge + « ! » au-dessus des ennemis ciblés
+        this.tauntFx(px, py, skill.range, color)
+        break
+      case 'jugement-royal': // colonne de lumière céleste + arc géant + onde + flash + hit-stop
+        this.beamStrikeFx(px + f * skill.range * 0.35, py, color)
+        this.bladeArcFx(px + f * skill.range * 0.5, py, skill.range * 1.9, color, true)
+        this.shockwaveFx(px + f * 30, py + 22, 150, color)
+        this.cameras.main.flash(130, 255, 240, 170)
+        this.hitStop(120)
+        break
+      case 'garde-imperiale': // éclat de garde dorée : anneaux + couronne de lames dressées
+        this.guardBurstFx(px, py, skill.range, color)
+        break
     }
   }
 
@@ -934,6 +987,171 @@ export class LevelScene extends Phaser.Scene {
       const shard = this.add.rectangle(x, y - 10, 4, 12, 0xffe082).setDepth(6).setRotation(a)
       this.tweens.add({ targets: shard, x: x + Math.cos(a) * 46, y: y - 26 + Math.sin(a) * 22, alpha: 0, duration: 420, onComplete: () => shard.destroy() })
     }
+  }
+
+  // ===== Effets visuels signature des skills sabreur / chevalier =====
+
+  // Grand arc de tranchant lumineux : croissant épais additif + cœur blanc-vif + halo + éclats
+  // projetés vers l'avant. `intense` = arc plus large + shake caméra. Orienté selon le regard.
+  private bladeArcFx(cx: number, cy: number, radius: number, color: number, intense = false) {
+    const f = this.player.facing
+    const crescent = (r: number, thick: number, col: number, alpha: number, dur: number) => {
+      const g = this.add.graphics({ x: cx, y: cy }).setDepth(6).setBlendMode(Phaser.BlendModes.ADD)
+      g.lineStyle(thick, col, alpha).beginPath()
+      g.arc(0, 0, r, Phaser.Math.DegToRad(-74), Phaser.Math.DegToRad(74), false)
+      g.strokePath()
+      g.setScale(0.6 * f, 0.6)
+      this.tweens.add({ targets: g, scaleX: 1.5 * f, scaleY: 1.5, alpha: 0, duration: dur, ease: 'Cubic.out', onComplete: () => g.destroy() })
+    }
+    crescent(radius * 0.5, intense ? 9 : 7, color, 0.95, 230)
+    crescent(radius * 0.5, intense ? 4 : 3, 0xffffff, 1, 300) // cœur blanc-vif du tranchant
+    if (intense) crescent(radius * 0.62, 5, color, 0.5, 260)
+    const flash = this.add.image(cx, cy, 'ring').setTint(color).setDepth(6).setBlendMode(Phaser.BlendModes.ADD).setScale(0.1).setAlpha(0.85)
+    this.tweens.add({ targets: flash, scale: intense ? 0.7 : 0.45, alpha: 0, duration: 200, onComplete: () => flash.destroy() })
+    const n = intense ? 9 : 6
+    for (let i = 0; i < n; i++) {
+      const a = Phaser.Math.DegToRad(-50 + (100 / n) * i)
+      const reach = (intense ? 58 : 40) + Phaser.Math.Between(-6, 10)
+      const sh = this.add.rectangle(cx, cy, 3, intense ? 11 : 8, color).setDepth(7).setRotation(a).setBlendMode(Phaser.BlendModes.ADD)
+      this.tweens.add({ targets: sh, x: cx + Math.cos(a) * reach * f, y: cy + Math.sin(a) * reach, alpha: 0, duration: 260, onComplete: () => sh.destroy() })
+    }
+    if (intense) this.cameras.main.shake(70, 0.006)
+  }
+
+  // Tourbillon : anneau de vent + lames en croissant qui balaient tout le cercle + éclats radiaux.
+  private whirlwindFx(cx: number, cy: number, radius: number, color: number) {
+    const ring = this.add.image(cx, cy, 'ring').setTint(color).setDepth(5).setBlendMode(Phaser.BlendModes.ADD).setScale(0.2).setAlpha(0.7)
+    this.tweens.add({ targets: ring, scale: (radius / 28) * 1.1, alpha: 0, duration: 440, onComplete: () => ring.destroy() })
+    const blades = 3
+    for (let b = 0; b < blades; b++) {
+      const g = this.add.graphics({ x: cx, y: cy }).setDepth(6).setBlendMode(Phaser.BlendModes.ADD)
+      g.lineStyle(6, color, 0.9).beginPath()
+      g.arc(0, 0, radius * 0.72, Phaser.Math.DegToRad(-28), Phaser.Math.DegToRad(28), false)
+      g.strokePath()
+      g.setRotation((b / blades) * Math.PI * 2)
+      this.tweens.add({ targets: g, rotation: g.rotation + Math.PI * 3, alpha: 0, scale: 1.2, duration: 520, ease: 'Cubic.out', onComplete: () => g.destroy() })
+    }
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2
+      const sh = this.add.rectangle(cx, cy, 3, 10, color).setDepth(6).setRotation(a).setBlendMode(Phaser.BlendModes.ADD)
+      this.tweens.add({ targets: sh, x: cx + Math.cos(a) * radius, y: cy + Math.sin(a) * radius, alpha: 0, duration: 440, onComplete: () => sh.destroy() })
+    }
+    this.cameras.main.shake(80, 0.004)
+  }
+
+  // Bond en avant (fente/charge) : petit élan avant-arrière (yoyo, la physique reste cohérente) +
+  // rémanences dorées du panda pour vendre la vitesse.
+  private lungeFx(distance: number, tint = 0xffe082) {
+    const f = this.player.facing
+    this.tweens.add({ targets: this.player, x: this.player.x + f * distance, duration: 110, yoyo: true, ease: 'Cubic.out' })
+    for (let i = 0; i < 3; i++) {
+      this.time.delayedCall(i * 30, () => {
+        if (!this.player.active) return
+        const echo = this.add.image(this.player.x, this.player.y, this.player.texture.key, this.player.frame.name)
+          .setFlipX(this.player.flipX).setAlpha(0.4).setTint(tint).setDepth(this.player.depth - 1)
+          .setDisplaySize(this.player.displayWidth, this.player.displayHeight)
+        this.tweens.add({ targets: echo, alpha: 0, duration: 200, onComplete: () => echo.destroy() })
+      })
+    }
+  }
+
+  // Estoc : trait perçant qui file vers l'avant + fines étincelles alignées.
+  private thrustFx(x: number, y: number, color: number) {
+    const f = this.player.facing
+    const streak = this.add.rectangle(x, y, 12, 6, color).setDepth(6).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.95)
+    this.tweens.add({ targets: streak, x: x + f * 80, scaleX: 6, alpha: 0, duration: 160, ease: 'Cubic.out', onComplete: () => streak.destroy() })
+    for (let i = 0; i < 3; i++) {
+      const sh = this.add.rectangle(x, y + Phaser.Math.Between(-8, 8), 3, 3, color).setDepth(6).setBlendMode(Phaser.BlendModes.ADD)
+      this.tweens.add({ targets: sh, x: x + f * Phaser.Math.Between(50, 90), alpha: 0, duration: 200, onComplete: () => sh.destroy() })
+    }
+  }
+
+  // Onde de choc au sol : deux anneaux aplatis qui s'étendent + éclats projetés vers le haut.
+  private shockwaveFx(x: number, y: number, radius: number, color: number) {
+    for (let i = 0; i < 2; i++) {
+      const w = this.add.image(x, y, 'ring').setTint(color).setDepth(4).setBlendMode(Phaser.BlendModes.ADD).setScale(0.15).setAlpha(0.8)
+      this.tweens.add({ targets: w, scaleX: radius / 28 + i, scaleY: (radius / 28) * 0.5, alpha: 0, duration: 340 + i * 90, delay: i * 60, ease: 'Cubic.out', onComplete: () => w.destroy() })
+    }
+    const n = 8
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2
+      const sh = this.add.rectangle(x, y, 4, 4, color).setDepth(5).setBlendMode(Phaser.BlendModes.ADD)
+      this.tweens.add({ targets: sh, x: x + Math.cos(a) * radius, y: y - Math.abs(Math.sin(a)) * radius * 0.6, alpha: 0, duration: 380, onComplete: () => sh.destroy() })
+    }
+  }
+
+  // Colonne de lumière céleste qui s'abat (jugement royal) : faisceau + cœur blanc + impact au sol.
+  private beamStrikeFx(x: number, y: number, color: number) {
+    const beam = this.add.rectangle(x, y + 8, 46, 320, color).setOrigin(0.5, 1).setDepth(5).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0)
+    this.tweens.add({ targets: beam, alpha: 0.9, duration: 90, yoyo: true, hold: 70, onComplete: () => beam.destroy() })
+    const core = this.add.rectangle(x, y + 8, 16, 320, 0xffffff).setOrigin(0.5, 1).setDepth(6).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0)
+    this.tweens.add({ targets: core, alpha: 1, duration: 80, yoyo: true, hold: 60, onComplete: () => core.destroy() })
+    this.aoeRing(x, y + 6, 72, color, true)
+  }
+
+  // Éclat de garde impériale : anneaux dorés concentriques + couronne de lames dressées qui jaillit.
+  private guardBurstFx(x: number, y: number, radius: number, color: number) {
+    for (let i = 0; i < 3; i++) {
+      const r = this.add.image(x, y, 'ring').setTint(i === 1 ? 0xffffff : color).setDepth(5).setBlendMode(Phaser.BlendModes.ADD).setScale(0.2).setAlpha(0.85)
+      this.tweens.add({ targets: r, scale: (radius / 28) * (0.9 + i * 0.15), alpha: 0, duration: 380 + i * 90, delay: i * 70, ease: 'Cubic.out', onComplete: () => r.destroy() })
+    }
+    const n = 12
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2
+      const sh = this.add.rectangle(x + Math.cos(a) * 20, y + Math.sin(a) * 20, 5, 16, color).setDepth(6).setRotation(a + Math.PI / 2).setBlendMode(Phaser.BlendModes.ADD)
+      this.tweens.add({ targets: sh, x: x + Math.cos(a) * radius, y: y + Math.sin(a) * radius, alpha: 0, duration: 420, ease: 'Cubic.out', onComplete: () => sh.destroy() })
+    }
+    this.cameras.main.shake(90, 0.004)
+  }
+
+  // Provocation : onde rouge + « ! » qui jaillit au-dessus de chaque ennemi dans la portée.
+  private tauntFx(x: number, y: number, radius: number, _color: number) {
+    for (let i = 0; i < 2; i++) {
+      const r = this.add.image(x, y, 'ring').setTint(0xff5252).setDepth(4).setBlendMode(Phaser.BlendModes.ADD).setScale(0.2).setAlpha(0.8)
+      this.tweens.add({ targets: r, scale: (radius / 28) * (1 + i * 0.2), alpha: 0, duration: 420 + i * 100, delay: i * 80, onComplete: () => r.destroy() })
+    }
+    for (const obj of this.enemies.getChildren()) {
+      const e = obj as Enemy
+      if (e.active && Phaser.Math.Distance.Between(x, y, e.x, e.y) <= radius) {
+        const mark = this.add.text(e.x, e.y - 40, '!', { fontSize: '26px', color: '#ff5252', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5).setDepth(7).setScale(0.4)
+        this.tweens.add({ targets: mark, scale: 1.2, duration: 200, ease: 'Back.out' })
+        this.tweens.add({ targets: mark, y: mark.y - 20, alpha: 0, delay: 450, duration: 400, onComplete: () => mark.destroy() })
+      }
+    }
+  }
+
+  // Onde tranchante : le projectile devient un croissant lumineux tournoyant qui laisse une
+  // traînée de petites lames le long de sa course (traînée nettoyée à la mort du projectile).
+  private bladeWaveProjectile(proj: Projectile, color: number) {
+    const f = this.player.facing
+    proj.setTexture('ring').setTint(color).setScale(0.7).setBlendMode(Phaser.BlendModes.ADD).setAngularVelocity(f * 720)
+    const trail = this.time.addEvent({
+      delay: 40, loop: true, callback: () => {
+        if (!proj.active) { trail.remove(); return }
+        const g = this.add.graphics({ x: proj.x, y: proj.y }).setDepth(5).setBlendMode(Phaser.BlendModes.ADD)
+        g.lineStyle(5, color, 0.7).beginPath()
+        g.arc(0, 0, 16, Phaser.Math.DegToRad(-70), Phaser.Math.DegToRad(70), false)
+        g.strokePath()
+        g.setScale(f, 1)
+        this.tweens.add({ targets: g, alpha: 0, scaleX: 1.6 * f, scaleY: 1.6, duration: 200, onComplete: () => g.destroy() })
+      },
+    })
+  }
+
+  // Sceau du heaume : le projectile devient un sigil héraldique tournoyant (anneau + croix) qui
+  // pulse le long de sa trajectoire (pulsations nettoyées à la mort du projectile).
+  private sealProjectile(proj: Projectile, color: number) {
+    proj.setTexture('ring').setTint(color).setScale(1.4).setBlendMode(Phaser.BlendModes.ADD).setAngularVelocity(240)
+    const seal = this.time.addEvent({
+      delay: 55, loop: true, callback: () => {
+        if (!proj.active) { seal.remove(); return }
+        const g = this.add.graphics({ x: proj.x, y: proj.y }).setDepth(5).setBlendMode(Phaser.BlendModes.ADD).setRotation(Phaser.Math.FloatBetween(0, Math.PI))
+        g.lineStyle(3, 0xffffff, 0.85).strokeCircle(0, 0, 14)
+        g.lineBetween(-16, 0, 16, 0)
+        g.lineBetween(0, -16, 0, 16)
+        this.tweens.add({ targets: g, alpha: 0, scale: 1.7, duration: 240, onComplete: () => g.destroy() })
+      },
+    })
   }
 
   // Touche les ennemis/props devant le panda (ou pile sur lui), avec grande tolérance

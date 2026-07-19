@@ -49,6 +49,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private attacking = false
   private hatImage: Phaser.GameObjects.Image | null = null
   private weaponImage: Phaser.GameObjects.Image | null = null
+  // offset d'angle (radians) ajouté à l'arme pendant l'attaque : un tween le fait balayer de
+  // l'arrière vers l'avant/bas puis revenir à 0. Piloté ici, appliqué dans syncOverlays (qui repose
+  // l'angle de repos chaque frame) → le swing prend le dessus tant qu'il n'est pas revenu à 0.
+  private attackSwing = 0
+  private swingTween: Phaser.Tweens.Tween | null = null
   // buff d'attaque (Cri de guerre) : multiplicateur temporaire des dégâts sortants + aura dorée suivie
   private buffUntil = 0
   private buffMult = 1
@@ -112,7 +117,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       // arme tenue en biais dans la patte (pas plantée à la verticale dans la tête) ; l'angle suit
       // le flip pour rester penchée vers l'avant quel que soit le sens du regard
       const tilt = WEAPON_TILT_DEG[getPlayer().classId] ?? 0
-      this.weaponImage.setRotation(Phaser.Math.DegToRad(tilt) * flip)
+      // angle de repos (tilt) + offset de swing d'attaque, le tout mirroré par le flip pour que
+      // l'arme fende toujours vers l'avant quel que soit le sens du regard
+      this.weaponImage.setRotation((Phaser.Math.DegToRad(tilt) + this.attackSwing) * flip)
     }
     // aura de buff : suit le panda tant que le buff est actif, puis se dissout à l'échéance
     if (this.auraImage) {
@@ -149,6 +156,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   destroy(fromScene?: boolean) {
     this.scene?.events?.off(Phaser.Scenes.Events.POST_UPDATE, this.syncOverlays, this)
+    this.swingTween?.remove()
     this.hatImage?.destroy()
     this.weaponImage?.destroy()
     this.auraTween?.remove()
@@ -166,6 +174,27 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.attacking = true
     this.play(this.anim('attack'), true)
     this.scene.time.delayedCall(160, () => { this.attacking = false })
+    this.swingWeapon()
+  }
+
+  // Balaye l'arme d'un coup : armé vers l'arrière (angle négatif) puis fend vers l'avant/bas
+  // (angle positif) et revient au repos. Synchronisé avec chaque attaque de base / skill mêlée.
+  // No-op sans arme (novice). L'ampleur suit un peu la classe (épée = grand arc franc).
+  swingWeapon() {
+    if (!this.weaponImage) return
+    this.swingTween?.remove()
+    this.attackSwing = Phaser.Math.DegToRad(-60) // arme relevée vers l'arrière
+    this.swingTween = this.scene.tweens.add({
+      targets: this,
+      attackSwing: Phaser.Math.DegToRad(78), // fend vers l'avant / le bas
+      duration: 150,
+      ease: 'Back.out',
+      onComplete: () => {
+        this.swingTween = this.scene?.tweens.add({
+          targets: this, attackSwing: 0, duration: 130, ease: 'Cubic.out',
+        }) ?? null
+      },
+    })
   }
 
   refreshStats() {

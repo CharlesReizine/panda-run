@@ -76,7 +76,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // plaque de niveau au-dessus du monstre : couleur selon l'écart de niveau avec le joueur
     // (danger). Les boss/MVP gardent leur indice distinct via la barre de vie large et le halo
     // d'élite ci-dessous — la COULEUR du nom, elle, suit l'écart.
-    this.lvlText = scene.add.text(x, y, `Nv ${def.level}`, { fontSize: '11px', color: levelGapColor(def.level), fontStyle: 'bold' }).setOrigin(0.5)
+    this.lvlText = scene.add.text(x, y, `Nv ${def.level}`, { fontSize: '17px', color: levelGapColor(def.level), fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5)
     if (def.mvp) this.eliteAura = scene.add.graphics()
   }
 
@@ -86,7 +86,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // Phaser 4 : le flash blanc se fait via setTint + mode FILL (setTintFill est un no-op déprécié)
     this.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL)
     this.scene.time.delayedCall(80, () => this.clearTint().setTintMode(Phaser.TintModes.MULTIPLY))
-    const txt = this.scene.add.text(this.x, this.y - 30, `${amount}`, { fontSize: '16px', color: '#ffee58' }).setOrigin(0.5)
+    const txt = this.scene.add.text(this.x, this.y - 30, `${amount}`, { fontSize: '24px', color: '#ffee58', fontStyle: 'bold', stroke: '#000000', strokeThickness: 5 }).setOrigin(0.5)
     this.scene.tweens.add({ targets: txt, y: txt.y - 30, alpha: 0, duration: 600, onComplete: () => txt.destroy() })
     if (this.hp <= 0) {
       this.scene.events.emit('enemy-died', this)
