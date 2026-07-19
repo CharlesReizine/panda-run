@@ -275,8 +275,6 @@ export class LevelScene extends Phaser.Scene {
     this.game.events.on('input-skill', this.castSkill, this)
     this.game.events.on('input-potion', this.usePotion, this)
     this.input.keyboard!.on('keydown-P', this.usePotion, this)
-    this.game.events.on('input-dash', this.dash, this)
-    this.input.keyboard!.on('keydown-SHIFT', this.dash, this)
     for (const [key, slot] of [['ONE', 0], ['TWO', 1], ['THREE', 2], ['FOUR', 3]] as const) {
       this.input.keyboard!.on(`keydown-${key}`, () => this.castSkill(slot))
     }
@@ -317,7 +315,6 @@ export class LevelScene extends Phaser.Scene {
       this.game.events.off('input-attack', this.basicAttack, this)
       this.game.events.off('input-skill', this.castSkill, this)
       this.game.events.off('input-potion', this.usePotion, this)
-      this.game.events.off('input-dash', this.dash, this)
       this.events.off('enemy-died', this.onEnemyDied, this)
       this.events.off('enemy-died', this.onBossDied, this)
       this.events.off('enemy-loot', this.onEnemyLoot, this)
@@ -351,7 +348,6 @@ export class LevelScene extends Phaser.Scene {
       '• Sauter : bouton SAUT / flèche HAUT',
       '• Attaquer : bouton ATTAQUE / ESPACE',
       '• Compétences : slots 1-4 / touches 1-4',
-      '• Dash (esquive) : bouton DASH / Maj',
       '• Potion : bouton potion / P',
       '• Toucher la barre de vie : gérer les compétences',
     ]

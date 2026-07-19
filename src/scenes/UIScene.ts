@@ -128,12 +128,6 @@ export class UIScene extends Phaser.Scene {
     this.add.text(792, 534, 'ATTAQUE', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
     atk.on('pointerdown', () => { this.pressFx(atk); this.game.events.emit('input-attack') })
 
-    // Bas-droite : roulade d'esquive (dash)
-    const dash = this.add.circle(712, 486, 28, 0x26a69a, 0.7).setInteractive()
-    this.add.text(712, 486, '»', { fontSize: '28px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
-    this.add.text(712, 520, 'DASH', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
-    dash.on('pointerdown', () => { this.pressFx(dash); this.game.events.emit('input-dash') })
-
     // Bas-gauche : potion
     const potion = this.add.image(52, 500, 'potion-drop').setScale(2.5).setInteractive()
     potion.on('pointerdown', () => { this.pressFx(potion); this.game.events.emit('input-potion') })

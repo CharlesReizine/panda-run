@@ -1298,7 +1298,12 @@ export class PreloadScene extends Phaser.Scene {
       g.generateTexture('exit-glow', 220, 260); g.clear()
     }
     // icônes de boutons
-    g.fillStyle(0xffffff).fillCircle(16, 19, 8).fillCircle(9, 10, 3).fillCircle(16, 8, 3).fillCircle(23, 10, 3); g.generateTexture('ui-attack', 32, 32); g.clear()
+    // épée (icône d'attaque claire) : lame acier diagonale + garde dorée + manche brun
+    g.fillStyle(0xdfe6ee).fillTriangle(11, 22, 25, 5, 28, 8).fillTriangle(11, 22, 14, 25, 28, 8)
+    g.fillStyle(0xffffff).fillTriangle(24, 4, 29, 9, 27, 3)
+    g.lineStyle(4, 0xffca28).beginPath(); g.moveTo(7, 16); g.lineTo(16, 25); g.strokePath()
+    g.lineStyle(5, 0x8d5a2b).beginPath(); g.moveTo(12, 21); g.lineTo(6, 27); g.strokePath()
+    g.fillStyle(0xffca28).fillCircle(5, 28, 2); g.generateTexture('ui-attack', 32, 32); g.clear()
     g.lineStyle(4, 0xffffff).beginPath(); g.moveTo(6, 19); g.lineTo(16, 9); g.lineTo(26, 19); g.moveTo(6, 26); g.lineTo(16, 16); g.lineTo(26, 26); g.strokePath(); g.generateTexture('ui-jump', 32, 32); g.clear()
     g.fillStyle(0xb71c1c).fillRoundedRect(0, 4, 16, 12, 4)
     g.fillStyle(0xef5350).fillRoundedRect(1, 5, 14, 8, 3)
