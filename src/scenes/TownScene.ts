@@ -97,12 +97,12 @@ const SPOTS: TownSpot[] = [
   { id: 'quete', label: QUESTS['chasse-aux-monstres']!.npcName, doorX: 480, doorY: 360 },
 ]
 
-// illustration rastérisée (public/town/*.png) associée à chaque bâtiment ; la porte de l'image
-// est calée sur le bas, alignée sur doorY pour rester cohérente avec la zone d'interaction
+// illustration rastérisée (public/art/town-*.png) associée à chaque bâtiment ; la porte de
+// l'image est calée sur le bas, alignée sur doorY pour rester cohérente avec la zone d'interaction
 const BUILDING_TEXTURE: Record<'potions' | 'armes' | 'vetements' | 'forge', string> = {
-  potions: 'town-shop-potion',
-  armes: 'town-shop-weapon',
-  vetements: 'town-shop-clothes',
+  potions: 'town-potion',
+  armes: 'town-armes',
+  vetements: 'town-vetements',
   forge: 'town-forge',
 }
 
@@ -119,11 +119,14 @@ export class TownScene extends Phaser.Scene {
 
   preload() {
     this.load.image('town-bg', 'town/bg.png')
-    this.load.image('town-shop-potion', 'town/shop-potion.png')
-    this.load.image('town-shop-weapon', 'town/shop-weapon.png')
-    this.load.image('town-shop-clothes', 'town/shop-clothes.png')
-    this.load.image('town-forge', 'town/forge.png')
-    this.load.image('town-npc', 'town/npc.png')
+    // façades illustrées + PNJ + décors (public/art/town-*.png)
+    this.load.image('town-potion', 'art/town-potion.png')
+    this.load.image('town-armes', 'art/town-armes.png')
+    this.load.image('town-vetements', 'art/town-vetements.png')
+    this.load.image('town-forge', 'art/town-forge.png')
+    this.load.image('town-quetes', 'art/town-quetes.png')
+    this.load.image('town-chateau', 'art/town-chateau.png')
+    this.load.image('town-maison', 'art/town-maison.png')
   }
 
   create() {
@@ -137,6 +140,18 @@ export class TownScene extends Phaser.Scene {
 
     // fond illustré (rue pavée + collines) — remplace les anciens aplats de couleur
     this.add.image(480, 270, 'town-bg').setDisplaySize(960, 540)
+
+    // décors non interactifs (pas de collision) posés AVANT les bâtiments : le château au
+    // centre en fond, deux maisons dans les intervalles entre boutiques. Placés en premier,
+    // ils passent derrière les façades interactives et le panda joueur.
+    const placeDecor = (key: string, x: number, baseY: number, width: number) => {
+      const img = this.add.image(x, baseY, key).setOrigin(0.5, 1)
+      img.setDisplaySize(width, width * (img.height / img.width))
+    }
+    placeDecor('town-chateau', 480, 96, 300)
+    placeDecor('town-maison', 330, 214, 96)
+    placeDecor('town-maison', 630, 214, 96)
+
     this.add.text(480, 20, 'Prontera', {
       fontSize: '26px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 4,
     }).setOrigin(0.5)
@@ -158,7 +173,7 @@ export class TownScene extends Phaser.Scene {
     }
 
     // PNJ de quête (illustration) — position et zone d'interaction inchangées (480, 360)
-    const npc = this.add.image(480, 366, 'town-npc').setOrigin(0.5, 0.5)
+    const npc = this.add.image(480, 366, 'town-quetes').setOrigin(0.5, 0.5)
     npc.setDisplaySize(72, 72 * (npc.height / npc.width))
     this.add.text(480, 302, QUESTS['chasse-aux-monstres']!.npcName, {
       fontSize: '12px', color: '#ffffff', stroke: '#3e2723', strokeThickness: 3,

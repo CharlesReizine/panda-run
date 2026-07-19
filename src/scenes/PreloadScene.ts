@@ -71,10 +71,15 @@ const POSES: Record<string, Pose> = {
 
 const OY = 14 // décalage vertical : laisse de la place au-dessus de la tête pour les coiffes
 
-// monstres pour lesquels une VRAIE illustration est fournie (public/art/art-<id>.png).
-// Elle est "bakée" dans la texture monster-<id> à la taille standard → bestiaire, écran
-// d'intro et combats utilisent l'illustration automatiquement.
-const ART_MONSTERS = ['gloopy', 'angeling', 'roi-gloopy', 'pharaon-scarabee', 'roi-liche', 'seigneur-liane', 'seigneur-dechu']
+// Une VRAIE illustration (public/art/art-<id>.png) existe pour CHAQUE monstre (mapping 1:1
+// avec les ids de MONSTERS). Chacune est "bakée" dans la texture monster-<id> → bestiaire,
+// écran d'intro et combats utilisent l'illustration automatiquement. drawMonster reste en
+// FALLBACK si une texture d'art venait à manquer au chargement.
+const ART_MONSTERS = Object.keys(MONSTERS)
+
+// gabarit d'illustration : les boss, MVP et gardiens sont dessinés plus grands (≈76×82) que
+// les monstres normaux (≈40×46), comme le faisait drawMonster.
+const isBigArt = (m: MonsterDef): boolean => !!m.boss || !!m.mvp || m.id.startsWith('gardien-')
 
 export class PreloadScene extends Phaser.Scene {
   constructor() { super('Preload') }
@@ -82,6 +87,8 @@ export class PreloadScene extends Phaser.Scene {
   preload() {
     this.load.image('splash', 'art/splash.png')
     for (const id of ART_MONSTERS) this.load.image(`art-${id}`, `art/art-${id}.png`)
+    // fonds de biome illustrés (public/art/biome-<clé>.png), affichés par LevelScene
+    for (const id of Object.keys(BIOMES)) this.load.image(`biome-${id}`, `art/biome-${id}.png`)
   }
 
   // Retire le fond uni (gris/blanc « polaroïd ») autour de l'illustration en effaçant
@@ -112,8 +119,8 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   // bake l'illustration fournie dans la texture monster-<id> à la taille standard (carrée, centrée)
-  private artMonster(id: string, boss: boolean) {
-    const s = boss ? 76 : 40
+  private artMonster(id: string, big: boolean) {
+    const s = big ? 76 : 40
     const h = s + 6
     const img = this.add.image(0, 0, this.cleanArtTexture(id)).setOrigin(0, 0).setDisplaySize(s, s)
     img.setPosition(0, (h - s) / 2)
@@ -983,7 +990,8 @@ export class PreloadScene extends Phaser.Scene {
     this.drawDecor()
     for (const item of Object.values(ITEMS)) if (item.slot === 'hat') this.drawCosmetic(item.id)
     for (const m of Object.values(MONSTERS)) {
-      if (ART_MONSTERS.includes(m.id)) this.artMonster(m.id, !!m.boss)
+      // texture d'art disponible → on la bake ; sinon repli sur le dessin procédural
+      if (this.textures.exists(`art-${m.id}`)) this.artMonster(m.id, isBigArt(m))
       else this.drawMonster(m)
     }
     for (const s of Object.values(SKILLS)) this.drawSkillIcon(s.id, SKILL_ICONS[s.id] ?? { color: 0xffd54f, glyph: 'sword' })
