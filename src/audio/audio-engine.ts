@@ -17,61 +17,64 @@ export type MusicTrack =
   | 'jungle' | 'montagne' | 'plage' | 'cimetiere' | 'enfer' | 'boss'
 
 type Wave = 'square' | 'triangle' | 'sawtooth' | 'sine'
+// la musique n'emploie que des ondes rondes (douces) : triangle et sine
+type MusicWave = 'triangle' | 'sine'
 
 // note MIDI → fréquence (Hz) ; 0 réservé au silence dans les séquences
 const midiToFreq = (m: number) => 440 * Math.pow(2, (m - 69) / 12)
 
 interface TrackDef {
-  stepMs: number // durée d'un pas (double-croche/croche) en ms
-  wave: Wave
-  melody: number[] // notes MIDI (0 = silence)
-  bass: number[] // notes MIDI (0 = silence), jouées 1 pas sur 2
+  stepMs: number // durée d'un pas en ms (tempo posé : voir valeurs par biome)
+  wave: MusicWave
+  melody: number[] // notes MIDI (0 = silence), phrases aérées avec respirations
+  bass: number[] // notes MIDI (0 = silence), discrète, jouée en notes tenues
   gain: number
 }
 
-// petites boucles chiptune, une par ambiance ; toutes en boucle propre (le séquenceur reboucle
-// sur la longueur de melody). Volumes doux (voir masterGain / musicGain).
+// boucles douces et mélodiques, une par ambiance ; en gammes majeures/pentatoniques pour
+// une écoute longue non fatigante. Le séquenceur reboucle sur la longueur de melody.
+// Volumes doux (voir musicGain + filtre passe-bas du bus musique).
 const A = 0 // silence lisible dans les tableaux
 const TRACKS: Record<MusicTrack, TrackDef> = {
-  titre: { stepMs: 260, wave: 'triangle', gain: 0.9,
-    melody: [72, A, 76, 79, 76, A, 74, A, 71, A, 74, 76, 74, A, 72, A],
-    bass: [48, A, 55, A, 53, A, 55, A, 47, A, 55, A, 53, A, 55, A] },
-  ville: { stepMs: 240, wave: 'triangle', gain: 0.9,
-    melody: [72, 76, 79, 76, 77, 74, 72, 74, 72, 76, 79, 81, 79, 76, 74, 72],
-    bass: [48, A, 55, A, 53, A, 52, A, 48, A, 55, A, 53, A, 55, A] },
-  carte: { stepMs: 280, wave: 'triangle', gain: 0.85,
-    melody: [69, A, 72, 76, 74, A, 72, A, 71, A, 69, 71, 72, A, 74, A],
-    bass: [45, A, 52, A, 50, A, 52, A, 43, A, 50, A, 48, A, 52, A] },
-  plaine: { stepMs: 200, wave: 'square', gain: 0.75,
-    melody: [72, 74, 76, 72, 79, 76, 74, 72, 77, 76, 74, 72, 74, 76, 79, 81],
-    bass: [48, A, 55, A, 53, A, 55, A, 50, A, 57, A, 55, A, 52, A] },
-  foret: { stepMs: 220, wave: 'triangle', gain: 0.78,
-    melody: [69, 72, 74, 76, 74, 72, 69, 67, 69, 72, 76, 74, 72, 69, 67, 64],
-    bass: [45, A, 52, A, 50, A, 48, A, 45, A, 52, A, 48, A, 52, A] },
-  desert: { stepMs: 230, wave: 'square', gain: 0.72,
-    melody: [69, 70, 73, 70, 69, 66, 69, 70, 73, 75, 73, 70, 69, 70, 66, 64],
-    bass: [45, A, 50, A, 45, A, 42, A, 45, A, 50, A, 45, A, 40, A] },
-  cave: { stepMs: 300, wave: 'sine', gain: 0.7,
-    melody: [60, A, 63, A, 65, A, 63, A, 62, A, 60, A, 58, A, 60, A],
-    bass: [36, A, A, A, 41, A, A, A, 38, A, A, A, 36, A, A, A] },
-  jungle: { stepMs: 190, wave: 'square', gain: 0.75,
-    melody: [64, 67, 71, 67, 69, 67, 64, 62, 64, 67, 71, 74, 71, 67, 64, 62],
-    bass: [40, A, 47, A, 45, A, 47, A, 40, A, 47, A, 43, A, 47, A] },
-  montagne: { stepMs: 300, wave: 'triangle', gain: 0.8,
-    melody: [67, A, 72, A, 74, A, 72, A, 71, A, 67, A, 69, A, 71, A],
-    bass: [43, A, 50, A, 48, A, 50, A, 41, A, 48, A, 47, A, 50, A] },
-  plage: { stepMs: 210, wave: 'triangle', gain: 0.78,
-    melody: [76, 74, 72, 74, 76, 79, 76, 74, 72, 71, 72, 74, 76, 79, 81, 79],
-    bass: [48, A, 55, A, 53, A, 55, A, 50, A, 57, A, 55, A, 52, A] },
-  cimetiere: { stepMs: 320, wave: 'sine', gain: 0.68,
-    melody: [57, A, 60, A, 63, A, 60, A, 59, A, 56, A, 59, A, 57, A],
-    bass: [33, A, A, A, 39, A, A, A, 35, A, A, A, 33, A, A, A] },
-  enfer: { stepMs: 180, wave: 'sawtooth', gain: 0.6,
-    melody: [55, 58, 55, 61, 58, 55, 54, 51, 55, 58, 61, 64, 61, 58, 55, 54],
-    bass: [31, A, 34, A, 30, A, 34, A, 31, A, 37, A, 34, A, 30, A] },
-  boss: { stepMs: 170, wave: 'sawtooth', gain: 0.62,
-    melody: [62, 65, 69, 65, 67, 65, 62, 60, 62, 65, 69, 72, 69, 65, 62, 60],
-    bass: [38, 38, 45, 45, 43, 43, 45, 45, 38, 38, 45, 45, 41, 41, 45, 45] },
+  titre: { stepMs: 300, wave: 'triangle', gain: 0.85,
+    melody: [72, A, 76, A, 79, A, 76, 74, 72, A, 74, A, 67, A, 69, A],
+    bass: [48, A, A, A, 55, A, A, A, 53, A, A, A, 55, A, A, A] },
+  ville: { stepMs: 300, wave: 'triangle', gain: 0.82,
+    melody: [67, A, 72, A, 74, A, 72, A, 76, A, 74, 72, 69, A, 67, A],
+    bass: [48, A, A, A, 52, A, A, A, 53, A, A, A, 55, A, A, A] },
+  carte: { stepMs: 320, wave: 'triangle', gain: 0.8,
+    melody: [69, A, 72, A, 74, A, 76, A, 72, A, 69, A, 67, A, 69, A],
+    bass: [45, A, A, A, 52, A, A, A, 50, A, A, A, 52, A, A, A] },
+  plaine: { stepMs: 300, wave: 'triangle', gain: 0.8,
+    melody: [72, A, 74, 76, A, 79, A, 76, 74, A, 72, A, 69, A, 72, A],
+    bass: [48, A, A, A, 55, A, A, A, 53, A, A, A, 50, A, A, A] },
+  foret: { stepMs: 320, wave: 'triangle', gain: 0.78,
+    melody: [64, A, 67, A, 69, A, 72, A, 69, 67, A, 64, A, 62, A, 64, A],
+    bass: [45, A, A, A, 52, A, A, A, 50, A, A, A, 48, A, A, A] },
+  desert: { stepMs: 340, wave: 'sine', gain: 0.76,
+    melody: [69, A, 72, A, 74, A, 72, A, 67, A, 69, A, 64, A, A, A],
+    bass: [45, A, A, A, 50, A, A, A, 45, A, A, A, 48, A, A, A] },
+  cave: { stepMs: 380, wave: 'sine', gain: 0.72,
+    melody: [60, A, A, A, 63, A, A, A, 62, A, A, A, 60, A, A, A],
+    bass: [36, A, A, A, A, A, A, A, 41, A, A, A, A, A, A, A] },
+  jungle: { stepMs: 300, wave: 'triangle', gain: 0.78,
+    melody: [64, A, 67, A, 71, A, 69, 67, 64, A, 67, A, 62, A, 64, A],
+    bass: [40, A, A, A, 47, A, A, A, 45, A, A, A, 47, A, A, A] },
+  montagne: { stepMs: 340, wave: 'triangle', gain: 0.8,
+    melody: [67, A, 72, A, 74, A, 72, A, 69, A, 67, A, 62, A, 67, A],
+    bass: [43, A, A, A, 50, A, A, A, 48, A, A, A, 50, A, A, A] },
+  plage: { stepMs: 300, wave: 'triangle', gain: 0.78,
+    melody: [76, A, 74, A, 72, A, 74, A, 76, A, 79, A, 76, 74, 72, A],
+    bass: [48, A, A, A, 55, A, A, A, 53, A, A, A, 50, A, A, A] },
+  cimetiere: { stepMs: 380, wave: 'sine', gain: 0.7,
+    melody: [57, A, A, A, 60, A, A, A, 59, A, A, A, 56, A, A, A],
+    bass: [33, A, A, A, A, A, A, A, 39, A, A, A, A, A, A, A] },
+  enfer: { stepMs: 300, wave: 'triangle', gain: 0.72,
+    melody: [55, A, 58, A, 60, A, 58, A, 55, A, 53, A, 55, A, A, A],
+    bass: [31, A, A, A, 34, A, A, A, 31, A, A, A, 30, A, A, A] },
+  boss: { stepMs: 280, wave: 'triangle', gain: 0.75,
+    melody: [62, A, 65, A, 69, A, 67, 65, 62, A, 65, A, 60, A, 62, A],
+    bass: [38, A, 45, A, 43, A, 45, A, 38, A, 45, A, 41, A, 45, A] },
 }
 
 class AudioEngine {
@@ -115,8 +118,13 @@ class AudioEngine {
     master.gain.value = this.masterLevel()
     master.connect(ctx.destination)
     const music = ctx.createGain()
-    music.gain.value = 0.22
-    music.connect(master)
+    music.gain.value = 0.18 // musique volontairement sous les SFX
+    // filtre passe-bas doux sur tout le bus musique : arrondit le timbre, retire la dureté aiguë
+    const musicFilter = ctx.createBiquadFilter()
+    musicFilter.type = 'lowpass'
+    musicFilter.frequency.value = 2800
+    musicFilter.Q.value = 0.7
+    music.connect(musicFilter).connect(master)
     const sfx = ctx.createGain()
     sfx.gain.value = 0.5
     sfx.connect(master)
@@ -310,19 +318,24 @@ class AudioEngine {
     }
   }
 
-  // note mélodique : enveloppe douce, routée sur le bus musique
-  private melodyTone(wave: Wave, freq: number, at: number, dur: number, peak: number) {
+  // note mélodique : enveloppe douce (attaque progressive + release long, aucune coupure sèche),
+  // routée sur le bus musique. Supprime clics et dureté d'attaque.
+  private melodyTone(wave: MusicWave, freq: number, at: number, dur: number, peak: number) {
     const ctx = this.ctx!
     const osc = ctx.createOscillator()
     const g = ctx.createGain()
     osc.type = wave
     osc.frequency.setValueAtTime(freq, at)
+    const attack = 0.02 // ~20 ms de montée douce
+    const release = 0.09 // ~90 ms de descente progressive
+    const body = Math.max(0.04, dur - release) // fin du maintien avant le release
     g.gain.setValueAtTime(0.0001, at)
-    g.gain.exponentialRampToValueAtTime(peak, at + 0.02)
-    g.gain.exponentialRampToValueAtTime(0.0001, at + dur * 0.9)
+    g.gain.exponentialRampToValueAtTime(peak, at + attack)
+    g.gain.setValueAtTime(peak, at + body)
+    g.gain.exponentialRampToValueAtTime(0.0001, at + body + release)
     osc.connect(g).connect(this.musicGain!)
     osc.start(at)
-    osc.stop(at + dur)
+    osc.stop(at + body + release + 0.02)
   }
 }
 
