@@ -3,10 +3,16 @@
 // PAS être la texture entière, sinon le perso s'enfonce dans le sol, se coince et n'est
 // plus aligné avec les monstres. Ces valeurs sont vérifiées par player-body.test.ts.
 
-export const PANDA_TEX = { w: 64, h: 92 }
+// Le cadre est plus LARGE que le corps du panda : les poses de course/saut/attaque écartent
+// bras et jambes bien au-delà de la silhouette au repos. On met à l'échelle chaque pose par sa
+// HAUTEUR uniquement (taille constante à l'écran, plus de « rapetissement » quand une pose large
+// serait rabotée en largeur) — le cadre doit donc accueillir la pose la plus large sans rogner.
+export const PANDA_TEX = { w: 96, h: 92 }
 
-// hitbox centrée horizontalement, pieds collés au bas visible du sprite (~y86)
-export const PANDA_BODY = { w: 34, h: 62, offsetX: 15, offsetY: 24 }
+// hitbox centrée horizontalement, pieds collés au bas visible du sprite (~y86). Sa largeur ne
+// couvre que le tronc (les membres écartés débordent hors hitbox, comme au repos) ; elle reste
+// centrée dans le cadre élargi : offsetX*2 + w === PANDA_TEX.w.
+export const PANDA_BODY = { w: 34, h: 62, offsetX: 31, offsetY: 24 }
 
 // Ancre de tête par texture de pose (offset depuis le CENTRE du sprite), remplie au bake des
 // poses dans PreloadScene. La tête n'est pas placée à la même hauteur d'une illustration à

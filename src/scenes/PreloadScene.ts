@@ -286,6 +286,9 @@ export class PreloadScene extends Phaser.Scene {
 
   private pandaFrame(key: string, o: Pose, cls: ClassId) {
     const g = this.add.graphics()
+    // le dessin procédural est calibré sur un cadre 64 de large ; on le recentre dans le cadre
+    // (éventuellement élargi) PANDA_TEX en décalant tout le tracé de la demi-marge.
+    g.translateCanvas((PANDA_TEX.w - 64) / 2, 0)
     const W = 0xf7f7f7, K = 0x2b2b2b, PINK = 0xff9ab0, DARK = 0x3a2f2f
     const bx = o.bx ?? 0, by = (o.by ?? 0) + OY
     const [lfx, lfy] = o.lf ?? [0, 0], [rfx, rfy] = o.rf ?? [0, 0]
@@ -310,7 +313,7 @@ export class PreloadScene extends Phaser.Scene {
     g.arc(32 + bx, 34 + by, 5, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false)
     g.strokePath()
     this.drawClassGear(g, cls, 32 + bx, 25 + by)
-    g.generateTexture(key, 64, 92)
+    g.generateTexture(key, PANDA_TEX.w, PANDA_TEX.h)
     g.destroy()
   }
 
@@ -328,18 +331,19 @@ export class PreloadScene extends Phaser.Scene {
     return pose ? `pandaart-${cls}-${pose}` : `pandaart-${cls}`
   }
 
-  // « Bake » d'une illustration dans une texture 64×92 (PANDA_TEX) identique en dimensions à la
-  // frame procédurale — donc hitbox PANDA_BODY inchangée. On rogne l'art à sa boîte englobante
+  // « Bake » d'une illustration dans une texture PANDA_TEX (même dimensions que la frame
+  // procédurale → hitbox PANDA_BODY inchangée). On rogne l'art à sa boîte englobante
   // non-transparente (comme cleanArtTexture le fait via getImageData), on le met à l'échelle
-  // uniformément vers une hauteur cible constante (STAND_H) en bornant la largeur (MAX_W, pas de
-  // débordement), puis on l'ANCRE BAS-CENTRE (pieds sur la ligne FEET_Y=86, la même que la hitbox)
+  // uniformément par sa HAUTEUR vers une cible constante (STAND_H) — donc taille identique dans
+  // toutes les poses, sans jamais raboter la largeur (le cadre est assez large pour les poses aux
+  // membres écartés) — puis on l'ANCRE BAS-CENTRE (pieds sur la ligne FEET_Y=86, la même que la hitbox)
   // pour une baseline identique dans toutes les poses → pieds stables, pas de tremblement.
   // Renvoie false si l'art manque ou si le canvas 2D échoue (repli procédural).
   private bakePandaPose(srcKey: string, destKey: string): boolean {
     if (this.textures.exists(destKey)) return true
     if (!this.textures.exists(srcKey)) return false
     try {
-      const STAND_H = 80, MAX_W = 62, FEET_Y = 86, ALPHA_MIN = 16
+      const STAND_H = 80, FEET_Y = 86, ALPHA_MIN = 16
       const src = this.textures.get(srcKey).getSourceImage() as HTMLImageElement | HTMLCanvasElement
       const sw = src.width, sh = src.height
       const probe = document.createElement('canvas')
@@ -362,7 +366,10 @@ export class PreloadScene extends Phaser.Scene {
       }
       const bw = x1 - x0 + 1, bh = y1 - y0 + 1
       if (bw <= 0 || bh <= 0) return false
-      const scale = Math.min(STAND_H / bh, MAX_W / bw)
+      // Échelle par la HAUTEUR uniquement : toutes les poses font la même hauteur à l'écran.
+      // On ne borne PAS la largeur (le cadre PANDA_TEX est assez large pour la pose la plus
+      // écartée), sinon une pose large serait réduite et le perso « rapetisserait » en courant.
+      const scale = STAND_H / bh
       const dw = bw * scale, dh = bh * scale
       const dx = (PANDA_TEX.w - dw) / 2, dy = FEET_Y - dh
       // Ancre de tête de CETTE pose : centre horizontal de la bande supérieure du contenu
