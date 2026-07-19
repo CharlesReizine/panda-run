@@ -70,6 +70,14 @@ export class LevelScene extends Phaser.Scene {
   // Plongeon : paramètres d'explosion réservés au lancer, consommés à l'atterrissage
   // ('player-dive-land') → dégâts/rayon proportionnels à la hauteur de chute.
   private pendingDive: { range: number; mult: number; color: number } | null = null
+  // Visée de zone (infra partagée archer/mage) : mode de ciblage actif. Le jeu ne se fige pas ;
+  // un réticule suit le doigt/la souris, le tap suivant valide la zone, un bouton (ou ÉCHAP) annule.
+  private aim: {
+    slot: number; skill: SkillDef
+    reticle: Phaser.GameObjects.Container
+    ui: Phaser.GameObjects.GameObject[]
+    cancelAt: { x: number; y: number }
+  } | null = null
 
   constructor() { super('Level') }
 
@@ -244,14 +252,19 @@ export class LevelScene extends Phaser.Scene {
     })
     this.physics.add.overlap(this.playerProjectiles, this.enemies, (projObj, eObj) => {
       const proj = projObj as Projectile, e = eObj as Enemy
+      if (!proj.active) return
+      // Flèche explosive : pas de dégâts directs, elle détone en zone à l'endroit du contact.
+      if (proj.explosive) { this.doArrowExplosion(proj); return }
       audio.playSfx('hit')
       if (proj.pierce) {
         if (proj.hitEnemies.has(e)) return
         proj.hitEnemies.add(e)
         e.takeDamage(physicalDamage(proj.damage, e.monster.def))
+        if (proj.burn) e.applyBurn(proj.burn.dmgPerTick, proj.burn.durationMs)
         this.impactFx(proj.x, proj.y, proj.tintTopLeft)
       } else {
         e.takeDamage(physicalDamage(proj.damage, e.monster.def))
+        if (proj.burn) e.applyBurn(proj.burn.dmgPerTick, proj.burn.durationMs)
         this.impactFx(proj.x, proj.y, proj.tintTopLeft)
         proj.destroy()
       }
@@ -285,6 +298,8 @@ export class LevelScene extends Phaser.Scene {
     for (const [key, slot] of [['ONE', 0], ['TWO', 1], ['THREE', 2], ['FOUR', 3]] as const) {
       this.input.keyboard!.on(`keydown-${key}`, () => this.castSkill(slot))
     }
+    // ÉCHAP annule une visée de zone en cours (sans rien consommer)
+    this.input.keyboard!.on('keydown-ESC', () => { if (this.aim) this.cancelAim() })
 
     // porte de sortie en fin de niveau (sauf arène de boss : elle n'apparaît qu'à sa mort)
     this.boss = null
@@ -329,6 +344,7 @@ export class LevelScene extends Phaser.Scene {
       this.events.off('enemy-loot', this.onEnemyLoot, this)
       this.events.off('prop-broken', this.onPropBroken, this)
       this.events.off(Phaser.Scenes.Events.RESUME, this.resumeWorld, this)
+      this.endAim() // sort proprement d'une éventuelle visée de zone en cours
       this.hitStopTimer?.remove()
       this.hitStopTimer = null
       this.bossVolley?.remove()
@@ -681,9 +697,10 @@ export class LevelScene extends Phaser.Scene {
     }
   }
 
-  // projectile allié tiré depuis la main, à hauteur des monstres
-  private spawnPlayerProjectile(damage: number, rangePx: number): Projectile {
-    const proj = new Projectile(this, this.player.x + this.player.facing * 22, this.player.y + 16, this.player.facing, 0, damage, true, rangePx)
+  // projectile allié tiré depuis la main, à hauteur des monstres (yOffset : décalage vertical du
+  // point de départ, ex. pour tirer deux flèches très rapprochées → Double flèche)
+  private spawnPlayerProjectile(damage: number, rangePx: number, yOffset = 0): Projectile {
+    const proj = new Projectile(this, this.player.x + this.player.facing * 22, this.player.y + 16 + yOffset, this.player.facing, 0, damage, true, rangePx)
     proj.setScale(1.5) // bien visible
     this.playerProjectiles.add(proj)
     proj.launch() // relance la vélocité (le groupe l'a remise à 0 sur add)
@@ -867,7 +884,11 @@ export class LevelScene extends Phaser.Scene {
     const p = getPlayer()
     const skillId = p.equippedSkills[slot]
     if (!skillId || !this.cooldowns.canUse(slot, this.time.now)) return
-    const skill = SKILLS[skillId]!
+    const skill = SKILLS[skillId]
+    if (!skill) return // skill retiré du registre (vieille save) : on ignore proprement
+    // Visée de zone : on n'engage rien tout de suite — on entre en mode ciblage, l'énergie et
+    // le cooldown ne sont consommés qu'à la confirmation de la zone.
+    if (skill.kind === 'zone') { this.beginZoneTargeting(slot, skill); return }
     if (!this.player.spendEnergy(energyCostOf(skill))) {
       this.announceSkill('Pas assez d\'énergie', 0x4dd0e1)
       return
@@ -911,7 +932,12 @@ export class LevelScene extends Phaser.Scene {
       // → portée forcée à au moins la largeur caméra (~960px)
       const range = skill.pierce ? Math.max(skill.range, this.scale.width) : skill.range
       const proj = this.spawnPlayerProjectile(atk * mult, range)
-      if (skill.arc) {
+      const mageType = skill.classId === 'mage' || skill.classId === 'sorcier'
+      const archerType = skill.classId === 'archer' || skill.classId === 'chasseur'
+      if (skill.arc && skill.explode) {
+        // Flèche explosive / Tir du faucon : cloche à tête explosive qui détone au sol (rayon = explodeRadius)
+        this.setupExplosiveArrow(proj, skill, atk * mult, color)
+      } else if (skill.arc) {
         // lancé en cloche : gravité + rotation (bambou). Au contact d'une surface (sol plein
         // ou plateforme), le boulet S'ARRÊTE et disparaît avec un petit impact — pas de rebond
         // à l'infini ni de traversée du sol.
@@ -930,27 +956,47 @@ export class LevelScene extends Phaser.Scene {
       } else if (skill.id === 'lancer-epee') {
         // Lancer d'épée : la lame elle-même part en tournoyant et traverse la ligne ennemie
         this.swordThrowProjectile(proj, color)
+      } else if (skill.burn) {
+        // Flèche enflammée / mortelle : flèche embrasée + brûlure (DoT) sur chaque cible touchée.
+        proj.pierce = !!skill.pierce
+        proj.burn = { dmgPerTick: atk * mult * 0.25, durationMs: 3200 }
+        proj.setTexture(skill.pierce ? 'fx-arrow-pierce' : 'fx-arrow').setTint(0xff7a33).setScale(1.35)
+        this.attachFlameTrail(proj)
       } else if (skill.pierce) {
-        // transperce tout sur toute la largeur visible : grande flèche perçante (archer/chasseur)
-        // ou faisceau laser (mage/sorcier). Texture blanche → teintée par la couleur du skill.
+        // transperce tout sur toute la largeur visible : grande flèche perçante à TRAÎNÉE BLEUE
+        // lumineuse (archer/chasseur) ou faisceau laser (mage/sorcier).
         proj.pierce = true
-        const isArrow = skill.classId === 'archer' || skill.classId === 'chasseur'
-          || skill.id.includes('fleche') || skill.id.includes('tir')
-        proj.setTexture(isArrow ? 'fx-arrow-pierce' : 'fx-laser').setTint(color).setScale(1)
+        const isArrow = archerType || skill.id.includes('fleche') || skill.id.includes('tir')
+        if (isArrow) {
+          proj.setTexture('fx-arrow-pierce').setTint(0x40c4ff).setScale(1.3)
+          this.attachSparkTrail(proj, 0x81d4fa)
+        } else {
+          proj.setTexture('fx-laser').setTint(color).setScale(1)
+        }
       } else if (skill.id === 'sceau-du-heaume') {
         // sceau du chevalier : sigil héraldique tournoyant, doré et lumineux
         this.sealProjectile(proj, color)
       } else {
         // projectile simple : boule de feu (mage/sorcier) ou flèche (archer/chasseur), sinon orbe
-        const mageType = skill.classId === 'mage' || skill.classId === 'sorcier'
-        const archerType = skill.classId === 'archer' || skill.classId === 'chasseur'
-        if (mageType) proj.setTexture('fx-fireball').clearTint()
-        else if (archerType) proj.setTexture('fx-arrow').clearTint()
-        else proj.setTint(color)
         const projScale = skill.multiplier >= 2.5 ? 1.6 : skill.multiplier >= 1.6 ? 1.25 : 1.05
-        proj.setScale(projScale)
-        if (mageType) this.fireballShimmer(proj, projScale)
+        const styleSimple = (pr: Projectile) => {
+          if (mageType) { pr.setTexture('fx-fireball').clearTint(); this.fireballShimmer(pr, projScale) }
+          else if (archerType) pr.setTexture('fx-arrow').clearTint().setScale(projScale)
+          else pr.setTint(color).setScale(projScale)
+        }
+        styleSimple(proj)
+        // Double flèche : on tire les flèches supplémentaires TOUT contre la première (léger
+        // décalage vertical), lancées ensemble → elles frappent comme une salve serrée.
+        if (skill.arrows && skill.arrows > 1) {
+          for (let k = 1; k < skill.arrows; k++) {
+            const off = (k % 2 === 1 ? -1 : 1) * (7 + Math.floor((k - 1) / 2) * 8)
+            styleSimple(this.spawnPlayerProjectile(atk * mult, range, off))
+          }
+        }
       }
+    } else if (skill.kind === 'trap') {
+      // Piège : posé au sol aux pieds du panda ; immobilise + blesse le premier ennemi qui l'atteint.
+      this.castTrap(skill, color, mult)
     } else if (skill.kind === 'heal') {
       this.player.heal(Math.round(maxHp * mult))
       this.aoeRing(this.player.x, this.player.y, 70, 0x66bb6a)
@@ -1309,6 +1355,231 @@ export class LevelScene extends Phaser.Scene {
     })
   }
 
+  // ===== Archer / Chasseur : traînées, flèche explosive, piège & visée de zone =====
+
+  // Traînée d'étincelles additives semées le long d'un projectile (flèche perçante bleue) : des
+  // éclats brillants qui s'estompent, en plus des échos de texture de Projectile. Nettoyée à la
+  // mort du projectile.
+  private attachSparkTrail(proj: Projectile, color: number) {
+    const ev = this.time.addEvent({
+      delay: 24, loop: true, callback: () => {
+        if (!proj.active) { ev.remove(); return }
+        const s = this.add.rectangle(proj.x - this.player.facing * Phaser.Math.Between(6, 16), proj.y + Phaser.Math.Between(-4, 4), 4, 4, color)
+          .setBlendMode(Phaser.BlendModes.ADD).setDepth((proj.depth ?? 0) - 1).setAlpha(0.9)
+        this.tweens.add({ targets: s, alpha: 0, scale: 0.2, duration: 240, onComplete: () => s.destroy() })
+      },
+    })
+  }
+
+  // Traînée de flammes d'une flèche embrasée : flammèches qui montent et s'éteignent dans son sillage.
+  private attachFlameTrail(proj: Projectile) {
+    const ev = this.time.addEvent({
+      delay: 22, loop: true, callback: () => {
+        if (!proj.active) { ev.remove(); return }
+        const col = Phaser.Math.RND.pick([0xffca28, 0xff7043, 0xff5252])
+        const fl = this.add.rectangle(proj.x - this.player.facing * Phaser.Math.Between(4, 14), proj.y + Phaser.Math.Between(-4, 4), 5, 9, col)
+          .setBlendMode(Phaser.BlendModes.ADD).setDepth((proj.depth ?? 0) - 1).setAlpha(0.95)
+        this.tweens.add({ targets: fl, y: fl.y - Phaser.Math.Between(10, 20), scaleY: 0.4, alpha: 0, duration: 300, onComplete: () => fl.destroy() })
+      },
+    })
+  }
+
+  // Flèche explosive : lancée en cloche, elle porte une charge qui détone au sol (ou à l'impact).
+  private setupExplosiveArrow(proj: Projectile, skill: SkillDef, damage: number, color: number) {
+    proj.explosive = { radius: skill.explodeRadius ?? 110, damage, color }
+    const b = proj.body as Phaser.Physics.Arcade.Body
+    b.setAllowGravity(true)
+    b.setVelocity(this.player.facing * 360, -430)
+    proj.setTexture('fx-arrow').setTint(color).setScale(1.35).setAngularVelocity(this.player.facing * 240)
+    this.attachFlameTrail(proj) // petite mèche fumante pendant le vol
+    const boom: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (projObj) => this.doArrowExplosion(projObj as Projectile)
+    this.physics.add.collider(proj, this.platforms, boom)
+    this.physics.add.collider(proj, this.oneWayPlatforms, boom)
+  }
+
+  // Détonation d'une flèche explosive : GROSSE explosion + secousse + dégâts de zone aux alentours.
+  private doArrowExplosion(proj: Projectile) {
+    if (!proj.active) return
+    const data = proj.explosive
+    if (!data) { proj.destroy(); return }
+    const x = proj.x, y = proj.y
+    proj.explosive = null // pare la double détonation (sol + ennemi dans la même frame)
+    proj.destroy()
+    this.explosionFx(x, y, data.radius, data.color)
+    this.screenShake(Math.min(0.02, data.radius * 0.0001), 200)
+    audio.playSfx('hit')
+    for (const obj of this.enemies.getChildren()) {
+      const e = obj as Enemy
+      if (e.active && Phaser.Math.Distance.Between(x, y, e.x, e.y) <= data.radius) e.takeDamage(physicalDamage(data.damage, e.monster.def))
+    }
+    for (const obj of this.props.getChildren()) {
+      const prop = obj as Prop
+      if (prop.active && Phaser.Math.Distance.Between(x, y, prop.x, prop.y) <= data.radius) prop.takeDamage(1)
+    }
+  }
+
+  // Piège à mâchoires : posé au sol aux pieds du panda. Le premier ennemi qui entre dans son
+  // rayon est IMMOBILISÉ (root) et mordu (dégâts), puis le piège claque et disparaît. S'il n'est
+  // pas déclenché, il s'efface au bout de ~14 s.
+  private castTrap(skill: SkillDef, color: number, mult: number) {
+    const gx = this.player.x, gy = GROUND_ROW * TILE - 6
+    const atk = this.player.stats.atk * this.player.outgoingMult()
+    const trap = this.add.image(gx, gy, 'fx-trap').setDepth(2).setScale(1.05)
+    this.physics.add.existing(trap, true) // corps statique = emprise de la texture (large piège au sol)
+    // petit clignotement d'armement + pose
+    this.aoeRing(gx, gy, 34, color)
+    this.tweens.add({ targets: trap, scaleX: 1.15, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+    let sprung = false
+    const spring = (enemy: Enemy) => {
+      if (sprung || !enemy.active) return
+      sprung = true
+      this.tweens.killTweensOf(trap)
+      enemy.root(skill.root ?? 2000)
+      enemy.takeDamage(physicalDamage(atk, enemy.monster.def, mult))
+      this.impactFx(trap.x, trap.y, color)
+      this.burstParticles(trap.x, trap.y, 12, color, { speed: 90, size: 5, durationMs: 360 })
+      this.screenShake(0.004, 120)
+      audio.playSfx('hit')
+      // mâchoires qui claquent (léger sursaut) puis disparition
+      this.tweens.add({ targets: trap, scaleY: 0.4, alpha: 0, duration: 260, onComplete: () => trap.destroy() })
+    }
+    this.physics.add.overlap(trap, this.enemies, (_t, e) => spring(e as Enemy))
+    // filet de sécurité : le piège non déclenché s'efface après un temps
+    this.time.delayedCall(14000, () => { if (!sprung && trap.active) { this.tweens.killTweensOf(trap); this.tweens.add({ targets: trap, alpha: 0, duration: 300, onComplete: () => trap.destroy() }) } })
+  }
+
+  // ===== Visée de zone (infra RÉUTILISABLE — archer & futur mage : météores / mur de flamme) =====
+  // On entre en mode ciblage : un réticule suit le pointeur, le tap suivant valide la zone (effet
+  // déclenché sur place), un bouton « Annuler » (ou ÉCHAP) sort sans rien consommer. Le jeu ne se
+  // fige jamais — les ennemis continuent d'agir pendant la visée.
+  private beginZoneTargeting(slot: number, skill: SkillDef) {
+    if (this.aim) this.cancelAim() // une seule visée à la fois
+    // vérifie SANS consommer que l'énergie suffira (dépensée seulement à la confirmation)
+    if (this.player.energy < energyCostOf(skill)) { this.announceSkill('Pas assez d\'énergie', 0x4dd0e1); return }
+
+    const color = this.skillColor(skill.id)
+    const radius = skill.range
+    // Réticule (monde) : disque translucide + anneau + croix, orienté au sol de la zone visée.
+    const g = this.add.graphics()
+    g.fillStyle(color, 0.16).fillCircle(0, 0, radius)
+    g.lineStyle(3, color, 0.9).strokeCircle(0, 0, radius)
+    g.lineStyle(2, 0xffffff, 0.9).lineBetween(-14, 0, 14, 0).lineBetween(0, -14, 0, 14)
+    const ring = this.add.image(0, 0, 'ring').setTint(color).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.7).setScale((radius / 28) * 0.5)
+    this.tweens.add({ targets: ring, scale: (radius / 28) * 1.05, alpha: 0.2, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+    const reticle = this.add.container(this.player.x + this.player.facing * 160, GROUND_ROW * TILE - 30, [g, ring]).setDepth(9)
+
+    // UI écran (épinglée) : consigne + bouton Annuler visuel (hit-test manuel dans onAimPointer)
+    const hint = this.add.text(480, 458, 'Touche la zone à viser', { fontSize: '16px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5).setScrollFactor(0).setDepth(60)
+    const cancelBg = this.add.rectangle(480, 498, 150, 34, 0x455a64, 0.95).setScrollFactor(0).setDepth(60).setStrokeStyle(2, 0xffffff, 0.6)
+    const cancelTxt = this.add.text(480, 498, 'Annuler ✕', { fontSize: '15px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(61)
+
+    this.aim = { slot, skill, reticle, ui: [hint, cancelBg, cancelTxt], cancelAt: { x: 480, y: 498 } }
+    // Le tap qui a lancé la visée (bouton de slot / touche) ne doit pas valider aussitôt :
+    // on n'écoute le pointeur qu'après un court délai.
+    this.time.delayedCall(160, () => { if (this.aim) this.input.on('pointerdown', this.onAimPointer, this) })
+  }
+
+  // Réticule suit le pointeur actif (souris survolée ou doigt posé) — appelé chaque frame.
+  private updateAimReticle() {
+    if (!this.aim) return
+    const p = this.input.activePointer
+    const wp = this.cameras.main.getWorldPoint(p.x, p.y)
+    this.aim.reticle.setPosition(wp.x, wp.y)
+  }
+
+  private onAimPointer(pointer: Phaser.Input.Pointer) {
+    if (!this.aim) return
+    // tap sur le bouton Annuler (coords écran) → on sort sans rien consommer
+    if (Phaser.Math.Distance.Between(pointer.x, pointer.y, this.aim.cancelAt.x, this.aim.cancelAt.y) < 48) { this.cancelAim(); return }
+    const wp = this.cameras.main.getWorldPoint(pointer.x, pointer.y)
+    this.confirmZone(wp.x, wp.y)
+  }
+
+  private cancelAim() {
+    this.announceSkill('Visée annulée', 0x90a4ae)
+    this.endAim()
+  }
+
+  // nettoie le mode visée : objets + écouteur pointeur
+  private endAim() {
+    if (!this.aim) return
+    this.input.off('pointerdown', this.onAimPointer, this)
+    this.aim.reticle.destroy()
+    for (const o of this.aim.ui) o.destroy()
+    this.aim = null
+  }
+
+  // Zone confirmée : NOW on consomme l'énergie + le cooldown, puis on déclenche l'effet sur place.
+  private confirmZone(x: number, y: number) {
+    if (!this.aim) return
+    const { slot, skill } = this.aim
+    this.endAim()
+    if (!this.cooldowns.canUse(slot, this.time.now)) return
+    if (!this.player.spendEnergy(energyCostOf(skill))) { this.announceSkill('Pas assez d\'énergie', 0x4dd0e1); return }
+    this.cooldowns.use(slot, this.time.now, skill.cooldownMs)
+    this.game.events.emit('skill-cooldown', slot, this.time.now + skill.cooldownMs)
+    audio.playSfx('skill')
+    this.announceSkill(skill.name)
+    const p = getPlayer()
+    const rank = p.skillLevels[skill.id] ?? 1
+    const mult = skill.multiplier * (1 + 0.25 * (rank - 1))
+    const color = this.skillColor(skill.id)
+    // clamp de la cible dans les bornes du monde pour rester jouable
+    const cx = Phaser.Math.Clamp(x, 40, this.levelDef.widthTiles * TILE - 40)
+    const cy = Phaser.Math.Clamp(y, 80, GROUND_ROW * TILE - 4)
+    this.executeArrowRain(skill, cx, cy, mult, color)
+  }
+
+  // Pluie de flèches / Nuée de flèches : ~40-64 mini-flèches s'abattent du ciel sur la zone visée,
+  // en criblant le secteur par vagues (dégâts répétés). Spectacle : marqueur au sol + rideau dense.
+  private executeArrowRain(skill: SkillDef, cx: number, cy: number, mult: number, color: number) {
+    const radius = skill.range
+    const count = skill.rain ?? 40
+    const atk = this.player.stats.atk * this.player.outgoingMult()
+    const durationMs = 900
+
+    // marqueur de zone au sol pendant la salve
+    const marker = this.add.graphics().setDepth(3)
+    const drawMarker = (a: number) => {
+      marker.clear()
+      marker.fillStyle(color, 0.12 * a).fillCircle(cx, cy, radius)
+      marker.lineStyle(3, color, 0.4 + 0.4 * a).strokeCircle(cx, cy, radius)
+    }
+    drawMarker(1)
+    this.tweens.addCounter({ from: 1, to: 0, duration: durationMs + 200, onUpdate: (tw) => drawMarker(tw.getValue() ?? 0), onComplete: () => marker.destroy() })
+
+    // rideau de flèches qui tombent (visuel pur, non physique → dense et fluide)
+    for (let i = 0; i < count; i++) {
+      this.time.delayedCall(Phaser.Math.Between(0, durationMs), () => {
+        const ax = cx + Phaser.Math.FloatBetween(-radius, radius)
+        const startY = cy - 340 - Phaser.Math.Between(0, 70)
+        const landY = cy + Phaser.Math.Between(-10, 12)
+        const arrow = this.add.image(ax, startY, 'fx-arrow').setTint(color).setRotation(Math.PI / 2).setScale(1.15).setDepth(7)
+        this.tweens.add({
+          targets: arrow, y: landY, duration: Phaser.Math.Between(200, 280), ease: 'Quad.in',
+          onComplete: () => { this.impactFx(ax, landY, color); arrow.destroy() },
+        })
+      })
+    }
+
+    // dégâts répétés : plusieurs vagues sur toute la durée de la pluie
+    const ticks = 5
+    for (let t = 0; t < ticks; t++) {
+      this.time.delayedCall(120 + t * (durationMs / ticks), () => {
+        for (const obj of this.enemies.getChildren()) {
+          const e = obj as Enemy
+          if (e.active && Phaser.Math.Distance.Between(cx, cy, e.x, e.y) <= radius * 1.08) e.takeDamage(physicalDamage(atk, e.monster.def, mult * 0.45))
+        }
+        for (const obj of this.props.getChildren()) {
+          const prop = obj as Prop
+          if (prop.active && Phaser.Math.Distance.Between(cx, cy, prop.x, prop.y) <= radius * 1.08) prop.takeDamage(1)
+        }
+      })
+    }
+    this.screenShake(0.004, 220)
+    audio.playSfx('hit')
+  }
+
   // Touche les ennemis/props devant le panda (ou pile sur lui), avec grande tolérance
   // verticale : le centre du grand sprite panda est plus haut que celui des monstres.
   meleeHit(reach: number, multiplier: number) {
@@ -1481,6 +1752,7 @@ export class LevelScene extends Phaser.Scene {
     if (this.bgClouds) this.bgClouds.tilePositionX = sx * 0.1
     if (this.bgFar) this.bgFar.tilePositionX = sx * 0.3
     if (this.bgNear) this.bgNear.tilePositionX = sx * 0.55
+    if (this.aim) this.updateAimReticle()
     if (this.player.hp <= 0) return
     this.player.regenEnergy(delta)
     // zones verticales chevauchées (échelle / eau) lues sur le centre du panda

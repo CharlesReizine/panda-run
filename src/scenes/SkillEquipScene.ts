@@ -165,10 +165,15 @@ export class SkillEquipScene extends Phaser.Scene {
       : s.kind === 'charge' ? 'Charge'
       : s.kind === 'dive' ? 'Plongeon'
       : s.kind === 'buff' ? 'Amélioration'
+      : s.kind === 'zone' ? 'Zone visée'
+      : s.kind === 'trap' ? 'Piège'
       : 'Soin'
     const tags: string[] = []
     if (s.pierce) tags.push('perçant')
     if (s.arc) tags.push('en cloche')
+    if (s.burn) tags.push('brûlure')
+    if (s.explode) tags.push('explosif')
+    if (s.arrows && s.arrows > 1) tags.push(`${s.arrows} flèches`)
     return tags.length ? `${base} (${tags.join(', ')})` : base
   }
 

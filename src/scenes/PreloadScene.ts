@@ -25,8 +25,11 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'meteore': { color: 0xff8a65, glyph: 'fireball' },
   'soin-du-panda': { color: 0x81c784, glyph: 'cross' },
   'tempete-arcanique': { color: 0xce93d8, glyph: 'star' },
-  'fleche-percante': { color: 0xd7a86e, glyph: 'arrow' },
+  'fleche-percante': { color: 0x40c4ff, glyph: 'arrow' },
   'double-tir': { color: 0xd7a86e, glyph: 'arrow2' },
+  'piege': { color: 0xffca28, glyph: 'trap' },
+  'fleche-enflammee': { color: 0xff7043, glyph: 'firearrow' },
+  'fleche-explosive': { color: 0xff8a65, glyph: 'boomarrow' },
   'pluie-de-fleches': { color: 0xa5d6a7, glyph: 'rain' },
   'tir-charge': { color: 0xffb74d, glyph: 'arrow' },
   'fleche-de-bambou': { color: 0x9ccc65, glyph: 'arrow' },
@@ -45,9 +48,9 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'faille-du-neant': { color: 0x7e57c2, glyph: 'ray' },
   'benediction-du-panda': { color: 0x81c784, glyph: 'heart' },
   // Chasseur
-  'fleche-mortelle': { color: 0xd32f2f, glyph: 'arrow' },
+  'fleche-mortelle': { color: 0x448aff, glyph: 'arrow' },
   'nuee-de-fleches': { color: 0xa5d6a7, glyph: 'rain' },
-  'tir-du-faucon': { color: 0xffb74d, glyph: 'lob' },
+  'tir-du-faucon': { color: 0xffb74d, glyph: 'boomarrow' },
 }
 
 type ClassId = 'novice' | 'swordsman' | 'mage' | 'archer' | 'chevalier' | 'sorcier' | 'chasseur'
@@ -1153,6 +1156,21 @@ export class PreloadScene extends Phaser.Scene {
       case 'rain':
         g.fillStyle(c); for (const dx of [-9, 0, 9]) g.fillTriangle(cx + dx - 3, 12, cx + dx + 3, 12, cx + dx, 34)
         break
+      case 'firearrow': // flèche montée d'une flamme
+        g.lineStyle(3, c).beginPath(); g.moveTo(12, 32); g.lineTo(30, 14); g.strokePath()
+        g.fillStyle(c).fillTriangle(30, 14, 22, 16, 28, 22)
+        g.fillStyle(0xffca28).fillCircle(14, 30, 4); g.fillStyle(0xff5252).fillTriangle(10, 30, 18, 30, 14, 22)
+        break
+      case 'boomarrow': // flèche en cloche + petite déflagration
+        g.lineStyle(2, c).beginPath(); g.arc(cx, 24, 13, Phaser.Math.DegToRad(190), Phaser.Math.DegToRad(350), false); g.strokePath()
+        g.fillStyle(0xffe082).fillCircle(cx + 13, 26, 4)
+        for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; g.fillStyle(c).fillCircle(cx + 13 + Math.cos(a) * 8, 26 + Math.sin(a) * 8, 1.6) }
+        break
+      case 'trap': // piège à mâchoires : deux demi-cercles dentés
+        g.lineStyle(3, c).beginPath(); g.arc(cx, cy, 12, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340), false); g.strokePath()
+        g.beginPath(); g.arc(cx, cy, 12, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false); g.strokePath()
+        g.fillStyle(c); for (let i = 0; i < 5; i++) { const px = cx - 10 + i * 5; g.fillTriangle(px, cy - 4, px + 4, cy - 4, px + 2, cy); g.fillTriangle(px, cy + 4, px + 4, cy + 4, px + 2, cy) }
+        break
       case 'roar':
         g.fillStyle(c).fillCircle(cx, cy + 4, 7)
         g.fillStyle(0x2b2b2b).fillTriangle(cx - 4, cy + 2, cx + 4, cy + 2, cx, cy + 9) // gueule ouverte
@@ -1363,6 +1381,14 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0x33691e).fillCircle(9, 9, 7)
     g.fillStyle(0x7bc86c).fillCircle(9, 9, 5)
     g.fillStyle(0xc5e1a5).fillCircle(7, 7, 2); g.generateTexture('fx-lob', 18, 18); g.clear()
+    // fx-trap : piège à mâchoires posé au sol (archer) — plaque + deux rangées de dents + charnière
+    g.fillStyle(0x5d4037).fillEllipse(28, 20, 52, 10) // plaque/ombre au sol
+    g.fillStyle(0x9e9e9e).fillRect(6, 16, 44, 4) // barre centrale (ressort)
+    g.fillStyle(0xbdbdbd).fillCircle(28, 18, 4) // charnière
+    g.fillStyle(0xeceff1) // dents supérieures et inférieures
+    for (let i = 0; i < 8; i++) { const px = 8 + i * 5; g.fillTriangle(px, 14, px + 5, 14, px + 2.5, 6); g.fillTriangle(px, 22, px + 5, 22, px + 2.5, 30) }
+    g.lineStyle(2, 0xffca28, 0.9).strokeEllipse(28, 18, 46, 22) // liseré d'armement
+    g.generateTexture('fx-trap', 56, 34); g.clear()
     // fx-bolt : éclair/bolt magique HORIZONTAL du mage noir (losange violet lumineux)
     g.fillStyle(0xb388ff, 0.4).fillEllipse(12, 6, 26, 12)
     g.fillStyle(0x7e57c2).fillTriangle(2, 6, 13, 1, 13, 11)

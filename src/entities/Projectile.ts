@@ -4,6 +4,10 @@ export class Projectile extends Phaser.Physics.Arcade.Sprite {
   damage: number
   fromPlayer: boolean
   pierce = false // traverse tout : ne se détruit pas au 1er impact
+  // Flèche enflammée : à l'impact, applique une brûlure (DoT) à l'ennemi touché (voir LevelScene).
+  burn: { dmgPerTick: number; durationMs: number } | null = null
+  // Flèche explosive : au lieu des dégâts directs, détone en zone à l'impact (sol ou ennemi).
+  explosive: { radius: number; damage: number; color: number } | null = null
   readonly hitEnemies = new Set<object>() // pour ne toucher chaque cible qu'une fois
   private startX: number
   private startY: number

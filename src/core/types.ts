@@ -17,7 +17,7 @@ export interface ClassDef {
   skillIds: string[]
 }
 
-export type SkillKind = 'melee' | 'projectile' | 'aoe' | 'heal' | 'charge' | 'dive' | 'buff'
+export type SkillKind = 'melee' | 'projectile' | 'aoe' | 'heal' | 'charge' | 'dive' | 'buff' | 'zone' | 'trap'
 
 export interface SkillDef {
   id: string
@@ -34,6 +34,13 @@ export interface SkillDef {
   flame?: boolean // épée enflammée : pendant le buff, la lame s'embrase → +dégâts + brûlure (DoT) sur les coups
   minLevel?: number // niveau joueur minimum pour débloquer/monter ce skill (défaut : aucun)
   requires?: string // id d'un skill prérequis à débloquer avant celui-ci (défaut : aucun)
+  // ── Archer / Chasseur ──────────────────────────────────────────────────────
+  arrows?: number // projectile : nombre de flèches tirées ensemble (double flèche = 2)
+  burn?: boolean // projectile : la flèche enflamme la cible (applyBurn / DoT) à l'impact
+  explode?: boolean // projectile en cloche : explose à l'impact (sol ou ennemi) → dégâts de zone
+  explodeRadius?: number // rayon de l'explosion (px) pour un projectile `explode`
+  root?: number // piège : durée d'immobilisation (ms) infligée à l'ennemi qui le déclenche
+  rain?: number // zone : nombre de flèches déversées du ciel sur la zone visée (densité de la pluie)
 }
 
 export type Rarity = 'commun' | 'rare' | 'epique' | 'legendaire'

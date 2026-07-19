@@ -58,6 +58,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   // l'échéance si on ré-enflamme.
   private burnUntil = 0
   private burnTimer: Phaser.Time.TimerEvent | null = null
+  // Immobilisation (Piège de l'archer) : l'ennemi reste cloué sur place jusqu'à cette échéance.
+  private rootedUntil = 0
+  private snareFx: Phaser.GameObjects.Graphics | null = null
 
   constructor(scene: LevelScene, x: number, y: number, def: MonsterDef) {
     super(scene, x, y, `monster-${def.id}`)
@@ -99,6 +102,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.eliteAura?.destroy()
       this.zzz?.destroy()
       this.burnTimer?.remove()
+      this.snareFx?.destroy()
       this.destroy()
     }
   }
@@ -121,6 +125,20 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.takeDamage(Math.max(1, Math.round(dmgPerTick)))
       },
     })
+  }
+
+  // Immobilise l'ennemi sur place pour une durée donnée (Piège) : la boucle d'IA ci-dessous
+  // ignore tout déplacement tant que rootedUntil n'est pas dépassé. Un liseré de « chaînes »
+  // pulse à ses pieds pendant l'effet.
+  root(durationMs: number) {
+    if (!this.active) return
+    this.rootedUntil = Math.max(this.rootedUntil, this.scene.time.now + durationMs)
+    this.setVelocity(0, 0)
+    if (!this.snareFx) this.snareFx = this.scene.add.graphics().setDepth(this.depth - 1)
+  }
+
+  isRooted(): boolean {
+    return this.scene.time.now < this.rootedUntil
   }
 
   // tir d'un projectile vers le joueur, propre et cohérent selon le monstre :
@@ -151,7 +169,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // (on reste planté à infliger les dégâts de contact) au lieu de foncer/pousser sans fin
     const stopDist = this.width * 0.5 + 16
 
-    if (dist < AGGRO_RANGE) {
+    // Immobilisé par un piège : cloué sur place, aucune IA de déplacement tant que dure l'effet.
+    const rooted = t < this.rootedUntil
+    if (rooted) this.setVelocity(0, 0)
+
+    if (!rooted && dist < AGGRO_RANGE) {
       if (this.monster.behavior === 'charge') {
         if (t > this.nextActionAt) {
           this.setVelocityX(dir * this.monster.speed * 3)
@@ -187,12 +209,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         // S'ARRÊTE au corps-à-corps (dégâts de contact) au lieu de foncer/pousser sans fin
         this.setVelocityX(dist > stopDist ? dir * this.monster.speed : 0)
       }
-    } else if (this.monster.boss) {
+    } else if (!rooted && this.monster.boss) {
       // hors aggro, le boss revient TOUJOURS vers le joueur tant qu'il est vivant : il ne
       // « s'endort » jamais hors écran et rejoint l'arène du joueur
       this.setVelocityX(dir * this.monster.speed)
     } else {
-      // hors aggro : les autres ennemis (y compris chargeurs) s'arrêtent net — pas de dérive
+      // hors aggro (ou immobilisé) : on s'arrête net — pas de dérive
       this.setVelocityX(0)
     }
 
@@ -232,6 +254,23 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     // « Nv X » juste au-dessus de la barre de vie
     this.lvlText.setPosition(this.x, this.y - this.height / 2 - 22)
+
+    // liseré d'immobilisation (Piège) : anneau + « chaînes » qui pulsent aux pieds tant que l'effet dure
+    if (this.snareFx) {
+      if (rooted) {
+        this.snareFx.clear()
+        const yFeet = this.y + this.height / 2 - 4
+        const pulse = 0.5 + 0.35 * Math.sin(t / 90)
+        this.snareFx.lineStyle(3, 0xffca28, pulse).strokeEllipse(this.x, yFeet, this.width * 0.9, 14)
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 + t / 400
+          this.snareFx.fillStyle(0xfff59d, pulse).fillCircle(this.x + Math.cos(a) * this.width * 0.45, yFeet + Math.sin(a) * 7, 2.5)
+        }
+      } else {
+        this.snareFx.destroy()
+        this.snareFx = null
+      }
+    }
 
     // halo d'élite pulsant autour des MVP
     if (this.eliteAura) {
