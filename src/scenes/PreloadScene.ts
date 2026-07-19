@@ -95,8 +95,8 @@ export class PreloadScene extends Phaser.Scene {
   preload() {
     this.load.image('splash', 'art/splash.png')
     for (const id of ART_MONSTERS) this.load.image(`art-${id}`, `art/art-${id}.png`)
-    // fonds de biome illustrés (public/art/biome-<clé>.png), affichés par LevelScene
-    for (const id of Object.keys(BIOMES)) this.load.image(`biome-${id}`, `art/biome-${id}.png`)
+    // fonds de biome illustrés (public/art/biome-<clé>.jpg), affichés par LevelScene
+    for (const id of Object.keys(BIOMES)) this.load.image(`biome-${id}`, `art/biome-${id}.jpg`)
     // illustrations du panda joueur : 4 poses par classe (idle/course/saut/attaque).
     // Chargées ici puis « bakées » (rognées + mises à l'échelle + ancrées pieds au sol) en
     // textures panda-<classe>* par bakePandaClassFromArt ; repli sur le dessin procédural si absentes.
