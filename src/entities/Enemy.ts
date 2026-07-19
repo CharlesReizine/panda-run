@@ -45,9 +45,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   takeDamage(amount: number) {
     if (!this.active) return
     this.hp -= amount
-    // Phaser v4 : setTintFill() n'accepte plus de couleur en argument (silhouette blanche fixe)
-    this.setTintFill()
-    this.scene.time.delayedCall(80, () => this.clearTint())
+    // Phaser 4 : le flash blanc se fait via setTint + mode FILL (setTintFill est un no-op déprécié)
+    this.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL)
+    this.scene.time.delayedCall(80, () => this.clearTint().setTintMode(Phaser.TintModes.MULTIPLY))
     const txt = this.scene.add.text(this.x, this.y - 30, `${amount}`, { fontSize: '16px', color: '#ffee58' }).setOrigin(0.5)
     this.scene.tweens.add({ targets: txt, y: txt.y - 30, alpha: 0, duration: 600, onComplete: () => txt.destroy() })
     if (this.hp <= 0) {

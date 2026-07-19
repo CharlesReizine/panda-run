@@ -42,19 +42,21 @@ export class UIScene extends Phaser.Scene {
     this.input.addPointer(3)
     this.joystick = new VirtualJoystick(this, new Phaser.Geom.Rectangle(0, 100, 400, 440))
 
-    // Haut-gauche : niveau + or, puis barres vie / énergie / XP empilées
-    this.levelText = this.add.text(12, 6, '', { fontSize: '15px', color: '#ffffff', fontStyle: 'bold' })
-    this.goldText = this.add.text(120, 7, '', { fontSize: '13px', color: '#ffd700' })
+    // Haut-gauche : panneau semi-opaque (lisibilité sur n'importe quel biome) regroupant
+    // niveau + or, puis barres vie (rouge) / énergie (bleue) / XP (jaune) empilées et distinctes.
+    this.add.rectangle(8, 2, BAR_W + 16, 78, 0x0d1b2a, 0.6).setOrigin(0).setStrokeStyle(1, 0xffffff, 0.25)
+    this.levelText = this.add.text(16, 6, '', { fontSize: '15px', color: '#ffffff', fontStyle: 'bold' })
+    this.goldText = this.add.text(132, 7, '', { fontSize: '13px', color: '#ffd700' })
 
-    this.add.rectangle(12, 24, BAR_W + 4, 16, 0x000000, 0.5).setOrigin(0)
-    this.hpBar = this.add.rectangle(14, 26, BAR_W, 12, 0xe53935).setOrigin(0)
-    this.add.rectangle(12, 42, BAR_W + 4, 12, 0x000000, 0.5).setOrigin(0)
-    this.energyBar = this.add.rectangle(14, 44, BAR_W, 8, 0x29b6f6).setOrigin(0)
-    this.add.rectangle(12, 56, BAR_W + 4, 6, 0x000000, 0.5).setOrigin(0)
-    this.xpBar = this.add.rectangle(14, 57, BAR_W, 4, 0xfdd835).setOrigin(0)
+    this.add.rectangle(14, 26, BAR_W + 4, 14, 0x000000, 0.6).setOrigin(0)
+    this.hpBar = this.add.rectangle(16, 27, BAR_W, 12, 0xe53935).setOrigin(0)
+    this.add.rectangle(14, 44, BAR_W + 4, 12, 0x000000, 0.6).setOrigin(0)
+    this.energyBar = this.add.rectangle(16, 46, BAR_W, 8, 0x29b6f6).setOrigin(0)
+    this.add.rectangle(14, 60, BAR_W + 4, 6, 0x000000, 0.6).setOrigin(0)
+    this.xpBar = this.add.rectangle(16, 61, BAR_W, 4, 0xfdd835).setOrigin(0)
 
-    // toucher la zone des barres (vie/énergie) ouvre la gestion des skills en jeu
-    this.add.rectangle(12, 22, BAR_W + 4, 42, 0xffffff, 0.001).setOrigin(0).setInteractive()
+    // toucher le panneau (barres) ouvre la gestion des skills en jeu
+    this.add.rectangle(8, 2, BAR_W + 16, 78, 0xffffff, 0.001).setOrigin(0).setInteractive()
       .on('pointerdown', () => {
         audio.playSfx('ui-tap')
         this.freezeLevelForOverlay()
@@ -62,10 +64,10 @@ export class UIScene extends Phaser.Scene {
         this.scene.pause('Level')
         this.scene.pause('UI')
       })
-    this.add.text(12, 66, 'compétences ▸', { fontSize: '10px', color: '#b0bec5' })
+    this.add.text(16, 68, 'compétences ▸', { fontSize: '10px', color: '#b0bec5' })
 
     // pastille de buff ATK : masquée par défaut, affichée avec un compte à rebours tant que le buff est actif
-    const bx = 12, by = 84, bw = 104, bh = 24
+    const bx = 12, by = 86, bw = 104, bh = 24
     const buffBg = this.add.rectangle(bx, by, bw, bh, 0xff8f00, 0.9).setOrigin(0).setStrokeStyle(2, 0xffe082, 0.8)
     const buffLabel = this.add.text(bx + 8, by + 4, '⚔ ATK+', { fontSize: '13px', color: '#3a2600', fontStyle: 'bold' }).setOrigin(0)
     this.buffBar = this.add.rectangle(bx + 2, by + bh - 5, bw - 4, 4, 0xfff176).setOrigin(0)
@@ -173,10 +175,10 @@ export class UIScene extends Phaser.Scene {
 
   private onBuffEnd = () => { this.buffUntil = 0 }
 
-  // notif de passage de niveau : grosse, au niveau des PV (haut-gauche), façon RO
+  // notif de passage de niveau : grosse, sous le panneau de HUD (haut-gauche), façon RO
   private onLevelUp(level: number) {
-    const bg = this.add.rectangle(14, 66, 250, 30, 0xffb300, 0.95).setOrigin(0)
-    const txt = this.add.text(24, 71, `⭐ NIVEAU ${level} !  +1 point`, {
+    const bg = this.add.rectangle(14, 118, 250, 30, 0xffb300, 0.95).setOrigin(0)
+    const txt = this.add.text(24, 123, `⭐ NIVEAU ${level} !  +1 point`, {
       fontSize: '18px', color: '#3a2600', fontStyle: 'bold',
     }).setOrigin(0, 0)
     bg.setScale(0.2, 1)

@@ -28,6 +28,9 @@ const BIOME_TRACKS: Record<string, MusicTrack> = {
   montagne: 'montagne', plage: 'plage', carriere: 'montagne', cimetiere: 'cimetiere', enfer: 'enfer',
 }
 
+// largeur de la barre de vie du boss (centrée sous son nom)
+const BOSS_BAR_W = 440
+
 export { TILE }
 
 export class LevelScene extends Phaser.Scene {
@@ -357,23 +360,25 @@ export class LevelScene extends Phaser.Scene {
 
   private addBackground() {
     const b = BIOMES[this.levelDef.biome] ?? BIOMES.plaine!
-    const sky = this.add.graphics().setScrollFactor(0).setDepth(-30)
-    sky.fillGradientStyle(b.skyTop, b.skyTop, b.skyBot, b.skyBot, 1).fillRect(0, 0, 960, 540)
 
-    // fond de biome illustré (public/art/biome-<clé>.png) : couvre le viewport (960×540),
-    // épinglé à la caméra (statique, scrollFactor 0 → aucune bande vide même sur les cartes
-    // larges), posé derrière tout le reste. Le ciel en dégradé reste dessous pour combler ses
-    // zones transparentes. Il remplace les collines dessinées en code. Fallback : biome absent
-    // → on garde l'ancien décor procédural (dégradé + collines).
+    // fond de biome illustré (public/art/biome-<clé>.png) : mis à l'échelle « cover » à partir
+    // de la taille réelle de la texture pour couvrir TOUT le viewport (960×540) sans jamais
+    // laisser de bande vide, centré, épinglé à la caméra (scrollFactor 0). Quand il est présent,
+    // il remplace intégralement le décor procédural (ciel dégradé + nuages + collines) qui
+    // ferait doublon et jurerait avec l'illustration. Fallback (biome sans image) : on garde
+    // l'ancien décor procédural (dégradé + nuages + collines).
     const biomeKey = `biome-${this.levelDef.biome}`
     const hasBiomeArt = this.textures.exists(biomeKey)
     if (hasBiomeArt) {
-      this.add.image(480, 270, biomeKey).setDisplaySize(960, 540).setScrollFactor(0).setDepth(-28)
-    }
-    if (b.clouds) {
-      this.bgClouds = this.add.tileSprite(0, 30, 960, 60, 'cloud').setOrigin(0).setScrollFactor(0).setDepth(-25).setAlpha(0.85)
-    }
-    if (!hasBiomeArt) {
+      const src = this.textures.get(biomeKey).getSourceImage()
+      const cover = Math.max(960 / src.width, 540 / src.height)
+      this.add.image(480, 270, biomeKey).setScale(cover).setScrollFactor(0).setDepth(-28)
+    } else {
+      const sky = this.add.graphics().setScrollFactor(0).setDepth(-30)
+      sky.fillGradientStyle(b.skyTop, b.skyTop, b.skyBot, b.skyBot, 1).fillRect(0, 0, 960, 540)
+      if (b.clouds) {
+        this.bgClouds = this.add.tileSprite(0, 30, 960, 60, 'cloud').setOrigin(0).setScrollFactor(0).setDepth(-25).setAlpha(0.85)
+      }
       this.bgFar = this.add.tileSprite(0, 300, 960, 240, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-22).setTint(b.hillFar)
       this.bgNear = this.add.tileSprite(0, 360, 960, 200, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-20).setTint(b.hillNear)
     }
@@ -432,10 +437,11 @@ export class LevelScene extends Phaser.Scene {
     this.enemies.add(boss)
     this.boss = boss
 
-    // barre de vie géante
-    this.bossBarBg = this.add.rectangle(480, 70, 604, 22, 0x000000, 0.6).setScrollFactor(0)
-    this.bossBar = this.add.rectangle(480 - 300, 70, 600, 18, 0xef5350).setOrigin(0, 0.5).setScrollFactor(0)
-    this.bossName = this.add.text(480, 45, def.name, { fontSize: '20px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0)
+    // barre de vie du boss : centrée sous son nom, largeur maîtrisée et posée assez bas pour
+    // ne PAS chevaucher les slots de compétences en haut à droite (qui descendent jusqu'à ~y63)
+    this.bossName = this.add.text(480, 74, def.name, { fontSize: '20px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5).setScrollFactor(0)
+    this.bossBarBg = this.add.rectangle(480, 100, BOSS_BAR_W + 4, 20, 0x000000, 0.6).setScrollFactor(0).setStrokeStyle(1, 0xffffff, 0.3)
+    this.bossBar = this.add.rectangle(480 - BOSS_BAR_W / 2, 100, BOSS_BAR_W, 16, 0xef5350).setOrigin(0, 0.5).setScrollFactor(0)
 
     this.bossPhase = 1
     this.startBossVolley(5000) // phase 1 : salve toutes les 5 s
@@ -474,7 +480,7 @@ export class LevelScene extends Phaser.Scene {
     this.bossPhase = 2
     this.startBossVolley(2500)
     this.cameras.main.shake(300, 0.01)
-    const txt = this.add.text(480, 110, 'ENRAGÉ !', {
+    const txt = this.add.text(480, 150, 'ENRAGÉ !', {
       fontSize: '44px', color: '#ff1744', fontStyle: 'bold', stroke: '#000000', strokeThickness: 5,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(30).setScale(0.3)
     this.tweens.add({
@@ -1004,7 +1010,7 @@ export class LevelScene extends Phaser.Scene {
       this.player.updateFromControls(mergeControls(this.keyboardControls(), touch))
     }
     if (this.boss?.active && this.bossBar) {
-      this.bossBar.setDisplaySize(600 * Math.max(0, this.boss.hp / this.boss.monster.hp), 18)
+      this.bossBar.setDisplaySize(BOSS_BAR_W * Math.max(0, this.boss.hp / this.boss.monster.hp), 16)
       if (this.bossPhase === 1 && this.boss.hp <= this.boss.monster.hp * 0.5) this.enterBossPhase2()
     }
   }
