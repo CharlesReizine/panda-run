@@ -171,12 +171,14 @@ export class UIScene extends Phaser.Scene {
     this.scene.pause('UI')
   }
 
-  // affiche/masque le badge selon les points non dépensés (compétence + stat) et met le compteur à jour
+  // affiche/masque le badge selon les points de COMPÉTENCE non dépensés (le badge ouvre le menu
+  // des compétences ; les points de STAT se gèrent depuis la carte, menu à part → pas comptés ici
+  // pour ne pas afficher un total qui ne correspond pas à ce qu'on peut dépenser dans ce menu)
   private updateSkillPointBadge() {
     const p = getPlayer()
-    const n = p.skillPoints + p.statPoints
+    const n = p.skillPoints
     this.spBadge.setVisible(n > 0)
-    if (n > 0) this.spBadgeText.setText(`⚠ ${n} point${n > 1 ? 's' : ''} !`)
+    if (n > 0) this.spBadgeText.setText(`⚠ ${n} compétence${n > 1 ? 's' : ''} !`)
   }
 
   // pulse visuel au tap pour que chaque bouton réponde sous le doigt
@@ -199,9 +201,9 @@ export class UIScene extends Phaser.Scene {
 
   // notif de passage de niveau : grosse, sous le panneau de HUD (haut-gauche), façon RO
   private onLevelUp(level: number) {
-    const bg = this.add.rectangle(14, 118, 250, 30, 0xffb300, 0.95).setOrigin(0)
-    const txt = this.add.text(24, 123, `⭐ NIVEAU ${level} !  +1 point`, {
-      fontSize: '18px', color: '#3a2600', fontStyle: 'bold',
+    const bg = this.add.rectangle(14, 118, 372, 28, 0xffb300, 0.95).setOrigin(0)
+    const txt = this.add.text(24, 122, `⭐ NIVEAU ${level} !  +1 compétence · +2 stats`, {
+      fontSize: '15px', color: '#3a2600', fontStyle: 'bold',
     }).setOrigin(0, 0)
     bg.setScale(0.2, 1)
     this.tweens.add({ targets: bg, scaleX: 1, duration: 200, ease: 'Back.out' })
