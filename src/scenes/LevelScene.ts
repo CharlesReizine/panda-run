@@ -359,11 +359,24 @@ export class LevelScene extends Phaser.Scene {
     const b = BIOMES[this.levelDef.biome] ?? BIOMES.plaine!
     const sky = this.add.graphics().setScrollFactor(0).setDepth(-30)
     sky.fillGradientStyle(b.skyTop, b.skyTop, b.skyBot, b.skyBot, 1).fillRect(0, 0, 960, 540)
+
+    // fond de biome illustré (public/art/biome-<clé>.png) : couvre le viewport (960×540),
+    // épinglé à la caméra (statique, scrollFactor 0 → aucune bande vide même sur les cartes
+    // larges), posé derrière tout le reste. Le ciel en dégradé reste dessous pour combler ses
+    // zones transparentes. Il remplace les collines dessinées en code. Fallback : biome absent
+    // → on garde l'ancien décor procédural (dégradé + collines).
+    const biomeKey = `biome-${this.levelDef.biome}`
+    const hasBiomeArt = this.textures.exists(biomeKey)
+    if (hasBiomeArt) {
+      this.add.image(480, 270, biomeKey).setDisplaySize(960, 540).setScrollFactor(0).setDepth(-28)
+    }
     if (b.clouds) {
       this.bgClouds = this.add.tileSprite(0, 30, 960, 60, 'cloud').setOrigin(0).setScrollFactor(0).setDepth(-25).setAlpha(0.85)
     }
-    this.bgFar = this.add.tileSprite(0, 300, 960, 240, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-22).setTint(b.hillFar)
-    this.bgNear = this.add.tileSprite(0, 360, 960, 200, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-20).setTint(b.hillNear)
+    if (!hasBiomeArt) {
+      this.bgFar = this.add.tileSprite(0, 300, 960, 240, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-22).setTint(b.hillFar)
+      this.bgNear = this.add.tileSprite(0, 360, 960, 200, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-20).setTint(b.hillNear)
+    }
 
     // décors posés au sol pour remplir l'espace (défilent avec le monde, derrière le joueur)
     const widthPx = this.levelDef.widthTiles * TILE
