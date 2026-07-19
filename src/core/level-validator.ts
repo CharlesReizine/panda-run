@@ -22,11 +22,18 @@ function hgap(a: Plat, b: Plat): number {
   return Math.max(0, Math.max(a.x - (b.x + b.w), b.x - (a.x + a.w)))
 }
 
-// Une plateforme est « posable » au sommet d'une échelle si son dessus est à ~la rangée du
-// haut de l'échelle (±1) ET qu'elle est horizontalement adjacente au montant (à gauche OU à
-// droite) : l'x de l'échelle tombe entre platX-1 et platX+platW+1.
+// Décalage PIEDS↔CENTRE du panda ≈ 40px ≈ 1,25 tuile : en grimpant jusqu'en haut, son CENTRE
+// atteint ~la rangée du haut du montant (l.y) et ses PIEDS sont ~1,25 tuile PLUS BAS. Une
+// plateforme posée pile à l.y serait donc à hauteur de tête, inatteignable. Elle n'est
+// « posable » au sommet que si son dessus est 1 à 2 rangées SOUS le haut de l'échelle
+// (l.y+1..l.y+2) — là où les pieds arrivent, avec un petit saut vers le bas pour s'y poser —
+// ET qu'elle est horizontalement adjacente au montant (l'x de l'échelle tombe entre platX-1 et
+// platX+platW+1, à gauche OU à droite).
+const LADDER_TOP_MIN_DROP = 1 // rangées sous l.y : borne HAUTE atteignable (pieds à ~1,25 tuile sous le centre)
+const LADDER_TOP_MAX_DROP = 2 // rangées sous l.y : borne BASSE (au-delà, la plateforme décroche du sommet)
 function isLadderTop(p: Plat, l: Ladder): boolean {
-  return Math.abs(p.y - l.y) <= ROW_TOL && l.x >= p.x - 1 && l.x <= p.x + p.w + 1
+  const drop = p.y - l.y
+  return drop >= LADDER_TOP_MIN_DROP && drop <= LADDER_TOP_MAX_DROP && l.x >= p.x - 1 && l.x <= p.x + p.w + 1
 }
 
 // Le pied de l'échelle (rangée y+h) rejoint-il le sol ou une plateforme ? (condition b)
