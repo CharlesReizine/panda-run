@@ -87,6 +87,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // (texture affichée) et non sur un offset fixe → il reste collé à la tête dans toutes les poses
   // (idle/course/saut/attaque/échelle), dont la hauteur de tête diffère.
   private syncOverlays() {
+    // garde de fermeture : pendant la sortie de niveau, POST_UPDATE peut encore se déclencher
+    // alors que la scène/le corps sont déjà en cours de destruction → accès à this.scene = gel
+    if (!this.active || !this.scene || !this.scene.sys) return
     const flip = this.facing
     if (this.hatImage) {
       const a = PANDA_HEAD_ANCHORS[this.texture.key] ?? { dx: 0, dy: HAT_OFFSET_Y }
@@ -131,7 +134,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   destroy(fromScene?: boolean) {
-    this.scene.events.off(Phaser.Scenes.Events.POST_UPDATE, this.syncOverlays, this)
+    this.scene?.events?.off(Phaser.Scenes.Events.POST_UPDATE, this.syncOverlays, this)
     this.hatImage?.destroy()
     this.weaponImage?.destroy()
     this.auraTween?.remove()
