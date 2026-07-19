@@ -39,7 +39,10 @@ export class WorldMapScene extends Phaser.Scene {
       // ne se « rejoint » pas — sauf si c'est une ville, qu'on ouvre alors directement.
       const isForwardTerrain = !isCurrent && unlocked && neighbors.has(n.id) && !done && n.type !== 'town'
       const isReachedTown = !isCurrent && n.type === 'town' && unlocked && revealed.has(n.id)
-      const canTravel = isForwardTerrain || isReachedTown
+      // depuis une VILLE (hub), on peut repartir vers TOUT voisin débloqué+révélé (fait ou non)
+      // pour rejoindre le chemin → évite de rester coincé quand les terrains voisins sont déjà faits
+      const canLeaveTown = current.type === 'town' && !isCurrent && neighbors.has(n.id) && unlocked && revealed.has(n.id)
+      const canTravel = isForwardTerrain || isReachedTown || canLeaveTown
       const canEnterTown = isCurrent && n.type === 'town'
       const interactive = canTravel || canEnterTown
       const radius = RADIUS[n.type]
