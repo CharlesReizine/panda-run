@@ -1120,7 +1120,7 @@ export class LevelScene extends Phaser.Scene {
         // Grosse boule de feu (skill.blast) : nettement plus imposante que les autres tirs.
         const projScale = skill.blast ? 2.4 : skill.multiplier >= 2.5 ? 1.6 : skill.multiplier >= 1.6 ? 1.25 : 1.05
         const styleSimple = (pr: Projectile) => {
-          if (mageType) { pr.setTexture('fx-fireball').clearTint(); this.fireballShimmer(pr, projScale) }
+          if (mageType) { pr.setTexture('fx-fireball-orange').clearTint(); this.fireballShimmer(pr, projScale) }
           else if (archerType) pr.setTexture('fx-arrow').clearTint().setScale(projScale)
           else pr.setTint(color).setScale(projScale)
           if (skill.blast) pr.blast = { radius: skill.blast, color }

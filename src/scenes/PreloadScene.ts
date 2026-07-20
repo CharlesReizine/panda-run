@@ -1355,6 +1355,20 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0xe1f5fe, 0.95).fillCircle(23, 11, 1) // étincelle
     g.fillStyle(0x81d4fa, 0.9).fillCircle(22, 6, 0.9) // étincelle
     g.generateTexture('fx-fireball', 30, 18); g.clear()
+    // fx-fireball-orange : variante ORANGE pour les SORTS de feu du mage (boule de feu, etc.),
+    // afin de les distinguer clairement de l'attaque de BASE (bleue ci-dessus)
+    g.fillStyle(0xffab40, 0.28).fillCircle(19, 9, 10)
+    g.fillStyle(0xffcc80, 0.22).fillCircle(19, 9, 8)
+    g.fillStyle(0xe65100, 0.85).fillTriangle(0, 9, 14, 4, 14, 14)
+    g.fillStyle(0xff6d00, 0.9).fillTriangle(3, 9, 15, 6, 15, 12)
+    g.fillStyle(0xffab40, 0.95).fillTriangle(6, 9, 15, 7, 15, 11)
+    g.fillStyle(0xff7043).fillCircle(19, 9, 7)
+    g.fillStyle(0xffb74d).fillCircle(19, 9, 5.2)
+    g.fillStyle(0xfff3e0).fillCircle(18, 8, 3.2)
+    g.fillStyle(0xffffff).fillCircle(17, 7, 1.7)
+    g.fillStyle(0xfff8e1, 0.95).fillCircle(23, 11, 1)
+    g.fillStyle(0xffe082, 0.9).fillCircle(22, 6, 0.9)
+    g.generateTexture('fx-fireball-orange', 30, 18); g.clear()
     // fx-arrow : flèche (attaque de base archer/chasseur) — traînée de vitesse dorée, hampe bois,
     // pointe acier brillante à droite, empennage rouge à l'arrière
     g.fillStyle(0xffe082, 0.25).fillTriangle(0, 6, 22, 3, 22, 9) // traînée de vitesse (halo doré)
