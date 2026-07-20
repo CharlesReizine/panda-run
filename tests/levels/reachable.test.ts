@@ -19,7 +19,11 @@ import { MONSTERS } from '../../src/data/monsters'
 // Niveaux construits par le KIT DE MODULES (docs/level-module-kit.md) : ils doivent respecter les
 // règles de jouabilité ET de cohérence supplémentaires du kit (les 15 autres niveaux, non refondus,
 // gardent seulement les garanties historiques ci-dessus).
-const MODULAR_IDS = ['zone1-1', 'zone1-2', 'zone1-3', 'zone1-4']
+const MODULAR_IDS = ['zone1-1', 'zone1-2', 'zone1-3', 'zone1-4',
+  'zone2-1', 'zone2-2', 'zone2-3', 'cave-1',
+  'zone3-1', 'zone3-2', 'plage-1', 'plage-2',
+  'zone4-1', 'zone4-2', 'carriere-1', 'carriere-2',
+  'zone5-1', 'zone5-2', 'zone6-1']
 const isAerial = (id: string) => !!MONSTERS[id]?.aerial
 
 // Garantit que CHAQUE niveau est physiquement jouable : toute plateforme est atteignable
