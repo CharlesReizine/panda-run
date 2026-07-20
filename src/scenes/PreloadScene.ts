@@ -947,6 +947,52 @@ export class PreloadScene extends Phaser.Scene {
         g.fillStyle(this.shadeColor(m.color, 0.7)).fillTriangle(r - 2, s - 4, r + 2, s - 4, r, s + 4) // queue
         break
       }
+      case 'faucon': {
+        // rapace brun (placeholder) : ailes déployées en V, corps fuselé, bec crochu, regard vif.
+        // Silhouette AÉRIENNE plus effilée et agressive que le corbeau (ailes plus pointues).
+        g.fillStyle(this.shadeColor(m.color, 1.5)).fillTriangle(-2, r - 6, r - 4, r - 2, 6, r + 8) // aile gauche pointue
+        g.fillStyle(this.shadeColor(m.color, 1.5)).fillTriangle(s + 2, r - 6, r + 4, r - 2, s - 6, r + 8) // aile droite pointue
+        g.fillStyle(this.shadeColor(m.color, 0.85)).fillTriangle(2, r - 2, r - 4, r, 8, r + 4) // dessous d'aile (ombre)
+        g.fillStyle(this.shadeColor(m.color, 0.85)).fillTriangle(s - 2, r - 2, r + 4, r, s - 8, r + 4)
+        g.fillStyle(m.color).fillEllipse(r, r + 2, r / 1.4, r) // corps fuselé
+        g.fillStyle(this.shadeColor(m.color, 1.35)).fillEllipse(r, r - 4, r / 1.9, r / 1.6) // tête
+        g.fillStyle(0xf5e6c8).fillTriangle(r + r / 3, r - 6, r + r / 3, r - 1, r + r / 1.1, r - 2) // bec crochu
+        g.fillStyle(0x4e2f14).fillTriangle(r + r / 1.4, r - 3, r + r / 1.1, r - 2, r + r / 1.4, r) // crochet du bec
+        g.fillStyle(0xffd54f).fillCircle(r + 2, r - 5, 2.6); g.fillStyle(0x000000).fillCircle(r + 3, r - 5, 1.3) // œil perçant
+        g.fillStyle(this.shadeColor(m.color, 0.6)).fillTriangle(r - 4, s - 4, r + 4, s - 4, r, s + 5) // queue en éventail
+        break
+      }
+      case 'ara': {
+        // perroquet tropical (placeholder) : plumage MULTICOLORE — corps bleu, ailes rouge/jaune/vert,
+        // grand bec crochu clair, longue queue. Silhouette AÉRIENNE chatoyante et exotique.
+        g.fillStyle(0xe53935).fillTriangle(-2, r - 6, r - 4, r - 2, 4, r + 6) // aile gauche rouge
+        g.fillStyle(0xfdd835).fillTriangle(0, r - 2, r - 5, r, 6, r + 8) // bande jaune
+        g.fillStyle(0x43a047).fillTriangle(2, r + 2, r - 5, r + 2, 8, r + 10) // bande verte
+        g.fillStyle(0xe53935).fillTriangle(s + 2, r - 6, r + 4, r - 2, s - 4, r + 6) // aile droite rouge
+        g.fillStyle(0xfdd835).fillTriangle(s, r - 2, r + 5, r, s - 6, r + 8) // bande jaune
+        g.fillStyle(0x43a047).fillTriangle(s - 2, r + 2, r + 5, r + 2, s - 8, r + 10) // bande verte
+        g.fillStyle(m.color).fillEllipse(r, r + 2, r / 1.35, r) // corps bleu vif
+        g.fillStyle(this.shadeColor(m.color, 1.3)).fillEllipse(r, r - 4, r / 1.8, r / 1.6) // tête bleue
+        g.fillStyle(0xfafafa).fillTriangle(r + r / 3.5, r - 6, r + r / 3.5, r + 1, r + r / 1.05, r - 2) // grand bec crochu clair
+        g.fillStyle(0x9e9e9e).fillTriangle(r + r / 1.3, r - 3, r + r / 1.05, r - 2, r + r / 1.3, r + 1) // crochet
+        g.fillStyle(0xffffff).fillCircle(r + 1, r - 5, 2.6); g.fillStyle(0x000000).fillCircle(r + 2, r - 5, 1.3) // œil
+        g.fillStyle(0x00acc1).fillTriangle(r - 3, s - 6, r + 3, s - 6, r, s + 8) // longue queue turquoise
+        break
+      }
+      case 'harfang-spectral': {
+        // chouette fantomatique (placeholder) : plumage blanc-bleuté TRANSLUCIDE, aura pâle, grands
+        // yeux lumineux, petit bec. Silhouette AÉRIENNE spectrale (alpha réduit, halo diffus).
+        g.fillStyle(m.color, 0.2).fillCircle(r, r + 2, r + 4) // aura spectrale diffuse
+        g.fillStyle(this.shadeColor(m.color, 0.92), 0.5).fillTriangle(-2, r - 4, r - 4, r - 2, 6, r + 10) // aile gauche large translucide
+        g.fillStyle(this.shadeColor(m.color, 0.92), 0.5).fillTriangle(s + 2, r - 4, r + 4, r - 2, s - 6, r + 10) // aile droite
+        g.fillStyle(m.color, 0.62).fillEllipse(r, r + 2, r / 1.15, r) // corps rondelet translucide
+        g.fillStyle(this.shadeColor(m.color, 1.02), 0.72).fillEllipse(r, r - 3, r / 1.35, r / 1.4) // grosse tête ronde
+        g.fillStyle(0xe1f5fe, 0.9).fillCircle(r - r / 3.2, r - 3, r / 4.5).fillCircle(r + r / 3.2, r - 3, r / 4.5) // grands disques oculaires
+        g.fillStyle(0x4fc3f7).fillCircle(r - r / 3.2, r - 3, r / 8).fillCircle(r + r / 3.2, r - 3, r / 8) // yeux lumineux bleus
+        g.fillStyle(0xb0bec5, 0.9).fillTriangle(r - 2, r - 1, r + 2, r - 1, r, r + 3) // petit bec
+        g.fillStyle(m.color, 0.4).fillTriangle(r - 3, s - 4, r + 3, s - 4, r, s + 5) // queue diffuse
+        break
+      }
       default:
         body(); eyes(); mouth()
     }
