@@ -56,6 +56,8 @@ export class LevelScene extends Phaser.Scene {
   private oneWayPlatforms!: Phaser.Physics.Arcade.StaticGroup
   private ladderRects: Phaser.Geom.Rectangle[] = []
   private waterRects: Phaser.Geom.Rectangle[] = []
+  // rideaux de cascade (water:'waterfall') : défilés verticalement dans update pour l'effet de chute
+  private waterfalls: Phaser.GameObjects.TileSprite[] = []
   // Plongée : réserve d'apnée restante (ms), accumulateurs de ticks de noyade et d'émission de
   // bulles, voile bleuté quand la tête est immergée, petite jauge d'apnée au-dessus de la tête.
   private breathMs = BREATH_MAX_MS
@@ -120,6 +122,7 @@ export class LevelScene extends Phaser.Scene {
     // la scène est réutilisée entre niveaux : ces états doivent repartir de zéro
     this.ladderRects = []
     this.waterRects = []
+    this.waterfalls = []
     // plongée : on entame chaque niveau souffle plein, sans dette de noyade ; les overlays
     // (voile, jauge) sont recréés plus bas (la scène est réutilisée → références remises à zéro)
     this.breathMs = BREATH_MAX_MS
@@ -166,10 +169,30 @@ export class LevelScene extends Phaser.Scene {
     // trous MORTELS : aux colonnes couvertes par un gap, on NE POSE PAS les tuiles de sol
     // pleines (rangées groundRow/+1) → c'est le vide, et tomber dedans tue (voir checkPitDeath).
     const isGapCol = (x: number) => (this.levelDef.gaps ?? []).some((g) => x >= g.x && x < g.x + g.w)
-    for (let x = 0; x < this.levelDef.widthTiles; x++) {
-      if (isGapCol(x)) continue
-      platforms.create(x * TILE + TILE / 2, this.groundRow * TILE + TILE, tileKey)
-      platforms.create(x * TILE + TILE / 2, (this.groundRow + 1) * TILE + TILE, tileKey)
+    // OPTIM RENDU : le sol/les plateformes/l'eau étaient dessinés TUILE PAR TUILE (des milliers de
+    // this.add.image). On rend désormais chaque tranche continue en UN SEUL TileSprite (le culling
+    // caméra de Phaser reste actif) et on regroupe la COLLISION en UN corps statique rectangulaire
+    // par tranche. La collision est STRICTEMENT équivalente : le corps couvre exactement la même
+    // emprise (même bord SUPÉRIEUR, seule surface qui compte pour se poser) que la ribambelle de
+    // tuiles qu'il remplace → aucun changement de comportement (pas de chute à travers le sol).
+    // SOL : tuiles historiquement posées à y = groundRow*TILE+TILE (centre) → dessus à
+    // groundRow*TILE+TILE/2. On reproduit EXACTEMENT cette emprise (2 rangées) par tranche continue.
+    const groundTopPx = this.groundRow * TILE + TILE / 2
+    const groundBandH = 2 * TILE
+    // tranches continues de sol (colonnes hors trou), [a, b)
+    let runA = -1
+    const W = this.levelDef.widthTiles
+    for (let x = 0; x <= W; x++) {
+      const solid = x < W && !isGapCol(x)
+      if (solid) { if (runA < 0) runA = x }
+      else if (runA >= 0) {
+        const wTiles = x - runA
+        // rendu : une bande tuilée (2 rangées), calée au pixel comme les anciennes tuiles
+        this.add.tileSprite(runA * TILE, groundTopPx, wTiles * TILE, groundBandH, tileKey).setOrigin(0, 0).setDepth(-4)
+        // collision : un corps statique rectangulaire équivalent (même dessus, même largeur)
+        this.addStaticBand(platforms, runA * TILE, groundTopPx, wTiles * TILE, groundBandH)
+        runA = -1
+      }
     }
     // bords de trou marqués : le sol s'arrête NET sur une fine paroi sombre de chaque côté du
     // vide → le danger se voit avant d'y arriver.
@@ -179,23 +202,21 @@ export class LevelScene extends Phaser.Scene {
       this.add.rectangle(g.x * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(1, 0).setDepth(-3)
       this.add.rectangle((g.x + g.w) * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(0, 0).setDepth(-3)
     }
-    // plateformes surélevées : on les traverse en montant et on se pose dessus en
-    // retombant (voir landsFromAbove). Sans ça, une plateforme qui en surplombe une
-    // autre (escaliers) fait cogner son dessous au joueur qui saute → il retombe.
+    // plateformes surélevées : on les traverse en montant et on se pose dessus en retombant (voir
+    // landsFromAbove). Rendu en UN TileSprite par plateforme ; collision en UN corps statique par
+    // plateforme (dessus à p.y*TILE, hauteur 1 tuile) — équivalent exact des anciennes tuiles.
     for (const p of this.levelDef.platforms) {
-      for (let i = 0; i < p.w; i++) {
-        oneWay.create((p.x + i) * TILE + TILE / 2, p.y * TILE + TILE / 2, platformKey)
-      }
+      this.add.tileSprite(p.x * TILE, p.y * TILE, p.w * TILE, TILE, platformKey).setOrigin(0, 0).setDepth(-4)
+      this.addStaticBand(oneWay, p.x * TILE, p.y * TILE, p.w * TILE, TILE)
     }
-    // ponts de planches : plateformes fines, elles aussi traversables par le bas
+    // ponts de planches : plateformes fines, elles aussi traversables par le bas. Rendu en UN
+    // TileSprite ; collision en UN corps statique par pont. Le visuel ne fait que 12px de haut mais
+    // à grande vitesse de chute le joueur pourrait traverser cette fine tranche en un pas de
+    // physique (tunneling) → on épaissit le corps (28px) sans toucher au rendu.
     for (const br of this.levelDef.bridges ?? []) {
-      for (let i = 0; i < br.w; i++) {
-        const plank = oneWay.create((br.x + i) * TILE + TILE / 2, br.y * TILE + 6, 'bridge') as Phaser.Physics.Arcade.Sprite
-        // le visuel ne fait que 12px de haut ; à grande vitesse de chute le joueur peut
-        // traverser cette fine tranche en un seul pas de physique (tunneling) — on épaissit
-        // donc le corps de collision sans toucher au rendu
-        ;(plank.body as Phaser.Physics.Arcade.StaticBody).setSize(TILE, 28)
-      }
+      this.add.tileSprite(br.x * TILE, br.y * TILE, br.w * TILE, 12, 'bridge').setOrigin(0, 0).setDepth(-4)
+      // corps 28px (le visuel ne fait que 12px) : même emprise que l'ancien plank (top br.y*TILE-8)
+      this.addStaticBand(oneWay, br.x * TILE, br.y * TILE - 8, br.w * TILE, 28)
     }
 
     this.player = new Player(this, this.spawnX(), this.groundRow * TILE - 40)
@@ -257,46 +278,73 @@ export class LevelScene extends Phaser.Scene {
       }
     }
 
-    // pics = danger mortel ; eau = zone nageable (rendu + zone d'overlap, jamais létale)
+    // pics = danger mortel ; eau = plan d'eau (bassin contenu / cascade / nappe libre héritée)
     const spikes = this.physics.add.staticGroup()
+    // PAROIS RIGIDES des bassins : corps statiques (un par paroi) qu'on ne traverse PAS en
+    // marchant. Collision avec le joueur ET les ennemis. La nage se fait EN DESCENDANT par le HAUT.
+    const basinWalls = this.physics.add.staticGroup()
     for (const hz of this.levelDef.hazards ?? []) {
       if (hz.kind === 'spikes') {
         for (let i = 0; i < hz.w; i++) {
           spikes.create((hz.x + i) * TILE + TILE / 2, this.groundRow * TILE + 8, 'spikes')
         }
-      } else {
-        // Eau : VRAIE zone nageable. Par défaut (top/h absents) c'est l'ancienne bande de 2 tuiles
-        // au-dessus du sol (rétrocompat exacte). Sinon on décrit un BASSIN : top = rangée de la
-        // surface, h = profondeur en rangées → grandes étendues (montée/descente à la nage, noyade
-        // P6 déjà en place). Rendu : nappe translucide + trait de surface plus clair en haut.
-        const waterTop = hz.top ?? this.groundRow - 2
-        const waterBottom = hz.h !== undefined ? waterTop + hz.h - 1 : this.groundRow + 1
-        for (let ty = waterTop; ty <= waterBottom; ty++) {
-          for (let i = 0; i < hz.w; i++) {
-            this.add.image((hz.x + i) * TILE + TILE / 2, ty * TILE + TILE / 2, 'water').setDepth(-2)
-          }
+        continue
+      }
+      // EAU. top = rangée de surface, h = profondeur (rangées). Sans top/h → ancienne bande près du
+      // sol (rétrocompat exacte). hz.water choisit la FORME : 'basin' (puits à parois rigides + déco
+      // de fond), 'waterfall' (cascade à source visible), sinon nappe libre héritée (aucun mur).
+      const waterTop = hz.top ?? this.groundRow - 2
+      const waterBottom = hz.h !== undefined ? waterTop + hz.h - 1 : this.groundRow + 1
+      const xPx = hz.x * TILE
+      const wPx = hz.w * TILE
+      const topPx = waterTop * TILE
+      const heightPx = (waterBottom + 1 - waterTop) * TILE
+
+      if (hz.water === 'waterfall') {
+        // CASCADE : rideau d'eau tuilé qu'on fait défiler vers le bas (update) + source rocheuse
+        // visible en haut d'où l'eau jaillit. Immersion douce (traversée courte, jamais mortelle).
+        const fall = this.add.tileSprite(xPx, topPx, wPx, heightPx, 'waterfall').setOrigin(0, 0).setDepth(-2)
+        this.waterfalls.push(fall)
+        this.add.image(xPx + wPx / 2, topPx, 'waterfall-source').setOrigin(0.5, 0.75).setDepth(-1)
+        // bassin d'écume au pied de la chute
+        this.add.ellipse(xPx + wPx / 2, waterBottom * TILE + TILE, wPx + 20, 16, 0xe3f2fd, 0.4).setDepth(-1)
+        this.waterRects.push(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))
+        continue
+      }
+
+      // NAPPE (basin OU libre) : rendu tuilé en UN TileSprite + liseré de surface.
+      this.add.tileSprite(xPx, topPx, wPx, heightPx, 'water').setOrigin(0, 0).setDepth(-3)
+      this.add.rectangle(xPx, topPx, wPx, 5, 0x9fdcff, 0.5).setOrigin(0, 0).setDepth(-1)
+      this.waterRects.push(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))
+
+      if (hz.water === 'basin') {
+        // PUITS/BASSIN CONTENU : parois rocheuses rigides à gauche (colonne hz.x-1) et à droite
+        // (colonne hz.x+hz.w). Visuel sur toute la hauteur d'eau ; COLLISION à partir d'une rangée
+        // SOUS la surface → on ne traverse jamais la paroi en marchant (blocage latéral au sol),
+        // mais on entre/sort librement par le HAUT (plonger, puis remonter à la nage et sortir sur
+        // le rebord). Le FOND est le sol du monde (les colonnes d'eau ne sont pas des trous).
+        for (const wx of [hz.x - 1, hz.x + hz.w]) {
+          if (wx < 0 || wx >= this.levelDef.widthTiles) continue
+          this.add.tileSprite(wx * TILE, topPx, TILE, heightPx, 'basin-wall').setOrigin(0, 0).setDepth(-2)
+          const collideTopPx = (waterTop + 1) * TILE
+          const collideH = (waterBottom + 1) * TILE - collideTopPx
+          this.addStaticBand(basinWalls, wx * TILE, collideTopPx, TILE, collideH)
         }
-        // surface : liseré translucide plus clair sur toute la largeur, en haut du bassin
-        this.add.rectangle(
-          hz.x * TILE, waterTop * TILE, hz.w * TILE, 5, 0x9fdcff, 0.5,
-        ).setOrigin(0, 0).setDepth(-1)
-        this.waterRects.push(new Phaser.Geom.Rectangle(
-          hz.x * TILE, waterTop * TILE, hz.w * TILE, (waterBottom + 1 - waterTop) * TILE,
-        ))
+        this.addBasinBottomDeco(hz.x, hz.x + hz.w - 1, waterBottom)
       }
     }
     this.physics.add.overlap(this.player, spikes, () => this.hitPlayer(35))
+    this.physics.add.collider(this.player, basinWalls)
+    this.physics.add.collider(this.enemies, basinWalls)
 
     // voile bleuté discret, épinglé à l'écran, affiché seulement quand la tête est immergée
     // (alpha piloté dans updateWater). Sous les overlays de menu/K.O. (depth ≥ 20).
     this.submergeVeil = this.add.rectangle(480, 270, 960, 540, 0x0a4a7a, 0)
       .setScrollFactor(0).setDepth(15)
 
-    // échelles : texture répétée + zone d'escalade (gérée dans update via ladderRects)
+    // échelles : texture répétée (UN TileSprite par échelle) + zone d'escalade (via ladderRects)
     for (const l of this.levelDef.ladders ?? []) {
-      for (let i = 0; i < l.h; i++) {
-        this.add.image(l.x * TILE + TILE / 2, (l.y + i) * TILE + TILE / 2, 'ladder').setDepth(-1)
-      }
+      this.add.tileSprite(l.x * TILE, l.y * TILE, TILE, l.h * TILE, 'ladder').setOrigin(0, 0).setDepth(-1)
       // on descend d'une tuile sous le bas de l'échelle pour pouvoir l'attraper depuis le sol
       // zone d'accroche large de 2 tuiles (centrée sur l'échelle) : plus de décrochage au moindre
       // décalage (avant : 1 tuile, testée sur le centre du panda → « casse-gueule »)
@@ -514,6 +562,42 @@ export class LevelScene extends Phaser.Scene {
         const jitter = ((x * 37) % 70) - 35 // pseudo-aléa déterministe
         this.add.image(x + jitter, groundY + 4, decoKey).setOrigin(0.5, 1).setDepth(-5)
       }
+    }
+  }
+
+  // OPTIM COLLISION : crée UN corps statique rectangulaire (coin haut-gauche leftPx/topPx, taille
+  // wPx×hPx) dans le groupe donné, à la place d'une ribambelle de tuiles. Le corps est dimensionné
+  // et positionné EXPLICITEMENT (setSize + position + updateCenter) : en Phaser 4, setScale+refreshBody
+  // ne redimensionne PAS un corps statique (il restait 32px → chute à travers). Le sprite support est
+  // invisible ; le RENDU est fait par un TileSprite séparé.
+  private addStaticBand(group: Phaser.Physics.Arcade.StaticGroup, leftPx: number, topPx: number, wPx: number, hPx: number) {
+    const band = group.create(leftPx + wPx / 2, topPx + hPx / 2, 'tile-plaine') as Phaser.Physics.Arcade.Sprite
+    band.setVisible(false)
+    const body = band.body as Phaser.Physics.Arcade.StaticBody
+    body.setSize(wPx, hPx, false)
+    body.position.set(leftPx, topPx)
+    body.updateCenter()
+  }
+
+  // DÉCO DE FOND de bassin (ambiance pure, AUCUNE physique/collision, depth arrière) : galets le
+  // long du fond, algues, coquillages, coraux et quelques bulles immobiles. Pseudo-aléa déterministe
+  // sur la colonne → rendu stable d'une frame à l'autre.
+  private addBasinBottomDeco(xFrom: number, xTo: number, bottomRow: number) {
+    const floorY = (bottomRow + 1) * TILE // ligne du fond (dessus du sol du monde)
+    const rnd = (seed: number) => { const s = Math.sin(seed * 127.1) * 43758.5453; return s - Math.floor(s) }
+    let k = 0
+    for (let tx = xFrom; tx <= xTo; tx++) {
+      const cx = tx * TILE + TILE / 2
+      const r = rnd(tx + 1)
+      // galets posés au fond (fréquents, tailles variées)
+      this.add.image(cx, floorY - 3, 'deco-pebble').setOrigin(0.5, 1).setDepth(-2).setAlpha(0.9).setScale(0.75 + r * 0.5)
+      // un élément « vivant » une colonne sur trois (algue / coquillage / corail en rotation)
+      if ((tx - xFrom) % 3 === 1) {
+        const kind = ['deco-algae', 'deco-shell', 'deco-coral'][k++ % 3]!
+        this.add.image(cx + (r - 0.5) * 10, floorY - 2, kind).setOrigin(0.5, 1).setDepth(-2).setAlpha(0.85)
+      }
+      // bulles immobiles éparses qui « décorent » la colonne d'eau
+      if (r > 0.7) this.add.image(cx, floorY - TILE - r * 40, 'fx-bubble').setDepth(-2).setAlpha(0.5).setScale(0.3 + r * 0.3)
     }
   }
 
@@ -2180,6 +2264,8 @@ export class LevelScene extends Phaser.Scene {
     if (this.bgClouds) this.bgClouds.tilePositionX = sx * 0.1
     if (this.bgFar) this.bgFar.tilePositionX = sx * 0.3
     if (this.bgNear) this.bgNear.tilePositionX = sx * 0.55
+    // cascades : le rideau d'eau défile vers le bas (effet de chute continue)
+    for (const wf of this.waterfalls) wf.tilePositionY += delta * 0.4
     if (this.aim) this.updateAimReticle()
     if (this.player.hp <= 0) return
     // chute mortelle dans un trou (ou sous le bas du monde) → mort ; peut réapparaître au checkpoint

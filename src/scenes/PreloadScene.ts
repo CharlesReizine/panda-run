@@ -1661,6 +1661,51 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0x1e88e5, 0.38).fillRect(0, 0, 32, 32)
     g.fillStyle(0x64b5f6, 0.45).fillRect(0, 0, 32, 5)
     g.fillStyle(0xbbdefb, 0.35).fillRect(4, 12, 8, 2).fillRect(18, 22, 9, 2); g.generateTexture('water', 32, 32); g.clear()
+    // basin-wall : PAROI ROCHEUSE rigide des bassins (cuve d'eau contenue). Bloc de pierre sombre
+    // tuilable verticalement, arêtes marquées + mousse humide → lit tout de suite comme un mur de
+    // puits/citerne qui retient l'eau. 32×32, corps de collision géré à part (rectangle par paroi).
+    g.fillStyle(0x37474f).fillRect(0, 0, 32, 32) // fond pierre
+    g.fillStyle(0x455a64).fillRect(2, 2, 28, 12).fillRect(2, 18, 28, 12) // deux assises de blocs
+    g.fillStyle(0x263238).fillRect(0, 14, 32, 2).fillRect(0, 30, 32, 2) // joints horizontaux sombres
+    g.fillStyle(0x263238).fillRect(15, 0, 2, 14).fillRect(7, 18, 2, 12).fillRect(23, 18, 2, 12) // joints verticaux
+    g.fillStyle(0x546e7a, 0.6).fillRect(3, 3, 24, 2).fillRect(3, 19, 24, 2) // reflet clair sur l'assise
+    g.fillStyle(0x33691e, 0.5).fillEllipse(8, 4, 10, 4).fillEllipse(25, 20, 9, 4) // mousse humide
+    g.generateTexture('basin-wall', 32, 32); g.clear()
+    // waterfall : CASCADE tuilable verticalement — rideau d'eau translucide, stries claires
+    // d'écoulement + écume. Le rendu la fait défiler vers le bas (tilePositionY) pour l'effet de chute.
+    g.fillStyle(0x1e88e5, 0.34).fillRect(0, 0, 32, 32)
+    g.fillStyle(0x64b5f6, 0.42).fillRect(3, 0, 5, 32).fillRect(13, 0, 6, 32).fillRect(24, 0, 4, 32) // colonnes d'eau
+    g.fillStyle(0xe3f2fd, 0.55).fillRect(4, 0, 2, 32).fillRect(15, 0, 2, 32).fillRect(25, 0, 1, 32) // stries vives
+    g.fillStyle(0xffffff, 0.35).fillEllipse(6, 8, 4, 3).fillEllipse(17, 22, 5, 3).fillEllipse(26, 14, 3, 2) // écume
+    g.generateTexture('waterfall', 32, 32); g.clear()
+    // waterfall-source : rebord rocheux d'où jaillit la cascade (posé au sommet de la chute)
+    g.fillStyle(0x4e342e).fillRoundedRect(0, 6, 64, 18, 5) // roche
+    g.fillStyle(0x6d4c41).fillRoundedRect(2, 6, 60, 10, 4)
+    g.fillStyle(0x33691e, 0.7).fillEllipse(14, 8, 20, 6).fillEllipse(46, 8, 22, 6) // mousse au bord
+    g.fillStyle(0x64b5f6, 0.5).fillRect(20, 16, 24, 8) // nappe qui déborde
+    g.fillStyle(0xe3f2fd, 0.6).fillRect(22, 16, 20, 3)
+    g.generateTexture('waterfall-source', 64, 30); g.clear()
+    // ─── Déco de FOND de bassin (légère, sans physique, depth arrière) ─────────────────
+    // deco-pebble : amas de galets ronds au fond de l'eau
+    g.fillStyle(0x546e7a).fillEllipse(7, 8, 12, 8).fillEllipse(18, 9, 11, 7).fillEllipse(27, 8, 9, 6)
+    g.fillStyle(0x78909c).fillEllipse(7, 7, 8, 5).fillEllipse(18, 8, 7, 4).fillEllipse(27, 7, 6, 4)
+    g.fillStyle(0x90a4ae, 0.8).fillEllipse(6, 6, 3, 2).fillEllipse(17, 7, 3, 2) // reflets
+    g.generateTexture('deco-pebble', 34, 16); g.clear()
+    // deco-algae : touffe d'algues vertes ondulantes
+    g.fillStyle(0x2e7d32).fillRect(4, 6, 3, 22).fillRect(9, 2, 3, 26).fillRect(14, 8, 3, 20)
+    g.fillStyle(0x43a047).fillRect(4, 6, 1, 22).fillRect(9, 2, 1, 26).fillRect(14, 8, 1, 20)
+    g.fillStyle(0x66bb6a, 0.8).fillEllipse(10, 3, 5, 3) // pointe claire
+    g.generateTexture('deco-algae', 20, 30); g.clear()
+    // deco-shell : petit coquillage en éventail
+    g.fillStyle(0xffab91).fillEllipse(8, 11, 16, 12)
+    g.fillStyle(0xffccbc).fillEllipse(8, 11, 12, 9)
+    g.lineStyle(1, 0xbf6a52, 0.8); g.beginPath(); g.moveTo(8, 11); g.lineTo(2, 3); g.moveTo(8, 11); g.lineTo(8, 1); g.moveTo(8, 11); g.lineTo(14, 3); g.strokePath()
+    g.generateTexture('deco-shell', 18, 16); g.clear()
+    // deco-coral : petit corail/racine rouge (variété de fond)
+    g.fillStyle(0xc62828).fillRect(7, 8, 3, 16)
+    g.fillStyle(0xe53935).fillRect(3, 12, 3, 12).fillRect(11, 10, 3, 14)
+    g.fillStyle(0xff8a80, 0.8).fillCircle(8, 7, 3).fillCircle(4, 12, 2).fillCircle(13, 10, 2)
+    g.generateTexture('deco-coral', 18, 26); g.clear()
     // échelle en bois (montants + barreaux, répétée verticalement)
     g.fillStyle(0x8d6e63).fillRect(4, 0, 5, 32).fillRect(23, 0, 5, 32) // montants
     g.fillStyle(0xa1887f).fillRect(4, 0, 2, 32).fillRect(23, 0, 2, 32) // reflet clair des montants

@@ -13,10 +13,17 @@ export interface LevelDef {
   platforms: { x: number; y: number; w: number }[] // en tuiles ; y depuis le haut
   spawns: { monsterId: string; x: number }[] // x en tuiles
   props?: { kind: string; x: number; y?: number }[] // x en tuiles ; y (tuiles) seulement pour les coffres sur plateforme
-  // spikes = danger (bande au sol) ; water = zone nageable. Par défaut l'eau est une bande près du
-  // sol ; on peut décrire une VRAIE ZONE (bassin profond) via top (rangée du haut de l'eau) et h
-  // (hauteur en rangées). Sans top/h → ancienne bande près du sol (rétrocompat).
-  hazards?: { kind: 'spikes' | 'water'; x: number; w: number; top?: number; h?: number }[]
+  // spikes = danger (bande au sol) ; water = plan d'eau. top = rangée de surface, h = profondeur en
+  // rangées (sans top/h → ancienne bande près du sol, rétrocompat). Le champ `water` choisit la FORME
+  // du plan d'eau :
+  //   • absent      → nappe LIBRE héritée : aucun mur (rétrocompat exacte des niveaux non refondus).
+  //   • 'basin'     → PUITS/BASSIN CONTENU : parois rocheuses RIGIDES (gauche/droite) qu'on ne
+  //                   traverse pas en marchant ; on plonge par le HAUT et on nage dedans ; fond = sol
+  //                   du monde (mettre h = groundRow - top) ; galets/algues/coquillages en déco de
+  //                   fond (sans collision). Un coffre au fond = récompense de plongée.
+  //   • 'waterfall' → CASCADE : source rocheuse visible en haut + rideau d'eau qui s'écoule (animé).
+  //                   Réservée aux VRAIES chutes, jamais à un bassin.
+  hazards?: { kind: 'spikes' | 'water'; x: number; w: number; top?: number; h?: number; water?: 'basin' | 'waterfall' }[]
   bridges?: { x: number; y: number; w: number }[] // ponts de planches (plateformes fines)
   // trous MORTELS dans le sol : à ces emplacements (x en tuiles, largeur w en tuiles) on ne
   // dessine PAS les rangées de sol pleines (groundRow/+1) → c'est le vide. Tomber dedans = mort.
@@ -33,6 +40,56 @@ const prop = (kind: string, x: number, y?: number) => ({ kind, x, y })
 const ladder = (x: number, y: number, h: number) => ({ x, y, h })
 const gap = (x: number, w: number) => ({ x, w })
 
+// ─── Constructeurs de terrain vertical (correct-par-construction pour reachable.test) ───────
+// Escalier de marches. dir=+1 : monte quand x croît ; dir=-1 : descend quand x croît. Chaque marche
+// = un palier de largeur w ; écart vertical stepUp (≤3 → toujours au saut simple), écart horizontal
+// stepX-w (≤3 → atteignable). Reproduit le motif d'escalier déjà validé des anciens niveaux.
+const stair = (x0: number, yStart: number, count: number, o: { w?: number; stepX?: number; stepUp?: number; dir?: 1 | -1 } = {}) => {
+  const { w = 5, stepX = 7, stepUp = 3, dir = 1 } = o
+  return Array.from({ length: count }, (_, i) => plat(x0 + i * stepX, yStart - i * stepUp * dir, w))
+}
+// TOUR D'ÉCHELLES en lacets : grimpe une falaise depuis baseRow (rangée où repose le PIED de la 1re
+// échelle — le sol du monde, ou un palier déjà atteignable). Chaque étage = une échelle (h) + un
+// palier posé 2 rangées SOUS son sommet (règle du décalage pieds↔centre, cf. level-validator), les
+// paliers alternant gauche/droite. Monte de ~9 rangées par étage. Renvoie échelles + paliers + le
+// palier de sommet (row/x) pour y accrocher la suite (chaîner un escalier, poser un coffre…).
+const tower = (lx: number, baseRow: number, stages: number, o: { h?: number; w?: number } = {}) => {
+  const { h = 11, w = 5 } = o
+  const platforms: { x: number; y: number; w: number }[] = []
+  const ladders: { x: number; y: number; h: number }[] = []
+  let base = baseRow
+  let topX = lx - 1
+  for (let i = 0; i < stages; i++) {
+    const T = base - h
+    ladders.push(ladder(lx, T, h))
+    topX = i % 2 === 0 ? lx - 1 : lx - w + 2
+    platforms.push(plat(topX, T + 2, w))
+    base = T + 2
+  }
+  return { platforms, ladders, topRow: base, topX, topW: w }
+}
+// BASSIN CONTENU traversé par un pont. Parois rigides gérées côté moteur (water:'basin') : le sol du
+// monde fait le FOND (top = gRow - depth). Un pont en DEUX segments (trou central de 2 tuiles) passe
+// juste au-dessus de la surface → on marche dessus, on saute le trou (≤ saut simple) OU on plonge par
+// le trou pour le coffre du fond puis on remonte (remontée survivable : profondeur courte). Escalier
+// d'accès depuis le sol côté gauche (le côté droit se rejoint en retombant sur le sol).
+const basinCrossing = (x: number, w: number, depth: number, gRow: number) => {
+  const surface = gRow - depth
+  const bridgeRow = surface - 1
+  const holeL = x + Math.floor(w / 2) - 1 // trou central de 3 tuiles (holeL, +1, +2) : franchissable
+  const hazard = { kind: 'water' as const, x, w, top: surface, h: depth, water: 'basin' as const } //   au saut ET assez large pour plonger confortablement par le dessus
+  const bridges = [
+    { x: x - 1, y: bridgeRow, w: holeL - (x - 1) }, // segment gauche : du mur gauche au trou
+    { x: holeL + 3, y: bridgeRow, w: (x + w) - (holeL + 3) + 1 }, // segment droit : du trou au mur droit
+  ].filter((b) => b.w > 0)
+  // escalier d'accès gauche : du sol jusqu'au niveau du pont, marche de sommet adjacente au pont.
+  // écart horizontal 2 tuiles (spacing 6, largeur 4) pour rester atteignable à +3 rangées de saut.
+  const steps = Math.max(1, Math.ceil(depth / 3))
+  const stairs = Array.from({ length: steps }, (_, i) => plat(x - 2 - (steps - 1 - i) * 6, bridgeRow + (steps - 1 - i) * 3, 4))
+  const chest = prop('coffre', x + Math.floor(w / 2)) // au FOND (plancher = sol), sous le trou
+  return { hazard, bridges, platforms: stairs, chest }
+}
+
 // RÈGLES DE VERTICALITÉ (toutes vérifiées par level-validator.ts, saut SIMPLE) :
 // - saut max ≈ 4 tuiles de haut ; le SOL couvre toute la largeur (écart horizontal = 0 vers
 //   n'importe quelle plateforme), donc toute plateforme à la rangée ≥ groundRow-4 est atteignable du sol.
@@ -44,65 +101,108 @@ const gap = (x: number, w: number) => ({ x, w })
 // PROFIL DISTINCT (nb d'étages, position des échelles, alternance haut/bas, pics/eau) : escalier,
 // buttes, tour d'échelle, vallée, zigzag, colonnes, cimes, vagues…
 
+// ─── Zone 1 refondue (PHASE 1) : mondes HAUTS (~8× le viewport) et LARGES (~2×), verticale REMPLIE
+// de bas en haut par des falaises à échelles (tower), des crêtes descendantes (stair dir:-1) et des
+// bassins d'eau CONTENUS (basinCrossing : parois rigides + pont à trou + coffre au fond) reliés au
+// sol. Chaque plan d'eau est soit un bassin contenu, soit une cascade à source — plus jamais de
+// colonne d'eau nue. Toute plateforme/échelle/coffre reste atteignable au saut simple (reachable.test).
+
+// zone1-1 : PRAIRIE — falaise gauche à échelles (sol → cime, coffre), crête descendante, pilier
+// central, bassin de vallée contenu (coffre au fond) + 2e falaise, cascade sur le flanc gauche.
+function mkZone11(): LevelDef {
+  const gRow = 118
+  const t1 = tower(14, gRow, 12) // falaise gauche : sol → cime (row 10)
+  const trav = stair(18, 12, 11, { dir: -1, stepX: 8, stepUp: 3, w: 5 }) // crête descendante row12→42
+  const tMid = tower(88, gRow, 10) // pilier central (row 28)
+  const t2 = tower(140, gRow, 10) // 2e falaise (row 28)
+  const basin = basinCrossing(118, 12, 5, gRow) // bassin de vallée + pont + coffre au fond
+  return {
+    id: 'zone1-1', name: 'Prairie de Prontera', biome: 'plaine', widthTiles: 175, heightTiles: 120,
+    platforms: [...t1.platforms, ...trav, ...tMid.platforms, ...t2.platforms, ...basin.platforms],
+    ladders: [...t1.ladders, ...tMid.ladders, ...t2.ladders],
+    bridges: [...basin.bridges],
+    hazards: [basin.hazard, { kind: 'water', x: 8, w: 3, top: 16, h: 54, water: 'waterfall' }, { kind: 'spikes', x: 66, w: 3 }],
+    gaps: [gap(160, 2)],
+    props: [prop('coffre', t1.topX + 2, t1.topRow - 1), prop('coffre', t2.topX + 2, t2.topRow - 1), basin.chest, prop('herbe', 30), prop('champignon', 78), prop('herbe', 158)],
+    spawns: [{ monsterId: 'gloopy', x: 8 }, { monsterId: 'angeling', x: 26 }, { monsterId: 'fabre', x: 42 }, { monsterId: 'poring-dore', x: 60 }, { monsterId: 'mandragore', x: 80 }, { monsterId: 'gloopy', x: 100 }, { monsterId: 'gloopy', x: 148 }],
+    checkpoints: [{ x: 30 }, { x: 100 }, { x: 150 }],
+  }
+}
+
+// zone1-2 : CHAMPS — deux falaises à échelles séparées par deux crêtes descendantes et DEUX bassins
+// contenus (coffres au fond), cascade médiane. Le plus long de la zone.
+function mkZone12(): LevelDef {
+  const gRow = 122
+  const t1 = tower(14, gRow, 13) // falaise gauche → cime (row 5)
+  const travA = stair(18, 8, 15, { dir: -1, stepX: 8, stepUp: 3, w: 5 }) // crête row8→50
+  const t2 = tower(185, gRow, 10) // falaise droite (row 32)
+  const travB = stair(189, 34, 11, { dir: -1, stepX: 8, stepUp: 3, w: 5 }) // crête row34→64
+  const basinA = basinCrossing(90, 12, 5, gRow)
+  const basinB = basinCrossing(230, 12, 5, gRow)
+  return {
+    id: 'zone1-2', name: 'Champs fleuris', biome: 'plaine', widthTiles: 300, heightTiles: 124,
+    platforms: [...t1.platforms, ...travA, ...t2.platforms, ...travB, ...basinA.platforms, ...basinB.platforms],
+    ladders: [...t1.ladders, ...t2.ladders],
+    bridges: [...basinA.bridges, ...basinB.bridges],
+    hazards: [basinA.hazard, basinB.hazard, { kind: 'water', x: 160, w: 3, top: 12, h: 58, water: 'waterfall' }, { kind: 'spikes', x: 120, w: 3 }, { kind: 'spikes', x: 265, w: 3 }],
+    gaps: [gap(150, 2), gap(285, 2)],
+    props: [prop('coffre', t1.topX + 2, t1.topRow - 1), prop('coffre', t2.topX + 2, t2.topRow - 1), basinA.chest, prop('herbe', 40), prop('champignon', 130), prop('herbe', 270)],
+    spawns: [{ monsterId: 'gloopy', x: 10 }, { monsterId: 'mandragore', x: 30 }, { monsterId: 'lunatic', x: 45 }, { monsterId: 'gloopy', x: 55 }, { monsterId: 'louveteau', x: 60 }, { monsterId: 'mandragore', x: 75 }, { monsterId: 'gloopy', x: 110 }, { monsterId: 'mandragore', x: 135 }, { monsterId: 'gloopy', x: 165 }, { monsterId: 'louveteau', x: 180 }, { monsterId: 'mandragore', x: 215 }, { monsterId: 'lunatic', x: 250 }, { monsterId: 'gloopy', x: 255 }, { monsterId: 'louveteau', x: 270 }, { monsterId: 'mandragore', x: 275 }, { monsterId: 'gloopy', x: 295 }],
+    checkpoints: [{ x: 40 }, { x: 130 }, { x: 250 }],
+  }
+}
+
+// zone1-3 : ORÉE — le plus « grimpe » : QUATRE falaises à échelles (deux hautes, deux moyennes) en
+// lacets, reliées par des crêtes, deux bassins contenus, cascade sur le flanc droit.
+function mkZone13(): LevelDef {
+  const gRow = 126
+  const t1 = tower(14, gRow, 13) // haute (row 9)
+  const t2 = tower(64, gRow, 13) // haute (row 9)
+  const t3 = tower(150, gRow, 11) // moyenne-haute (row 27)
+  const t4 = tower(240, gRow, 10) // moyenne (row 36)
+  const travA = stair(18, 11, 12, { dir: -1, stepX: 8, stepUp: 3, w: 5 }) // crête row11→44
+  const travC = stair(154, 38, 10, { dir: -1, stepX: 8, stepUp: 3, w: 5 }) // crête row38→65
+  const basinA = basinCrossing(100, 12, 5, gRow)
+  const basinB = basinCrossing(200, 12, 5, gRow)
+  return {
+    id: 'zone1-3', name: 'Orée de la forêt', biome: 'foret', widthTiles: 300, heightTiles: 128,
+    platforms: [...t1.platforms, ...t2.platforms, ...t3.platforms, ...t4.platforms, ...travA, ...travC, ...basinA.platforms, ...basinB.platforms],
+    ladders: [...t1.ladders, ...t2.ladders, ...t3.ladders, ...t4.ladders],
+    bridges: [...basinA.bridges, ...basinB.bridges],
+    hazards: [basinA.hazard, basinB.hazard, { kind: 'water', x: 232, w: 3, top: 14, h: 56, water: 'waterfall' }, { kind: 'spikes', x: 130, w: 3 }, { kind: 'spikes', x: 275, w: 3 }],
+    props: [prop('coffre', t1.topX + 2, t1.topRow - 1), prop('coffre', t3.topX + 2, t3.topRow - 1), basinA.chest, prop('herbe', 45), prop('champignon', 120), prop('herbe', 260)],
+    spawns: [{ monsterId: 'louveteau', x: 10 }, { monsterId: 'gardien-sylve', x: 35 }, { monsterId: 'mandragore', x: 55 }, { monsterId: 'louveteau', x: 85 }, { monsterId: 'poporing', x: 120 }, { monsterId: 'gardien-sylve', x: 145 }, { monsterId: 'poporing', x: 160 }, { monsterId: 'louveteau', x: 170 }, { monsterId: 'mandragore', x: 190 }, { monsterId: 'poporing', x: 230 }, { monsterId: 'mandragore', x: 250 }, { monsterId: 'louveteau', x: 290 }],
+    checkpoints: [{ x: 40 }, { x: 120 }, { x: 245 }],
+  }
+}
+
+// zone1-4 : FORÊT PROFONDE — VALLÉE : falaise gauche → cime (coffre), GRAND bassin central contenu et
+// profond (coffre au fond), 2e falaise, second bassin, cascade qui alimente la vallée.
+function mkZone14(): LevelDef {
+  const gRow = 120
+  const t1 = tower(14, gRow, 12) // falaise gauche (row 12)
+  const travA = stair(18, 14, 14, { dir: -1, stepX: 8, stepUp: 3, w: 5 }) // crête row14→53
+  const t2 = tower(200, gRow, 11) // falaise droite (row 21)
+  const basinBig = basinCrossing(110, 16, 6, gRow) // grand bassin de vallée profond
+  const basinB = basinCrossing(250, 12, 5, gRow)
+  return {
+    id: 'zone1-4', name: 'Forêt profonde', biome: 'foret', widthTiles: 320, heightTiles: 122,
+    platforms: [...t1.platforms, ...travA, ...t2.platforms, ...basinBig.platforms, ...basinB.platforms],
+    ladders: [...t1.ladders, ...t2.ladders],
+    bridges: [...basinBig.bridges, ...basinB.bridges],
+    hazards: [basinBig.hazard, basinB.hazard, { kind: 'water', x: 128, w: 4, top: 18, h: 90, water: 'waterfall' }, { kind: 'spikes', x: 70, w: 3 }, { kind: 'spikes', x: 290, w: 3 }],
+    gaps: [gap(180, 2)],
+    props: [prop('coffre', t1.topX + 2, t1.topRow - 1), prop('coffre', t2.topX + 2, t2.topRow - 1), basinBig.chest, prop('herbe', 40), prop('champignon', 160), prop('herbe', 300)],
+    spawns: [{ monsterId: 'louveteau', x: 10 }, { monsterId: 'willow', x: 35 }, { monsterId: 'mandragore', x: 45 }, { monsterId: 'rocker', x: 75 }, { monsterId: 'louveteau', x: 60 }, { monsterId: 'louveteau', x: 90 }, { monsterId: 'louveteau', x: 140 }, { monsterId: 'rocker', x: 165 }, { monsterId: 'mandragore', x: 195 }, { monsterId: 'willow', x: 225 }, { monsterId: 'louveteau', x: 270 }, { monsterId: 'rocker', x: 300 }, { monsterId: 'louveteau', x: 315 }],
+    checkpoints: [{ x: 40 }, { x: 135 }, { x: 270 }],
+  }
+}
+
 const list: LevelDef[] = [
-  // zone1-1 : MONDE HAUT DÉMO (44 rangées, sol row42). Grand escalier montant à gauche (row39→24)
-  // → échelle vers le sommet (row16) → grand LAC profond au centre (nage montée/descente) franchi
-  // par un pont → paliers de droite redescendant vers la sortie, pic au sol. Modèle de verticalité.
-  { id: 'zone1-1', name: 'Prairie de Prontera', biome: 'plaine', widthTiles: 90, heightTiles: 44,
-    platforms: [
-      plat(8, 39, 5), plat(15, 36, 5), plat(22, 33, 5), plat(29, 30, 5), plat(36, 27, 5), plat(43, 24, 5),
-      plat(44, 16, 5),
-      plat(70, 39, 5), plat(77, 36, 5), plat(83, 33, 5)],
-    spawns: [{ monsterId: 'gloopy', x: 12 }, { monsterId: 'angeling', x: 24 }, { monsterId: 'fabre', x: 36 }, { monsterId: 'poring-dore', x: 46 }, { monsterId: 'gloopy', x: 70 }, { monsterId: 'mandragore', x: 78 }, { monsterId: 'gloopy', x: 86 }],
-    props: [prop('herbe', 15), prop('champignon', 68), prop('herbe', 75), prop('coffre', 7), prop('coffre', 45, 23), prop('coffre', 84, 32)],
-    hazards: [{ kind: 'water', x: 52, w: 13, top: 18, h: 24 }, { kind: 'spikes', x: 66, w: 4 }],
-    bridges: [{ x: 49, y: 22, w: 17 }],
-    ladders: [ladder(46, 14, 10)],
-    checkpoints: [{ x: 20 }, { x: 68 }] },
-  // zone1-2 : PLAINE HAUTE & LARGE (40 rangées, sol row38, w160). Trois escaliers montants (gauche
-  // → échelle-sommet, centre → échelle-sommet, droite) séparés par un GRAND bassin et un second
-  // plan d'eau à ponts. Alternance montée/plateau/eau sur toute la longueur.
-  { id: 'zone1-2', name: 'Champs fleuris', biome: 'plaine', widthTiles: 160, heightTiles: 40,
-    platforms: [
-      plat(8, 35, 5), plat(15, 32, 5), plat(22, 29, 5), plat(29, 26, 5), plat(36, 23, 5), plat(37, 15, 5),
-      plat(74, 35, 5), plat(81, 32, 5), plat(88, 29, 5), plat(95, 26, 5), plat(96, 17, 5),
-      plat(130, 35, 5), plat(137, 32, 5), plat(144, 29, 5), plat(151, 26, 5)],
-    spawns: [{ monsterId: 'gloopy', x: 12 }, { monsterId: 'gloopy', x: 18 }, { monsterId: 'mandragore', x: 28 }, { monsterId: 'gloopy', x: 40 }, { monsterId: 'mandragore', x: 48 }, { monsterId: 'gloopy', x: 58 }, { monsterId: 'mandragore', x: 65 }, { monsterId: 'lunatic', x: 76 }, { monsterId: 'louveteau', x: 85 }, { monsterId: 'gloopy', x: 95 }, { monsterId: 'mandragore', x: 108 }, { monsterId: 'lunatic', x: 118 }, { monsterId: 'louveteau', x: 128 }, { monsterId: 'gloopy', x: 138 }, { monsterId: 'mandragore', x: 148 }, { monsterId: 'louveteau', x: 156 }],
-    props: [prop('herbe', 30), prop('champignon', 105), prop('herbe', 155), prop('coffre', 39, 14), prop('coffre', 98, 16), prop('coffre', 146, 28)],
-    hazards: [{ kind: 'water', x: 52, w: 16, top: 20, h: 18 }, { kind: 'spikes', x: 70, w: 4 }, { kind: 'water', x: 110, w: 12, top: 26, h: 12 }, { kind: 'spikes', x: 124, w: 4 }],
-    bridges: [{ x: 51, y: 22, w: 18 }],
-    gaps: [gap(42, 3)],
-    ladders: [ladder(39, 13, 10), ladder(98, 15, 11)],
-    checkpoints: [{ x: 45 }, { x: 100 }, { x: 140 }] },
-  // zone1-3 : FORÊT — TOUR D'ÉCHELLES (48 rangées, sol row46, w150). À gauche trois échelles
-  // empilées grimpant en spirale jusqu'à une cime (row17) ; au centre et à droite deux escaliers à
-  // échelle-sommet, séparés par des étangs à ponts. Le niveau le plus « grimpe » de la zone 1.
-  { id: 'zone1-3', name: 'Orée de la forêt', biome: 'foret', widthTiles: 150, heightTiles: 48,
-    platforms: [
-      plat(12, 43, 5), plat(14, 36, 5), plat(16, 26, 5), plat(18, 17, 5),
-      plat(56, 43, 5), plat(63, 40, 5), plat(70, 37, 5), plat(77, 34, 5), plat(78, 25, 5),
-      plat(112, 43, 5), plat(119, 40, 5), plat(126, 37, 5), plat(133, 34, 5), plat(140, 31, 5)],
-    spawns: [{ monsterId: 'louveteau', x: 14 }, { monsterId: 'gardien-sylve', x: 26 }, { monsterId: 'mandragore', x: 44 }, { monsterId: 'poporing', x: 55 }, { monsterId: 'louveteau', x: 66 }, { monsterId: 'mandragore', x: 78 }, { monsterId: 'poporing', x: 90 }, { monsterId: 'louveteau', x: 102 }, { monsterId: 'mandragore', x: 114 }, { monsterId: 'gardien-sylve', x: 126 }, { monsterId: 'poporing', x: 138 }, { monsterId: 'louveteau', x: 146 }],
-    props: [prop('herbe', 48), prop('champignon', 88), prop('herbe', 145), prop('coffre', 20, 16), prop('coffre', 80, 24), prop('coffre', 135, 33)],
-    hazards: [{ kind: 'water', x: 32, w: 13, top: 28, h: 18 }, { kind: 'spikes', x: 50, w: 4 }, { kind: 'water', x: 92, w: 12, top: 32, h: 14 }, { kind: 'spikes', x: 106, w: 4 }],
-    bridges: [{ x: 31, y: 30, w: 15 }],
-    ladders: [ladder(16, 34, 12), ladder(20, 25, 11), ladder(20, 15, 11), ladder(80, 23, 11)],
-    checkpoints: [{ x: 45 }, { x: 90 }, { x: 130 }] },
-  // zone1-4 : FORÊT PROFONDE — VALLÉE (46 rangées, sol row44, w170). Ascension gauche → cime, GRAND
-  // gouffre d'eau profond au centre franchi par un long pont, remontée centrale → cime, second
-  // bassin, escalier de sortie. Coffres en fond de vallée et en cime.
-  { id: 'zone1-4', name: 'Forêt profonde', biome: 'foret', widthTiles: 170, heightTiles: 46,
-    platforms: [
-      plat(10, 41, 5), plat(17, 38, 5), plat(24, 35, 5), plat(31, 32, 5), plat(38, 29, 5), plat(39, 20, 5),
-      plat(74, 41, 5), plat(81, 38, 5), plat(88, 35, 5), plat(95, 32, 5), plat(96, 23, 5),
-      plat(132, 41, 5), plat(139, 38, 5), plat(146, 35, 5), plat(153, 32, 5), plat(162, 41, 4)],
-    spawns: [{ monsterId: 'louveteau', x: 14 }, { monsterId: 'willow', x: 30 }, { monsterId: 'louveteau', x: 44 }, { monsterId: 'rocker', x: 55 }, { monsterId: 'louveteau', x: 62 }, { monsterId: 'mandragore', x: 76 }, { monsterId: 'louveteau', x: 88 }, { monsterId: 'rocker', x: 100 }, { monsterId: 'willow', x: 112 }, { monsterId: 'louveteau', x: 124 }, { monsterId: 'mandragore', x: 138 }, { monsterId: 'rocker', x: 150 }, { monsterId: 'louveteau', x: 162 }],
-    props: [prop('herbe', 30), prop('champignon', 104), prop('herbe', 165), prop('coffre', 41, 19), prop('coffre', 98, 22), prop('coffre', 148, 34)],
-    hazards: [{ kind: 'water', x: 50, w: 18, top: 20, h: 24 }, { kind: 'spikes', x: 70, w: 4 }, { kind: 'water', x: 112, w: 12, top: 30, h: 14 }, { kind: 'spikes', x: 126, w: 4 }],
-    bridges: [{ x: 49, y: 22, w: 20 }],
-    gaps: [gap(106, 3)],
-    ladders: [ladder(41, 18, 11), ladder(98, 21, 11)],
-    checkpoints: [{ x: 45 }, { x: 100 }, { x: 150 }] },
+  mkZone11(),
+  mkZone12(),
+  mkZone13(),
+  mkZone14(),
   { id: 'zone1-boss', name: 'Antre du Roi Gloopy', biome: 'foret', widthTiles: 40,
     platforms: [plat(8, 10, 4), plat(28, 10, 4)],
     spawns: [], boss: 'roi-gloopy' },
