@@ -32,6 +32,7 @@ export interface SkillDef {
   arc?: boolean // projectile lancé en cloche (soumis à la gravité, rebondit)
   buff?: { atkMult: number; durationMs: number } // cri de guerre : booste l'ATK sortante un temps donné
   flame?: boolean // épée enflammée : pendant le buff, la lame s'embrase → +dégâts + brûlure (DoT) sur les coups
+  fear?: { durationMs: number } // folie enragée : aura rouge sang + terreur sur les mobs de niveau ≤ joueur (fuite lente + -50% DÉF), hors boss
   minLevel?: number // niveau joueur minimum pour débloquer/monter ce skill (défaut : aucun)
   requires?: string // id d'un skill prérequis à débloquer avant celui-ci (défaut : aucun)
   // ── Archer / Chasseur ──────────────────────────────────────────────────────

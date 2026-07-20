@@ -11,7 +11,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     id: 'swordsman', name: 'Sabreur', tint: 0xff8888,
     baseStats: { atk: 16, def: 5, maxHp: 136, attackSpeed: 1.6 },
     growth: { atk: 3, def: 2, maxHp: 21, attackSpeed: 0 },
-    skillIds: ['taillade', 'estoc-rapide', 'tourbillon', 'attaque-chargee', 'lancer-epee', 'epee-enflammee', 'plongeon', 'lame-ultime'],
+    skillIds: ['taillade', 'estoc-rapide', 'tourbillon', 'attaque-chargee', 'lancer-epee', 'epee-enflammee', 'folie-enragee', 'plongeon', 'lame-ultime'],
   },
   mage: {
     id: 'mage', name: 'Mage', tint: 0x88aaff,
@@ -29,7 +29,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     id: 'chevalier', name: 'Chevalier', tint: 0xffcc44,
     baseStats: { atk: 28, def: 10, maxHp: 238, attackSpeed: 1.7 },
     growth: { atk: 5, def: 3, maxHp: 34, attackSpeed: 0 },
-    skillIds: ['garde-imperiale', 'sceau-du-heaume', 'jugement-royal', 'taillade', 'attaque-chargee', 'plongeon', 'epee-enflammee', 'lame-ultime'],
+    skillIds: ['garde-imperiale', 'sceau-du-heaume', 'jugement-royal', 'taillade', 'attaque-chargee', 'folie-enragee', 'plongeon', 'epee-enflammee', 'lame-ultime'],
   },
   sorcier: {
     id: 'sorcier', name: 'Sorcier', tint: 0xaa66ff,

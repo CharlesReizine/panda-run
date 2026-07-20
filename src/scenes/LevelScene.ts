@@ -320,11 +320,11 @@ export class LevelScene extends Phaser.Scene {
       if (proj.pierce) {
         if (proj.hitEnemies.has(e)) return
         proj.hitEnemies.add(e)
-        e.takeDamage(physicalDamage(proj.damage, e.monster.def))
+        e.takeDamage(physicalDamage(proj.damage, e.effectiveDef()))
         if (proj.burn) e.applyBurn(proj.burn.dmgPerTick, proj.burn.durationMs)
         this.impactFx(proj.x, proj.y, proj.tintTopLeft)
       } else {
-        e.takeDamage(physicalDamage(proj.damage, e.monster.def))
+        e.takeDamage(physicalDamage(proj.damage, e.effectiveDef()))
         if (proj.burn) e.applyBurn(proj.burn.dmgPerTick, proj.burn.durationMs)
         // grosse boule de feu : petite explosion (gerbe + splash) à l'impact, en plus du coup direct
         if (proj.blast) this.doFireballBlast(proj)
@@ -1079,7 +1079,7 @@ export class LevelScene extends Phaser.Scene {
       for (const obj of this.enemies.getChildren()) {
         const e = obj as Enemy
         if (Phaser.Math.Distance.Between(this.player.x, this.player.y, e.x, e.y) <= skill.range) {
-          e.takeDamage(physicalDamage(atk, e.monster.def, mult))
+          e.takeDamage(physicalDamage(atk, e.effectiveDef(), mult))
         }
       }
       for (const obj of this.props.getChildren()) {
@@ -1192,6 +1192,20 @@ export class LevelScene extends Phaser.Scene {
       this.player.applyAtkBuff(skill.buff.atkMult, skill.buff.durationMs)
       if (skill.flame) { this.player.applyFlameBuff(skill.buff.durationMs); this.flameEnchantFx(color) }
       else this.warCryFx()
+    }
+    // Folie enragée : le panda entre en furie (aura ROUGE côté joueur) et TERRORISE tous les
+    // monstres de son niveau ou moins — hors boss, jamais apeurés — qui fuient lentement et
+    // encaissent +50% de dégâts (déf halvée, cf. Enemy.effectiveDef).
+    if (skill.fear) {
+      this.player.applyRageAura(skill.fear.durationMs)
+      for (const obj of this.enemies.getChildren()) {
+        const e = obj as Enemy
+        if (!e.monster.boss && e.monster.level <= p.level) e.fear(skill.fear.durationMs)
+      }
+      // FX de lancement : onde rouge sang + léger flash rouge + courte secousse
+      this.aoeRing(this.player.x, this.player.y, 170, 0xd50000, true)
+      this.flashScreen(0xd50000, 0.14, 150)
+      this.screenShake(0.008, 200)
     }
     // couche d'effets stylés propre à chaque skill sabreur / chevalier (par-dessus le générique)
     this.swordsmanFx(skill, color)
@@ -1323,7 +1337,7 @@ export class LevelScene extends Phaser.Scene {
     for (const obj of this.enemies.getChildren()) {
       const e = obj as Enemy
       if (e.active && Phaser.Math.Distance.Between(x, y, e.x, e.y) <= radius) {
-        e.takeDamage(physicalDamage(atk, e.monster.def, dmgMult))
+        e.takeDamage(physicalDamage(atk, e.effectiveDef(), dmgMult))
         if (flaming) e.applyBurn(atk * 0.35, 3000)
       }
     }
@@ -1577,7 +1591,7 @@ export class LevelScene extends Phaser.Scene {
     audio.playSfx('hit')
     for (const obj of this.enemies.getChildren()) {
       const e = obj as Enemy
-      if (e.active && Phaser.Math.Distance.Between(x, y, e.x, e.y) <= data.radius) e.takeDamage(physicalDamage(data.damage, e.monster.def))
+      if (e.active && Phaser.Math.Distance.Between(x, y, e.x, e.y) <= data.radius) e.takeDamage(physicalDamage(data.damage, e.effectiveDef()))
     }
     for (const obj of this.props.getChildren()) {
       const prop = obj as Prop
@@ -1602,7 +1616,7 @@ export class LevelScene extends Phaser.Scene {
       sprung = true
       this.tweens.killTweensOf(trap)
       enemy.root(skill.root ?? 2000)
-      enemy.takeDamage(physicalDamage(atk, enemy.monster.def, mult))
+      enemy.takeDamage(physicalDamage(atk, enemy.effectiveDef(), mult))
       this.impactFx(trap.x, trap.y, color)
       this.burstParticles(trap.x, trap.y, 12, color, { speed: 90, size: 5, durationMs: 360 })
       this.screenShake(0.004, 120)
@@ -1739,7 +1753,7 @@ export class LevelScene extends Phaser.Scene {
       this.time.delayedCall(120 + t * (durationMs / ticks), () => {
         for (const obj of this.enemies.getChildren()) {
           const e = obj as Enemy
-          if (e.active && Phaser.Math.Distance.Between(cx, cy, e.x, e.y) <= radius * 1.08) e.takeDamage(physicalDamage(atk, e.monster.def, mult * 0.45))
+          if (e.active && Phaser.Math.Distance.Between(cx, cy, e.x, e.y) <= radius * 1.08) e.takeDamage(physicalDamage(atk, e.effectiveDef(), mult * 0.45))
         }
         for (const obj of this.props.getChildren()) {
           const prop = obj as Prop
@@ -1763,7 +1777,7 @@ export class LevelScene extends Phaser.Scene {
     for (const obj of this.enemies.getChildren()) {
       const e = obj as Enemy
       if (e.active && Phaser.Math.Distance.Between(x, y, e.x, e.y) <= data.radius) {
-        e.takeDamage(physicalDamage(proj.damage * 0.5, e.monster.def))
+        e.takeDamage(physicalDamage(proj.damage * 0.5, e.effectiveDef()))
       }
     }
     for (const obj of this.props.getChildren()) {
@@ -1785,7 +1799,7 @@ export class LevelScene extends Phaser.Scene {
       if (!e.active) continue
       const dx = (e.x - px) * f
       if (dx >= -24 && dx <= reach && Math.abs(e.y - py) <= 140) {
-        e.takeDamage(physicalDamage(atk, e.monster.def, mult))
+        e.takeDamage(physicalDamage(atk, e.effectiveDef(), mult))
         touched = true
       }
     }
@@ -1892,7 +1906,7 @@ export class LevelScene extends Phaser.Scene {
             for (const obj of this.enemies.getChildren()) {
               const e = obj as Enemy
               if (e.active && Phaser.Math.Distance.Between(mx, landY, e.x, e.y) <= blast) {
-                e.takeDamage(physicalDamage(atk, e.monster.def, mult * 0.6))
+                e.takeDamage(physicalDamage(atk, e.effectiveDef(), mult * 0.6))
                 e.applyBurn(atk * 0.15, 2200)
               }
             }
@@ -1930,7 +1944,7 @@ export class LevelScene extends Phaser.Scene {
         const atk = this.player.stats.atk * this.player.outgoingMult()
         for (const obj of this.enemies.getChildren()) {
           const e = obj as Enemy
-          if (e.active && Phaser.Math.Distance.Between(bx, by, e.x, e.y) <= 122) e.takeDamage(physicalDamage(atk, e.monster.def, mult * 0.4))
+          if (e.active && Phaser.Math.Distance.Between(bx, by, e.x, e.y) <= 122) e.takeDamage(physicalDamage(atk, e.effectiveDef(), mult * 0.4))
         }
       })
     }
@@ -1959,7 +1973,7 @@ export class LevelScene extends Phaser.Scene {
     for (const obj of this.enemies.getChildren()) {
       const e = obj as Enemy
       if (e.active && inMeleeReach((e.x - px) * f, Math.abs(e.y - py), reach)) {
-        e.takeDamage(physicalDamage(atk, e.monster.def, multiplier))
+        e.takeDamage(physicalDamage(atk, e.effectiveDef(), multiplier))
         if (flaming) e.applyBurn(atk * 0.35, 3000)
         touched = true
       }

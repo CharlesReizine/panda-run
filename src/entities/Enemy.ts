@@ -40,6 +40,9 @@ const CASTER_KEEP_DIST = 240 // distance de confort du lanceur de sorts
 // flip flou quand la vitesse oscille autour de 0 (lanceur qui garde ses distances, cible qui
 // alterne gauche/droite)
 const FLIP_THRESHOLD = 20
+// fraction de la vitesse nominale à laquelle un monstre apeuré (Folie enragée) fuit le joueur :
+// assez lent pour rester rattrapable et frappable pendant qu'il détale.
+const FEAR_SPEED_MULT = 0.45
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   monster: MonsterDef
@@ -61,6 +64,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   // Immobilisation (Piège de l'archer) : l'ennemi reste cloué sur place jusqu'à cette échéance.
   private rootedUntil = 0
   private snareFx: Phaser.GameObjects.Graphics | null = null
+  // Terreur (Folie enragée du sabreur) : l'ennemi FUIT le joueur lentement et prend +50% de dégâts
+  // (défense effective halvée) jusqu'à cette échéance. Les boss en sont toujours immunisés.
+  private fearedUntil = 0
+  private fearFx: Phaser.GameObjects.Text | null = null
 
   constructor(scene: LevelScene, x: number, y: number, def: MonsterDef) {
     super(scene, x, y, `monster-${def.id}`)
@@ -103,6 +110,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.zzz?.destroy()
       this.burnTimer?.remove()
       this.snareFx?.destroy()
+      this.fearFx?.destroy()
       this.destroy()
     }
   }
@@ -141,6 +149,24 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     return this.scene.time.now < this.rootedUntil
   }
 
+  // Terrorise l'ennemi pour une durée donnée (Folie enragée) : tant que l'effet dure, la boucle
+  // d'IA le fait FUIR le joueur (sens opposé) lentement et sa défense effective est halvée. Sans
+  // effet sur les boss — la peur ne prend jamais sur eux.
+  fear(durationMs: number) {
+    if (!this.active || this.monster.boss) return
+    this.fearedUntil = Math.max(this.fearedUntil, this.scene.time.now + durationMs)
+  }
+
+  isFeared(): boolean {
+    return this.scene.time.now < this.fearedUntil
+  }
+
+  // Défense effective encaissée par le calcul de dégâts : halvée tant que l'ennemi est apeuré
+  // (Folie enragée), sinon la défense nominale du monstre.
+  effectiveDef(): number {
+    return this.isFeared() ? this.monster.def * 0.5 : this.monster.def
+  }
+
   // tir d'un projectile vers le joueur, propre et cohérent selon le monstre :
   //  - mandragore : boule verte EN CLOCHE (gravité, retombe et s'arrête au sol)
   //  - mage noir : bolt magique violet HORIZONTAL ; rocker : petite pierre HORIZONTALE
@@ -172,8 +198,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // Immobilisé par un piège : cloué sur place, aucune IA de déplacement tant que dure l'effet.
     const rooted = t < this.rootedUntil
     if (rooted) this.setVelocity(0, 0)
+    // Apeuré (Folie enragée) : le monstre FUIT le joueur (sens opposé) LENTEMENT — encore
+    // rattrapable pour le taper — et n'attaque plus. Les boss n'y sont jamais soumis.
+    const feared = !this.monster.boss && t < this.fearedUntil
 
-    if (!rooted && dist < AGGRO_RANGE) {
+    if (!rooted && feared) {
+      this.setVelocityX(-dir * this.monster.speed * FEAR_SPEED_MULT)
+    } else if (!rooted && dist < AGGRO_RANGE) {
       if (this.monster.behavior === 'charge') {
         if (t > this.nextActionAt) {
           this.setVelocityX(dir * this.monster.speed * 3)
@@ -270,6 +301,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.snareFx.destroy()
         this.snareFx = null
       }
+    }
+
+    // indicateur de terreur (Folie enragée) : un « ! » pâle et tremblotant au-dessus de la tête
+    // tant que le monstre est apeuré.
+    if (feared) {
+      if (!this.fearFx) this.fearFx = this.scene.add.text(this.x, this.y, '!', { fontSize: '20px', color: '#e3f2fd', fontStyle: 'bold', stroke: '#4527a0', strokeThickness: 4 }).setOrigin(0.5)
+      this.fearFx.setPosition(this.x + Phaser.Math.Between(-2, 2), this.y - this.height / 2 - 34 + Phaser.Math.Between(-2, 2))
+      this.fearFx.setAlpha(0.65 + 0.35 * Math.sin(t / 60))
+    } else if (this.fearFx) {
+      this.fearFx.destroy()
+      this.fearFx = null
     }
 
     // halo d'élite pulsant autour des MVP

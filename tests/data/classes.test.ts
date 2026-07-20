@@ -10,10 +10,14 @@ const BASE_OF: Partial<Record<ClassId, ClassId>> = Object.fromEntries(
 )
 
 describe('données classes/skills', () => {
-  it('7 classes, novice 3 skills, les autres 8', () => {
+  it('7 classes, novice 3 skills, sabreur/chevalier 9 (Folie enragée), les autres 8', () => {
     expect(Object.keys(CLASSES)).toHaveLength(7)
     expect(CLASSES.novice.skillIds).toHaveLength(3)
-    for (const id of ['swordsman', 'mage', 'archer', 'chevalier', 'sorcier', 'chasseur'] as const) {
+    // le sabreur et son évolution portent Folie enragée en plus de leur arbre → 9 skills
+    for (const id of ['swordsman', 'chevalier'] as const) {
+      expect(CLASSES[id].skillIds).toHaveLength(9)
+    }
+    for (const id of ['mage', 'archer', 'sorcier', 'chasseur'] as const) {
       expect(CLASSES[id].skillIds).toHaveLength(8)
     }
   })

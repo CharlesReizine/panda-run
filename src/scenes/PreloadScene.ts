@@ -15,18 +15,19 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'estoc-rapide': { color: 0xe0e0e0, glyph: 'thrust' },
   'tourbillon': { color: 0x90caf9, glyph: 'tornado' },
   'attaque-chargee': { color: 0xffcc80, glyph: 'dash' },
-  'lancer-epee': { color: 0xb0bec5, glyph: 'sword' },
-  'epee-enflammee': { color: 0xff7043, glyph: 'fireball' },
+  'lancer-epee': { color: 0xb0bec5, glyph: 'swordthrow' },
+  'epee-enflammee': { color: 0xff7043, glyph: 'flamesword' },
+  'folie-enragee': { color: 0xd50000, glyph: 'rage' },
   'plongeon': { color: 0xff8a65, glyph: 'slam' },
-  'lame-ultime': { color: 0xffd54f, glyph: 'sword' },
+  'lame-ultime': { color: 0xffd54f, glyph: 'swordx' },
   'boule-de-feu': { color: 0xff7043, glyph: 'fireball' },
   'eclair': { color: 0x64b5ff, glyph: 'bolt' },
-  'mur-de-flamme': { color: 0xff7043, glyph: 'fireball' },
-  'pluie-de-meteores': { color: 0xff8a65, glyph: 'rain' },
+  'mur-de-flamme': { color: 0xff7043, glyph: 'flamewall' },
+  'pluie-de-meteores': { color: 0xff8a65, glyph: 'meteors' },
   'maitrise-arcanique': { color: 0xba68c8, glyph: 'star' },
   'vitalite-magique': { color: 0x66bb6a, glyph: 'heart' },
   'nova-de-givre': { color: 0x4dd0e1, glyph: 'snow' },
-  'meteore': { color: 0xff8a65, glyph: 'fireball' },
+  'meteore': { color: 0xff8a65, glyph: 'meteor' },
   'soin-du-panda': { color: 0x81c784, glyph: 'cross' },
   'tempete-arcanique': { color: 0xce93d8, glyph: 'star' },
   'fleche-percante': { color: 0x40c4ff, glyph: 'arrow' },
@@ -48,7 +49,7 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'garde-imperiale': { color: 0xffe082, glyph: 'target' },
   'sceau-du-heaume': { color: 0xffca28, glyph: 'wave' },
   // Sorcier
-  'cataclysme': { color: 0xff5252, glyph: 'fireball' },
+  'cataclysme': { color: 0xff5252, glyph: 'meteors' },
   'faille-du-neant': { color: 0x7e57c2, glyph: 'ray' },
   'benediction-du-panda': { color: 0x81c784, glyph: 'heart' },
   // Chasseur
@@ -1211,6 +1212,55 @@ export class PreloadScene extends Phaser.Scene {
         g.fillStyle(c).fillCircle(cx + 14, 30, 3)
         g.fillStyle(c, 0.4).fillCircle(cx - 14, 30, 2.5).fillCircle(cx - 2, 17, 2)
         break
+      case 'flamesword': // épée dont la lame s'embrase (distincte de la boule de feu)
+        g.lineStyle(4, 0xeceff1).beginPath(); g.moveTo(13, 31); g.lineTo(31, 13); g.strokePath() // lame
+        g.lineStyle(3, 0x9e9e9e).beginPath(); g.moveTo(10, 28); g.lineTo(16, 34); g.strokePath() // garde
+        // flammes qui lèchent la lame
+        g.fillStyle(0xff7043).fillTriangle(20, 24, 26, 24, 24, 12)
+        g.fillStyle(0xffca28).fillTriangle(22, 22, 26, 22, 25, 15)
+        g.fillStyle(0xff5252).fillTriangle(28, 18, 33, 18, 31, 8)
+        break
+      case 'swordthrow': // épée lancée / tournoyante : lame horizontale + arcs de rotation
+        g.lineStyle(4, c).beginPath(); g.moveTo(10, 26); g.lineTo(30, 18); g.strokePath() // lame filante
+        g.fillStyle(c).fillTriangle(30, 18, 24, 15, 25, 22) // pointe
+        g.lineStyle(2, 0x9e9e9e).beginPath(); g.moveTo(11, 22); g.lineTo(15, 30); g.strokePath() // garde
+        g.lineStyle(2, c, 0.6); g.beginPath(); g.arc(22, 22, 15, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(320), false); g.strokePath()
+        break
+      case 'swordx': // ultime : deux lames croisées (X)
+        g.lineStyle(4, c).beginPath(); g.moveTo(12, 32); g.lineTo(32, 12); g.strokePath()
+        g.beginPath(); g.moveTo(12, 12); g.lineTo(32, 32); g.strokePath()
+        g.lineStyle(3, 0x9e9e9e).beginPath(); g.moveTo(9, 29); g.lineTo(15, 35); g.moveTo(29, 35); g.lineTo(35, 29); g.strokePath()
+        g.fillStyle(0xffffff).fillCircle(cx, cy, 2.5)
+        break
+      case 'flamewall': // mur de flammes : rangée de flammes dressées sur une base
+        g.fillStyle(0x5d4037).fillRect(7, 33, 30, 4) // base / sol
+        for (let i = 0; i < 3; i++) {
+          const fx = 13 + i * 9, h = i === 1 ? 22 : 17
+          g.fillStyle(0xff7043).fillTriangle(fx - 5, 34, fx + 5, 34, fx, 34 - h)
+          g.fillStyle(0xffca28).fillTriangle(fx - 2.5, 34, fx + 2.5, 34, fx, 34 - h * 0.6)
+        }
+        break
+      case 'meteor': // roche enflammée avec traînée (un seul météore)
+        g.fillStyle(c, 0.35).fillTriangle(30, 8, 36, 10, 20, 24) // traînée
+        g.fillStyle(0xffca28, 0.6).fillTriangle(28, 12, 33, 13, 22, 22)
+        g.fillStyle(0x6d4c41).fillCircle(18, 26, 8) // roche
+        g.fillStyle(0xff7043).fillCircle(15, 23, 3).fillCircle(21, 28, 2.5) // braises
+        break
+      case 'meteors': // plusieurs météores : pluie de roches enflammées
+        for (const [mx, my, r] of [[13, 22, 6], [26, 30, 5], [30, 14, 4]] as const) {
+          g.fillStyle(c, 0.35).fillTriangle(mx + r + 6, my - r - 6, mx + r + 10, my - r - 3, mx, my)
+          g.fillStyle(0x6d4c41).fillCircle(mx, my, r)
+          g.fillStyle(0xff7043).fillCircle(mx - r * 0.4, my - r * 0.3, r * 0.4)
+        }
+        break
+      case 'rage': { // furie : crâne rouge cerné d'un éclat de rage
+        g.fillStyle(0xd50000); for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; g.fillTriangle(cx + Math.cos(a) * 9, cy + Math.sin(a) * 9, cx + Math.cos(a + 0.3) * 9, cy + Math.sin(a + 0.3) * 9, cx + Math.cos(a + 0.15) * 18, cy + Math.sin(a + 0.15) * 18) }
+        g.fillStyle(0xffebee).fillCircle(cx, cy - 1, 8) // crâne pâle
+        g.fillStyle(0xffebee).fillRect(cx - 4, cy + 4, 8, 5) // mâchoire
+        g.fillStyle(0x7f0000).fillCircle(cx - 3, cy - 1, 2.3).fillCircle(cx + 3, cy - 1, 2.3) // orbites
+        g.fillStyle(0x7f0000).fillRect(cx - 3, cy + 5, 1.5, 4).fillRect(cx + 1.5, cy + 5, 1.5, 4) // dents
+        break
+      }
     }
     g.generateTexture(`skill-${id}`, 44, 44)
     g.destroy()

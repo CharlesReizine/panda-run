@@ -74,6 +74,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private buffMult = 1
   private auraImage: Phaser.GameObjects.Image | null = null
   private auraTween: Phaser.Tweens.Tween | null = null
+  // Folie enragée : aura ROUGE SANG pulsante + clignotement rouge du panda, distincte du buff ATK
+  // doré. Purement visuel côté joueur (l'effet de terreur s'applique aux ennemis dans LevelScene).
+  private rageUntil = 0
+  private rageAura: Phaser.GameObjects.Image | null = null
+  private rageTween: Phaser.Tweens.Tween | null = null
+  private rageBlink: Phaser.Time.TimerEvent | null = null
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, `panda-${getPlayer().classId}`)
@@ -146,6 +152,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.auraImage.setPosition(this.x, this.y)
       }
     }
+    // aura de rage (Folie enragée) : suit le panda tant que la furie dure, puis s'éteint et rend
+    // sa teinte normale au panda.
+    if (this.rageAura) {
+      if (this.scene.time.now >= this.rageUntil) {
+        this.rageTween?.remove(); this.rageTween = null
+        this.rageBlink?.remove(); this.rageBlink = null
+        this.rageAura.destroy(); this.rageAura = null
+        this.clearTint()
+      } else {
+        this.rageAura.setPosition(this.x, this.y)
+      }
+    }
   }
 
   // applique (ou renouvelle) un buff d'attaque : multiplie les dégâts sortants un temps donné,
@@ -164,6 +182,31 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.scene.events.emit('player-buff', this.buffUntil, durationMs)
   }
 
+  // Folie enragée : entre en furie pour une durée donnée → aura ROUGE SANG pulsante sous le panda
+  // + clignotement rouge du panda (teinte alternée). Purement visuel côté joueur ; la terreur
+  // infligée aux monstres est gérée dans LevelScene. Nettoyage à l'échéance dans syncOverlays.
+  applyRageAura(durationMs: number) {
+    this.rageUntil = this.scene.time.now + durationMs
+    if (!this.rageAura) {
+      this.rageAura = this.scene.add.image(this.x, this.y, 'ring')
+        .setTint(0xd50000).setDepth(this.depth - 1).setAlpha(0.55).setScale(1.8)
+      this.rageTween = this.scene.tweens.add({
+        targets: this.rageAura, scale: 2.5, alpha: 0.85,
+        duration: 300, yoyo: true, repeat: -1, ease: 'Sine.inOut',
+      })
+    }
+    if (!this.rageBlink) {
+      this.rageBlink = this.scene.time.addEvent({
+        delay: 120, loop: true, callback: () => {
+          if (this.scene.time.now >= this.rageUntil) { this.rageBlink?.remove(); this.rageBlink = null; return }
+          // alterne une teinte ROUGE SANG sur le panda → clignotement de furie
+          if (this.isTinted) this.clearTint()
+          else this.setTint(0xb71c1c)
+        },
+      })
+    }
+  }
+
   // multiplicateur appliqué à tous les dégâts sortants (attaque de base + skills) ; 1 hors buff
   outgoingMult(): number {
     return this.scene.time.now < this.buffUntil ? this.buffMult : 1
@@ -177,6 +220,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.weaponImage?.destroy()
     this.auraTween?.remove()
     this.auraImage?.destroy()
+    this.rageTween?.remove()
+    this.rageBlink?.remove()
+    this.rageAura?.destroy()
     super.destroy(fromScene)
   }
 
