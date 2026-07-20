@@ -5,8 +5,9 @@ import { buyPotion, buyItem } from '../core/shop'
 import { canCraft, doCraft } from '../core/craft'
 import { canReforge, doReforge, reforgeCost, upgradedBonus, sellItem, sellValue, MAX_REFORGE_LEVEL } from '../core/reforge'
 import { acceptQuest, refreshQuestProgress, claimQuest } from '../core/quests'
-import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, HAT_SHOP, QUESTS } from '../data/shops'
-import { ITEMS, rarityColor } from '../data/items'
+import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, HAT_SHOP, QUESTS, type ShopItemDef } from '../data/shops'
+import { ITEMS, rarityColor, SLOT_ORDER, SLOT_LABEL_PLURAL } from '../data/items'
+import type { EquipSlot } from '../core/types'
 import { MATERIALS } from '../data/materials'
 import { RECIPES } from '../data/recipes'
 import { audio } from '../audio/audio-engine'
@@ -373,19 +374,36 @@ export class TownScene extends Phaser.Scene {
     name: string, sub: string, price: number,
     onBuy: () => boolean,
     onBought: () => void,
+    owned = false,
   ) {
+    const parts: Phaser.GameObjects.GameObject[] = []
     const card = this.add.rectangle(x, y, w, h, 0x4e342e, 0.9).setStrokeStyle(2, 0x8d6e63, 1)
-    c.add(card)
+    c.add(card); parts.push(card)
     const iy = y - h / 2 + 30
     if ('texture' in icon) {
-      c.add(this.add.image(x, iy, icon.texture).setDisplaySize(30, 30))
+      const img = this.add.image(x, iy, icon.texture).setDisplaySize(30, 30)
+      c.add(img); parts.push(img)
     } else {
       // pas de visuel dédié pour cet objet : pastille colorée par emplacement (arme/armure/accessoire)
-      c.add(this.add.circle(x, iy, 15, icon.pastille).setStrokeStyle(2, 0xffffff, 0.6))
-      c.add(this.add.text(x, iy, icon.glyph, { fontSize: '11px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
+      const circ = this.add.circle(x, iy, 15, icon.pastille).setStrokeStyle(2, 0xffffff, 0.6)
+      const glyph = this.add.text(x, iy, icon.glyph, { fontSize: '11px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
+      c.add(circ); c.add(glyph); parts.push(circ, glyph)
     }
-    c.add(this.add.text(x, y - h / 2 + 52, name, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: w - 12 } }).setOrigin(0.5, 0))
-    if (sub) c.add(this.add.text(x, y - h / 2 + 74, sub, { fontSize: '10px', color: '#90a4ae', align: 'center', wordWrap: { width: w - 12 } }).setOrigin(0.5, 0))
+    const nameTxt = this.add.text(x, y - h / 2 + 52, name, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: w - 12 } }).setOrigin(0.5, 0)
+    c.add(nameTxt); parts.push(nameTxt)
+    if (sub) { const subTxt = this.add.text(x, y - h / 2 + 74, sub, { fontSize: '10px', color: '#90a4ae', align: 'center', wordWrap: { width: w - 12 } }).setOrigin(0.5, 0); c.add(subTxt); parts.push(subTxt) }
+
+    // objet déjà possédé (inventaire ou équipé) : carte grisée, achat bloqué, libellé « Possédé »
+    if (owned) {
+      for (const o of parts) (o as unknown as { setAlpha: (a: number) => void }).setAlpha(0.4)
+      card.setStrokeStyle(2, 0x6d5b52, 1)
+      const tag = this.add.text(x, y + h / 2 - 18, 'Possédé', {
+        fontSize: '13px', color: '#cfd8dc', backgroundColor: '#3a2b28', padding: { x: 10, y: 5 },
+      }).setOrigin(0.5)
+      c.add(tag)
+      return
+    }
+
     const buyBtn = this.add.text(x, y + h / 2 - 18, `${price} or`, {
       fontSize: '13px', color: '#ffffff', backgroundColor: '#2e7d32', padding: { x: 10, y: 5 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true })
@@ -448,46 +466,81 @@ export class TownScene extends Phaser.Scene {
     return bySlot[item.slot]
   }
 
-  private openItemShop(kind: 'armes' | 'vetements', list: { itemId: string; price: number }[], page = 0) {
+  // itemIds déjà possédés par le joueur (dans l'inventaire OU équipés) — sert à bloquer le rachat
+  private ownedIds(): Set<string> {
+    const p = getPlayer()
+    const equipped = Object.values(p.equipment).filter((id): id is string => !!id)
+    return new Set<string>([...p.inventory, ...equipped])
+  }
+
+  private openItemShop(kind: 'armes' | 'vetements', list: ShopItemDef[], page = 0) {
     this.closePanel()
     const title = kind === 'armes' ? 'Armurerie' : 'Boutique de vêtements'
-    const cols = list.length <= 1 ? 1 : list.length <= 4 ? 2 : 3
-    const cardW = 168, cardH = 128, gapX = 16, gapY = 14
-    // pagination : au plus 2 rangées visibles par page pour que le panneau tienne dans le
-    // viewport 960×540 (hauteur bornée ≤ 500, largeur ≤ 920, centré).
+
+    // regroupe les articles par type dans l'ordre fixe (chapeau → armure → arme → accessoire)
+    const groups = SLOT_ORDER
+      .map((slot) => ({ slot, entries: list.filter((e) => ITEMS[e.itemId]!.slot === slot) }))
+      .filter((g) => g.entries.length > 0)
+    const maxGroup = Math.max(...groups.map((g) => g.entries.length), 1)
+    const cols = maxGroup <= 1 ? 1 : maxGroup <= 4 ? 2 : 3
+    const cardW = 168, cardH = 128, gapX = 16, gapY = 14, sectionH = 28
+
+    // aplatis en rangées de cartes étiquetées par type (une rangée ≤ cols cartes d'un même type)
+    const cardRows: { slot: EquipSlot; entries: ShopItemDef[] }[] = []
+    for (const g of groups)
+      for (let i = 0; i < g.entries.length; i += cols)
+        cardRows.push({ slot: g.slot, entries: g.entries.slice(i, i + cols) })
+
+    // pagination : au plus 2 rangées de cartes visibles par page (viewport 960×540, hauteur ≤ 500)
     const rowsPerPage = 2
-    const perPage = cols * rowsPerPage
-    const pageCount = Math.max(1, Math.ceil(list.length / perPage))
+    const pageCount = Math.max(1, Math.ceil(cardRows.length / rowsPerPage))
     page = Phaser.Math.Clamp(page, 0, pageCount - 1)
-    const pageItems = list.slice(page * perPage, page * perPage + perPage)
-    const rowsThis = Math.ceil(pageItems.length / cols)
-    const rowsForH = pageCount > 1 ? rowsPerPage : rowsThis
+    const pageRows = cardRows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+
+    // hauteur du contenu : un en-tête de section à chaque changement de type sur la page
+    let sections = 0
+    let seen: EquipSlot | null = null
+    for (const r of pageRows) { if (r.slot !== seen) { sections++; seen = r.slot } }
+    const contentH = pageRows.length * cardH + Math.max(0, pageRows.length - 1) * gapY + sections * sectionH
 
     const w = Math.min(920, Math.max(360, cols * cardW + (cols - 1) * gapX + 60))
     const headerH = 100, footerH = 64
-    const h = Math.min(500, headerH + rowsForH * cardH + (rowsForH - 1) * gapY + footerH)
+    const h = Math.min(500, headerH + contentH + footerH)
     const c = this.add.container(0, 0).setDepth(50)
     this.panel = c
     const top = this.drawPanelFrame(c, w, h, title)
     const p = getPlayer()
     const goldText = this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
+    const owned = this.ownedIds()
 
-    const gridTop = top + headerH
     const gridLeft = 480 - (cols * cardW + (cols - 1) * gapX) / 2 + cardW / 2
-    pageItems.forEach((entry, i) => {
-      const item = ITEMS[entry.itemId]!
-      const col = i % cols
-      const row = Math.floor(i / cols)
-      const x = gridLeft + col * (cardW + gapX)
-      const y = gridTop + row * (cardH + gapY) + cardH / 2
-      const bonus = Object.entries(item.bonus).map(([k, v]) => `${k} +${v}`).join(' / ')
-      this.drawItemCard(
-        c, x, y, cardW, cardH,
-        this.iconFor(entry.itemId), item.name, bonus, entry.price,
-        () => { const pl = getPlayer(); return buyItem(pl, entry.itemId, entry.price) },
-        () => { const pl = getPlayer(); save(pl); goldText.setText(`${pl.gold} or`) },
-      )
-    })
+    let y = top + headerH
+    let lastSlot: EquipSlot | null = null
+    for (const r of pageRows) {
+      if (r.slot !== lastSlot) {
+        // en-tête de section lisible + fin filet doré séparateur
+        c.add(this.add.text(480 - w / 2 + 24, y + sectionH / 2, SLOT_LABEL_PLURAL[r.slot], {
+          fontSize: '14px', color: '#ffd54f', fontStyle: 'bold',
+        }).setOrigin(0, 0.5))
+        c.add(this.add.rectangle(480, y + sectionH - 3, w - 44, 1, 0xffd54f, 0.3))
+        y += sectionH
+        lastSlot = r.slot
+      }
+      r.entries.forEach((entry, col) => {
+        const item = ITEMS[entry.itemId]!
+        const x = gridLeft + col * (cardW + gapX)
+        const cy = y + cardH / 2
+        const bonus = Object.entries(item.bonus).map(([k, v]) => `${k} +${v}`).join(' / ')
+        this.drawItemCard(
+          c, x, cy, cardW, cardH,
+          this.iconFor(entry.itemId), item.name, bonus, entry.price,
+          () => { const pl = getPlayer(); return buyItem(pl, entry.itemId, entry.price) },
+          () => { const pl = getPlayer(); save(pl); goldText.setText(`${pl.gold} or`) },
+          owned.has(entry.itemId),
+        )
+      })
+      y += cardH + gapY
+    }
 
     this.drawPager(c, 480, top + h - 44, page, pageCount, (pg) => this.openItemShop(kind, list, pg))
     c.add(

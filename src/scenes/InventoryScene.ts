@@ -1,11 +1,12 @@
 import Phaser from 'phaser'
 import { getPlayer } from '../state'
 import { save } from '../core/save'
-import { ITEMS, rarityColor } from '../data/items'
+import { ITEMS, rarityColor, SLOT_ORDER, SLOT_LABEL_PLURAL } from '../data/items'
 import type { EquipSlot } from '../core/types'
 import type { LevelScene } from './LevelScene'
 
-const SLOTS: EquipSlot[] = ['weapon', 'armor', 'accessory', 'hat']
+// ordre fixe chapeau → armure → arme → accessoire (partagé avec les boutiques)
+const SLOTS: EquipSlot[] = SLOT_ORDER
 const SLOT_LABELS: Record<EquipSlot, string> = { weapon: 'Arme', armor: 'Armure', accessory: 'Accessoire', hat: 'Chapeau' }
 // pastille par emplacement (repli quand aucune icône illustrée item-<id> n'est bakée)
 const SLOT_PASTILLE: Record<EquipSlot, { color: number; glyph: string }> = {
@@ -77,29 +78,40 @@ export class InventoryScene extends Phaser.Scene {
     if (p.inventory.length === 0) {
       this.add.text(265, 300, '(vide — les objets ramassés\napparaissent ici)', { fontSize: '14px', color: '#78909c', align: 'center' }).setOrigin(0.5)
     } else {
-      const cols = 3, cellW = 150, cellH = 96
-      const gridLeft = 40, gridTop = 104
-      p.inventory.forEach((itemId, i) => {
-        const item = ITEMS[itemId]!
-        const col = i % cols, row = Math.floor(i / cols)
-        const cx = gridLeft + col * cellW + cellW / 2
-        const cy = gridTop + row * cellH
-        const up = p.upgrades[itemId] ?? 0
-        const upTxt = up > 0 ? ` +${up}` : ''
-        const tile = this.add.rectangle(cx, cy + 8, cellW - 12, cellH - 12, 0x1b2b3a, 0.9).setStrokeStyle(2, rarityColor(item.rarity), 0.9)
-        this.itemIcon(itemId, cx, cy - 6, 42)
-        this.add.text(cx, cy + 30, `${item.name}${upTxt}`, {
-          fontSize: '11px', color: this.css(rarityColor(item.rarity)), align: 'center', wordWrap: { width: cellW - 18 },
-        }).setOrigin(0.5, 0)
-        // clic sur la case = équiper l'objet dans son slot (l'objet précédent retourne au stock)
-        tile.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-          const prev = p.equipment[item.slot]
-          p.equipment[item.slot] = itemId
-          p.inventory.splice(i, 1)
-          if (prev) p.inventory.push(prev)
-          save(p); this.dirty = true; this.render()
+      // regroupé visuellement par type (chapeau → armure → arme → accessoire), en-tête par section.
+      // On conserve l'index réel dans p.inventory pour l'équipement (splice).
+      const cols = 3, cellW = 150, cellH = 92
+      const gridLeft = 40
+      const entries = p.inventory.map((itemId, i) => ({ itemId, i }))
+      let y = 92
+      for (const slot of SLOTS) {
+        const group = entries.filter((e) => ITEMS[e.itemId]!.slot === slot)
+        if (group.length === 0) continue
+        this.add.text(44, y, SLOT_LABEL_PLURAL[slot], { fontSize: '13px', color: '#ffd54f', fontStyle: 'bold' })
+        const rowsTop = y + 22
+        group.forEach((e, gi) => {
+          const item = ITEMS[e.itemId]!
+          const col = gi % cols, row = Math.floor(gi / cols)
+          const cx = gridLeft + col * cellW + cellW / 2
+          const cy = rowsTop + row * cellH + cellH / 2
+          const up = p.upgrades[e.itemId] ?? 0
+          const upTxt = up > 0 ? ` +${up}` : ''
+          const tile = this.add.rectangle(cx, cy, cellW - 12, cellH - 16, 0x1b2b3a, 0.9).setStrokeStyle(2, rarityColor(item.rarity), 0.9)
+          this.itemIcon(e.itemId, cx, cy - 14, 40)
+          this.add.text(cx, cy + 20, `${item.name}${upTxt}`, {
+            fontSize: '11px', color: this.css(rarityColor(item.rarity)), align: 'center', wordWrap: { width: cellW - 18 },
+          }).setOrigin(0.5, 0)
+          // clic sur la case = équiper l'objet dans son slot (l'objet précédent retourne au stock)
+          tile.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+            const prev = p.equipment[item.slot]
+            p.equipment[item.slot] = e.itemId
+            p.inventory.splice(e.i, 1)
+            if (prev) p.inventory.push(prev)
+            save(p); this.dirty = true; this.render()
+          })
         })
-      })
+        y = rowsTop + Math.ceil(group.length / cols) * cellH + 6
+      }
     }
 
     // ─── DROITE : ÉQUIPEMENT porté (4 slots) ───────────────────────────────

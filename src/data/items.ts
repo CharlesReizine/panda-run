@@ -1,4 +1,15 @@
-import type { ItemDef, Rarity } from '../core/types'
+import type { EquipSlot, ItemDef, Rarity } from '../core/types'
+
+// Ordre d'affichage fixe des types d'équipement (boutiques + inventaire) : chapeau → armure →
+// arme → accessoire. Libellés pluriels pour les en-têtes de section.
+export const SLOT_ORDER: EquipSlot[] = ['hat', 'armor', 'weapon', 'accessory']
+export const SLOT_LABEL_PLURAL: Record<EquipSlot, string> = {
+  hat: 'Chapeaux',
+  armor: 'Armures',
+  weapon: 'Armes',
+  accessory: 'Accessoires',
+}
+export const SLOT_RANK: Record<EquipSlot, number> = { hat: 0, armor: 1, weapon: 2, accessory: 3 }
 
 const list: ItemDef[] = [
   { id: 'epee-bambou', name: 'Épée en bambou', slot: 'weapon', bonus: { atk: 5 }, rarity: 'commun' },
