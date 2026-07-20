@@ -4,3 +4,6 @@ scripts/_measure.mjs
 scripts/_verify.mjs
 
 scripts/_capture.mjs
+
+scripts/_reach.test.mjs
+scripts/_dump.test.mjs
