@@ -54,14 +54,14 @@ function ladderFootReachable(l: Ladder, platforms: Plat[], reachable: Set<number
     && Math.abs(p.y - bottom) <= ROW_TOL && l.x >= p.x - 1 && l.x <= p.x + p.w + 1)
 }
 
-// Plateformes qu'on ne peut atteindre ni du sol, ni de proche en proche par saut, ni en
-// grimpant une échelle dont le pied est accessible. Point fixe (itération jusqu'à stabilité).
-export function unreachablePlatforms(level: LevelDef): Plat[] {
+// Graphe d'atteignabilité (point fixe) : surfaces joignables du sol, de proche en proche par saut,
+// ou par une échelle dont le pied est accessible. Les PONTS sont des surfaces marchables (one-way)
+// au même titre que les plateformes : inclus comme relais, sinon une traversée qui passe par un pont
+// (ex. franchir une cuve) ferait croire la rive opposée injoignable. Renvoie les nœuds (plateformes
+// PUIS ponts), l'ensemble des indices atteignables, le nb de plateformes et le sol.
+interface ReachInfo { nodes: Plat[]; reachable: Set<number>; nPlat: number; groundRow: number; ground: Plat }
+function computeReach(level: LevelDef): ReachInfo {
   const platforms = level.platforms
-  // Les PONTS sont des surfaces marchables (one-way) au même titre que les plateformes : on les
-  // inclut dans le graphe d'atteignabilité (comme relais), sinon une traversée qui passe par un
-  // pont (ex. franchir une cuve) ferait croire la rive opposée injoignable. On ne RAPPORTE que les
-  // plateformes injoignables ; les ponts ne servent que de relais.
   const bridges = (level.bridges ?? []).map((b) => ({ x: b.x, y: b.y, w: b.w }))
   const nodes: Plat[] = [...platforms, ...bridges]
   const ladders = (level.ladders ?? []) as Ladder[]
@@ -83,7 +83,14 @@ export function unreachablePlatforms(level: LevelDef): Plat[] {
       }
     }
   }
-  return platforms.filter((_, i) => !reachable.has(i))
+  return { nodes, reachable, nPlat: platforms.length, groundRow, ground }
+}
+
+// Plateformes qu'on ne peut atteindre ni du sol, ni de proche en proche par saut, ni en
+// grimpant une échelle dont le pied est accessible.
+export function unreachablePlatforms(level: LevelDef): Plat[] {
+  const { nodes, reachable, nPlat } = computeReach(level)
+  return nodes.slice(0, nPlat).filter((_, i) => !reachable.has(i))
 }
 
 // Échelles « vers le vide » : sommet sans plateforme posable (a) ou pied qui ne rejoint ni
@@ -209,14 +216,46 @@ export function startExitProblems(level: LevelDef, minAltGap = 3): string[] {
   return out
 }
 
-// Coffres posés sur plateforme (props avec y) dont la plateforme est absente ou injoignable.
+// Un coffre AU FOND (sans y) est atteignable par NAGE si son plan d'eau (bassin marine) est ENTRABLE
+// depuis une surface marchable atteignable adjacente : il faut (1) une COLONNE OUVERTE en surface
+// (non scellée par un pont) pour PLONGER, et (2) une surface marchable ATTEIGNABLE qui BORDE le
+// bassin au niveau de sa surface (pour rejoindre le point de plongée puis RESSORTIR). Un lac entouré
+// de falaises (aucune surface joignable à son niveau) ou entièrement ponté rend le coffre injoignable.
+function bottomChestReachable(level: LevelDef, cx: number, reachSurfaces: Plat[], groundRow: number): boolean {
+  const water = (level.hazards ?? []).find((h) => h.kind === 'water' && h.water === 'basin' && cx >= h.x && cx < h.x + h.w)
+  if (!water) {
+    // pas dans l'eau → coffre posé au sol : injoignable seulement s'il est au-dessus d'un trou mortel
+    return !(level.gaps ?? []).some((g) => cx >= g.x && cx < g.x + g.w)
+  }
+  const surfaceRow = water.top ?? groundRow - 2
+  const covers = (x: number) => [...level.platforms, ...(level.bridges ?? [])]
+    .some((p) => x >= p.x && x < p.x + p.w && Math.abs(p.y - surfaceRow) <= 1)
+  // (1) au moins une colonne d'eau OUVERTE en surface (par où plonger dans le bassin)
+  let open = false
+  for (let x = water.x; x < water.x + water.w; x++) if (!covers(x)) { open = true; break }
+  if (!open) return false
+  // (2) une surface marchable ATTEIGNABLE borde le bassin au niveau de sa surface (accès + sortie)
+  return reachSurfaces.some((s) => Math.abs(s.y - surfaceRow) <= 1 && s.x <= water.x + water.w && s.x + s.w >= water.x)
+}
+
+// Coffres injoignables : posés sur une plateforme absente/injoignable (coffre AVEC y), OU au fond
+// d'un bassin qu'on ne peut pas entrer/ressortir à la nage (coffre SANS y). Le test casse le build
+// si un seul coffre est injoignable (bug du coffre dans un lac inaccessible).
 export function unreachableChests(level: LevelDef): ChestProblem[] {
   const bad = new Set(unreachablePlatforms(level))
+  const reach = computeReach(level)
+  const reachSurfaces = [reach.ground, ...[...reach.reachable].map((i) => reach.nodes[i]!)]
   const out: ChestProblem[] = []
   for (const c of level.props ?? []) {
-    if (c.kind !== 'coffre' || c.y === undefined) continue
-    const plat = level.platforms.find((p) => c.x >= p.x && c.x < p.x + p.w && c.y === p.y - 1)
-    if (!plat || bad.has(plat)) out.push({ x: c.x, y: c.y })
+    if (c.kind !== 'coffre') continue
+    if (c.y !== undefined) {
+      // coffre POSÉ sur une plateforme : elle doit exister ET être atteignable
+      const plat = level.platforms.find((p) => c.x >= p.x && c.x < p.x + p.w && c.y === p.y - 1)
+      if (!plat || bad.has(plat)) out.push({ x: c.x, y: c.y })
+      continue
+    }
+    // coffre AU FOND (sans y) : au sol marchable, ou au fond d'un bassin atteignable à la NAGE
+    if (!bottomChestReachable(level, c.x, reachSurfaces, reach.groundRow)) out.push({ x: c.x, y: reach.groundRow - 1 })
   }
   return out
 }

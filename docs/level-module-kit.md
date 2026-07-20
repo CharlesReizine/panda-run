@@ -207,3 +207,40 @@ l'eau (nager en surface, fond piégé) · E40 Sortie humide (sortie derrière un
 
 NB : « échelle tranquille / cage d'échelles / échelle vs sauts / tour creuse / échelle exposée /
 double sol » ⇒ les ÉCHELLES sont de nouveau des motifs de plein droit (mécanique déjà là dans Player).
+
+---
+
+## PHASE 2b — MOTEUR (prérequis à la refonte des 15 niveaux) — CANONIQUE
+
+Le moteur (assembleur `level-modules.ts` + rendu `LevelScene.ts` + validateur `level-validator.ts`)
+gagne quatre capacités. **APIs à connaître pour composer les niveaux qui suivent :**
+
+### 1. Coffre TOUJOURS atteignable (bassin entrable)
+- Un `bottom-chest` (coffre `props` SANS `y`, au fond de l'eau) ne se pose QUE dans un **bassin marine
+  ENTRABLE** : parois de pierre, mais **trou de plongée** au-dessus (le pont a un TROU central) pour
+  plonger ET ressortir. `bassin`, `tresor-bassin`, `petit-pont` respectent ça (trou central de 3 tuiles).
+- Le validateur `unreachableChests` vérifie désormais l'**accès par NAGE** : un coffre en eau est
+  atteignable si le bassin a une **colonne ouverte** en surface (par où plonger) ET qu'une **surface
+  marchable atteignable BORDE** le bassin à son niveau. Un lac ceint de falaises ou entièrement ponté
+  ⇒ **test ROUGE**. `reachable.test.ts` couvre les 19 niveaux + 3 cas de rejet synthétiques.
+
+### 2. PLAFOND DE ROCHE — vrais tunnels fermés (`grotte`, `couloir-pics`)
+- `grotte` rend maintenant un **tunnel FERMÉ** : roche pleine AU-DESSUS (plafond) ET EN DESSOUS (socle)
+  de la surface marchable. Le plafond laisse un **dégagement `CAVE_CLEARANCE` (6 rangées > saut)** →
+  on traverse le boyau sans se cogner. Les dalles sont **purement visuelles** (aucune collision), champ
+  `LevelDef.rockBands: {x,y,w,h}` (texture du biome, depth −5). NE PAS confondre avec le plafond du
+  MONDE (traversable). L'enveloppe verticale (`groundRow`) intègre les plafonds → le monde grandit pour
+  les contenir.
+
+### 3. PICS EN HAUTEUR (sur n'importe quelle corniche)
+- Les pics se rendent sur **toute surface élevée** : hazard `spikes` avec `top` = rangée de la surface
+  porteuse (absent → pics au sol, rétrocompat). Dégâts/overlap identiques (35).
+- Nouveaux motifs (tier ≥ 3, hors zone 1) : **`faux-plat`** (pics isolés à enjamber), **`couloir-pics`**
+  (plafond de roche + lits de pics), **`pics-quinconce`** (pics au sol + mini-corniches à pics),
+  **`atterrissage-etroit`** (1 case entre 2 pics). Dans l'assembleur : `Piece.spikes` porte un `alt`.
+
+### 4. DÉBUT STANDARDISÉ (bande plate)
+- Le PREMIER module est TOUJOURS une **bande PLATE à un seul niveau** (aucune rampe d'amorce, aucun sol
+  parallèle) : `startAlt ∈ {3,4}` (VARIABLE par niveau, joignable du sol au saut simple), spawn au
+  MILIEU, socle plein dessous (mesa → un seul niveau visible), aucun monstre à `SAFE_SPAWN_TILES` (8).
+  Ensuite la variété reprend. Concerne TOUS les niveaux modulaires (`buildLevelFromModules` + `composeLevel`).

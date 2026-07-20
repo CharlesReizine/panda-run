@@ -38,10 +38,10 @@ export type ModuleKind =
   | 'zigzag' | 'cage-echelles' | 'echelle-vs-sauts' | 'descente-controlee' | 'tour-creuse'
   // risque / récompense (D2–D4)
   | 'chemin-double' | 'detour-balcon' | 'fausse-sortie' | 'tresor-bassin'
-  // tension / précision (D3–D5) — NOTE : les motifs à PICS (couloir-pics, pics-quinconce,
-  // atterrissage-etroit, faux-plat) sont reportés en 2b : le moteur ne rend les pics qu'au SOL
-  // (LevelScene, groundRow), pas sur une surface en hauteur → incompatibles à mi-hauteur pour l'instant.
-  | 'echelle-exposee'
+  // tension / précision (D3–D5) — PHASE 2b : le moteur rend désormais les pics sur N'IMPORTE QUELLE
+  // surface élevée (corniche/plateforme), pas seulement au sol → les motifs à PICS en hauteur sont
+  // activés. Dégâts/overlap identiques quelle que soit la hauteur.
+  | 'echelle-exposee' | 'couloir-pics' | 'pics-quinconce' | 'atterrissage-etroit' | 'faux-plat'
   // eau / cascade (D2–D4)
   | 'sortie-humide'
 
@@ -92,9 +92,14 @@ const SIMPLE_JUMP_ROWS = 3 // marche maximale garantie au saut simple (rise ≈ 
 // ─── Représentation intermédiaire en espace ALTITUDE (converti en rows à la fin) ────────────
 interface Piece {
   platforms: { x: number; alt: number; w: number }[]
-  ceilings: { x: number; alt: number; w: number }[] // plafond de roche (fillAbove roche)
+  // DALLES DE ROCHE décoratives (aucune collision) : rectangle plein de altBot à altTop (altitudes
+  // inclusives). Sert au PLAFOND DE ROCHE d'un tunnel (grotte : roche au-dessus de la surface, avec
+  // un dégagement >= saut confortable → on ne se cogne jamais) et au remplissage plein sous le sol de
+  // la grotte / sous la bande de départ (mesa), pour « tout pierre dessus ET dessous ».
+  rocks: { x: number; altBot: number; altTop: number; w: number }[]
   gaps: { x: number; w: number }[]
-  spikes: { x: number; w: number }[]
+  // pics : alt = altitude de la SURFACE qui porte les pics (corniche en hauteur). Absent → pics au sol.
+  spikes: { x: number; w: number; alt?: number }[]
   bridges: { x: number; alt: number; w: number }[]
   // cuves d'eau : marine (noyade) ou cascade (remontable). bankAlt = rangée des berges (surface d'eau
   // juste dessous) ; l'eau descend jusqu'au sol (fond). Le moteur pose murs + fond + déco.
@@ -110,8 +115,14 @@ interface Piece {
 }
 
 function emptyPiece(exitAlt: number): Piece {
-  return { platforms: [], ceilings: [], gaps: [], spikes: [], bridges: [], waters: [], ladders: [], spawns: [], props: [], exitAlt }
+  return { platforms: [], rocks: [], gaps: [], spikes: [], bridges: [], waters: [], ladders: [], spawns: [], props: [], exitAlt }
 }
+
+// Dégagement libre (en rangées) garanti sous un PLAFOND DE ROCHE de tunnel : strictement supérieur à
+// la hauteur de saut (≈ 4 tuiles) + la taille du panda, pour qu'il traverse le boyau sans se cogner
+// (le plafond n'a AUCUNE collision, mais on garde un vrai vide pour que ça reste jouable et lisible).
+const CAVE_CLEARANCE = 6
+const CAVE_CEILING_THICK = 4 // épaisseur de la dalle de plafond (rangées de roche pleine)
 
 // Rampe de paliers : suite de plateformes ADJACENTES de fromAlt à toAlt par marches ≤3 rangées.
 // Les alt ≤ 0 (niveau du sol) ne posent PAS de plateforme (on marche sur le sol) — sauf si
@@ -313,12 +324,18 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       break
     }
     case 'grotte': {
-      // tunnel : sol de roche, mobs dans le boyau, encaissé entre deux crêtes de roche (déco). NOTE :
-      // un vrai plafond de roche à collision (fillAbove roche) n'est pas encore rendu par le moteur —
-      // on garde le boyau au sol ; le plafond sera ajouté quand le moteur saura poser une dalle
-      // « anti-remontée » (les plateformes actuelles sont one-way, traversables par le bas).
+      // VRAI TUNNEL FERMÉ (phase 2b) : roche PLEINE au-dessus ET en dessous de la surface marchable.
+      // - sol de roche marchable à `alt` ;
+      // - remplissage plein SOUS le sol (de la surface jusqu'au bas du monde) → « tout pierre dessous » ;
+      // - PLAFOND DE ROCHE au-dessus, laissant un dégagement CAVE_CLEARANCE (> saut confortable) pour
+      //   qu'on traverse le boyau sans se cogner (plafond sans collision, purement visuel).
       const alt = Math.max(entryAlt, 2)
       if (alt >= 1) p.platforms.push({ x: 0, alt, w })
+      // socle plein sous la surface (jusqu'au niveau du sol du monde ; le reste est fermé par le sol)
+      if (alt - 1 >= 1) p.rocks.push({ x: 0, altBot: 1, altTop: alt - 1, w })
+      // plafond de roche : dalle pleine à partir de alt + CAVE_CLEARANCE, épaisse de CAVE_CEILING_THICK
+      const ceilBot = alt + CAVE_CLEARANCE
+      p.rocks.push({ x: 0, altBot: ceilBot, altTop: ceilBot + CAVE_CEILING_THICK - 1, w })
       p.exitAlt = alt
       break
     }
@@ -421,13 +438,18 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       break
     }
     case 'petit-pont': {
-      // F5 : pont plein au-dessus d'un bassin marine peu profond (traversée sûre, pas de trou)
+      // F5 : pont au-dessus d'un bassin marine peu profond. Le pont a un TROU central (3 tuiles,
+      // franchissable au saut) par lequel on PLONGE pour le petit trésor du fond puis on RESSORT —
+      // sans le trou, le coffre du fond serait injoignable (bassin scellé). Bassin peu profond →
+      // plongée/remontée triviale (survivable).
       const bankAlt = entryAlt + 2
       const rampW = 4
       p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt))
-      const wx = rampW, ww = Math.max(4, w - 2 * rampW)
+      const wx = rampW, ww = Math.max(6, w - 2 * rampW)
       p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt })
-      p.bridges.push({ x: wx, alt: bankAlt, w: ww })
+      const holeL = wx + Math.floor(ww / 2) - 1 // trou central de 3 tuiles : on plonge par là
+      if (holeL - wx > 0) p.bridges.push({ x: wx, alt: bankAlt, w: holeL - wx })
+      if (wx + ww - (holeL + 3) > 0) p.bridges.push({ x: holeL + 3, alt: bankAlt, w: wx + ww - (holeL + 3) })
       p.platforms.push(...ramp(wx + ww, w - (wx + ww), bankAlt, entryAlt))
       p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) }) // petit trésor au fond du bassin
       p.exitAlt = entryAlt
@@ -569,6 +591,58 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       break
     }
 
+    // ─── PHASE 2b — TENSION à PICS (pics rendus sur TOUTE surface élevée) ─────────────────────
+    case 'faux-plat': {
+      // T16 : corniche plate (en hauteur) semée de PICS ISOLÉS à enjamber. Surface pleine + pics
+      // d'1 tuile posés SUR la corniche à intervalles réguliers → on saute par-dessus.
+      const alt = Math.max(1, entryAlt)
+      p.platforms.push({ x: 0, alt, w })
+      for (const sx of spread(w, 3)) p.spikes.push({ x: sx, w: 1, alt })
+      p.exitAlt = alt
+      break
+    }
+    case 'couloir-pics': {
+      // P29 : couloir avec PLAFOND DE ROCHE (roche au-dessus) et LITS DE PICS sur la corniche : on
+      // enchaîne des sauts par-dessus les lits, dégagement > saut sous le plafond.
+      const alt = Math.max(2, entryAlt)
+      p.platforms.push({ x: 0, alt, w })
+      const ceilBot = alt + CAVE_CLEARANCE
+      p.rocks.push({ x: 0, altBot: ceilBot, altTop: ceilBot + CAVE_CEILING_THICK - 1, w })
+      let x = 3
+      while (x < w - 4) { p.spikes.push({ x, w: 2, alt }); x += 6 } // lit de 2 pics + 4 tuiles libres
+      p.exitAlt = alt
+      break
+    }
+    case 'pics-quinconce': {
+      // P31 : pics en QUINCONCE — lits de pics au sol de la corniche alternés avec des mini-corniches
+      // surélevées elles aussi coiffées de pics → on slalome en hauteur.
+      const alt = Math.max(1, entryAlt)
+      p.platforms.push({ x: 0, alt, w })
+      let x = 3, hi = false
+      while (x < w - 4) {
+        if (hi) { p.platforms.push({ x, alt: alt + 2, w: 3 }); p.spikes.push({ x, w: 3, alt: alt + 2 }) }
+        else p.spikes.push({ x, w: 2, alt })
+        x += 5; hi = !hi
+      }
+      p.exitAlt = alt
+      break
+    }
+    case 'atterrissage-etroit': {
+      // P32 : atterrissages ÉTROITS (1 case) encadrés de pics — précision de saut en hauteur.
+      const alt = Math.max(2, entryAlt)
+      p.platforms.push({ x: 0, alt, w: 3 }) // berge d'entrée
+      let x = 3
+      while (x < w - 4) {
+        p.spikes.push({ x, w: 1, alt })
+        p.platforms.push({ x: x + 1, alt, w: 1 }) // atterrissage d'une seule tuile
+        p.spikes.push({ x: x + 2, w: 1, alt })
+        x += 4
+      }
+      p.platforms.push({ x: Math.max(x, w - 3), alt, w: 3 }) // berge de sortie
+      p.exitAlt = alt
+      break
+    }
+
     // ─── PHASE 2 — EAU / cascade (D2–D4) ─────────────────────────────────────────────────────
     case 'sortie-humide': {
       // E40 : sortie derrière une cascade — reprend exactement le motif cascade (plateforme collée
@@ -617,23 +691,27 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   // 1) pièces en espace altitude, chaînées (entrée = altitude courante)
   const pieces: { piece: Piece; x0: number; w: number }[] = []
   let cursorX = 2 // petite marge de bord gauche
-  // RAMPE D'AMORCE : le sol (alt 0) monte jusqu'à BASE_ALT au bord gauche. Le premier module (donc
-  // le DÉPART) est ainsi posé à MI-HAUTEUR — routes vers le HAUT (collines suivantes) ET vers le BAS
-  // (redescendre la rampe jusqu'au sol) — et toute la surface reste accrochée au sol (reachable).
-  const BASE_ALT = 5
-  const onbW = BASE_ALT * 2 + 3
-  const onb = emptyPiece(BASE_ALT)
-  onb.platforms = ramp(0, onbW, 0, BASE_ALT)
-  pieces.push({ piece: onb, x0: cursorX, w: onbW })
-  cursorX += onbW
-  let runningAlt = BASE_ALT
+  // DÉPART STANDARDISÉ (phase 2b) : le PREMIER module est TOUJOURS une bande PLATE à UN SEUL niveau
+  // de sol — pas de rampe d'amorce (qui empilait des paliers « à deux niveaux » au spawn), pas de
+  // plateforme parallèle. Sa hauteur VARIE d'un niveau à l'autre (startAlt ∈ {2,3,4}, toujours
+  // joignable du sol au saut simple ; rise ≤ 4). Un SOCLE PLEIN (mesa, posé plus bas) referme le
+  // dessous → une seule bande plate visible au départ. Ensuite la variété reprend (rester, grimper,
+  // ou sauter dans l'eau/la cascade). Plage {3,4} : varie d'un niveau à l'autre, reste joignable du
+  // sol (≤ 4) ET laisse ≥ 3 rangées d'écart avec une sortie tout en bas (validateur départ/sortie).
+  const startAlt = 3 + (hashSeed(opts.id + ':startalt') % 2)
+  let runningAlt = startAlt
   modules.forEach((m, i) => {
     const rng = mulberry32(seed + i * 2654435761)
     const [wmin, wmax] = m.widthRange
     const w = wmin + (hashSeed(opts.id + ':' + i + ':' + m.kind) % (wmax - wmin + 1))
     const piece = buildModule(m, rng, w, runningAlt)
     // départ / sortie
-    if (m.spawnHere) piece.start = { x: Math.floor(w / 2), alt: runningAlt }
+    if (m.spawnHere) {
+      piece.start = { x: Math.floor(w / 2), alt: runningAlt }
+      // SOCLE PLEIN sous la bande de départ (mesa) : de la 1re rangée jusqu'à sous la surface → aucun
+      // « sol parallèle » sous le spawn, juste une bande plate posée sur un bloc de terre.
+      if (runningAlt - 1 >= 1) piece.rocks.push({ x: 0, altBot: 1, altTop: runningAlt - 1, w })
+    }
     if (m.exitHere) piece.exit = { x: w - 3, alt: piece.exitAlt }
     pieces.push({ piece, x0: cursorX, w })
     cursorX += w
@@ -641,10 +719,12 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   })
   const totalWidth = cursorX + 2
 
-  // 2) enveloppe verticale : altitude max des surfaces/plafonds → hauteur du monde
+  // 2) enveloppe verticale : altitude max des surfaces ET des plafonds de roche → hauteur du monde
+  // (le plafond d'un tunnel doit tenir dans le monde, sinon il déborderait en haut de la carte).
   let maxAlt = 0
   for (const { piece } of pieces) {
     for (const pl of piece.platforms) maxAlt = Math.max(maxAlt, pl.alt)
+    for (const rk of piece.rocks) maxAlt = Math.max(maxAlt, rk.altTop)
   }
   // sol au bas ; headroom au-dessus du sommet. groundRow = maxAlt + marge. heightTiles = groundRow + 2.
   const groundRow = maxAlt + 6
@@ -657,6 +737,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   const gaps: NonNullable<LevelDef['gaps']> = []
   const hazards: NonNullable<LevelDef['hazards']> = []
   const ladders: NonNullable<LevelDef['ladders']> = []
+  const rockBands: NonNullable<LevelDef['rockBands']> = []
   const spawns: LevelDef['spawns'] = []
   const props: NonNullable<LevelDef['props']> = []
   let start: LevelDef['start']
@@ -667,7 +748,10 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     for (const b of piece.bridges) bridges.push({ x: x0 + b.x, y: row(b.alt), w: b.w })
     for (const l of piece.ladders) ladders.push({ x: x0 + l.x, y: row(l.topAlt), h: l.h })
     for (const g of piece.gaps) gaps.push({ x: x0 + g.x, w: g.w })
-    for (const s of piece.spikes) hazards.push({ kind: 'spikes', x: x0 + s.x, w: s.w })
+    // dalles de roche (plafond de tunnel / socle) : y = rangée du HAUT de la dalle, h = épaisseur
+    for (const rk of piece.rocks) rockBands.push({ x: x0 + rk.x, y: row(rk.altTop), w: rk.w, h: rk.altTop - rk.altBot + 1 })
+    // pics : `top` = rangée de la surface qui les porte (corniche en hauteur), sinon au sol (top absent)
+    for (const s of piece.spikes) hazards.push({ kind: 'spikes', x: x0 + s.x, w: s.w, ...(s.alt !== undefined ? { top: row(s.alt) } : {}) })
     for (const wtr of piece.waters) {
       const top = row(wtr.bankAlt) // surface d'eau À RAS du rebord (berges) — pas de bande d'air au-dessus
       if (wtr.kind === 'cascade') {
@@ -704,7 +788,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     id: opts.id, name: opts.name, biome: opts.biome,
     widthTiles: totalWidth, heightTiles,
     start, exit,
-    platforms, bridges, gaps, hazards, ladders, spawns: safeSpawns, props,
+    platforms, bridges, gaps, hazards, ladders, rockBands, spawns: safeSpawns, props,
   }
 }
 
@@ -769,6 +853,11 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'tresor-bassin': { tier: 2, family: 'risque', entry: 'milieu', exit: 'milieu', width: [14, 24], below: 'marine', above: 'air', chest: true, water: true },
   // tension / précision (D3–D5)
   'echelle-exposee': { tier: 4, family: 'tension', entry: 'bas', exit: 'haut', width: [12, 20], below: 'sol', above: 'air', ladder: true },
+  // PHASE 2b — motifs à PICS en hauteur (tier ≥ 3 → hors de la zone 1 : n'altèrent aucun niveau existant)
+  'faux-plat': { tier: 3, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [12, 20], below: 'sol', above: 'air' },
+  'couloir-pics': { tier: 4, family: 'tension', entry: 'milieu', exit: 'milieu', width: [14, 22], below: 'sol', above: 'roche' },
+  'pics-quinconce': { tier: 4, family: 'tension', entry: 'milieu', exit: 'milieu', width: [14, 22], below: 'sol', above: 'air' },
+  'atterrissage-etroit': { tier: 5, family: 'tension', entry: 'milieu', exit: 'milieu', width: [12, 18], below: 'sol', above: 'air' },
   // eau / cascade (D2–D4)
   'sortie-humide': { tier: 3, family: 'risque', entry: 'bas', exit: 'haut', width: [16, 26], below: 'cascade', above: 'air', chest: true, water: true },
 }

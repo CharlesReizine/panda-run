@@ -132,6 +132,37 @@ describe('kit de modules — cas de rejet synthétiques', () => {
     expect(overStackedColumns(bad, 3).length).toBeGreaterThan(0)
   })
 
+  it('coffre au fond d’un bassin ENTRABLE (berge atteignable + surface ouverte) → accepté', () => {
+    const ok: LevelDef = {
+      id: 'synth-basin-ok', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],
+      platforms: [{ x: 3, y: 11, w: 4 }], // berge au niveau de la surface, atteignable du sol (rise 3)
+      hazards: [{ kind: 'water', x: 7, w: 8, top: 11, h: 3, water: 'basin' }],
+      props: [{ kind: 'coffre', x: 10 }], // AU FOND (sans y)
+    }
+    expect(unreachableChests(ok)).toEqual([])
+  })
+
+  it('coffre au fond d’un LAC INACCESSIBLE (aucune berge à son niveau) → rejeté', () => {
+    const bad: LevelDef = {
+      id: 'synth-lac-ko', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],
+      platforms: [], // rien au niveau de la surface : lac entouré de « falaises »
+      hazards: [{ kind: 'water', x: 7, w: 8, top: 6, h: 8, water: 'basin' }],
+      props: [{ kind: 'coffre', x: 10 }],
+    }
+    expect(unreachableChests(bad)).toHaveLength(1)
+  })
+
+  it('coffre au fond d’un bassin ENTIÈREMENT PONTÉ (aucune colonne ouverte) → rejeté', () => {
+    const bad: LevelDef = {
+      id: 'synth-basin-scelle', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],
+      platforms: [{ x: 3, y: 11, w: 4 }],
+      hazards: [{ kind: 'water', x: 7, w: 8, top: 11, h: 3, water: 'basin' }],
+      bridges: [{ x: 7, y: 11, w: 8 }], // pont couvrant TOUTE la surface → impossible de plonger
+      props: [{ kind: 'coffre', x: 10 }],
+    }
+    expect(unreachableChests(bad)).toHaveLength(1)
+  })
+
   it('3 paliers empilés (sol + 2 plateformes) → accepté', () => {
     const ok: LevelDef = {
       id: 'synthetique-3tiers', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],

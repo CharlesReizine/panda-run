@@ -22,7 +22,10 @@ export interface LevelDef {
   // (pas en l'air, pas dans le sol). Absent → au sol. Sert à peupler la VERTICALE (monstres en hauteur).
   spawns: { monsterId: string; x: number; y?: number }[]
   props?: { kind: string; x: number; y?: number }[] // x en tuiles ; y (tuiles) seulement pour les coffres sur plateforme
-  // spikes = danger (bande au sol) ; water = plan d'eau. top = rangée de surface, h = profondeur en
+  // spikes = danger ; water = plan d'eau. Pour les PICS, `top` = rangée de la surface qui PORTE les
+  // pics (dessus d'une corniche/plateforme en hauteur) ; absent → pics au SOL (rétrocompat exacte).
+  // Les pics infligent les mêmes dégâts et se chevauchent pareil, quelle que soit la hauteur.
+  // Pour l'EAU : top = rangée de surface, h = profondeur en
   // rangées (sans top/h → ancienne bande près du sol, rétrocompat). Le champ `water` choisit la FORME
   // du plan d'eau :
   //   • absent      → nappe LIBRE héritée : aucun mur (rétrocompat exacte des niveaux non refondus).
@@ -42,6 +45,12 @@ export interface LevelDef {
   // Chaque trou doit rester FRANCHISSABLE au saut simple (w ≤ distance de saut confortable,
   // vérifié par level-validator.oversizedGaps / reachable.test.ts).
   gaps?: { x: number; w: number }[]
+  // BANDES DE ROCHE décoratives (aucune collision) : dalles de pierre pleine rendues avec la texture
+  // du biome. Servent à REFERMER visuellement un tunnel (PLAFOND de roche au-dessus de la surface
+  // marchable + remplissage sous le sol de la grotte) et à donner un socle plein au départ (mesa).
+  // Purement visuelles : la hauteur libre sous un plafond reste toujours >= un saut confortable (le
+  // joueur ne se cogne jamais). NE PAS confondre avec le plafond du MONDE (traversable).
+  rockBands?: { x: number; y: number; w: number; h: number }[] // x,y,w,h en tuiles ; y = rangée du haut de la dalle
   ladders?: { x: number; y: number; h: number }[] // échelles (x tuile, y tuile du haut, hauteur en tuiles)
   checkpoints?: { x: number }[] // drapeaux de réapparition (x en tuiles)
   boss?: string

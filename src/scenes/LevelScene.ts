@@ -237,6 +237,14 @@ export class LevelScene extends Phaser.Scene {
       // corps 28px (le visuel ne fait que 12px) : même emprise que l'ancien plank (top br.y*TILE-8)
       this.addStaticBand(oneWay, br.x * TILE, br.y * TILE - 8, br.w * TILE, 28)
     }
+    // BANDES DE ROCHE (plafond de tunnel + socle de départ) : dalles de pierre PLEINE rendues avec la
+    // texture du biome, SANS collision (depth -5, derrière le joueur → il reste toujours visible ; le
+    // dégagement sous un plafond est garanti > saut confortable côté assembleur, donc on ne se cogne
+    // jamais). Referment visuellement les tunnels (roche dessus + sol/roche dessous) et masquent le
+    // dessous de la bande de départ (mesa) → un seul niveau au spawn. Distinct du plafond du MONDE.
+    for (const rb of this.levelDef.rockBands ?? []) {
+      this.add.tileSprite(rb.x * TILE, rb.y * TILE, rb.w * TILE, rb.h * TILE, tileKey).setOrigin(0, 0).setDepth(-5)
+    }
 
     // départ : sur la corniche `start` (mi-hauteur) si le niveau en définit une, sinon au sol,
     // bord gauche (comportement historique). Le -40 pose les PIEDS sur le dessus de la corniche.
@@ -311,8 +319,12 @@ export class LevelScene extends Phaser.Scene {
     const basinWalls = this.physics.add.staticGroup()
     for (const hz of this.levelDef.hazards ?? []) {
       if (hz.kind === 'spikes') {
+        // PICS EN HAUTEUR : `hz.top` = rangée de la surface qui porte les pics (dessus d'une corniche).
+        // Absent → pics au SOL (comportement historique EXACT : groundTopPx - 8 = groundRow*TILE + 8).
+        // Les pics sont posés SUR la surface (base au dessus de la corniche, pointes vers le haut).
+        const surfaceTopPx = hz.top !== undefined ? hz.top * TILE : groundTopPx
         for (let i = 0; i < hz.w; i++) {
-          spikes.create((hz.x + i) * TILE + TILE / 2, this.groundRow * TILE + 8, 'spikes')
+          spikes.create((hz.x + i) * TILE + TILE / 2, surfaceTopPx - 8, 'spikes')
         }
         continue
       }
