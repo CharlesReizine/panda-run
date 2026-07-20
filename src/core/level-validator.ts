@@ -8,7 +8,7 @@
 // sommet d'une échelle est donc atteignable dès que son pied l'est, ce que le simple
 // `unreachablePlatforms` de platforming.ts (sauts uniquement) ne sait pas modéliser.
 
-import { groundRowFor, canReach, maxJumpGapPx, TILE, type Plat } from './platforming'
+import { groundRowFor, canReach, maxJumpGapPx, MAX_LADDER_TILES, TILE, type Plat } from './platforming'
 import type { LevelDef } from '../data/levels'
 
 const ROW_TOL = 1 // tolérance verticale (en tuiles) pour « le dessus est à la rangée y »
@@ -18,6 +18,7 @@ interface Ladder { x: number; y: number; h: number }
 export interface LadderProblem { x: number; y: number; h: number; reason: 'sommet-sans-plateforme' | 'pied-dans-le-vide' }
 export interface ChestProblem { x: number; y: number }
 export interface GapProblem { x: number; w: number }
+export interface OversizedLadder { x: number; y: number; h: number }
 
 function hgap(a: Plat, b: Plat): number {
   return Math.max(0, Math.max(a.x - (b.x + b.w), b.x - (a.x + a.w)))
@@ -106,6 +107,14 @@ export function unreachableLadders(level: LevelDef): LadderProblem[] {
     }
   }
   return out
+}
+
+// Échelles trop LONGUES (h > MAX_LADDER_TILES) : une échelle unique géante est proscrite — une
+// grande montée doit être découpée en SEGMENTS empilés séparés par des paliers (voir builder tower).
+export function oversizedLadders(level: LevelDef): OversizedLadder[] {
+  return ((level.ladders ?? []) as Ladder[])
+    .filter((l) => l.h > MAX_LADDER_TILES)
+    .map((l) => ({ x: l.x, y: l.y, h: l.h }))
 }
 
 // Trous du sol trop LARGES pour être franchis au saut simple (w × TILE > distance de saut

@@ -6,7 +6,9 @@ import {
   unreachableLadders,
   unreachableChests,
   oversizedGaps,
+  oversizedLadders,
 } from '../../src/core/level-validator'
+import { MAX_LADDER_TILES } from '../../src/core/platforming'
 
 // Garantit que CHAQUE niveau est physiquement jouable : toute plateforme est atteignable
 // (au sol, de proche en proche, ou en grimpant une échelle), aucune échelle ne débouche sur
@@ -37,7 +39,30 @@ describe('atteignabilité physique de chaque niveau', () => {
       const bad = oversizedGaps(level)
       expect(bad, `${level.id}: trous infranchissables → ${JSON.stringify(bad)}`).toEqual([])
     })
+
+    it(`${level.id} — aucune échelle plus longue que MAX_LADDER_TILES`, () => {
+      const bad = oversizedLadders(level)
+      expect(bad, `${level.id}: échelles interminables → ${JSON.stringify(bad)}`).toEqual([])
+    })
   }
+})
+
+// PLAFOND DE LONGUEUR D'ÉCHELLE : aucune échelle ne doit dépasser MAX_LADDER_TILES. Une montée
+// géante doit se faire en segments d'échelle empilés séparés par de vrais paliers (builder tower).
+describe('plafond de longueur d’échelle (MAX_LADDER_TILES)', () => {
+  const withLadderH = (h: number): LevelDef => ({
+    id: `synthetique-ladder-h${h}`, name: 'test', biome: 'plaine', widthTiles: 30,
+    platforms: [{ x: 6, y: 15 - h + 2, w: 4 }], spawns: [], ladders: [{ x: 10, y: 15 - h, h }],
+  })
+
+  it('échelle pile à MAX_LADDER_TILES → acceptée', () => {
+    expect(oversizedLadders(withLadderH(MAX_LADDER_TILES))).toEqual([])
+  })
+  it('échelle de MAX_LADDER_TILES + 1 → rejetée', () => {
+    const bad = oversizedLadders(withLadderH(MAX_LADDER_TILES + 1))
+    expect(bad).toHaveLength(1)
+    expect(bad[0]!.h).toBe(MAX_LADDER_TILES + 1)
+  })
 })
 
 // Règle du palier de SOMMET : à cause du décalage pieds↔centre du panda (~1,25 tuile), quand il

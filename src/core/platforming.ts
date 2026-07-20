@@ -39,8 +39,18 @@ export function maxJumpTiles(): number {
 // qu'aucune échelle ne puisse se franchir d'un simple saut (elle doit se grimper).
 export const MIN_LADDER_TILES = Math.ceil(2 * maxJumpTiles())
 
+// Hauteur MAXIMALE d'une échelle, en tuiles. Au-delà, on obtient une « échelle de l'enfer » qui
+// monte pendant des plombes — grotesque à grimper. Les GRANDES montées verticales se font donc en
+// SEGMENTS d'échelle empilés (chacun ≤ MAX_LADDER_TILES) séparés par de VRAIS PALIERS (plateformes)
+// où l'on sort de l'échelle, on marche, puis on reprend l'échelle suivante — voir le builder `tower`.
+export const MAX_LADDER_TILES = 13
+
 export function ladderTooShort(h: number): boolean {
   return h < MIN_LADDER_TILES
+}
+
+export function ladderTooLong(h: number): boolean {
+  return h > MAX_LADDER_TILES
 }
 
 // Prédicat de collision « one-way » (plateformes traversables par le bas) : on ne retient la

@@ -219,7 +219,12 @@ export class LevelScene extends Phaser.Scene {
       this.addStaticBand(oneWay, br.x * TILE, br.y * TILE - 8, br.w * TILE, 28)
     }
 
-    this.player = new Player(this, this.spawnX(), this.groundRow * TILE - 40)
+    // départ : sur la corniche `start` (mi-hauteur) si le niveau en définit une, sinon au sol,
+    // bord gauche (comportement historique). Le -40 pose les PIEDS sur le dessus de la corniche.
+    const start = this.levelDef.start
+    const startX = start ? start.x * TILE + TILE / 2 : this.spawnX()
+    const startY = (start ? start.y : this.groundRow) * TILE - 40
+    this.player = new Player(this, startX, startY)
     // PLAFOND TRAVERSABLE (fini le rebond) : en Phaser 4, la collision aux bornes du monde est
     // arbitrée par world.checkCollision (GLOBAL, partagé avec les ennemis) — désactiver le bord
     // haut du joueur via body.checkCollision.up ne suffit donc pas. On donne au JOUEUR un
@@ -259,7 +264,9 @@ export class LevelScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.pickups, (_p, pk) => this.collectPickup(pk as Phaser.Physics.Arcade.Sprite))
 
     for (const s of this.levelDef.spawns) {
-      this.enemies.add(new Enemy(this, s.x * TILE, this.groundRow * TILE - 40, MONSTERS[s.monsterId]!))
+      // s.y présent → monstre posé sur une corniche en hauteur (pieds sur son dessus) ; sinon au sol.
+      const yTile = s.y ?? this.groundRow
+      this.enemies.add(new Enemy(this, s.x * TILE, yTile * TILE - 40, MONSTERS[s.monsterId]!))
     }
 
     // le groupe applique ses defaults (allowGravity: true, immovable: false) à chaque ajout et
@@ -639,11 +646,14 @@ export class LevelScene extends Phaser.Scene {
   }
 
   createExit() {
-    const doorX = this.exitX()
-    // la porte (texture 'exit', 210 px de haut) repose au sol : on ancre son bas sur la ligne
-    // de sol (comme l'ancienne sortie, légèrement plantée dans la terre)
+    // sortie sur la corniche `exit` (altitude différente du départ) si définie, sinon au sol bord droit.
+    const exitDef = this.levelDef.exit
+    const doorX = exitDef ? exitDef.x * TILE + TILE / 2 : this.exitX()
+    const doorRow = exitDef ? exitDef.y : this.groundRow
+    // la porte (texture 'exit', 210 px de haut) repose sur la corniche : on ancre son bas sur le
+    // dessus de la corniche (légèrement plantée, comme l'ancienne sortie au sol)
     const doorH = 210
-    const doorBottom = this.groundRow * TILE + 20
+    const doorBottom = doorRow * TILE + (exitDef ? 6 : 20)
     const doorY = doorBottom - doorH / 2
     // halo lumineux pulsant DERRIÈRE la porte : aura blanc/jaune attirante (alpha + échelle)
     const glow = this.add.image(doorX, doorY - 4, 'exit-glow')
