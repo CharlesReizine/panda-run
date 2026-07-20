@@ -107,8 +107,11 @@ function spread(w: number, n: number): number[] {
 // ─── Générateur d'un module (espace altitude, x local 0..w) ─────────────────────────────────
 function buildModule(m: Module, rng: () => number, w: number, entryAlt: number): Piece {
   const bank = 3 // largeur des berges solides d'entrée/sortie
-  const groundMobs = m.ground ?? []
-  const birds = m.birds ?? []
+  // DÉPART TOUJOURS SÛR : le module de spawn ne pose AUCUN monstre (ni au sol, ni en l'air) → le
+  // panda apparaît seul sur son plateau. La marge de sécurité autour du x de départ est en plus
+  // garantie globalement par l'assembleur (voir SAFE_SPAWN_TILES).
+  const groundMobs = m.spawnHere ? [] : (m.ground ?? [])
+  const birds = m.spawnHere ? [] : (m.birds ?? [])
   const p = emptyPiece(entryAlt)
   const rise = m.rise ?? 0
   const exitAlt = Math.max(0, entryAlt + rise)
@@ -345,13 +348,18 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   const decoKind = opts.biome === 'foret' || opts.biome === 'jungle' ? 'champignon' : 'herbe'
   for (const f of [0.18, 0.45, 0.72]) props.push({ kind: decoKind, x: Math.round(totalWidth * f) })
 
-  // checkpoints répartis sur la largeur
-  const checkpoints = [0.3, 0.6, 0.85].map((f) => ({ x: Math.round(totalWidth * f) }))
+  // DÉPART SÛR (marge globale) : aucun spawn — terrestre OU aérien — n'est laissé à moins de
+  // SAFE_SPAWN_TILES tuiles du x de départ. Couvre les monstres des modules voisins et les oiseaux
+  // qui, malgré le module de spawn vidé, se retrouveraient à portée du point d'apparition.
+  const SAFE_SPAWN_TILES = 8
+  const safeSpawns = start
+    ? spawns.filter((s) => Math.abs(s.x - start!.x) >= SAFE_SPAWN_TILES)
+    : spawns
 
   return {
     id: opts.id, name: opts.name, biome: opts.biome,
     widthTiles: totalWidth, heightTiles,
     start, exit,
-    platforms, bridges, gaps, hazards, spawns, props, checkpoints,
+    platforms, bridges, gaps, hazards, spawns: safeSpawns, props,
   }
 }
