@@ -142,10 +142,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.climbing) {
       // escalade : poses + inclinaison gérées par animateClimb → pas de squash d'affichage
     } else if (!body.blocked.down && !this.inWater) {
-      // SAUT : étirement vertical en montée (vy<0), compression à la retombée (vy>0)
-      const s = Phaser.Math.Clamp(-body.velocity.y / 850, -0.16, 0.18)
-      sy = 1 + s * 0.9
-      sx = 1 - s * 0.6
+      // SAUT : très léger étirement en montée (vy<0) / compression à la retombée (vy>0) — discret,
+      // pas d'effet « chamallow » qui s'allonge
+      const s = Phaser.Math.Clamp(-body.velocity.y / 850, -0.10, 0.12)
+      sy = 1 + s * 0.3
+      sx = 1 - s * 0.2
     } else if (Math.abs(body.velocity.x) > 6) {
       // COURSE : rebond de foulée cadencé par la distance parcourue + squash/stretch d'appui
       this.strideDist += moved
@@ -155,18 +156,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       sy = 1 - sq
       sx = 1 + sq
     } else {
-      // IDLE : respiration douce (échelle qui pulse ±3 %) + micro-bob → plus de statue figée
+      // IDLE : respiration TRÈS discrète (échelle qui pulse ±1 %) + micro-bob → vivant sans excès
       this.breathT += delta / 1000
       const b = Math.sin(this.breathT * 2.1)
-      sy = 1 + b * 0.03
-      sx = 1 - b * 0.03
-      dy = -Math.abs(b) * 1.3
+      sy = 1 + b * 0.01
+      sx = 1 - b * 0.01
+      dy = -Math.abs(b) * 0.6
     }
 
     // impulsion d'atterrissage : squash bref (aplati) qui se superpose puis décroît
     if (this.landSquash > 0.01) {
-      sx += this.landSquash * 0.16
-      sy -= this.landSquash * 0.16
+      sx += this.landSquash * 0.08
+      sy -= this.landSquash * 0.08
       this.landSquash *= 0.8
     } else this.landSquash = 0
 
