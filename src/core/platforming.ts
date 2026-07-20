@@ -3,11 +3,22 @@
 // sans casser un test.
 
 export const TILE = 32
-export const GROUND_ROW = 14 // rangée du sol (y en tuiles depuis le haut)
+// Hauteur de monde par DÉFAUT (en tuiles) et rangée de sol associée. Un niveau peut désormais
+// être plus HAUT (LevelDef.heightTiles) ; sa rangée de sol se calcule alors avec groundRowFor().
+// GROUND_ROW reste la valeur historique (monde de 16 rangées) pour ne rien régresser.
+export const DEFAULT_HEIGHT_TILES = 16
+export const GROUND_ROW = 14 // rangée du sol par défaut (= DEFAULT_HEIGHT_TILES - 2)
 export const GRAVITY = 1200
 export const JUMP_SPEED = 560 // magnitude de la vitesse de saut
 export const RUN_SPEED = 220
-const SAFETY = 0.6 // marge : on n'exige pas un saut parfait au pixel, il doit rester confortable
+// Le sol est TOUJOURS au bas du monde : deux rangées pleines (sol + sous-sol) → groundRow = h - 2.
+export function groundRowFor(heightTiles = DEFAULT_HEIGHT_TILES): number {
+  return heightTiles - 2
+}
+// Marge de confort du saut. Resserrée (0.6 → 0.55) : « atteignable » signifie désormais
+// CONFORTABLEMENT atteignable, pas « atteignable pile au pixel au sommet de la parabole ». On
+// n'exige donc plus le saut parfait, mais on refuse les plateformes réellement trop écartées.
+const SAFETY = 0.55
 
 export function maxJumpHeightPx(): number {
   return (JUMP_SPEED * JUMP_SPEED) / (2 * GRAVITY)
@@ -59,9 +70,10 @@ function hgap(a: Plat, b: Plat): number {
   return Math.max(0, Math.max(a.x - (b.x + b.w), b.x - (a.x + a.w)))
 }
 
-// Plateformes qu'on ne peut atteindre ni depuis le sol ni de proche en proche.
-export function unreachablePlatforms(platforms: Plat[], widthTiles: number): Plat[] {
-  const ground: Plat = { x: 0, y: GROUND_ROW, w: widthTiles }
+// Plateformes qu'on ne peut atteindre ni depuis le sol ni de proche en proche. Le sol du niveau
+// est à groundRow (bas du monde) — paramétrable pour les mondes hauts.
+export function unreachablePlatforms(platforms: Plat[], widthTiles: number, groundRow = GROUND_ROW): Plat[] {
+  const ground: Plat = { x: 0, y: groundRow, w: widthTiles }
   const reachable = new Set<number>()
   let changed = true
   while (changed) {

@@ -5,10 +5,18 @@ export interface LevelDef {
   name: string
   biome: Biome
   widthTiles: number
-  platforms: { x: number; y: number; w: number }[] // en tuiles ; y depuis le haut (16 lignes visibles)
+  // Hauteur du monde en tuiles. Défaut 16 (comportement historique : sol rangée 14, un écran de
+  // haut). Un niveau HAUT (ex. 40-48) fait scroller la caméra en vertical ; le sol reste au bas
+  // (groundRow = heightTiles - 2). Tous les y (plateformes, échelles, eau…) sont comptés DEPUIS LE
+  // HAUT, donc les rangées basses (proches du sol) ont un y proche de groundRow.
+  heightTiles?: number
+  platforms: { x: number; y: number; w: number }[] // en tuiles ; y depuis le haut
   spawns: { monsterId: string; x: number }[] // x en tuiles
   props?: { kind: string; x: number; y?: number }[] // x en tuiles ; y (tuiles) seulement pour les coffres sur plateforme
-  hazards?: { kind: 'spikes' | 'water'; x: number; w: number }[] // spikes = danger ; water = zone nageable (x, largeur en tuiles)
+  // spikes = danger (bande au sol) ; water = zone nageable. Par défaut l'eau est une bande près du
+  // sol ; on peut décrire une VRAIE ZONE (bassin profond) via top (rangée du haut de l'eau) et h
+  // (hauteur en rangées). Sans top/h → ancienne bande près du sol (rétrocompat).
+  hazards?: { kind: 'spikes' | 'water'; x: number; w: number; top?: number; h?: number }[]
   bridges?: { x: number; y: number; w: number }[] // ponts de planches (plateformes fines)
   ladders?: { x: number; y: number; h: number }[] // échelles (x tuile, y tuile du haut, hauteur en tuiles)
   checkpoints?: { x: number }[] // drapeaux de réapparition (x en tuiles)
@@ -30,12 +38,20 @@ const ladder = (x: number, y: number, h: number) => ({ x, y, h })
 // haut/bas, pics/eau) : escalier, buttes, tour d'échelle, vallée, zigzag, colonnes, cimes…
 
 const list: LevelDef[] = [
-  // zone1-1 : escalier montant doux (11→5) + tour d'échelle à droite (palier row7 → sommet)
-  { id: 'zone1-1', name: 'Prairie de Prontera', biome: 'plaine', widthTiles: 90,
-    platforms: [plat(12, 11, 5), plat(20, 9, 4), plat(27, 7, 4), plat(34, 5, 4), plat(50, 10, 5), plat(66, 7, 4)],
-    spawns: [{ monsterId: 'gloopy', x: 12 }, { monsterId: 'angeling', x: 25 }, { monsterId: 'fabre', x: 38 }, { monsterId: 'poring-dore', x: 44 }, { monsterId: 'gloopy', x: 50 }, { monsterId: 'mandragore', x: 62 }, { monsterId: 'gloopy', x: 75 }],
-    props: [prop('herbe', 10), prop('champignon', 44), prop('herbe', 68), prop('coffre', 7), prop('coffre', 35, 4)],
-    ladders: [ladder(70, 5, 9)] },
+  // zone1-1 : MONDE HAUT DÉMO (44 rangées, sol row42). Grand escalier montant à gauche (row39→24)
+  // → échelle vers le sommet (row16) → grand LAC profond au centre (nage montée/descente) franchi
+  // par un pont → paliers de droite redescendant vers la sortie, pic au sol. Modèle de verticalité.
+  { id: 'zone1-1', name: 'Prairie de Prontera', biome: 'plaine', widthTiles: 90, heightTiles: 44,
+    platforms: [
+      plat(8, 39, 5), plat(15, 36, 5), plat(22, 33, 5), plat(29, 30, 5), plat(36, 27, 5), plat(43, 24, 5),
+      plat(44, 16, 5),
+      plat(70, 39, 5), plat(77, 36, 5), plat(83, 33, 5)],
+    spawns: [{ monsterId: 'gloopy', x: 12 }, { monsterId: 'angeling', x: 24 }, { monsterId: 'fabre', x: 36 }, { monsterId: 'poring-dore', x: 46 }, { monsterId: 'gloopy', x: 70 }, { monsterId: 'mandragore', x: 78 }, { monsterId: 'gloopy', x: 86 }],
+    props: [prop('herbe', 15), prop('champignon', 68), prop('herbe', 75), prop('coffre', 7), prop('coffre', 45, 23), prop('coffre', 84, 32)],
+    hazards: [{ kind: 'water', x: 52, w: 13, top: 18, h: 24 }, { kind: 'spikes', x: 66, w: 4 }],
+    bridges: [{ x: 49, y: 22, w: 17 }],
+    ladders: [ladder(46, 14, 10)],
+    checkpoints: [{ x: 20 }, { x: 68 }] },
   // zone1-2 : deux buttes qui montent (row4) encadrant une descente centrale au-dessus d'un bassin
   { id: 'zone1-2', name: 'Champs fleuris', biome: 'plaine', widthTiles: 100,
     platforms: [plat(14, 10, 5), plat(21, 7, 4), plat(27, 4, 4), plat(45, 12, 4), plat(55, 13, 4), plat(70, 10, 4), plat(77, 8, 4), plat(84, 6, 4)],
@@ -64,14 +80,20 @@ const list: LevelDef[] = [
     spawns: [{ monsterId: 'scorpion', x: 18 }, { monsterId: 'orc-seigneur', x: 38 }, { monsterId: 'scorpion', x: 62 }, { monsterId: 'vautour', x: 68 }, { monsterId: 'orc-guerrier', x: 74 }, { monsterId: 'scorpion', x: 88 }],
     props: [prop('roche', 12), prop('herbe', 40), prop('roche', 90), prop('coffre', 10), prop('coffre', 45, 2)],
     hazards: [{ kind: 'spikes', x: 54, w: 4 }] },
-  // zone2-2 : échelle centrale + grand plateau haut (row4) au-dessus d'un gouffre d'eau ; pics à droite
-  { id: 'zone2-2', name: 'Oasis perdue', biome: 'desert', widthTiles: 110,
-    platforms: [plat(14, 11, 4), plat(20, 9, 4), plat(26, 7, 4), plat(32, 4, 4), plat(38, 4, 7), plat(60, 10, 4), plat(67, 8, 4), plat(85, 11, 4), plat(93, 11, 4)],
-    spawns: [{ monsterId: 'scorpion', x: 18 }, { monsterId: 'gardien-pierre', x: 27 }, { monsterId: 'momie', x: 48 }, { monsterId: 'vautour', x: 60 }, { monsterId: 'momie', x: 70 }, { monsterId: 'scorpion', x: 100 }],
-    props: [prop('roche', 10), prop('herbe', 52), prop('roche', 70), prop('herbe', 105), prop('coffre', 12), prop('coffre', 40, 3)],
-    hazards: [{ kind: 'water', x: 48, w: 6 }, { kind: 'spikes', x: 78, w: 4 }],
-    bridges: [{ x: 47, y: 13, w: 8 }],
-    ladders: [ladder(30, 5, 9)] },
+  // zone2-2 : MONDE HAUT DÉMO (46 rangées, sol row44). Ascension d'oasis à gauche (row41→29) →
+  // échelle vers le sommet (row21) → vaste OASIS profonde au centre (nage) franchie par un pont →
+  // remontée droite en paliers, pic au sol. Deux checkpoints.
+  { id: 'zone2-2', name: 'Oasis perdue', biome: 'desert', widthTiles: 110, heightTiles: 46,
+    platforms: [
+      plat(10, 41, 5), plat(17, 38, 5), plat(24, 35, 5), plat(31, 32, 5), plat(38, 29, 5),
+      plat(39, 21, 5),
+      plat(66, 41, 5), plat(73, 38, 5), plat(80, 35, 5), plat(90, 40, 5), plat(97, 37, 5)],
+    spawns: [{ monsterId: 'scorpion', x: 14 }, { monsterId: 'gardien-pierre', x: 27 }, { monsterId: 'momie', x: 40 }, { monsterId: 'vautour', x: 68 }, { monsterId: 'momie', x: 80 }, { monsterId: 'scorpion', x: 100 }],
+    props: [prop('roche', 6), prop('herbe', 70), prop('roche', 105), prop('coffre', 12), prop('coffre', 40, 20), prop('coffre', 81, 34)],
+    hazards: [{ kind: 'water', x: 48, w: 15, top: 22, h: 23 }, { kind: 'spikes', x: 84, w: 4 }],
+    bridges: [{ x: 48, y: 30, w: 14 }],
+    ladders: [ladder(41, 19, 10)],
+    checkpoints: [{ x: 30 }, { x: 75 }] },
   // zone2-3 : on démarre dans une fosse basse (row12/13) avec des pics, puis on grimpe un pic (row4)
   { id: 'zone2-3', name: 'Vallée des tombeaux', biome: 'desert', widthTiles: 110,
     platforms: [plat(20, 13, 5), plat(30, 12, 4), plat(48, 11, 5), plat(60, 10, 4), plat(67, 8, 4), plat(74, 6, 4), plat(81, 4, 4), plat(98, 11, 4)],
@@ -109,13 +131,20 @@ const list: LevelDef[] = [
   { id: 'zone3-boss', name: 'Cœur de la Jungle', biome: 'jungle', widthTiles: 40,
     platforms: [plat(8, 10, 4), plat(28, 10, 4)],
     spawns: [], boss: 'seigneur-liane' },
-  // plage-1 : récifs montants (11→5) au-dessus d'un lagon à pont, puis descente et pics
-  { id: 'plage-1', name: 'Rivage de corail', biome: 'plage', widthTiles: 110,
-    platforms: [plat(14, 11, 4), plat(21, 9, 4), plat(28, 7, 4), plat(34, 5, 4), plat(58, 12, 4), plat(66, 10, 4), plat(73, 8, 4), plat(92, 11, 5), plat(102, 13, 4)],
-    spawns: [{ monsterId: 'crabe-geant', x: 12 }, { monsterId: 'meduse', x: 24 }, { monsterId: 'crabe-geant', x: 45 }, { monsterId: 'roi-crabe', x: 50 }, { monsterId: 'meduse', x: 55 }, { monsterId: 'crabe-geant', x: 68 }, { monsterId: 'meduse', x: 85 }, { monsterId: 'crabe-geant', x: 95 }, { monsterId: 'meduse', x: 104 }],
-    props: [prop('roche', 20), prop('herbe', 50), prop('roche', 92), prop('coffre', 14), prop('coffre', 35, 4), prop('coffre', 59, 11)],
-    hazards: [{ kind: 'water', x: 44, w: 5 }, { kind: 'spikes', x: 82, w: 4 }],
-    bridges: [{ x: 43, y: 13, w: 7 }] },
+  // plage-1 : MONDE HAUT DÉMO (42 rangées, sol row40). Récifs montants à gauche (row37→25) →
+  // échelle vers le sommet (row17) → grand LAGON profond au centre (nage) franchi par un pont →
+  // récifs de droite en paliers, pic au sol. Deux checkpoints.
+  { id: 'plage-1', name: 'Rivage de corail', biome: 'plage', widthTiles: 110, heightTiles: 42,
+    platforms: [
+      plat(10, 37, 5), plat(17, 34, 5), plat(24, 31, 5), plat(31, 28, 5), plat(38, 25, 5),
+      plat(39, 17, 5),
+      plat(68, 37, 5), plat(75, 34, 5), plat(82, 31, 5), plat(95, 36, 5), plat(102, 33, 5)],
+    spawns: [{ monsterId: 'crabe-geant', x: 12 }, { monsterId: 'meduse', x: 24 }, { monsterId: 'roi-crabe', x: 36 }, { monsterId: 'crabe-geant', x: 46 }, { monsterId: 'meduse', x: 70 }, { monsterId: 'crabe-geant', x: 78 }, { monsterId: 'meduse', x: 90 }, { monsterId: 'crabe-geant', x: 100 }, { monsterId: 'meduse', x: 104 }],
+    props: [prop('roche', 6), prop('herbe', 70), prop('roche', 107), prop('coffre', 12), prop('coffre', 40, 16), prop('coffre', 83, 30)],
+    hazards: [{ kind: 'water', x: 48, w: 16, top: 18, h: 23 }, { kind: 'spikes', x: 88, w: 4 }],
+    bridges: [{ x: 48, y: 26, w: 15 }],
+    ladders: [ladder(41, 15, 10)],
+    checkpoints: [{ x: 30 }, { x: 78 }] },
   // plage-2 : colonnes en dents de scie (montées row6/row7 séparées par deux lagons à ponts)
   { id: 'plage-2', name: 'Récif immergé', biome: 'plage', widthTiles: 120,
     platforms: [plat(14, 12, 4), plat(20, 9, 4), plat(26, 6, 4), plat(46, 11, 5), plat(58, 13, 4), plat(66, 10, 4), plat(72, 7, 4), plat(100, 12, 5), plat(112, 10, 4)],

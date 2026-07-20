@@ -60,3 +60,37 @@ describe('palier de sommet d’échelle : rangée réellement atteignable (déca
     expect(laddersToNowhere(withTopAtRow(6)).map((p) => p.reason)).toEqual(['sommet-sans-plateforme'])
   })
 })
+
+// MONDE HAUT : le sol n'est plus figé à la rangée 14 mais au BAS du monde (heightTiles - 2). Le
+// validateur doit prendre le groundRow DU NIVEAU, sinon un monde haut aurait un « sol fantôme »
+// à la rangée 14 et jugerait à tort atteignables/injoignables des plateformes ou pieds d'échelle.
+describe('monde haut : groundRow dérivé de heightTiles (sol au bas du monde)', () => {
+  // monde de 44 rangées → sol row42. Un escalier depuis le sol (row39) grimpe de +3 en +3, puis
+  // une échelle mène au sommet (row16). Tout est atteignable AVEC le bon groundRow.
+  const tall: LevelDef = {
+    id: 'synthetique-haut', name: 'test', biome: 'plaine', widthTiles: 60, heightTiles: 44,
+    platforms: [{ x: 8, y: 39, w: 5 }, { x: 15, y: 36, w: 5 }, { x: 22, y: 33, w: 5 }, { x: 29, y: 30, w: 5 }, { x: 36, y: 27, w: 5 }, { x: 43, y: 24, w: 5 }, { x: 44, y: 16, w: 5 }],
+    spawns: [], ladders: [{ x: 46, y: 14, h: 10 }],
+  }
+
+  it('toutes les plateformes atteignables avec le sol au bas (row42)', () => {
+    expect(unreachablePlatforms(tall)).toEqual([])
+  })
+  it('l’échelle (pied row24 sur le palier, sommet row16) ne débouche pas sur le vide', () => {
+    expect(laddersToNowhere(tall)).toEqual([])
+    expect(unreachableLadders(tall)).toEqual([])
+  })
+  it('pied d’échelle : « touche le sol » dépend du groundRow DU niveau', () => {
+    // échelle dont le pied (row24) ne repose sur AUCUNE plateforme. Son statut « grounded »
+    // bascule selon la hauteur déclarée du monde → prouve que groundRow vient bien du niveau.
+    const base: LevelDef = {
+      id: 'x', name: 't', biome: 'plaine', widthTiles: 60, spawns: [],
+      platforms: [{ x: 10, y: 16, w: 4 }], // sommet (drop 2 sous l.y=14)
+      ladders: [{ x: 12, y: 14, h: 10 }], // pied à row24, dans le vide
+    }
+    // monde HAUT (sol row42) : pied row24 < 42 et rien dessous → « pied dans le vide »
+    expect(laddersToNowhere({ ...base, heightTiles: 44 }).map((p) => p.reason)).toContain('pied-dans-le-vide')
+    // monde COURT (sol row24) : le pied atteint le sol → aucune anomalie
+    expect(laddersToNowhere({ ...base, heightTiles: 26 })).toEqual([])
+  })
+})

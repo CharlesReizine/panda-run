@@ -8,7 +8,7 @@
 // sommet d'une échelle est donc atteignable dès que son pied l'est, ce que le simple
 // `unreachablePlatforms` de platforming.ts (sauts uniquement) ne sait pas modéliser.
 
-import { GROUND_ROW, canReach, type Plat } from './platforming'
+import { groundRowFor, canReach, type Plat } from './platforming'
 import type { LevelDef } from '../data/levels'
 
 const ROW_TOL = 1 // tolérance verticale (en tuiles) pour « le dessus est à la rangée y »
@@ -36,18 +36,18 @@ function isLadderTop(p: Plat, l: Ladder): boolean {
   return drop >= LADDER_TOP_MIN_DROP && drop <= LADDER_TOP_MAX_DROP && l.x >= p.x - 1 && l.x <= p.x + p.w + 1
 }
 
-// Le pied de l'échelle (rangée y+h) rejoint-il le sol ou une plateforme ? (condition b)
-function ladderFootGrounded(l: Ladder, platforms: Plat[]): boolean {
+// Le pied de l'échelle (rangée y+h) rejoint-il le sol (au BAS du monde) ou une plateforme ? (b)
+function ladderFootGrounded(l: Ladder, platforms: Plat[], groundRow: number): boolean {
   const bottom = l.y + l.h
-  if (bottom >= GROUND_ROW) return true // descend jusqu'au sol
+  if (bottom >= groundRow) return true // descend jusqu'au sol
   return platforms.some((p) => Math.abs(p.y - bottom) <= ROW_TOL && l.x >= p.x - 1 && l.x <= p.x + p.w + 1)
 }
 
 // Le pied de l'échelle repose-t-il sur une surface DÉJÀ atteignable (sol, ou plateforme du
 // set) ? — condition pour pouvoir emprunter l'échelle et donc atteindre son sommet.
-function ladderFootReachable(l: Ladder, platforms: Plat[], reachable: Set<number>): boolean {
+function ladderFootReachable(l: Ladder, platforms: Plat[], reachable: Set<number>, groundRow: number): boolean {
   const bottom = l.y + l.h
-  if (bottom >= GROUND_ROW) return true // pied au sol : toujours accessible
+  if (bottom >= groundRow) return true // pied au sol : toujours accessible
   return platforms.some((p, i) => reachable.has(i)
     && Math.abs(p.y - bottom) <= ROW_TOL && l.x >= p.x - 1 && l.x <= p.x + p.w + 1)
 }
@@ -57,7 +57,8 @@ function ladderFootReachable(l: Ladder, platforms: Plat[], reachable: Set<number
 export function unreachablePlatforms(level: LevelDef): Plat[] {
   const platforms = level.platforms
   const ladders = (level.ladders ?? []) as Ladder[]
-  const ground: Plat = { x: 0, y: GROUND_ROW, w: level.widthTiles }
+  const groundRow = groundRowFor(level.heightTiles)
+  const ground: Plat = { x: 0, y: groundRow, w: level.widthTiles }
   const reachable = new Set<number>()
   let changed = true
   while (changed) {
@@ -69,7 +70,7 @@ export function unreachablePlatforms(level: LevelDef): Plat[] {
       // (1) atteignable par saut depuis le sol ou une plateforme déjà atteignable
       if (surfaces.some((a) => canReach(a.y, b, hgap(a, b)))) { reachable.add(i); changed = true; continue }
       // (2) sommet d'une échelle dont le pied est accessible
-      if (ladders.some((l) => isLadderTop(b, l) && ladderFootReachable(l, platforms, reachable))) {
+      if (ladders.some((l) => isLadderTop(b, l) && ladderFootReachable(l, platforms, reachable, groundRow))) {
         reachable.add(i); changed = true
       }
     }
@@ -80,11 +81,12 @@ export function unreachablePlatforms(level: LevelDef): Plat[] {
 // Échelles « vers le vide » : sommet sans plateforme posable (a) ou pied qui ne rejoint ni
 // le sol ni une plateforme (b).
 export function laddersToNowhere(level: LevelDef): LadderProblem[] {
+  const groundRow = groundRowFor(level.heightTiles)
   const out: LadderProblem[] = []
   for (const l of (level.ladders ?? []) as Ladder[]) {
     const hasTop = level.platforms.some((p) => isLadderTop(p, l))
     if (!hasTop) { out.push({ x: l.x, y: l.y, h: l.h, reason: 'sommet-sans-plateforme' }); continue }
-    if (!ladderFootGrounded(l, level.platforms)) out.push({ x: l.x, y: l.y, h: l.h, reason: 'pied-dans-le-vide' })
+    if (!ladderFootGrounded(l, level.platforms, groundRow)) out.push({ x: l.x, y: l.y, h: l.h, reason: 'pied-dans-le-vide' })
   }
   return out
 }
@@ -92,12 +94,13 @@ export function laddersToNowhere(level: LevelDef): LadderProblem[] {
 // Échelles dont le pied n'est pas accessible à pied (sol ou plateforme atteignable). Utile en
 // complément : une échelle peut avoir un sommet correct mais un pied injoignable.
 export function unreachableLadders(level: LevelDef): LadderProblem[] {
+  const groundRow = groundRowFor(level.heightTiles)
   const bad = new Set(unreachablePlatforms(level))
   const reachable = new Set<number>()
   level.platforms.forEach((p, i) => { if (!bad.has(p)) reachable.add(i) })
   const out: LadderProblem[] = []
   for (const l of (level.ladders ?? []) as Ladder[]) {
-    if (!ladderFootReachable(l, level.platforms, reachable)) {
+    if (!ladderFootReachable(l, level.platforms, reachable, groundRow)) {
       out.push({ x: l.x, y: l.y, h: l.h, reason: 'pied-dans-le-vide' })
     }
   }

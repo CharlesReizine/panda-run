@@ -19,7 +19,7 @@ import { SKILLS } from '../data/skills'
 import { rollDrops } from '../core/loot'
 import type { DropEntry, SkillDef } from '../core/types'
 import type { UIScene } from './UIScene'
-import { TILE, GROUND_ROW, GRAVITY, landsOnOneWayPlatform } from '../core/platforming'
+import { TILE, DEFAULT_HEIGHT_TILES, groundRowFor, GRAVITY, landsOnOneWayPlatform } from '../core/platforming'
 import { BIOMES } from '../data/biomes'
 import { audio, type MusicTrack } from '../audio/audio-engine'
 
@@ -65,6 +65,10 @@ export class LevelScene extends Phaser.Scene {
   private breathBarBg: Phaser.GameObjects.Rectangle | null = null
   private breathBar: Phaser.GameObjects.Rectangle | null = null
   private lastCheckpoint: { x: number; y: number } | null = null
+  // Géométrie verticale du monde courant : rangée de sol (bas du monde) et hauteur en pixels.
+  // Recalculées à chaque niveau depuis levelDef.heightTiles (défaut 16 → groundRow 14, monde 540).
+  private groundRow = groundRowFor()
+  private worldH = DEFAULT_HEIGHT_TILES * TILE
   levelDef!: LevelDef
   private fromNode: string | null = null
   private targetNode: string | null = null
@@ -126,8 +130,15 @@ export class LevelScene extends Phaser.Scene {
     this.breathBar = null
     this.lastCheckpoint = null
 
+    // hauteur de monde paramétrable : le sol reste au BAS (groundRow), la caméra scrolle en
+    // vertical dès que le monde dépasse la hauteur du viewport (540)
+    this.groundRow = groundRowFor(this.levelDef.heightTiles)
+    // au moins la hauteur du viewport (540) pour que les mondes « défaut 16 » se comportent
+    // EXACTEMENT comme avant (bounds 540, caméra verrouillée) ; les mondes hauts dépassent 540 et
+    // déclenchent le scroll vertical.
+    this.worldH = Math.max(540, (this.levelDef.heightTiles ?? DEFAULT_HEIGHT_TILES) * TILE)
     const widthPx = this.levelDef.widthTiles * TILE
-    this.physics.world.setBounds(0, 0, widthPx, 540)
+    this.physics.world.setBounds(0, 0, widthPx, this.worldH)
 
     // Garde-fou anti-gel. Le hit-stop met le monde physique GLOBAL en pause puis programme
     // sa reprise via l'horloge de la scène ; or cette horloge se gèle dès qu'un overlay
@@ -153,8 +164,8 @@ export class LevelScene extends Phaser.Scene {
     // même taille 32×32 que le sol → corps de collision identique, seul le rendu change
     const platformKey = `platform-${this.levelDef.biome}`
     for (let x = 0; x < this.levelDef.widthTiles; x++) {
-      platforms.create(x * TILE + TILE / 2, GROUND_ROW * TILE + TILE, tileKey)
-      platforms.create(x * TILE + TILE / 2, (GROUND_ROW + 1) * TILE + TILE, tileKey)
+      platforms.create(x * TILE + TILE / 2, this.groundRow * TILE + TILE, tileKey)
+      platforms.create(x * TILE + TILE / 2, (this.groundRow + 1) * TILE + TILE, tileKey)
     }
     // plateformes surélevées : on les traverse en montant et on se pose dessus en
     // retombant (voir landsFromAbove). Sans ça, une plateforme qui en surplombe une
@@ -175,7 +186,7 @@ export class LevelScene extends Phaser.Scene {
       }
     }
 
-    this.player = new Player(this, this.spawnX(), GROUND_ROW * TILE - 40)
+    this.player = new Player(this, this.spawnX(), this.groundRow * TILE - 40)
     this.physics.add.collider(this.player, platforms)
     // collision one-way : validée seulement quand le panda retombe sur le dessus
     this.physics.add.collider(this.player, oneWay, undefined, this.landsFromAbove)
@@ -206,7 +217,7 @@ export class LevelScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.pickups, (_p, pk) => this.collectPickup(pk as Phaser.Physics.Arcade.Sprite))
 
     for (const s of this.levelDef.spawns) {
-      this.enemies.add(new Enemy(this, s.x * TILE, GROUND_ROW * TILE - 40, MONSTERS[s.monsterId]!))
+      this.enemies.add(new Enemy(this, s.x * TILE, this.groundRow * TILE - 40, MONSTERS[s.monsterId]!))
     }
 
     // le groupe applique ses defaults (allowGravity: true, immovable: false) à chaque ajout et
@@ -214,7 +225,7 @@ export class LevelScene extends Phaser.Scene {
     // un coffre "tombe" (gravité réactivée) dès qu'il rejoint le groupe
     this.props = this.physics.add.group({ allowGravity: false, immovable: true })
     for (const propDef of this.levelDef.props ?? []) {
-      const yTile = propDef.y ?? GROUND_ROW - 1
+      const yTile = propDef.y ?? this.groundRow - 1
       const prop = new Prop(this, propDef.x * TILE + TILE / 2, yTile * TILE + TILE / 2, PROPS[propDef.kind]!)
       this.props.add(prop)
       // les coffres attirent l'œil : petit rebond + éclat régulier
@@ -227,21 +238,29 @@ export class LevelScene extends Phaser.Scene {
 
     // pics = danger mortel ; eau = zone nageable (rendu + zone d'overlap, jamais létale)
     const spikes = this.physics.add.staticGroup()
-    const WATER_TOP = GROUND_ROW - 2 // l'eau monte de 2 tuiles au-dessus du sol : de quoi nager
     for (const hz of this.levelDef.hazards ?? []) {
       if (hz.kind === 'spikes') {
         for (let i = 0; i < hz.w; i++) {
-          spikes.create((hz.x + i) * TILE + TILE / 2, GROUND_ROW * TILE + 8, 'spikes')
+          spikes.create((hz.x + i) * TILE + TILE / 2, this.groundRow * TILE + 8, 'spikes')
         }
       } else {
-        // bassin d'eau : plusieurs rangées de tuiles translucides derrière le joueur
-        for (let ty = WATER_TOP; ty <= GROUND_ROW + 1; ty++) {
+        // Eau : VRAIE zone nageable. Par défaut (top/h absents) c'est l'ancienne bande de 2 tuiles
+        // au-dessus du sol (rétrocompat exacte). Sinon on décrit un BASSIN : top = rangée de la
+        // surface, h = profondeur en rangées → grandes étendues (montée/descente à la nage, noyade
+        // P6 déjà en place). Rendu : nappe translucide + trait de surface plus clair en haut.
+        const waterTop = hz.top ?? this.groundRow - 2
+        const waterBottom = hz.h !== undefined ? waterTop + hz.h - 1 : this.groundRow + 1
+        for (let ty = waterTop; ty <= waterBottom; ty++) {
           for (let i = 0; i < hz.w; i++) {
             this.add.image((hz.x + i) * TILE + TILE / 2, ty * TILE + TILE / 2, 'water').setDepth(-2)
           }
         }
+        // surface : liseré translucide plus clair sur toute la largeur, en haut du bassin
+        this.add.rectangle(
+          hz.x * TILE, waterTop * TILE, hz.w * TILE, 5, 0x9fdcff, 0.5,
+        ).setOrigin(0, 0).setDepth(-1)
         this.waterRects.push(new Phaser.Geom.Rectangle(
-          hz.x * TILE, WATER_TOP * TILE, hz.w * TILE, (GROUND_ROW + 2 - WATER_TOP) * TILE,
+          hz.x * TILE, waterTop * TILE, hz.w * TILE, (waterBottom + 1 - waterTop) * TILE,
         ))
       }
     }
@@ -268,13 +287,13 @@ export class LevelScene extends Phaser.Scene {
     // checkpoints : drapeaux ; passer dessus mémorise le point de réapparition
     for (const cp of this.levelDef.checkpoints ?? []) {
       const fx = cp.x * TILE + TILE / 2
-      const fy = GROUND_ROW * TILE - 22
+      const fy = this.groundRow * TILE - 22
       const flag = this.physics.add.staticImage(fx, fy, 'flag')
       let activated = false
       this.physics.add.overlap(this.player, flag, () => {
         if (activated) return
         activated = true
-        this.lastCheckpoint = { x: fx, y: GROUND_ROW * TILE - 40 }
+        this.lastCheckpoint = { x: fx, y: this.groundRow * TILE - 40 }
         flag.setTint(0x66bb6a)
         audio.playSfx('level-up')
         this.aoeRing(fx, fy, 50, 0x66bb6a)
@@ -358,7 +377,11 @@ export class LevelScene extends Phaser.Scene {
       this.createExit()
     }
 
-    this.cameras.main.setBounds(0, 0, widthPx, 540)
+    // caméra bornée à la taille RÉELLE du monde (largeur ET hauteur) : sur un monde haut elle
+    // suit le panda en X ET en Y (scroll vertical quand il monte/descend), lerp doux sur les deux
+    // axes. Sur un monde « défaut 16 » (worldH = 540 = viewport) l'axe Y reste verrouillé → aucune
+    // régression.
+    this.cameras.main.setBounds(0, 0, widthPx, this.worldH)
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1)
 
     this.cursors = this.input.keyboard!.createCursorKeys()
@@ -463,7 +486,7 @@ export class LevelScene extends Phaser.Scene {
 
     // décors posés au sol pour remplir l'espace (défilent avec le monde, derrière le joueur)
     const widthPx = this.levelDef.widthTiles * TILE
-    const groundY = GROUND_ROW * TILE
+    const groundY = this.groundRow * TILE
     const decoKey = `deco-${this.levelDef.biome}`
     if (this.textures.exists(decoKey)) {
       for (let x = 160; x < widthPx - 80; x += 250) {
@@ -515,7 +538,7 @@ export class LevelScene extends Phaser.Scene {
     // la porte (texture 'exit', 210 px de haut) repose au sol : on ancre son bas sur la ligne
     // de sol (comme l'ancienne sortie, légèrement plantée dans la terre)
     const doorH = 210
-    const doorBottom = GROUND_ROW * TILE + 20
+    const doorBottom = this.groundRow * TILE + 20
     const doorY = doorBottom - doorH / 2
     // halo lumineux pulsant DERRIÈRE la porte : aura blanc/jaune attirante (alpha + échelle)
     const glow = this.add.image(doorX, doorY - 4, 'exit-glow')
@@ -529,7 +552,7 @@ export class LevelScene extends Phaser.Scene {
 
   spawnBoss() {
     const def = MONSTERS[this.levelDef.boss!]!
-    const boss = new Enemy(this, this.levelDef.widthTiles * TILE * 0.7, GROUND_ROW * TILE - 80, def)
+    const boss = new Enemy(this, this.levelDef.widthTiles * TILE * 0.7, this.groundRow * TILE - 80, def)
     this.enemies.add(boss)
     this.boss = boss
 
@@ -592,7 +615,7 @@ export class LevelScene extends Phaser.Scene {
   // sort de zone télégraphié posé au sol : marqueur qui se remplit ~600 ms, puis dégâts
   // de zone (onde de choc) touchant le joueur s'il est encore dans le cercle
   enemyGroundSpell(targetX: number, damage: number) {
-    const groundY = GROUND_ROW * TILE - 10
+    const groundY = this.groundRow * TILE - 10
     const radius = 58
     const marker = this.add.graphics().setDepth(4)
     const draw = (fill: number) => {
@@ -1566,7 +1589,7 @@ export class LevelScene extends Phaser.Scene {
   // rayon est IMMOBILISÉ (root) et mordu (dégâts), puis le piège claque et disparaît. S'il n'est
   // pas déclenché, il s'efface au bout de ~14 s.
   private castTrap(skill: SkillDef, color: number, mult: number) {
-    const gx = this.player.x, gy = GROUND_ROW * TILE - 6
+    const gx = this.player.x, gy = this.groundRow * TILE - 6
     const atk = this.player.stats.atk * this.player.outgoingMult()
     const trap = this.add.image(gx, gy, 'fx-trap').setDepth(2).setScale(1.05)
     this.physics.add.existing(trap, true) // corps statique = emprise de la texture (large piège au sol)
@@ -1610,7 +1633,7 @@ export class LevelScene extends Phaser.Scene {
     g.lineStyle(2, 0xffffff, 0.9).lineBetween(-14, 0, 14, 0).lineBetween(0, -14, 0, 14)
     const ring = this.add.image(0, 0, 'ring').setTint(color).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.7).setScale((radius / 28) * 0.5)
     this.tweens.add({ targets: ring, scale: (radius / 28) * 1.05, alpha: 0.2, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
-    const reticle = this.add.container(this.player.x + this.player.facing * 160, GROUND_ROW * TILE - 30, [g, ring]).setDepth(9)
+    const reticle = this.add.container(this.player.x + this.player.facing * 160, this.groundRow * TILE - 30, [g, ring]).setDepth(9)
 
     // UI écran (épinglée) : consigne + bouton Annuler visuel (hit-test manuel dans onAimPointer)
     const hint = this.add.text(480, 458, 'Touche la zone à viser', { fontSize: '16px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5).setScrollFactor(0).setDepth(60)
@@ -1670,7 +1693,7 @@ export class LevelScene extends Phaser.Scene {
     const color = this.skillColor(skill.id)
     // clamp de la cible dans les bornes du monde pour rester jouable
     const cx = Phaser.Math.Clamp(x, 40, this.levelDef.widthTiles * TILE - 40)
-    const cy = Phaser.Math.Clamp(y, 80, GROUND_ROW * TILE - 4)
+    const cy = Phaser.Math.Clamp(y, 80, this.groundRow * TILE - 4)
     // dispatch selon la nature du sort de zone : cataclysme (ultime) > météores > mur de flamme > pluie de flèches
     if (skill.id === 'cataclysme') this.executeCataclysm(skill, cx, cy, mult, color)
     else if (skill.meteors) this.executeMeteorRain(skill, cx, cy, mult, color)
@@ -1807,7 +1830,7 @@ export class LevelScene extends Phaser.Scene {
   // brûle et bloque les ennemis tant qu'elle dure ; ici on gère l'embrasement d'invocation + FX.
   private executeFlameWall(skill: SkillDef, cx: number, mult: number) {
     const cfg = skill.wall!
-    const groundY = GROUND_ROW * TILE - 4
+    const groundY = this.groundRow * TILE - 4
     const width = skill.range * 2
     const atk = this.player.stats.atk * this.player.outgoingMult()
     const dmgPerTick = Math.max(1, atk * mult * 0.3)
@@ -1893,7 +1916,7 @@ export class LevelScene extends Phaser.Scene {
     this.hitStop(90)
     this.executeMeteorRain(skill, cx, cy, mult, color)
     const radius = skill.range
-    const groundY = GROUND_ROW * TILE - 4
+    const groundY = this.groundRow * TILE - 4
     // colonnes de feu en travers de la zone
     for (let i = 0; i < 6; i++) {
       this.time.delayedCall(i * 140, () => this.firePillarFx(cx + Phaser.Math.FloatBetween(-radius, radius), groundY))
