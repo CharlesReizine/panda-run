@@ -273,27 +273,46 @@ function mkZone42(): LevelDef {
 }
 
 // carriere-1 : CARRIÈRE — TERRASSES D'EXTRACTION. D3, DESCENTE minière (ending bas) vers une arène
-// GARDÉE par le gardien-pierre (mvp de climax). Fosse noyée (bassin), galeries de roche, biome pierre.
+// GARDÉE par le gardien-pierre (mvp de climax). REPASSÉE en buildLevelFromModules (comme cave-1) pour
+// GARANTIR de VRAIS TUNNELS DE PIERRE DENSES : quatre boyaux `grotte` (roche dessus ET dessous) + un
+// couloir-pics enchaînés (le plafond famille-tension de composeLevel n'en laissait qu'un — trop peu de
+// grottes pour une carrière). Le gardien-pierre veille dans un GOULET (dernier boyau) avant la grande
+// dévalade vers l'arène du fond. Fosse noyée (bassin, coffre), biome pierre, faucons aux respirations.
 function mkCarriere1(): LevelDef {
-  return composeLevel({
-    id: 'carriere-1', name: 'Carrière abandonnée', biome: 'carriere',
-    tierCap: 3, ending: 'bas', allowLadders: true, midCount: 6,
-    ground: ['gobelin-mineur', 'golem-de-pierre', 'gargouille'], birds: ['faucon'],
-    mvp: 'gardien-pierre', waterKinds: ['bassin'], seed: 'carr-1',
-  })
+  return buildLevelFromModules([
+    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], spawnHere: true },
+    { kind: 'grotte', widthRange: [16, 22], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gobelin-mineur'] }, // BOYAU DE PIERRE #1
+    { kind: 'grotte', widthRange: [16, 22], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['golem-de-pierre'] }, // BOYAU DE PIERRE #2 (galerie continue avec #1)
+    { kind: 'descente', widthRange: [14, 20], rise: -6, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['gargouille'], birds: ['faucon'] }, // terrasse d'extraction, respiration à l'air
+    { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['gobelin-mineur'] }, // fosse noyée, coffre au fond
+    { kind: 'couloir-pics', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'roche', tags: ['tension', 'danger'], ground: ['golem-de-pierre'] }, // galerie basse à lits de pics (plafond de roche)
+    { kind: 'grotte', widthRange: [16, 22], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gargouille'] }, // BOYAU DE PIERRE #3
+    { kind: 'grotte', widthRange: [14, 20], fillBelow: 'roche', fillAbove: 'roche', tags: ['tension', 'danger'], ground: ['gardien-pierre'] }, // GOULET GARDÉ : le gardien-pierre veille dans le tunnel
+    { kind: 'descente-controlee', widthRange: [16, 22], rise: -28, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['golem-de-pierre'] }, // grande dévalade minière vers le fond
+    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['gobelin-mineur', 'gargouille'], exitHere: true }, // arène du fond + PORTE en contrebas
+  ], { id: 'carriere-1', name: 'Carrière abandonnée', biome: 'carriere', seed: 'carr-1-tunnels' })
 }
 
 // carriere-2 : CARRIÈRE — FOSSE DES GOLEMS. D4, le plus enterré : on REMONTE de la fosse (ending haut,
-// climax = grande escalade de sortie, ≠ de l'arène gardée du 4-1 en bas). Tier 4 → un maximum de
-// galeries de pierre + pics (grotte/couloir-pics/pics-quinconce). Deux plans d'eau (fosse noyée +
-// source claire remontable). (Le gardien-pierre veille dans carriere-1 ; ici le péril est la remontée.)
+// climax = grande escalade de sortie, ≠ de l'arène gardée du 1 en bas). REPASSÉE en buildLevelFromModules
+// pour un MAXIMUM de galeries de pierre + pics : quatre boyaux `grotte` + couloir-pics + pics-quinconce
+// (tier 4), impossibles à garantir via le plafond famille-tension de composeLevel. Deux plans d'eau
+// (fosse noyée + source claire remontable), remontée finale par une échelle vers la PORTE tout en haut.
+// (Le gardien-pierre veille dans carriere-1 ; ici le péril est la remontée à travers les galeries.)
 function mkCarriere2(): LevelDef {
-  return composeLevel({
-    id: 'carriere-2', name: 'Fosse des golems', biome: 'carriere',
-    tierCap: 4, ending: 'haut', allowLadders: true, midCount: 7,
-    ground: ['gobelin-mineur', 'golem-de-pierre', 'gargouille'], birds: ['faucon'],
-    waterKinds: ['bassin', 'cascade'], seed: 'carr-2',
-  })
+  return buildLevelFromModules([
+    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], spawnHere: true },
+    { kind: 'grotte', widthRange: [16, 22], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gobelin-mineur'] }, // BOYAU DE PIERRE #1
+    { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['golem-de-pierre'] }, // fosse noyée, coffre au fond
+    { kind: 'grotte', widthRange: [16, 22], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gargouille'] }, // BOYAU DE PIERRE #2
+    { kind: 'couloir-pics', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'roche', tags: ['tension', 'danger'], ground: ['golem-de-pierre'] }, // galerie basse à lits de pics
+    { kind: 'pics-quinconce', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['tension', 'danger'], ground: ['gargouille'] }, // slalom de pics en hauteur (tier 4)
+    { kind: 'grotte', widthRange: [16, 22], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gobelin-mineur'] }, // BOYAU DE PIERRE #3
+    { kind: 'cascade', widthRange: [18, 24], rise: 2, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['golem-de-pierre'], birds: ['faucon'] }, // source claire remontable, coffre secret
+    { kind: 'grotte', widthRange: [14, 20], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gargouille'] }, // BOYAU DE PIERRE #4
+    { kind: 'marche', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['gobelin-mineur'] },
+    { kind: 'echelle-tranquille', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['golem-de-pierre'], exitHere: true }, // remontée finale, PORTE tout en HAUT
+  ], { id: 'carriere-2', name: 'Fosse des golems', biome: 'carriere', seed: 'carr-2-tunnels' })
 }
 
 // ─── Zone 5 — CIMETIÈRE (refondue PHASE MODULES, composeLevel) ──────────────────────────────
