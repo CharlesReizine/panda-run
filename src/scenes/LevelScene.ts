@@ -8,6 +8,7 @@ import { FlameWall } from '../entities/FlameWall'
 import { MONSTERS } from '../data/monsters'
 import { PROPS } from '../data/props'
 import { MATERIALS } from '../data/materials'
+import { ITEMS, rarityColor } from '../data/items'
 import { physicalDamage, inMeleeReach } from '../core/combat'
 import { grantXp } from '../core/progression'
 import { emptyControls, mergeControls, type ControlsState } from '../core/controls'
@@ -2231,7 +2232,10 @@ export class LevelScene extends Phaser.Scene {
       const txt = this.add.text(s.x, s.y - 10, '♥', { fontSize: '20px', color: '#ff6b81' }).setOrigin(0.5)
       this.tweens.add({ targets: txt, y: txt.y - 30, alpha: 0, duration: 600, onComplete: () => txt.destroy() })
     }
-    if (itemId) p.inventory.push(itemId)
+    if (itemId) {
+      p.inventory.push(itemId)
+      this.showLootReveal(itemId)
+    }
     if (materialId) {
       p.materials[materialId] = (p.materials[materialId] ?? 0) + 1
       const def = MATERIALS[materialId]!
@@ -2242,6 +2246,121 @@ export class LevelScene extends Phaser.Scene {
     s.destroy()
     save(p)
     this.game.events.emit('hud-refresh')
+  }
+
+  // Présentation de loot valorisante quand un équipement est ramassé (drop de monstre / coffre).
+  // Purement visuel, non bloquant : icône en GROS au centre-écran, halo + rayons tournants +
+  // éclats scintillants teintés selon la rareté, nom coloré dessous. Plus la rareté est haute,
+  // plus c'est spectaculaire. N'affecte ni la logique de drop ni l'inventaire.
+  // File d'attente : si plusieurs équipements tombent en même temps (coffre), on les présente
+  // l'un après l'autre plutôt qu'en les empilant → chaque icône/nom reste lisible.
+  private lootQueue: string[] = []
+  private lootBusy = false
+  private showLootReveal(itemId: string) {
+    const def = ITEMS[itemId]
+    if (!def || !def.slot) return // seul l'équipement (arme/armure/chapeau/accessoire) est présenté
+    this.lootQueue.push(itemId)
+    if (!this.lootBusy) this.pumpLootQueue()
+  }
+  private pumpLootQueue() {
+    const next = this.lootQueue.shift()
+    if (next === undefined) { this.lootBusy = false; return }
+    this.lootBusy = true
+    this.runLootReveal(next)
+  }
+  private runLootReveal(itemId: string) {
+    const def = ITEMS[itemId]!
+    const color = rarityColor(def.rarity)
+    const tier = ({ commun: 0, rare: 1, epique: 2, legendaire: 3 } as const)[def.rarity ?? 'commun'] ?? 0
+    const ADD = Phaser.BlendModes.ADD
+
+    const cx = 480
+    const cy = 236
+    const holdMs = 900 + tier * 260 // plus rare = reste plus longtemps
+    const totalMs = 360 + holdMs + 420
+
+    const objs: Phaser.GameObjects.GameObject[] = []
+    const track = <T extends Phaser.GameObjects.GameObject>(o: T): T => { objs.push(o); return o }
+
+    // halo lumineux (disque additif qui pulse) — plus large et intense selon la rareté
+    const haloR = 70 + tier * 26
+    const halo = track(this.add.circle(cx, cy, haloR, color, 0.28 + tier * 0.05))
+      .setScrollFactor(0).setDepth(60).setBlendMode(ADD).setScale(0.2)
+    this.tweens.add({ targets: halo, scale: 1, duration: 320, ease: 'Cubic.out' })
+    this.tweens.add({ targets: halo, alpha: halo.alpha * 0.55, scale: 1.12, duration: 620, yoyo: true, repeat: -1, delay: 320, ease: 'Sine.inOut' })
+
+    // rayons lumineux qui tournent (réutilise la texture 'title-rays') — dès la rareté rare
+    if (tier >= 1) {
+      const raysScale = (haloR * 2.4) / 1200
+      const rays = track(this.add.image(cx, cy, 'title-rays').setTint(color))
+        .setScrollFactor(0).setDepth(59).setBlendMode(ADD).setAlpha(0).setScale(raysScale * 0.6)
+      this.tweens.add({ targets: rays, alpha: 0.5 + tier * 0.1, scale: raysScale, duration: 340, ease: 'Cubic.out' })
+      this.tweens.add({ targets: rays, angle: 40 + tier * 30, duration: totalMs, ease: 'Sine.inOut' })
+    }
+
+    // éclats scintillants (screen-space) — nombre croissant avec la rareté
+    const sparkle = (delay: number) => {
+      const n = 6 + tier * 5
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + Phaser.Math.FloatBetween(-0.3, 0.3)
+        const reach = (haloR + 10) * Phaser.Math.FloatBetween(0.5, 1.1)
+        const sz = Phaser.Math.Between(3, 5 + tier)
+        const p = this.add.rectangle(cx, cy, sz, sz, i % 4 === 0 ? 0xffffff : color)
+          .setScrollFactor(0).setDepth(61).setBlendMode(ADD).setRotation(a).setAlpha(0)
+        this.tweens.add({
+          targets: p, x: cx + Math.cos(a) * reach, y: cy + Math.sin(a) * reach,
+          alpha: { from: 1, to: 0 }, scale: 0.3, delay, duration: 460 + tier * 60, ease: 'Cubic.out',
+          onComplete: () => p.destroy(),
+        })
+      }
+    }
+    sparkle(0)
+    if (tier >= 2) this.time.delayedCall(holdMs * 0.5, () => { if (this.sys.isActive()) sparkle(0) })
+
+    // légendaire : petit flash doré plein écran pour marquer le coup (non bloquant)
+    if (tier >= 3) this.flashScreen(color, 0.22, 220)
+
+    // ICÔNE en GROS : pop (Back.out) puis pulse doux pendant le maintien
+    const iconKey = this.textures.exists(`item-${itemId}`) ? `item-${itemId}` : 'item-drop'
+    const icon = track(this.add.image(cx, cy, iconKey)).setScrollFactor(0).setDepth(62)
+    const targetH = 108 + tier * 18
+    const baseScale = targetH / Math.max(1, icon.height)
+    icon.setScale(0)
+    this.tweens.add({ targets: icon, scale: baseScale, duration: 360, ease: 'Back.out' })
+    this.tweens.add({ targets: icon, scale: baseScale * 1.06, duration: 560, yoyo: true, repeat: -1, delay: 360, ease: 'Sine.inOut' })
+
+    // liseré de rareté (anneau) autour de l'icône pour les hautes raretés
+    if (tier >= 2) {
+      const ring = track(this.add.image(cx, cy, 'ring').setTint(color)).setScrollFactor(0).setDepth(61).setBlendMode(ADD)
+      ring.setScale((targetH * 1.25) / 64).setAlpha(0)
+      this.tweens.add({ targets: ring, alpha: 0.9, duration: 320, ease: 'Cubic.out' })
+      this.tweens.add({ targets: ring, angle: -60, duration: totalMs, ease: 'Sine.inOut' })
+    }
+
+    // NOM de l'objet, couleur = rareté
+    const hex = `#${color.toString(16).padStart(6, '0')}`
+    const name = track(this.add.text(cx, cy + targetH * 0.62, def.name, {
+      fontSize: `${20 + tier * 2}px`, fontStyle: 'bold', color: hex,
+      stroke: '#000000', strokeThickness: 4, align: 'center',
+    })).setOrigin(0.5).setScrollFactor(0).setDepth(62).setAlpha(0)
+    this.tweens.add({ targets: name, alpha: 1, y: name.y - 6, duration: 300, delay: 200, ease: 'Cubic.out' })
+
+    // son de récompense si dispo (pop selon la rareté)
+    audio.playSfx(tier >= 2 ? 'level-up' : 'buy')
+
+    // sortie commune : tout monte légèrement et se dissout, puis destruction
+    this.time.delayedCall(360 + holdMs, () => {
+      const live = objs.filter((o) => o.scene)
+      if (!this.sys.isActive()) { live.forEach((o) => o.destroy()); return }
+      this.tweens.killTweensOf(live as unknown as object[])
+      this.tweens.add({
+        targets: live, alpha: 0, y: '-=24', duration: 420, ease: 'Cubic.in',
+        onComplete: () => {
+          live.forEach((o) => o.destroy())
+          if (this.sys.isActive()) this.pumpLootQueue() // enchaîne l'objet suivant en file
+        },
+      })
+    })
   }
 
   usePotion() {
