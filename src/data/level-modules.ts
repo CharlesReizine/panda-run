@@ -16,12 +16,40 @@
 //   monde = enveloppe des modules (souvent ~22-34 tuiles, pas de tour géante).
 
 import type { LevelDef } from './levels'
+import { MIN_LADDER_TILES, MAX_LADDER_TILES } from '../core/platforming'
 
 // altitude = nombre de rangées AU-DESSUS du sol (0 = surface du sol). row = groundRow - alt.
 export type Fill = 'air' | 'sol' | 'roche' | 'vide' | 'marine' | 'cascade' | 'pics'
+
+// PHASE 2 — CATALOGUE ÉTENDU. On GARDE les 12 kinds historiques (les 15 niveaux non refondus en
+// dépendent) et on AJOUTE ceux du catalogue user (docs/level-module-kit.md §PHASE 2), dédupliqués.
+// Chaque kind porte des métadonnées de composition dans CATALOG (tier, famille, tags entrée/sortie,
+// largeur variable). Les motifs à ÉCHELLE (flag ladder) réintroduisent la mécanique d'escalade.
 export type ModuleKind =
+  // historiques (12)
   | 'plateau' | 'colline' | 'escalier' | 'descente' | 'gue' | 'corniche-vide'
   | 'bassin' | 'cascade' | 'grotte' | 'arene' | 'crete' | 'volee'
+  // fillers / respiration (D1)
+  | 'ligne-droite' | 'marche' | 'descente-douce' | 'couloir-large' | 'petit-pont'
+  | 'echelle-tranquille' | 'balcon' | 'double-sol'
+  // traversée horizontale (D1–D3)
+  | 'gap-grandissant' | 'ilots-reguliers' | 'ilots-irreguliers' | 'trou-filet' | 'pas-japonais' | 'triple-saut'
+  // vertical / étages (D2–D4)
+  | 'zigzag' | 'cage-echelles' | 'echelle-vs-sauts' | 'descente-controlee' | 'tour-creuse'
+  // risque / récompense (D2–D4)
+  | 'chemin-double' | 'detour-balcon' | 'fausse-sortie' | 'tresor-bassin'
+  // tension / précision (D3–D5) — NOTE : les motifs à PICS (couloir-pics, pics-quinconce,
+  // atterrissage-etroit, faux-plat) sont reportés en 2b : le moteur ne rend les pics qu'au SOL
+  // (LevelScene, groundRow), pas sur une surface en hauteur → incompatibles à mi-hauteur pour l'instant.
+  | 'echelle-exposee'
+  // eau / cascade (D2–D4)
+  | 'sortie-humide'
+
+// Tier de difficulté (D1..D5) et tags d'accroche : altitude du bord GAUCHE (entrée) / DROIT (sortie).
+export type Tier = 1 | 2 | 3 | 4 | 5
+export type EdgeTag = 'bas' | 'milieu' | 'haut'
+// Famille de composition (pour le DOSAGE par niveau, cf. composeLevel).
+export type Family = 'filler' | 'traverse' | 'vertical' | 'risque' | 'tension'
 
 export interface Module {
   kind: ModuleKind
@@ -38,6 +66,10 @@ export interface Module {
   birds?: string[]
   spawnHere?: boolean // départ du joueur dans ce module (posé à mi-portée sur la surface)
   exitHere?: boolean // PORTE de sortie dans ce module
+  // métadonnées (déduites de CATALOG si absentes) — servent au dosage / à la courbe de difficulté.
+  tier?: Tier
+  entry?: EdgeTag
+  exit?: EdgeTag
 }
 
 // ─── RNG déterministe (mulberry32) : pas de Math.random (interdit) ──────────────────────────
@@ -67,6 +99,9 @@ interface Piece {
   // cuves d'eau : marine (noyade) ou cascade (remontable). bankAlt = rangée des berges (surface d'eau
   // juste dessous) ; l'eau descend jusqu'au sol (fond). Le moteur pose murs + fond + déco.
   waters: { x: number; w: number; kind: 'marine' | 'cascade'; bankAlt: number }[]
+  // ÉCHELLES : montant vertical de topAlt (haut) jusqu'à topAlt-h (pied). h∈[MIN,MAX]_LADDER_TILES.
+  // Correct-par-construction : pied posé sur une surface + palier de sortie 2 rangées sous le sommet.
+  ladders: { x: number; topAlt: number; h: number }[]
   spawns: { monsterId: string; x: number; alt?: number; aerial?: boolean }[]
   props: { kind: string; x: number; alt?: number }[]
   start?: { x: number; alt: number }
@@ -75,7 +110,7 @@ interface Piece {
 }
 
 function emptyPiece(exitAlt: number): Piece {
-  return { platforms: [], ceilings: [], gaps: [], spikes: [], bridges: [], waters: [], spawns: [], props: [], exitAlt }
+  return { platforms: [], ceilings: [], gaps: [], spikes: [], bridges: [], waters: [], ladders: [], spawns: [], props: [], exitAlt }
 }
 
 // Rampe de paliers : suite de plateformes ADJACENTES de fromAlt à toAlt par marches ≤3 rangées.
@@ -102,6 +137,47 @@ function ramp(x0: number, w: number, fromAlt: number, toAlt: number, keepGround 
 function spread(w: number, n: number): number[] {
   if (n <= 0) return []
   return Array.from({ length: n }, (_, i) => Math.round((w * (i + 1)) / (n + 1)))
+}
+
+// hauteur d'échelle bornée à [MIN,MAX]_LADDER_TILES (le validateur casse hors de cet intervalle).
+const LADDER_H = Math.max(MIN_LADDER_TILES, Math.min(9, MAX_LADDER_TILES))
+
+// ─── ÉCHELLES (motifs correct-par-construction) ─────────────────────────────────────────────
+// Pose UN étage d'escalade : une plateforme-PIED à footAlt qui couvre le montant, un MONTANT de h
+// tuiles (h∈[MIN,MAX]), et un PALIER DE SORTIE posé 2 rangées SOUS le sommet (drop=2, la règle du
+// décalage pieds↔centre du panda — cf. level-validator.isLadderTop), horizontalement collé au
+// montant. Le palier s'étend jusqu'à `landRight` pour raccorder la sortie du module. Renvoie
+// l'altitude du palier (= altitude de sortie de l'escalade).
+function poseLadder(p: Piece, xLad: number, footAlt: number, footX0: number, footW: number, landRight: number, h = LADDER_H): number {
+  const fa = Math.max(1, footAlt)
+  p.platforms.push({ x: footX0, alt: fa, w: footW }) // pied de l'échelle (surface d'accès)
+  return poseLadderOn(p, xLad, fa, landRight, h)
+}
+
+// Ajoute un montant + palier de sortie SUR une surface de pied DÉJÀ posée à footAlt (couvrant xLad).
+function poseLadderOn(p: Piece, xLad: number, footAlt: number, landRight: number, h = LADDER_H): number {
+  const topAlt = footAlt + h
+  p.ladders.push({ x: xLad, topAlt, h })
+  const landAlt = topAlt - 2 // palier atteignable : 2 rangées sous le haut du montant (décalage pieds)
+  p.platforms.push({ x: xLad, alt: landAlt, w: Math.max(4, landRight - xLad) }) // palier collé au montant
+  return landAlt
+}
+
+// TOUR D'ÉCHELLES en LACET (cage / puits) : `stages` étages échelle+palier, l'échelle suivante part
+// du bout du palier précédent (quinconce) → jamais plus de 2 paliers empilés (+ sol = 3). Renvoie
+// l'altitude du palier de sommet.
+function poseTower(p: Piece, w: number, entryAlt: number, stages: number): number {
+  const seg = Math.max(6, Math.floor((w - 4) / (stages + 1)))
+  let footAlt = Math.max(1, entryAlt)
+  p.platforms.push({ x: 0, alt: footAlt, w: seg + 2 }) // plateforme-pied initiale
+  let x = 2
+  for (let i = 0; i < stages; i++) {
+    const isLast = i === stages - 1
+    const landRight = isLast ? w : Math.min(w, x + seg + 2)
+    footAlt = poseLadderOn(p, x, footAlt, landRight)
+    x = Math.min(w - 3, landRight - 2) // prochaine échelle au bout du palier
+  }
+  return footAlt
 }
 
 // ─── Générateur d'un module (espace altitude, x local 0..w) ─────────────────────────────────
@@ -256,6 +332,263 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.exitAlt = alt
       break
     }
+
+    // ─── PHASE 2 — FILLERS / respiration (D1) ────────────────────────────────────────────────
+    case 'ligne-droite':
+    case 'couloir-large': {
+      const alt = entryAlt
+      if (alt >= 1) p.platforms.push({ x: 0, alt, w })
+      placeBirds(alt + 2)
+      p.exitAlt = alt
+      break
+    }
+    case 'marche': {
+      // une marche simple qui monte de 2-3 rangées à mi-parcours
+      const alt = entryAlt
+      const step = Math.min(SIMPLE_JUMP_ROWS, 2 + Math.floor(rng() * 2))
+      const half = Math.floor(w / 2)
+      if (alt >= 1) p.platforms.push({ x: 0, alt, w: half })
+      p.platforms.push({ x: half, alt: alt + step, w: w - half })
+      p.exitAlt = alt + step
+      break
+    }
+    case 'descente-douce': {
+      const alt = entryAlt
+      const drop = Math.min(SIMPLE_JUMP_ROWS, 2 + Math.floor(rng() * 2))
+      const toAlt = Math.max(0, alt - drop)
+      p.platforms.push(...ramp(0, w, alt, toAlt))
+      p.exitAlt = toAlt
+      break
+    }
+    case 'balcon': {
+      // plateau + balcon surélevé (bonus optionnel), sortie = entrée
+      const alt = Math.max(1, entryAlt)
+      p.platforms.push({ x: 0, alt, w })
+      p.platforms.push({ x: Math.floor(w / 3), alt: alt + SIMPLE_JUMP_ROWS, w: Math.max(4, Math.floor(w / 3)) })
+      placeBirds(alt + 4)
+      p.exitAlt = alt
+      break
+    }
+    case 'echelle-tranquille': {
+      // F6 : montée par UNE échelle unique, palier de sortie jusqu'au bord droit
+      const xLad = Math.max(3, Math.floor(w * 0.4))
+      p.exitAlt = poseLadder(p, xLad, entryAlt, 0, xLad + 3, w)
+      break
+    }
+    case 'double-sol': {
+      // F8 : 2 étages plats reliés par une échelle, MÊME sortie que l'entrée (l'étage haut = bonus)
+      const alt = Math.max(1, entryAlt)
+      p.platforms.push({ x: 0, alt, w }) // sol bas, pleine largeur = chemin principal
+      const xLad = Math.max(3, Math.floor(w * 0.35))
+      const topAlt = alt + LADDER_H
+      p.ladders.push({ x: xLad, topAlt, h: LADDER_H })
+      p.platforms.push({ x: xLad, alt: topAlt - 2, w: Math.max(4, Math.floor(w / 2)) }) // étage haut
+      p.exitAlt = alt
+      break
+    }
+
+    // ─── PHASE 2 — TRAVERSÉE horizontale (D1–D3) ─────────────────────────────────────────────
+    case 'gap-grandissant':
+    case 'ilots-reguliers':
+    case 'ilots-irreguliers':
+    case 'triple-saut': {
+      // sol à alt courant coupé de TROUS mortels (≤3 tuiles chacun, franchissables). Le motif change
+      // le rythme des trous : croissant, régulier, irrégulier, ou triple saut serré.
+      const alt = Math.max(1, entryAlt)
+      const bank = 3
+      p.platforms.push({ x: 0, alt, w: bank })
+      let x = bank
+      let i = 0
+      const maxGaps = m.kind === 'triple-saut' ? 3 : 99
+      while (x < w - bank - 2 && i < maxGaps) {
+        let gw: number
+        if (m.kind === 'gap-grandissant') gw = Math.min(1 + i, 3)
+        else if (m.kind === 'ilots-irreguliers') gw = 1 + ((i * 2 + 1) % 3)
+        else if (m.kind === 'triple-saut') gw = 3
+        else gw = 2
+        gw = Math.min(gw, 3, w - bank - x - 2)
+        if (gw <= 0) break
+        p.gaps.push({ x, w: gw }); x += gw
+        const iw = m.kind === 'ilots-irreguliers' ? 3 + (i % 3) : 4
+        const sw = Math.min(iw, w - bank - x)
+        if (sw <= 0) break
+        p.platforms.push({ x, alt, w: sw }); x += sw
+        i++
+      }
+      p.platforms.push({ x: Math.max(x, w - bank), alt, w: bank }) // berge droite
+      placeBirds(alt + 2)
+      p.exitAlt = alt
+      break
+    }
+    case 'petit-pont': {
+      // F5 : pont plein au-dessus d'un bassin marine peu profond (traversée sûre, pas de trou)
+      const bankAlt = entryAlt + 2
+      const rampW = 4
+      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt))
+      const wx = rampW, ww = Math.max(4, w - 2 * rampW)
+      p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt })
+      p.bridges.push({ x: wx, alt: bankAlt, w: ww })
+      p.platforms.push(...ramp(wx + ww, w - (wx + ww), bankAlt, entryAlt))
+      p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) }) // petit trésor au fond du bassin
+      p.exitAlt = entryAlt
+      break
+    }
+    case 'trou-filet':
+    case 'pas-japonais': {
+      // pas de pierre (bridges) au-dessus d'une cuve marine : rater = tomber à l'eau (nage), pas mourir
+      const bankAlt = Math.max(entryAlt, 2)
+      const bank = 3
+      p.platforms.push({ x: 0, alt: bankAlt, w: bank })
+      const wx = bank, ww = Math.max(6, w - 2 * bank)
+      p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt })
+      const stepW = m.kind === 'pas-japonais' ? 2 : 3
+      let x = wx
+      while (x < wx + ww) {
+        const sw = Math.min(stepW, wx + ww - x)
+        if (sw <= 0) break
+        p.bridges.push({ x, alt: bankAlt, w: sw })
+        x += sw + 3
+      }
+      p.platforms.push({ x: wx + ww, alt: bankAlt, w: bank })
+      placeBirds(bankAlt + 2)
+      p.exitAlt = bankAlt
+      break
+    }
+
+    // ─── PHASE 2 — VERTICAL / étages (D2–D4) ─────────────────────────────────────────────────
+    case 'zigzag': {
+      // plateformes alternées contiguës (monte de 2, redescend de 1 → progression en dents de scie)
+      const alt = Math.max(1, entryAlt)
+      const seg = 4
+      let x = 0, a = alt, i = 0
+      while (x < w) {
+        const sw = Math.min(seg, w - x)
+        if (sw <= 0) break
+        p.platforms.push({ x, alt: a, w: sw })
+        x += sw
+        a = Math.max(1, i % 2 === 0 ? a + 2 : a - 1)
+        i++
+      }
+      p.exitAlt = a
+      break
+    }
+    case 'descente-controlee': {
+      // paliers descendants réguliers (chute contrôlée corniche → corniche)
+      const alt = entryAlt
+      const drop = Math.max(5, Math.abs(m.rise ?? 8))
+      const toAlt = Math.max(0, alt - drop)
+      p.platforms.push(...ramp(0, w, alt, toAlt))
+      placeBirds(alt + 2)
+      p.exitAlt = toAlt
+      break
+    }
+    case 'cage-echelles': {
+      // V18 : 2 échelles + paliers en lacet (quinconce)
+      p.exitAlt = poseTower(p, w, entryAlt, 2)
+      break
+    }
+    case 'tour-creuse': {
+      // V21 : puits, plateformes en quinconce reliées par échelles (3 étages)
+      p.exitAlt = poseTower(p, w, entryAlt, 3)
+      break
+    }
+    case 'echelle-vs-sauts': {
+      // V19 : deux routes vers le même palier — échelle (gauche) OU escalier de sauts (droite)
+      const xLad = Math.max(3, Math.floor(w * 0.25))
+      const rx = Math.floor(w * 0.5)
+      const landAlt = poseLadder(p, xLad, entryAlt, 0, rx, rx)
+      p.platforms.push(...ramp(rx, w - rx, entryAlt, landAlt)) // escalier alternatif à droite
+      p.exitAlt = landAlt
+      break
+    }
+
+    // ─── PHASE 2 — RISQUE / récompense (D2–D4) ───────────────────────────────────────────────
+    case 'chemin-double': {
+      // R23 : route HAUTE continue (sûre) + route BASSE à trous (rapide, risquée)
+      const lowAlt = Math.max(1, entryAlt)
+      const highAlt = lowAlt + SIMPLE_JUMP_ROWS
+      p.platforms.push({ x: 0, alt: lowAlt, w: 4 })
+      let x = 4
+      while (x < w - 4) {
+        const gw = Math.min(2, w - 4 - x)
+        if (gw <= 0) break
+        p.gaps.push({ x, w: gw }); x += gw
+        const sw = Math.min(4, w - 4 - x)
+        if (sw <= 0) break
+        p.platforms.push({ x, alt: lowAlt, w: sw }); x += sw
+      }
+      p.platforms.push({ x: Math.max(x, w - 4), alt: lowAlt, w: 4 })
+      p.platforms.push({ x: 2, alt: highAlt, w: Math.max(6, w - 4) }) // corniche haute continue
+      p.exitAlt = lowAlt
+      break
+    }
+    case 'fausse-sortie': {
+      // R28 : chemin continu + leurre surélevé sans issue (cul-de-sac à observer)
+      const alt = Math.max(1, entryAlt)
+      p.platforms.push({ x: 0, alt, w })
+      p.platforms.push({ x: Math.floor(w / 3), alt: alt + SIMPLE_JUMP_ROWS, w: 5 }) // leurre
+      p.exitAlt = alt
+      break
+    }
+    case 'detour-balcon': {
+      // R26 : chemin principal au sol + balcon-trésor optionnel via échelle (sortie = entrée)
+      const alt = Math.max(1, entryAlt)
+      p.platforms.push({ x: 0, alt, w })
+      const xLad = Math.max(3, Math.floor(w * 0.4))
+      const topAlt = alt + LADDER_H
+      p.ladders.push({ x: xLad, topAlt, h: LADDER_H })
+      const balcAlt = topAlt - 2
+      p.platforms.push({ x: xLad, alt: balcAlt, w: Math.max(4, Math.floor(w / 3)) })
+      p.props.push({ kind: 'coffre', x: xLad + 2, alt: balcAlt + 1 })
+      p.exitAlt = alt
+      break
+    }
+    case 'tresor-bassin': {
+      // R25 : cuve marine avec coffre au FOND (détour aquatique) — reprend le motif bassin
+      const bankAlt = entryAlt + 4
+      const rampW = 5
+      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt))
+      const wx = rampW, ww = Math.max(6, w - 2 * rampW)
+      p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt })
+      const holeL = wx + Math.floor(ww / 2) - 1
+      if (holeL - wx > 0) p.bridges.push({ x: wx, alt: bankAlt, w: holeL - wx })
+      if (wx + ww - (holeL + 3) > 0) p.bridges.push({ x: holeL + 3, alt: bankAlt, w: wx + ww - (holeL + 3) })
+      p.platforms.push(...ramp(wx + ww, w - (wx + ww), bankAlt, entryAlt))
+      p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) })
+      placeBirds(bankAlt + 2)
+      break
+    }
+
+    // ─── PHASE 2 — TENSION / précision (D3–D5, sans pics — voir NOTE) ─────────────────────────
+    case 'echelle-exposee': {
+      // P30 : échelle exposée, il faut SORTIR DU BON CÔTÉ (palier à droite ; leurre court à gauche)
+      const xLad = Math.max(4, Math.floor(w * 0.5))
+      const landAlt = poseLadder(p, xLad, entryAlt, 0, xLad + 3, w)
+      p.platforms.push({ x: Math.max(0, xLad - 6), alt: landAlt, w: 3 }) // leurre gauche (cul-de-sac)
+      p.exitAlt = landAlt
+      break
+    }
+
+    // ─── PHASE 2 — EAU / cascade (D2–D4) ─────────────────────────────────────────────────────
+    case 'sortie-humide': {
+      // E40 : sortie derrière une cascade — reprend exactement le motif cascade (plateforme collée
+      // à GAUCHE et à DROITE du rideau, courant DESCENDANT qu'on remonte en maintenant HAUT)
+      const low = Math.max(entryAlt, 1)
+      const top = low + Math.max(4, 4 + Math.floor(rng() * 2))
+      const L = Math.max(4, Math.floor(w * 0.22))
+      const cornW = 5
+      const upW = Math.max(4, Math.min(Math.floor(w * 0.3), w - L - 2 - cornW - 2))
+      p.platforms.push({ x: 0, alt: low, w: L }) // corniche basse collée à gauche du rideau
+      p.waters.push({ x: L, w: 2, kind: 'cascade', bankAlt: top })
+      p.platforms.push(...ramp(L + 2, upW, low, top)) // rampe collée à droite du rideau
+      const topX = L + 2 + upW
+      p.platforms.push({ x: topX, alt: top, w: cornW })
+      p.props.push({ kind: 'coffre', x: topX + 2, alt: top + 1 })
+      const downStart = topX + cornW
+      if (w - downStart >= 1) p.platforms.push(...ramp(downStart, w - downStart, top, exitAlt))
+      placeBirds(top + 2)
+      break
+    }
   }
 
   // Placement GÉNÉRIQUE des monstres terrestres : posés SUR les plateformes marchables assez larges
@@ -323,6 +656,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   const bridges: NonNullable<LevelDef['bridges']> = []
   const gaps: NonNullable<LevelDef['gaps']> = []
   const hazards: NonNullable<LevelDef['hazards']> = []
+  const ladders: NonNullable<LevelDef['ladders']> = []
   const spawns: LevelDef['spawns'] = []
   const props: NonNullable<LevelDef['props']> = []
   let start: LevelDef['start']
@@ -331,6 +665,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   for (const { piece, x0 } of pieces) {
     for (const pl of piece.platforms) platforms.push({ x: x0 + pl.x, y: row(pl.alt), w: pl.w })
     for (const b of piece.bridges) bridges.push({ x: x0 + b.x, y: row(b.alt), w: b.w })
+    for (const l of piece.ladders) ladders.push({ x: x0 + l.x, y: row(l.topAlt), h: l.h })
     for (const g of piece.gaps) gaps.push({ x: x0 + g.x, w: g.w })
     for (const s of piece.spikes) hazards.push({ kind: 'spikes', x: x0 + s.x, w: s.w })
     for (const wtr of piece.waters) {
@@ -369,6 +704,207 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     id: opts.id, name: opts.name, biome: opts.biome,
     widthTiles: totalWidth, heightTiles,
     start, exit,
-    platforms, bridges, gaps, hazards, spawns: safeSpawns, props,
+    platforms, bridges, gaps, hazards, ladders, spawns: safeSpawns, props,
   }
+}
+
+// ─── CATALOGUE : métadonnées de composition par kind (docs/level-module-kit.md §PHASE 2) ─────
+// tier D1..D5 · family (dosage) · tags d'accroche entry/exit ∈ {bas,milieu,haut} · largeur VARIABLE
+// (amplitude large ±40-60 %, tirée déterministiquement par l'assembleur) · fills · flags ladder /
+// chest (coffre) / water (plan d'eau). Sert au helper composeLevel (dosage + courbe de difficulté).
+export interface ModuleSpec {
+  tier: Tier
+  family: Family
+  entry: EdgeTag
+  exit: EdgeTag
+  width: [number, number]
+  below: Fill
+  above: Fill
+  ladder?: boolean
+  chest?: boolean
+  water?: boolean
+  birds?: boolean // motif de plein air (accueille des oiseaux)
+}
+
+export const CATALOG: Record<ModuleKind, ModuleSpec> = {
+  // historiques (12)
+  plateau: { tier: 1, family: 'filler', entry: 'milieu', exit: 'milieu', width: [10, 18], below: 'sol', above: 'air' },
+  colline: { tier: 2, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [14, 28], below: 'sol', above: 'air', birds: true },
+  escalier: { tier: 1, family: 'traverse', entry: 'bas', exit: 'haut', width: [12, 22], below: 'sol', above: 'air' },
+  descente: { tier: 1, family: 'traverse', entry: 'haut', exit: 'bas', width: [12, 22], below: 'sol', above: 'air' },
+  gue: { tier: 2, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [12, 22], below: 'vide', above: 'air', birds: true },
+  'corniche-vide': { tier: 2, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [14, 26], below: 'vide', above: 'air', birds: true },
+  bassin: { tier: 2, family: 'risque', entry: 'milieu', exit: 'milieu', width: [12, 22], below: 'marine', above: 'air', chest: true, water: true },
+  cascade: { tier: 2, family: 'risque', entry: 'bas', exit: 'haut', width: [16, 26], below: 'cascade', above: 'air', chest: true, water: true },
+  grotte: { tier: 2, family: 'tension', entry: 'milieu', exit: 'milieu', width: [12, 20], below: 'roche', above: 'roche' },
+  arene: { tier: 2, family: 'tension', entry: 'milieu', exit: 'milieu', width: [14, 24], below: 'sol', above: 'air' },
+  crete: { tier: 3, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [12, 22], below: 'vide', above: 'air', birds: true },
+  volee: { tier: 2, family: 'tension', entry: 'milieu', exit: 'milieu', width: [14, 26], below: 'sol', above: 'air', birds: true },
+  // fillers / respiration (D1)
+  'ligne-droite': { tier: 1, family: 'filler', entry: 'milieu', exit: 'milieu', width: [8, 16], below: 'sol', above: 'air' },
+  marche: { tier: 1, family: 'filler', entry: 'bas', exit: 'haut', width: [8, 16], below: 'sol', above: 'air' },
+  'descente-douce': { tier: 1, family: 'filler', entry: 'haut', exit: 'bas', width: [8, 16], below: 'sol', above: 'air' },
+  'couloir-large': { tier: 1, family: 'filler', entry: 'milieu', exit: 'milieu', width: [14, 30], below: 'sol', above: 'air' },
+  'petit-pont': { tier: 1, family: 'filler', entry: 'milieu', exit: 'milieu', width: [10, 18], below: 'marine', above: 'air', chest: true, water: true },
+  'echelle-tranquille': { tier: 1, family: 'filler', entry: 'bas', exit: 'haut', width: [10, 16], below: 'sol', above: 'air', ladder: true },
+  balcon: { tier: 1, family: 'filler', entry: 'milieu', exit: 'milieu', width: [12, 20], below: 'sol', above: 'air', birds: true },
+  'double-sol': { tier: 1, family: 'filler', entry: 'milieu', exit: 'milieu', width: [12, 20], below: 'sol', above: 'air', ladder: true },
+  // traversée horizontale (D1–D3)
+  'gap-grandissant': { tier: 2, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [12, 22], below: 'vide', above: 'air' },
+  'ilots-reguliers': { tier: 2, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [14, 24], below: 'vide', above: 'air' },
+  'ilots-irreguliers': { tier: 3, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [14, 26], below: 'vide', above: 'air' },
+  'trou-filet': { tier: 2, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [14, 24], below: 'marine', above: 'air', water: true },
+  'pas-japonais': { tier: 2, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [14, 24], below: 'marine', above: 'air', water: true },
+  'triple-saut': { tier: 3, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [14, 22], below: 'vide', above: 'air' },
+  // vertical / étages (D2–D4)
+  zigzag: { tier: 2, family: 'vertical', entry: 'bas', exit: 'haut', width: [14, 24], below: 'sol', above: 'air' },
+  'cage-echelles': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [16, 26], below: 'sol', above: 'air', ladder: true },
+  'echelle-vs-sauts': { tier: 2, family: 'vertical', entry: 'bas', exit: 'haut', width: [14, 24], below: 'sol', above: 'air', ladder: true },
+  'descente-controlee': { tier: 2, family: 'vertical', entry: 'haut', exit: 'bas', width: [14, 24], below: 'sol', above: 'air', birds: true },
+  'tour-creuse': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [18, 28], below: 'sol', above: 'air', ladder: true },
+  // risque / récompense (D2–D4)
+  'chemin-double': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [16, 26], below: 'vide', above: 'air' },
+  'detour-balcon': { tier: 2, family: 'risque', entry: 'milieu', exit: 'milieu', width: [14, 24], below: 'sol', above: 'air', ladder: true, chest: true },
+  'fausse-sortie': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [12, 22], below: 'sol', above: 'air' },
+  'tresor-bassin': { tier: 2, family: 'risque', entry: 'milieu', exit: 'milieu', width: [14, 24], below: 'marine', above: 'air', chest: true, water: true },
+  // tension / précision (D3–D5)
+  'echelle-exposee': { tier: 4, family: 'tension', entry: 'bas', exit: 'haut', width: [12, 20], below: 'sol', above: 'air', ladder: true },
+  // eau / cascade (D2–D4)
+  'sortie-humide': { tier: 3, family: 'risque', entry: 'bas', exit: 'haut', width: [16, 26], below: 'cascade', above: 'air', chest: true, water: true },
+}
+
+// Construit un Module à partir de son kind (fills + métadonnées du CATALOG) + peuplement/flags.
+function mk(kind: ModuleKind, extra: Partial<Module> = {}): Module {
+  const s = CATALOG[kind]
+  return {
+    kind, widthRange: s.width, fillBelow: s.below, fillAbove: s.above,
+    tier: s.tier, entry: s.entry, exit: s.exit, tags: [s.family],
+    ...extra,
+  }
+}
+
+// ─── COMPOSITION : DOSAGE + COURBE DE DIFFICULTÉ ─────────────────────────────────────────────
+// Assemble un niveau en respectant : (1) COURBE — tier PLAFONNÉ par la progression (tierCap) ;
+// (2) DOSAGE — ~30 % fillers · ~40 % traversée+vertical · ~20 % risque · ~10 % tension ; (3) départ
+// = filler simple à mi-hauteur SANS monstre (R127) ; (4) sortie à une altitude ≠ (ending bas/haut) ;
+// (5) au moins UN plan d'eau + un coffre ; coffres plafonnés à 3. Déterministe (aucun Math.random).
+export interface ComposeOpts {
+  id: string
+  name: string
+  biome: string
+  tierCap: Tier
+  ending: 'bas' | 'haut' // sortie franchement plus BASSE ou plus HAUTE que le départ (mi-hauteur)
+  ground: string[]       // pool de monstres terrestres (ordre = difficulté croissante)
+  birds: string[]        // pool d'oiseaux du biome
+  mvp?: string           // MVP rare posé dans un module de risque tardif
+  midCount?: number      // nb de modules centraux (défaut 5)
+  allowLadders?: boolean // autoriser les motifs à échelle (niveau 1 : false pour rester simple)
+  waterKinds?: ModuleKind[] // plans d'eau imposés (variété entre niveaux)
+  seed?: string
+}
+
+const FAMILY_BUCKET: Record<Family, 'filler' | 'traverse' | 'risque' | 'tension'> = {
+  filler: 'filler', traverse: 'traverse', vertical: 'traverse', risque: 'risque', tension: 'tension',
+}
+
+export function composeLevel(o: ComposeOpts): LevelDef {
+  const rng = mulberry32(hashSeed(o.seed ?? o.id))
+  const pick = <T>(arr: T[]): T => arr[Math.floor(rng() * arr.length)] ?? arr[0]!
+  const cap = o.tierCap
+  const allowLadders = o.allowLadders ?? true
+  const mid = o.midCount ?? 5
+
+  // pools de kinds par bucket, filtrés par tier + échelles autorisées (on exclut les plans d'eau
+  // des pools génériques : ils sont IMPOSÉS séparément pour garantir eau + coffre et leur variété).
+  const kindsOf = (bucket: 'filler' | 'traverse' | 'risque' | 'tension'): ModuleKind[] =>
+    (Object.keys(CATALOG) as ModuleKind[]).filter((k) => {
+      const s = CATALOG[k]
+      if (FAMILY_BUCKET[s.family] !== bucket) return false
+      if (s.tier > cap) return false
+      if (s.ladder && !allowLadders) return false
+      if (s.water) return false // eau imposée séparément
+      if (k === 'plateau' || k === 'arene') return false // réservés spawn / climax
+      return true
+    })
+
+  // séquence de familles pour les modules centraux (dosage 30/40/20/10, arrondi).
+  const nFiller = Math.max(1, Math.round(mid * 0.3))
+  const nRisque = Math.max(1, Math.round(mid * 0.2))
+  const nTension = cap >= 2 ? Math.round(mid * 0.1) : 0
+  const nTraverse = Math.max(1, mid - nFiller - nRisque - nTension)
+  const bag: ('filler' | 'traverse' | 'risque' | 'tension')[] = [
+    ...Array(nFiller).fill('filler'), ...Array(nTraverse).fill('traverse'),
+    ...Array(nRisque).fill('risque'), ...Array(nTension).fill('tension'),
+  ]
+  // rythme : on ordonne selon un patron plaisant (traversée → filler → risque → tension tardif)
+  const rhythm = ['traverse', 'filler', 'risque', 'traverse', 'filler', 'tension', 'traverse', 'risque', 'filler', 'traverse']
+  const order: typeof bag = []
+  for (const fam of rhythm) { const i = bag.indexOf(fam as never); if (i >= 0) { order.push(bag[i]!); bag.splice(i, 1) } }
+  order.push(...bag)
+
+  const modules: Module[] = []
+  let chests = 0
+  let lastKind: ModuleKind | null = null
+
+  // 1) DÉPART : filler plat à mi-hauteur, AUCUN monstre (R127)
+  modules.push(mk('plateau', { spawnHere: true, tags: ['respiration'] }))
+
+  // 2) plan(s) d'eau imposé(s) : au moins un (eau + coffre), variété pilotée par waterKinds
+  const waters = (o.waterKinds ?? ['bassin']).slice(0, 2)
+  const waterSlots = new Set<number>()
+  waters.forEach((_, i) => waterSlots.add(1 + Math.floor(((i + 1) * order.length) / (waters.length + 1))))
+
+  // 3) modules centraux
+  const groundQ = [...o.ground]
+  const nextGround = (): string[] => (groundQ.length ? [groundQ.shift()!] : (o.ground.length ? [o.ground[0]!] : []))
+  order.forEach((bucket, idx) => {
+    if (waterSlots.has(idx + 1) && waters.length) {
+      const wk = waters.shift()!
+      const spec = CATALOG[wk]
+      if (spec.chest && chests < 3) chests++
+      modules.push(mk(wk, { ground: nextGround(), birds: spec.birds ? [pick(o.birds)] : undefined }))
+      lastKind = wk
+      return
+    }
+    let cands = kindsOf(bucket)
+    if (cands.length === 0) cands = kindsOf('traverse')
+    if (cands.length === 0) cands = ['colline']
+    // évite la répétition immédiate + respecte le plafond de coffres
+    const fresh = cands.filter((k) => k !== lastKind)
+    let kind = pick(fresh.length ? fresh : cands)
+    if (CATALOG[kind].chest && chests >= 3) {
+      const noChest = (fresh.length ? fresh : cands).filter((k) => !CATALOG[k].chest)
+      if (noChest.length) kind = pick(noChest)
+    }
+    if (CATALOG[kind].chest) chests++
+    const spec = CATALOG[kind]
+    const mvpHere = o.mvp && bucket === 'risque' && idx >= order.length - 2 && !modules.some((m) => m.ground?.includes(o.mvp!))
+    modules.push(mk(kind, {
+      ground: [...(mvpHere ? [o.mvp!] : []), ...nextGround()],
+      birds: spec.birds && o.birds.length ? [pick(o.birds)] : undefined,
+    }))
+    lastKind = kind
+  })
+
+  // 4) plan(s) d'eau non encore placé(s) (sécurité : garantit l'eau + un coffre)
+  for (const wk of waters) {
+    const spec = CATALOG[wk]
+    if (spec.chest && chests < 3) chests++
+    modules.push(mk(wk, { ground: nextGround(), birds: spec.birds ? [pick(o.birds)] : undefined }))
+  }
+
+  // 5) SORTIE à altitude ≠ du départ (mi-hauteur = BASE_ALT 5) :
+  //    ending 'bas'  → grande descente jusqu'au sol, arène-climax + PORTE en contrebas ;
+  //    ending 'haut' → petite marche puis échelle/escalier, PORTE tout en haut.
+  if (o.ending === 'bas') {
+    modules.push(mk('descente-controlee', { rise: -40, ground: nextGround(), tags: ['relief', 'combat'] }))
+    modules.push(mk('arene', { exitHere: true, ground: [...(o.mvp && !modules.some((m) => m.ground?.includes(o.mvp!)) ? [o.mvp] : []), ...nextGround()], tags: ['combat'] }))
+  } else {
+    modules.push(mk('marche', { ground: nextGround() }))
+    const climb: ModuleKind = allowLadders ? 'echelle-tranquille' : 'escalier'
+    if (climb === 'escalier') modules.push(mk('escalier', { rise: 6, exitHere: true, ground: nextGround(), tags: ['montée'] }))
+    else modules.push(mk('echelle-tranquille', { exitHere: true, ground: nextGround(), tags: ['montée'] }))
+  }
+
+  return buildLevelFromModules(modules, { id: o.id, name: o.name, biome: o.biome, seed: o.seed })
 }

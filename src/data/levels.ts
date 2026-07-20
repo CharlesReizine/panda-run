@@ -47,7 +47,7 @@ export interface LevelDef {
   boss?: string
 }
 
-import { buildLevelFromModules } from './level-modules'
+import { buildLevelFromModules, composeLevel } from './level-modules'
 
 const plat = (x: number, y: number, w: number) => ({ x, y, w })
 const prop = (kind: string, x: number, y?: number) => ({ kind, x, y })
@@ -127,68 +127,53 @@ const basinCrossing = (x: number, w: number, depth: number, gRow: number) => {
 // PROFIL DISTINCT (nb d'étages, position des échelles, alternance haut/bas, pics/eau) : escalier,
 // buttes, tour d'échelle, vallée, zigzag, colonnes, cimes, vagues…
 
-// ─── Zone 1 refondue (PHASE MODULES) : construite par le KIT DE MODULES (src/data/level-modules.ts,
-// docs/level-module-kit.md). Fini les tours d'échelles verticales : chaque niveau est une LISTE de
-// 6-10 modules collés bout à bout formant une SILHOUETTE COLLINES (montée douce → eau en cuve →
-// détour → climax), ≤3 paliers empilés, eau en cuves marine (noyade) ET cascade (remontable), monstres
-// au sol ET en hauteur + oiseaux en plein air, DÉPART à mi-hauteur, PORTE à altitude ≠. Chaque niveau
-// enchaîne des familles DIFFÉRENTES → 4 rythmes distincts.
+// ─── Zone 1 refondue (PHASE 2 — DOSAGE + COURBE DE DIFFICULTÉ) : construite par composeLevel du KIT
+// DE MODULES (src/data/level-modules.ts, docs/level-module-kit.md §PHASE 2). La COURBE monte : le
+// NIVEAU 1 est le plus SIMPLE (tier D1 SEULEMENT, aucune échelle, fillers + traversée douce) ; 1-2,
+// 1-3, 1-4 montent doucement (D1-2), réintroduisent les ÉCHELLES et gagnent en variété. Chaque niveau
+// est DISTINCT (tierCap, ending bas/haut, plans d'eau, longueur, seed) → 4 rythmes différents. Dosage
+// ~30 % fillers / 40 % traversée+vertical / 20 % risque / 10 % tension. Départ mi-hauteur sans monstre
+// (R127), PORTE à altitude ≠. Eau en cuves marine (noyade) ET cascade (remontable, courant descendant).
 
-// zone1-1 : PRAIRIE — traversée douce → gué → colline → bassin d'apnée → cascade secrète → arène+PORTE.
+// zone1-1 : PRAIRIE — le plus SIMPLE. D1 uniquement, aucune échelle, petit bassin-pont, sortie EN BAS.
 function mkZone11(): LevelDef {
-  return buildLevelFromModules([
-    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['gloopy'], spawnHere: true },
-    { kind: 'gue', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['angeling'], birds: ['corbeau'] },
-    { kind: 'colline', widthRange: [16, 24], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['fabre', 'gloopy'], birds: ['corbeau'] },
-    { kind: 'bassin', widthRange: [12, 18], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['gloopy'] },
-    { kind: 'cascade', widthRange: [18, 24], rise: 2, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['mandragore'], birds: ['corbeau'] },
-    { kind: 'descente', widthRange: [12, 18], rise: -12, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['fabre', 'angeling'] },
-    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['gloopy', 'poring-dore'], exitHere: true }, // PORTE en contrebas, au sol (départ à mi-hauteur)
-  ], { id: 'zone1-1', name: 'Prairie de Prontera', biome: 'plaine' })
+  return composeLevel({
+    id: 'zone1-1', name: 'Prairie de Prontera', biome: 'plaine',
+    tierCap: 1, ending: 'bas', allowLadders: false, midCount: 5,
+    ground: ['gloopy', 'fabre', 'angeling', 'gloopy'], birds: ['corbeau'],
+    waterKinds: ['petit-pont'], seed: 'z1-1',
+  })
 }
 
-// zone1-2 : CHAMPS — plateau → escalier montant → corniche & vide (oiseaux) → cascade → bassin →
-// volée d'oiseaux → arène+PORTE. Plus long et plus aérien.
+// zone1-2 : CHAMPS — D1-2, réintroduit les ÉCHELLES (F6/F8/V19), sortie EN HAUT, un bassin d'apnée.
 function mkZone12(): LevelDef {
-  return buildLevelFromModules([
-    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['gloopy'], spawnHere: true },
-    { kind: 'escalier', widthRange: [14, 20], rise: 6, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['mandragore', 'lunatic'] },
-    { kind: 'corniche-vide', widthRange: [16, 24], fillBelow: 'vide', fillAbove: 'air', tags: ['relief', 'oiseaux', 'danger'], ground: ['gloopy'], birds: ['corbeau', 'corbeau'] },
-    { kind: 'cascade', widthRange: [18, 24], rise: 2, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['mandragore'], birds: ['corbeau'] },
-    { kind: 'bassin', widthRange: [12, 18], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['louveteau'] },
-    { kind: 'volee', widthRange: [16, 24], fillBelow: 'sol', fillAbove: 'air', tags: ['oiseaux', 'danger'], ground: ['gloopy'], birds: ['corbeau', 'corbeau', 'corbeau'] },
-    { kind: 'colline', widthRange: [16, 22], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['mandragore', 'gloopy'] },
-    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['louveteau', 'gloopy'], exitHere: true }, // PORTE tout en HAUT (départ à mi-hauteur)
-  ], { id: 'zone1-2', name: 'Champs fleuris', biome: 'plaine' })
+  return composeLevel({
+    id: 'zone1-2', name: 'Champs fleuris', biome: 'plaine',
+    tierCap: 2, ending: 'haut', allowLadders: true, midCount: 6,
+    ground: ['gloopy', 'mandragore', 'fabre', 'angeling', 'willow'], birds: ['corbeau'],
+    waterKinds: ['bassin'], seed: 'z1-2',
+  })
 }
 
-// zone1-3 : ORÉE — plateau → colline → grotte (roche/roche) → gué → bassin → escalier → crête (oiseaux)
-// +PORTE. Rythme forêt : relief, tunnel, eau, arête aérienne.
+// zone1-3 : ORÉE — D1-2, deux plans d'eau (cascade secrète + bassin), MVP poring doré, sortie EN BAS.
 function mkZone13(): LevelDef {
-  return buildLevelFromModules([
-    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['louveteau'], spawnHere: true },
-    { kind: 'colline', widthRange: [18, 26], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['mandragore', 'poporing'], birds: ['corbeau'] },
-    { kind: 'grotte', widthRange: [12, 18], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['louveteau', 'mandragore'] },
-    { kind: 'gue', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['poporing'], birds: ['corbeau'] },
-    { kind: 'bassin', widthRange: [12, 18], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['louveteau'] },
-    { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['mandragore', 'louveteau'] },
-    { kind: 'crete', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'oiseaux', 'danger'], ground: ['poporing'], birds: ['corbeau', 'corbeau'], exitHere: true },
-  ], { id: 'zone1-3', name: 'Orée de la forêt', biome: 'foret' })
+  return composeLevel({
+    id: 'zone1-3', name: 'Orée de la forêt', biome: 'foret',
+    tierCap: 2, ending: 'bas', allowLadders: true, midCount: 6,
+    ground: ['louveteau', 'mandragore', 'poporing', 'willow'], birds: ['corbeau'],
+    mvp: 'poring-dore', waterKinds: ['cascade', 'bassin'], seed: 'z1-3',
+  })
 }
 
-// zone1-4 : FORÊT PROFONDE — plateau → escalier → cascade → grande vallée bassin → colline → corniche &
-// vide (oiseaux) → descente → arène+PORTE. Le plus long, la plus grande cuve.
+// zone1-4 : FORÊT PROFONDE — le plus long et le plus varié de la zone (D1-2), cascade + bassin, MVP,
+// sortie EN HAUT (grande remontée finale).
 function mkZone14(): LevelDef {
-  return buildLevelFromModules([
-    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['louveteau'], spawnHere: true },
-    { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['willow', 'mandragore'] },
-    { kind: 'cascade', widthRange: [18, 24], rise: 3, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['louveteau'], birds: ['corbeau'] },
-    { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['rocker'] },
-    { kind: 'colline', widthRange: [18, 26], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['mandragore', 'louveteau'], birds: ['corbeau'] },
-    { kind: 'corniche-vide', widthRange: [16, 24], fillBelow: 'vide', fillAbove: 'air', tags: ['relief', 'oiseaux', 'danger'], ground: ['willow'], birds: ['corbeau', 'corbeau'] },
-    { kind: 'descente', widthRange: [14, 20], rise: -12, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['rocker', 'louveteau'] },
-    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['mandragore', 'louveteau'], exitHere: true }, // PORTE en contrebas, au sol (départ à mi-hauteur)
-  ], { id: 'zone1-4', name: 'Forêt profonde', biome: 'foret' })
+  return composeLevel({
+    id: 'zone1-4', name: 'Forêt profonde', biome: 'foret',
+    tierCap: 2, ending: 'haut', allowLadders: true, midCount: 7,
+    ground: ['louveteau', 'mandragore', 'rocker', 'willow', 'poporing'], birds: ['corbeau'],
+    mvp: 'poring-dore', waterKinds: ['cascade', 'bassin'], seed: 'z1-4',
+  })
 }
 
 // ─── Zone 3 — JUNGLE (PHASE MODULES) : même kit que la zone 1, rythmes DISTINCTS. ───────────────

@@ -383,10 +383,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // dans l'eau : gravité coupée, flottaison + nage verticale ; ne tue jamais
   private updateSwim(c: ControlsState, body: Phaser.Physics.Arcade.Body) {
     body.setAllowGravity(false)
+    // cascade : le COURANT POUSSE VERS LE BAS (elle fait tomber). On la REMONTE en maintenant HAUT
+    // (grimpe à contre-courant, aucune noyade) ; BAS accélère la descente. Bassin : nage libre.
     if (c.up || c.jump) this.setVelocityY(-SWIM_SPEED)
-    else if (c.down) this.setVelocityY(SWIM_SPEED)
-    // cascade : courant ASCENDANT au repos (on la remonte) ; bassin : léger enfoncement (flottaison)
-    else this.setVelocityY(this.inCascade ? -SWIM_SPEED * 0.5 : SWIM_DRIFT)
+    else if (c.down) this.setVelocityY(this.inCascade ? SWIM_SPEED * 1.4 : SWIM_SPEED)
+    // au repos : cascade = courant DESCENDANT ; bassin = léger enfoncement (flottaison)
+    else this.setVelocityY(this.inCascade ? SWIM_SPEED * 0.5 : SWIM_DRIFT)
     if (!this.attacking) {
       if (c.left || c.right) this.play(this.anim('run'), true)
       else this.play(this.anim('jump'), true)

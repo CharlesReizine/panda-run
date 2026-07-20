@@ -835,7 +835,7 @@ export class LevelScene extends Phaser.Scene {
 
     // voile sombre plein écran, épinglé à l'écran
     this.add.rectangle(480, 270, 960, 540, 0x0b0b12, 0.72).setScrollFactor(0).setDepth(20)
-    this.add.text(480, 78, 'T\'es mort !', {
+    this.add.text(480, 78, 'Essaie encore !', {
       fontSize: '64px', color: '#ff5252', fontStyle: 'bold', stroke: '#000000', strokeThickness: 6,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(22)
 
