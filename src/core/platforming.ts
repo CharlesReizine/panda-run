@@ -8,9 +8,14 @@ export const TILE = 32
 // GROUND_ROW reste la valeur historique (monde de 16 rangées) pour ne rien régresser.
 export const DEFAULT_HEIGHT_TILES = 16
 export const GROUND_ROW = 14 // rangée du sol par défaut (= DEFAULT_HEIGHT_TILES - 2)
-export const GRAVITY = 1200
-export const JUMP_SPEED = 560 // magnitude de la vitesse de saut
-export const RUN_SPEED = 220
+// Physique calibrée pour un saut NERVEUX (moins « lune ») : par rapport à l'ancien réglage
+// (G=1200, JUMP=560, RUN=220) tout est mis à l'échelle ×1,25 sur JUMP / ×1,5625 sur GRAVITY /
+// ×1,25 sur RUN → la HAUTEUR de saut (JUMP²/2G) ET la PORTÉE horizontale d'un gap (RUN·2·JUMP/G)
+// restent IDENTIQUES (atteignabilité de tous les niveaux préservée), mais le TEMPS DE VOL baisse
+// de ~20 % → chute plus franche, fini l'impression de gravité lunaire.
+export const GRAVITY = 1875
+export const JUMP_SPEED = 700 // magnitude de la vitesse de saut
+export const RUN_SPEED = 275
 // Le sol est TOUJOURS au bas du monde : deux rangées pleines (sol + sous-sol) → groundRow = h - 2.
 export function groundRowFor(heightTiles = DEFAULT_HEIGHT_TILES): number {
   return heightTiles - 2
