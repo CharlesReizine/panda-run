@@ -180,12 +180,14 @@ export function overStackedColumns(level: LevelDef, limit = 3): TierProblem[] {
   return out
 }
 
-// Eau NON ENCLOSE dans une cuve de pierre : le kit n'autorise que 'basin' (marine) et 'cascade' —
-// des formes contenues (murs/fond posés par le moteur). Une nappe LIBRE (water absent) ou une
-// 'waterfall' décorative n'est pas une cuve jouable → rejetée pour un niveau modulaire.
+// Eau NON ENCLOSE dans une cuve de pierre : le kit n'autorise que les formes CONTENUES (murs/fond
+// posés par le moteur) — 'basin' (marine), 'cascade' (remontable) et 'lave' (cuve de lave mortelle,
+// enfer). Une nappe LIBRE (water absent) ou une 'waterfall' décorative n'est pas une cuve jouable →
+// rejetée pour un niveau modulaire.
 export function openWaterHazards(level: LevelDef): WaterProblem[] {
+  const enclosed = new Set(['basin', 'cascade', 'lave'])
   return (level.hazards ?? [])
-    .filter((h) => h.kind === 'water' && h.water !== 'basin' && h.water !== 'cascade')
+    .filter((h) => h.kind === 'water' && !enclosed.has(h.water ?? ''))
     .map((h) => ({ x: h.x, w: h.w, water: h.water }))
 }
 

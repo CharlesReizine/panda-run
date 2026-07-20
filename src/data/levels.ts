@@ -38,7 +38,10 @@ export interface LevelDef {
   //   • 'cascade'   → CASCADE REMONTABLE : colonne d'eau CLAIRE (bleu clair) en cuve de pierre, à
   //                   COURANT ASCENDANT — on la remonte comme une échelle et on NE SE NOIE PAS
   //                   (contrairement à 'basin'). Vers une corniche/coffre secret en hauteur.
-  hazards?: { kind: 'spikes' | 'water'; x: number; w: number; top?: number; h?: number; water?: 'basin' | 'waterfall' | 'cascade' }[]
+  //   • 'lave'      → CUVE DE LAVE (enfer) : même cuve de pierre que 'basin', mais rendue ROUGE/ORANGE
+  //                   incandescente (lueur + bulles) et MORTELLE au contact (gros dégâts continus, cf.
+  //                   LevelScene.updateLava). Aucun coffre au fond (y plonger = mourir).
+  hazards?: { kind: 'spikes' | 'water'; x: number; w: number; top?: number; h?: number; water?: 'basin' | 'waterfall' | 'cascade' | 'lave' }[]
   bridges?: { x: number; y: number; w: number }[] // ponts de planches (plateformes fines)
   // trous MORTELS dans le sol : à ces emplacements (x en tuiles, largeur w en tuiles) on ne
   // dessine PAS les rangées de sol pleines (groundRow/+1) → c'est le vide. Tomber dedans = mort.
@@ -283,7 +286,7 @@ function mkCarriere1(): LevelDef {
     { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], spawnHere: true },
     { kind: 'grotte', widthRange: [16, 22], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gobelin-mineur'] }, // BOYAU DE PIERRE #1
     { kind: 'grotte', widthRange: [16, 22], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['golem-de-pierre'] }, // BOYAU DE PIERRE #2 (galerie continue avec #1)
-    { kind: 'descente', widthRange: [14, 20], rise: -6, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['gargouille'], birds: ['faucon'] }, // terrasse d'extraction, respiration à l'air
+    { kind: 'descente', widthRange: [14, 20], rise: -6, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['gargouille'], birds: ['faucon', 'faucon'] }, // terrasse d'extraction, respiration à l'air
     { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['gobelin-mineur'] }, // fosse noyée, coffre au fond
     { kind: 'couloir-pics', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'roche', tags: ['tension', 'danger'], ground: ['golem-de-pierre'] }, // galerie basse à lits de pics (plafond de roche)
     { kind: 'grotte', widthRange: [16, 22], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gargouille'] }, // BOYAU DE PIERRE #3
@@ -350,15 +353,15 @@ function mkZone52(): LevelDef {
 // zone6-1 : SENTIER DES DAMNÉS — le niveau le PLUS DUR du jeu (D4-5, tierCap 5 débloque l'atterrissage
 // étroit D5). Le plus LONG (midCount 8). Sortie EN BAS : longue dévalade vers l'arène-climax où rugit
 // le dragon de flamme (MVP). Tension maximale — couloirs de pics, atterrissages étroits, triples sauts,
-// embuscades de corbeaux ; un gardien-flamme posté en chokepoint sur le chemin. Bassin de lave (apnée,
-// coffre) + sortie humide secrète. Monstres au sol ET en hauteur : diablotin, mage-noir, gargouille,
-// mini-baphomet, gardien-flamme ; corbeaux en vol ; dragon-flamme en climax.
+// embuscades de corbeaux ; un gardien-flamme posté en chokepoint sur le chemin. CUVE DE LAVE mortelle
+// (rouge incandescent, pas de coffre : y plonger tue) + sortie humide secrète. Monstres au sol ET en
+// hauteur : diablotin, mage-noir, gargouille, mini-baphomet, gardien-flamme ; corbeaux en vol ; dragon-flamme en climax.
 function mkZone61(): LevelDef {
   return composeLevel({
     id: 'zone6-1', name: 'Sentier des Damnés', biome: 'enfer',
     tierCap: 5, ending: 'bas', allowLadders: true, midCount: 10,
     ground: ['diablotin', 'mage-noir', 'gargouille', 'mini-baphomet', 'gardien-flamme'], birds: ['corbeau'],
-    mvp: 'dragon-flamme', waterKinds: ['bassin', 'sortie-humide'], seed: 'damnes-2',
+    mvp: 'dragon-flamme', waterKinds: ['bassin', 'sortie-humide'], lava: true, seed: 'damnes-2',
   })
 }
 
@@ -379,8 +382,8 @@ const list: LevelDef[] = [
   buildLevelFromModules([
     { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['scorpion'], spawnHere: true },
     { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['scorpion'] },
-    { kind: 'gue', widthRange: [16, 22], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['vautour'], birds: ['faucon'] },
-    { kind: 'colline', widthRange: [18, 26], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['momie'], birds: ['faucon'] },
+    { kind: 'gue', widthRange: [16, 22], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['vautour'], birds: ['faucon', 'faucon'] },
+    { kind: 'colline', widthRange: [18, 26], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['momie'], birds: ['faucon', 'faucon', 'faucon'] },
     { kind: 'petit-pont', widthRange: [12, 18], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'respiration'], ground: ['scorpion'] }, // gué d'oasis peu profond, petit trésor au fond
     { kind: 'bassin', widthRange: [14, 20], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['momie'] }, // oasis d'apnée, coffre au fond
     { kind: 'descente', widthRange: [14, 20], rise: -12, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['orc-guerrier', 'vautour'] },
@@ -394,12 +397,12 @@ const list: LevelDef[] = [
   // d'eau (cascade + bassin), un beat de pics, un beat d'oiseaux : plus varié et plus long que 2-1.
   buildLevelFromModules([
     { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['scorpion'], spawnHere: true },
-    { kind: 'colline', widthRange: [16, 24], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['vautour'], birds: ['faucon'] },
+    { kind: 'colline', widthRange: [16, 24], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['vautour'], birds: ['faucon', 'faucon', 'faucon'] },
     { kind: 'cascade', widthRange: [18, 24], rise: 2, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['momie'], birds: ['faucon'] },
     { kind: 'faux-plat', widthRange: [14, 20], fillBelow: 'sol', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['scorpion'] }, // pics isolés à enjamber sur la corniche (tier 3)
     { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['momie'] },
-    { kind: 'gue', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['vautour'], birds: ['faucon'] },
-    { kind: 'volee', widthRange: [18, 24], fillBelow: 'sol', fillAbove: 'air', tags: ['oiseaux', 'danger'], ground: ['scorpion'], birds: ['faucon', 'faucon', 'faucon'] },
+    { kind: 'gue', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['vautour'], birds: ['faucon', 'faucon'] },
+    { kind: 'volee', widthRange: [18, 24], fillBelow: 'sol', fillAbove: 'air', tags: ['oiseaux', 'danger'], ground: ['scorpion'], birds: ['faucon', 'faucon', 'faucon', 'faucon', 'faucon'] },
     { kind: 'escalier', widthRange: [14, 20], rise: 6, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['orc-guerrier'] },
     { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['momie', 'zombie'], exitHere: true }, // PORTE tout en HAUT
   ], { id: 'zone2-2', name: 'Oasis perdue', biome: 'desert' }),
@@ -415,10 +418,10 @@ const list: LevelDef[] = [
     { kind: 'grotte', widthRange: [14, 20], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['momie', 'zombie'] }, // boyau de pierre fermé (roche dessus + dessous)
     { kind: 'pics-quinconce', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['tension', 'danger'], ground: ['zombie'] }, // slalom de pics en hauteur (tier 4)
     { kind: 'descente', widthRange: [14, 20], rise: -10, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['mini-baphomet', 'zombie'] }, // mini-baphomet = élite cornue des tombeaux
-    { kind: 'gue', widthRange: [16, 22], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['vautour'], birds: ['faucon'] },
+    { kind: 'gue', widthRange: [16, 22], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['vautour'], birds: ['faucon', 'faucon'] },
     { kind: 'bassin', widthRange: [12, 18], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['zombie'] },
     { kind: 'escalier', widthRange: [14, 20], rise: 6, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['momie'] },
-    { kind: 'crete', widthRange: [16, 22], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'oiseaux', 'danger'], ground: ['vautour'], birds: ['faucon', 'faucon'], exitHere: true }, // PORTE sur l'arête ventée, tout en haut
+    { kind: 'crete', widthRange: [16, 22], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'oiseaux', 'danger'], ground: ['vautour'], birds: ['faucon', 'faucon', 'faucon'], exitHere: true }, // PORTE sur l'arête ventée, tout en haut
   ], { id: 'zone2-3', name: 'Vallée des tombeaux', biome: 'desert' }),
   // cave-1 : CAVE (KIT MODULES) — CAVE AUX ÉCHOS (≈ D3). Vrai niveau de GROTTE : DEUX tunnels de
   // pierre FERMÉS (roche au-dessus ET en dessous) + un couloir à pics sous plafond de roche encadrent
@@ -428,7 +431,7 @@ const list: LevelDef[] = [
   // + PORTE en HAUT (altitude ≠ départ). Ambiance fermée et resserrée, distincte des dunes ouvertes.
   buildLevelFromModules([
     { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['chauve-souris'], spawnHere: true },
-    { kind: 'colline', widthRange: [16, 24], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['squelette'], birds: ['corbeau'] },
+    { kind: 'colline', widthRange: [16, 24], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['squelette'], birds: ['corbeau', 'corbeau', 'corbeau'] },
     { kind: 'cascade', widthRange: [18, 24], rise: 2, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['fantome'], birds: ['corbeau'] },
     { kind: 'grotte', widthRange: [14, 20], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gobelin-mineur', 'chauve-souris'] }, // boyau de pierre fermé #1
     { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['squelette'] }, // lac marin souterrain, coffre au fond

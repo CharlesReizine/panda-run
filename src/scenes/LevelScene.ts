@@ -41,6 +41,10 @@ const BREATH_RECHARGE_MULT = 3 // le souffle se recharge 3× plus vite qu'il ne 
 const DROWN_DPS = 7 // PV perdus par seconde une fois le souffle épuisé (traversée courte = sûre)
 const DROWN_TICK_MS = 250 // cadence des ticks de noyade : perte régulière, jamais d'un coup
 const BUBBLE_INTERVAL_MS = 170 // intervalle d'émission des bulles tant que la tête est sous l'eau
+// LAVE (enfer) : cuve de pierre incandescente, MORTELLE au contact. On ne nage pas dedans — le contact
+// inflige de gros dégâts continus (chemin de dégâts standard, cf. drownTick) → y tomber tue vite.
+const LAVA_DPS = 120 // PV perdus par seconde au contact de la lave (bien plus violent que la noyade)
+const LAVA_TICK_MS = 150 // cadence des ticks de brûlure : perte rapide et régulière
 
 export { TILE }
 
@@ -64,6 +68,9 @@ export class LevelScene extends Phaser.Scene {
   // contact (cascadeRects) + rideaux défilés vers le HAUT (cascadeSprites).
   private cascadeRects: Phaser.Geom.Rectangle[] = []
   private cascadeSprites: Phaser.GameObjects.TileSprite[] = []
+  // CUVES DE LAVE (water:'lave', enfer) : zones de contact MORTELLES (brûlure continue, cf. updateLava).
+  private lavaRects: Phaser.Geom.Rectangle[] = []
+  private lavaAccumMs = 0
   // Plongée : réserve d'apnée restante (ms), accumulateurs de ticks de noyade et d'émission de
   // bulles, voile bleuté quand la tête est immergée, petite jauge d'apnée au-dessus de la tête.
   private breathMs = BREATH_MAX_MS
@@ -130,6 +137,8 @@ export class LevelScene extends Phaser.Scene {
     this.waterfalls = []
     this.cascadeRects = []
     this.cascadeSprites = []
+    this.lavaRects = []
+    this.lavaAccumMs = 0
     // plongée : on entame chaque niveau souffle plein, sans dette de noyade ; les overlays
     // (voile, jauge) sont recréés plus bas (la scène est réutilisée → références remises à zéro)
     this.breathMs = BREATH_MAX_MS
@@ -375,6 +384,39 @@ export class LevelScene extends Phaser.Scene {
         continue
       }
 
+      if (hz.water === 'lave') {
+        // CUVE DE LAVE (enfer) : cuve de PIERRE (parois rigides identiques au bassin) remplie de lave
+        // ROUGE/ORANGE incandescente. MORTELLE au contact (lavaRects → brûlure continue) : on ne nage
+        // PAS dedans. Corps OPAQUE (rectangle molten posé en fond, derrière ponts/plateformes) surmonté
+        // d'ondulations (texture 'water' teintée) + croûte incandescente + lueur ADD + bulles qui crèvent.
+        this.add.rectangle(xPx, topPx, wPx, heightPx, 0xd8380f, 1).setOrigin(0, 0).setDepth(-6) // corps de lave opaque
+        this.add.tileSprite(xPx, topPx, wPx, heightPx, 'water').setOrigin(0, 0).setDepth(-3).setTint(0xff5a1e).setAlpha(0.7)
+        this.add.rectangle(xPx, topPx, wPx, 6, 0xffd24a, 0.9).setOrigin(0, 0).setDepth(-1) // croûte incandescente en surface
+        const glow = this.add.rectangle(xPx + wPx / 2, topPx, wPx, 30, 0xff7a1e, 0.4)
+          .setOrigin(0.5, 0).setDepth(-1).setBlendMode(Phaser.BlendModes.ADD)
+        this.tweens.add({ targets: glow, alpha: 0.15, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+        // parois de pierre (cuve) — mêmes corps rigides que le bassin marine
+        for (const wx of [hz.x - 1, hz.x + hz.w]) {
+          if (wx < 0 || wx >= this.levelDef.widthTiles) continue
+          this.add.tileSprite(wx * TILE, topPx, TILE, heightPx, 'basin-wall').setOrigin(0, 0).setDepth(-2)
+          const collideTopPx = (waterTop + 1) * TILE
+          const collideH = (waterBottom + 1) * TILE - collideTopPx
+          this.addStaticBand(basinWalls, wx * TILE, collideTopPx, TILE, collideH)
+        }
+        // bulles de lave qui montent et crèvent en surface (déterministes, animées en boucle)
+        const nb = Math.max(3, Math.round(wPx / 40))
+        for (let i = 0; i < nb; i++) {
+          const bx = xPx + (i + 0.5) * (wPx / nb)
+          const bub = this.add.circle(bx, topPx + 6, 3 + (i % 3), 0xffb347, 0.95).setDepth(-1).setBlendMode(Phaser.BlendModes.ADD)
+          this.tweens.add({
+            targets: bub, y: topPx - 10, scale: 1.9, alpha: 0,
+            duration: 700 + (i % 4) * 240, repeat: -1, repeatDelay: 260 + i * 110, ease: 'Sine.out',
+          })
+        }
+        this.lavaRects.push(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))
+        continue
+      }
+
       // NAPPE (basin OU libre) : rendu tuilé en UN TileSprite + liseré de surface.
       this.add.tileSprite(xPx, topPx, wPx, heightPx, 'water').setOrigin(0, 0).setDepth(-3)
       this.add.rectangle(xPx, topPx, wPx, 5, 0x9fdcff, 0.5).setOrigin(0, 0).setDepth(-1)
@@ -597,6 +639,12 @@ export class LevelScene extends Phaser.Scene {
       this.bgNear = this.add.tileSprite(0, 360, 960, 200, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-20).setTint(b.hillNear)
     }
 
+    // AMBIANCE DE CIEL : le fond de biome (illustration ou dégradé) laissait un HAUT figé et mort.
+    // On peuple la bande de ciel d'éléments d'ambiance ANIMÉS et biome-appropriés (nuages, braises,
+    // brumes, flocons, volées lointaines). Purement décoratif : AUCUNE physique, depth arrière (derrière
+    // le décor jouable), épinglé à la caméra (scrollFactor 0 = ciel « à l'infini », parallaxe cohérente).
+    this.addSkyAmbience()
+
     // décors posés au sol pour remplir l'espace (défilent avec le monde, derrière le joueur)
     const widthPx = this.levelDef.widthTiles * TILE
     const groundY = this.groundRow * TILE
@@ -606,6 +654,85 @@ export class LevelScene extends Phaser.Scene {
         const jitter = ((x * 37) % 70) - 35 // pseudo-aléa déterministe
         this.add.image(x + jitter, groundY + 4, decoKey).setOrigin(0.5, 1).setDepth(-5)
       }
+    }
+  }
+
+  // AMBIANCE DE CIEL (décor pur, aucune physique) : peuple la bande de ciel au-dessus du jeu d'éléments
+  // ANIMÉS selon le biome pour qu'elle ne soit plus une dalle figée. Épinglé caméra (scrollFactor 0),
+  // depth arrière (derrière plateformes/joueur). Pseudo-aléa déterministe → rendu stable.
+  private addSkyAmbience() {
+    const biome = this.levelDef.biome
+    const rnd = (n: number) => { const s = Math.sin((n + 1) * 91.7) * 43758.5453; return s - Math.floor(s) }
+    // dérive horizontale en boucle (nuages, brumes, volées) — va-et-vient lent
+    const drift = (obj: Phaser.GameObjects.GameObject & { x: number }, dx: number, dur: number) =>
+      this.tweens.add({ targets: obj, x: obj.x + dx, duration: dur, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+
+    if (biome === 'enfer') {
+      // ENFER : braises ascendantes incandescentes + volutes de fumée sombres
+      for (let i = 0; i < 16; i++) {
+        const x = 30 + rnd(i) * 900
+        const y = 130 + rnd(i + 50) * 260
+        const em = this.add.circle(x, y, 2 + rnd(i + 7) * 3, 0xff7a2a, 0.9).setScrollFactor(0).setDepth(-24).setBlendMode(Phaser.BlendModes.ADD)
+        this.tweens.add({ targets: em, y: y - 120 - rnd(i) * 90, alpha: 0, duration: 2600 + rnd(i + 3) * 2400, repeat: -1, repeatDelay: rnd(i + 9) * 1600, ease: 'Sine.out' })
+      }
+      for (let i = 0; i < 4; i++) {
+        const smoke = this.add.ellipse(120 + rnd(i + 20) * 720, 55 + rnd(i) * 120, 170, 60, 0x2a0a0a, 0.3).setScrollFactor(0).setDepth(-25)
+        drift(smoke, 70 - rnd(i) * 140, 9000 + rnd(i) * 4000)
+      }
+      return
+    }
+    if (biome === 'cimetiere') {
+      // CIMETIÈRE : brumes pâles qui dérivent + orbes spectraux qui palpitent
+      for (let i = 0; i < 6; i++) {
+        const fog = this.add.ellipse(rnd(i + 4) * 960, 40 + rnd(i) * 220, 230, 56, 0xb9b0d6, 0.16).setScrollFactor(0).setDepth(-25)
+        drift(fog, 130 - rnd(i) * 260, 12000 + rnd(i) * 5000)
+      }
+      for (let i = 0; i < 4; i++) {
+        const orb = this.add.circle(60 + rnd(i + 8) * 840, 90 + rnd(i) * 170, 4, 0xd7cbff, 0.5).setScrollFactor(0).setDepth(-24).setBlendMode(Phaser.BlendModes.ADD)
+        this.tweens.add({ targets: orb, y: orb.y - 34, alpha: 0.12, duration: 2200 + rnd(i) * 1800, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+      }
+      return
+    }
+    if (biome === 'cave') {
+      // GROTTE : rares poussières en suspension qui descendent lentement (ambiance souterraine feutrée)
+      for (let i = 0; i < 9; i++) {
+        const x = rnd(i) * 960, y = 20 + rnd(i + 2) * 170
+        const mote = this.add.circle(x, y, 1.5 + rnd(i) * 1.5, 0xbfae90, 0.4).setScrollFactor(0).setDepth(-24)
+        this.tweens.add({ targets: mote, y: y + 130 + rnd(i) * 80, alpha: 0, duration: 5000 + rnd(i) * 4000, repeat: -1, repeatDelay: rnd(i) * 2200, ease: 'Sine.in' })
+      }
+      return
+    }
+
+    // BIOMES DE PLEIN AIR (plaine/foret/desert/jungle/montagne/plage/carriere) : nuages doux qui dérivent
+    const cloudN = 6
+    for (let i = 0; i < cloudN; i++) {
+      const cx = (i / cloudN) * 960 + rnd(i) * 120
+      const cy = 22 + rnd(i + 3) * 150
+      const cloud = this.add.container(cx, cy).setScrollFactor(0).setDepth(-25)
+      for (const [ox, oy, r] of [[0, 0, 34], [28, 7, 26], [-26, 7, 24], [6, -9, 22]] as const) {
+        cloud.add(this.add.ellipse(ox, oy, r * 1.7, r, 0xffffff, 0.5))
+      }
+      cloud.setScale(0.7 + rnd(i + 5) * 0.8)
+      drift(cloud, 90 - rnd(i) * 180, 14000 + rnd(i) * 7000)
+    }
+    if (biome === 'montagne') {
+      // MONTAGNE : flocons lents en plus des nuages
+      for (let i = 0; i < 12; i++) {
+        const x = rnd(i) * 960, y = rnd(i + 1) * 270
+        const flake = this.add.circle(x, y, 1.5 + rnd(i) * 1.5, 0xffffff, 0.75).setScrollFactor(0).setDepth(-24)
+        this.tweens.add({ targets: flake, y: y + 170, x: x + 30 - rnd(i) * 60, duration: 6000 + rnd(i) * 4000, repeat: -1, repeatDelay: rnd(i) * 1500, ease: 'Sine.in' })
+      }
+    }
+    // volées lointaines d'oiseaux d'ambiance (chevrons sombres qui traversent le ciel)
+    for (let gi = 0; gi < 2; gi++) {
+      const gx = 180 + gi * 340, gy = 46 + rnd(gi + 30) * 90
+      const g = this.add.graphics().setScrollFactor(0).setDepth(-24).setPosition(gx, gy)
+      g.lineStyle(2, 0x37474f, 0.5)
+      for (let k = 0; k < 3; k++) {
+        const bx = k * 18 - 18, by = Math.abs(k - 1) * 7
+        g.beginPath(); g.moveTo(bx - 6, by); g.lineTo(bx, by - 4); g.lineTo(bx + 6, by); g.strokePath()
+      }
+      this.tweens.add({ targets: g, x: gx + 240, y: gy + 24 - rnd(gi) * 48, duration: 17000 + gi * 5000, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
     }
   }
 
@@ -916,6 +1043,22 @@ export class LevelScene extends Phaser.Scene {
 
     this.submergeVeil?.setAlpha(submerged ? 0.14 : 0)
     this.updateBreathGauge(body, submerged)
+  }
+
+  // Contact avec la LAVE (appelé chaque frame ; no-op sans cuve de lave). Dès que le corps du panda
+  // touche une cuve de lave (pieds OU centre), il BRÛLE : gros dégâts continus par ticks rapides via
+  // le chemin de dégâts standard (drownTick respecte le god mode et déclenche le K.O.). Pas de nage :
+  // tomber dans la lave tue très vite (cuve de pierre → dur d'en ressortir).
+  private updateLava(delta: number) {
+    if (!this.lavaRects.length) return
+    const body = this.player.body as Phaser.Physics.Arcade.Body
+    const touching = this.lavaRects.some((r) => r.contains(this.player.x, body.bottom) || r.contains(this.player.x, this.player.y))
+    if (!touching) { this.lavaAccumMs = 0; return }
+    this.lavaAccumMs += delta
+    while (this.lavaAccumMs >= LAVA_TICK_MS) {
+      this.lavaAccumMs -= LAVA_TICK_MS
+      this.drownTick((LAVA_DPS * LAVA_TICK_MS) / 1000)
+    }
   }
 
   // un tick de noyade : perte de PV régulière passant par le chemin de dégâts standard. Respecte
@@ -2456,6 +2599,7 @@ export class LevelScene extends Phaser.Scene {
     this.player.inCascade = this.cascadeRects.some((r) => r.contains(this.player.x, this.player.y))
     this.player.inWater = this.player.inCascade || this.waterRects.some((r) => r.contains(this.player.x, this.player.y))
     this.updateWater(delta)
+    this.updateLava(delta)
     if (this.time.now < this.dashUntil) {
       // pendant la roulade : vitesse imposée, contrôles suspendus (le saut/déplacement
       // reprennent la main dès la fin de la fenêtre)

@@ -19,7 +19,10 @@ import type { LevelDef } from './levels'
 import { MIN_LADDER_TILES, MAX_LADDER_TILES } from '../core/platforming'
 
 // altitude = nombre de rangées AU-DESSUS du sol (0 = surface du sol). row = groundRow - alt.
-export type Fill = 'air' | 'sol' | 'roche' | 'vide' | 'marine' | 'cascade' | 'pics'
+// 'lave' = cuve de LAVE (enfer) : rendu rouge/orange incandescent, MORTELLE au contact (gros dégâts
+// continus, cf. LevelScene.updateLava) — géométriquement une cuve de pierre comme 'marine', mais sans
+// coffre de plongée (plonger = mourir).
+export type Fill = 'air' | 'sol' | 'roche' | 'vide' | 'marine' | 'cascade' | 'lave' | 'pics'
 
 // PHASE 2 — CATALOGUE ÉTENDU. On GARDE les 12 kinds historiques (les 15 niveaux non refondus en
 // dépendent) et on AJOUTE ceux du catalogue user (docs/level-module-kit.md §PHASE 2), dédupliqués.
@@ -101,9 +104,9 @@ interface Piece {
   // pics : alt = altitude de la SURFACE qui porte les pics (corniche en hauteur). Absent → pics au sol.
   spikes: { x: number; w: number; alt?: number }[]
   bridges: { x: number; alt: number; w: number }[]
-  // cuves d'eau : marine (noyade) ou cascade (remontable). bankAlt = rangée des berges (surface d'eau
-  // juste dessous) ; l'eau descend jusqu'au sol (fond). Le moteur pose murs + fond + déco.
-  waters: { x: number; w: number; kind: 'marine' | 'cascade'; bankAlt: number }[]
+  // cuves d'eau : marine (noyade), cascade (remontable) ou lave (mortelle, enfer). bankAlt = rangée des
+  // berges (surface juste dessous) ; le liquide descend jusqu'au sol (fond). Le moteur pose murs + fond + déco.
+  waters: { x: number; w: number; kind: 'marine' | 'cascade' | 'lave'; bankAlt: number }[]
   // ÉCHELLES : montant vertical de topAlt (haut) jusqu'à topAlt-h (pied). h∈[MIN,MAX]_LADDER_TILES.
   // Correct-par-construction : pied posé sur une surface + palier de sortie 2 rangées sous le sommet.
   ladders: { x: number; topAlt: number; h: number }[]
@@ -203,6 +206,9 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
   const rise = m.rise ?? 0
   const exitAlt = Math.max(0, entryAlt + rise)
   p.exitAlt = exitAlt
+  // CUVE marine par défaut, sauf si le module est déclaré 'lave' (enfer) : la lave est mortelle et ne
+  // porte JAMAIS de coffre de plongée (y plonger = mourir), à la différence de la marine (apnée + trésor).
+  const basinKind: 'marine' | 'lave' = m.fillBelow === 'lave' ? 'lave' : 'marine'
 
   // pose les monstres terrestres sur la surface (alt lue plus bas selon le kind) et les oiseaux en l'air
   const placeBirds = (surfaceAlt: number) => {
@@ -290,13 +296,13 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const rampW = 5
       p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt)) // berge gauche montante
       const wx = rampW, ww = w - 2 * rampW
-      p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt })
+      p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt })
       // pont à bankAlt en 2 segments avec un trou central de 3 tuiles (on plonge par le trou)
       const holeL = wx + Math.floor(ww / 2) - 1
       if (holeL - wx > 0) p.bridges.push({ x: wx, alt: bankAlt, w: holeL - wx })
       if (wx + ww - (holeL + 3) > 0) p.bridges.push({ x: holeL + 3, alt: bankAlt, w: wx + ww - (holeL + 3) })
       p.platforms.push(...ramp(wx + ww, w - (wx + ww), bankAlt, exitAlt)) // berge droite descendante
-      p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) }) // au fond (sol)
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) }) // au fond (sol) — jamais dans la lave
       placeBirds(bankAlt + 2)
       break
     }
@@ -446,12 +452,12 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const rampW = 4
       p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt))
       const wx = rampW, ww = Math.max(6, w - 2 * rampW)
-      p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt })
+      p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt })
       const holeL = wx + Math.floor(ww / 2) - 1 // trou central de 3 tuiles : on plonge par là
       if (holeL - wx > 0) p.bridges.push({ x: wx, alt: bankAlt, w: holeL - wx })
       if (wx + ww - (holeL + 3) > 0) p.bridges.push({ x: holeL + 3, alt: bankAlt, w: wx + ww - (holeL + 3) })
       p.platforms.push(...ramp(wx + ww, w - (wx + ww), bankAlt, entryAlt))
-      p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) }) // petit trésor au fond du bassin
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) }) // petit trésor au fond du bassin
       p.exitAlt = entryAlt
       break
     }
@@ -571,12 +577,12 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const rampW = 5
       p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt))
       const wx = rampW, ww = Math.max(6, w - 2 * rampW)
-      p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt })
+      p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt })
       const holeL = wx + Math.floor(ww / 2) - 1
       if (holeL - wx > 0) p.bridges.push({ x: wx, alt: bankAlt, w: holeL - wx })
       if (wx + ww - (holeL + 3) > 0) p.bridges.push({ x: holeL + 3, alt: bankAlt, w: wx + ww - (holeL + 3) })
       p.platforms.push(...ramp(wx + ww, w - (wx + ww), bankAlt, entryAlt))
-      p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) })
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) })
       placeBirds(bankAlt + 2)
       break
     }
@@ -719,15 +725,23 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   })
   const totalWidth = cursorX + 2
 
-  // 2) enveloppe verticale : altitude max des surfaces ET des plafonds de roche → hauteur du monde
-  // (le plafond d'un tunnel doit tenir dans le monde, sinon il déborderait en haut de la carte).
-  let maxAlt = 0
+  // 2) enveloppe verticale. On distingue le sommet des SURFACES MARCHABLES (platforms) de celui des
+  // PLAFONDS DE ROCHE (rocks) pour NE PAS laisser de dalle de ciel morte au-dessus des grottes : le
+  // plafond d'un tunnel monte souvent bien plus haut que la plus haute plateforme, et garder +6 tuiles
+  // au-dessus donnait un grand vide bleu inutile. On garde donc juste ce qu'il faut :
+  //   • SKY_PAD tuiles de dégagement au-dessus de la plus haute plateforme (> hauteur de saut ≈ 4 →
+  //     on peut sauter du sommet sans sortir du monde, plafond du monde traversable R114) ;
+  //   • le plafond de roche le plus haut tient dans le monde (+1 tuile).
+  let maxPlatAlt = 0
+  let maxRockAlt = 0
+  let maxAerialAlt = 0 // les oiseaux volent AU-DESSUS des surfaces : le ciel doit les contenir (row ≥ 1)
   for (const { piece } of pieces) {
-    for (const pl of piece.platforms) maxAlt = Math.max(maxAlt, pl.alt)
-    for (const rk of piece.rocks) maxAlt = Math.max(maxAlt, rk.altTop)
+    for (const pl of piece.platforms) maxPlatAlt = Math.max(maxPlatAlt, pl.alt)
+    for (const rk of piece.rocks) maxRockAlt = Math.max(maxRockAlt, rk.altTop)
+    for (const s of piece.spawns) if (s.aerial && s.alt !== undefined) maxAerialAlt = Math.max(maxAerialAlt, s.alt)
   }
-  // sol au bas ; headroom au-dessus du sommet. groundRow = maxAlt + marge. heightTiles = groundRow + 2.
-  const groundRow = maxAlt + 6
+  const SKY_PAD = 5 // dégagement au-dessus de la plus haute plateforme (> saut ~4 tuiles), sans ciel mort
+  const groundRow = Math.max(maxPlatAlt + SKY_PAD, maxRockAlt + 1, maxAerialAlt + 1)
   const heightTiles = groundRow + 2
   const row = (alt: number) => groundRow - alt
 
@@ -761,9 +775,10 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
         hazards.push({ kind: 'water', x: x0 + wtr.x, w: wtr.w, top, h: Math.max(2, heightTiles - top), water: 'cascade' })
         gaps.push({ x: x0 + wtr.x, w: wtr.w }) // VIDE sous la cascade → descendre au fond = mort
       } else {
-        // LAC marine (bassin) : le FOND repose TOUJOURS sur le SOL PLEIN, sans le moindre espace vide.
-        // On étend l'eau jusqu'à recouvrir la surface du sol (rangée groundRow) → jamais d'eau qui vole.
-        hazards.push({ kind: 'water', x: x0 + wtr.x, w: wtr.w, top, h: Math.max(2, groundRow + 1 - top), water: 'basin' })
+        // CUVE de fond plein (marine OU lave) : le FOND repose TOUJOURS sur le SOL PLEIN, sans espace
+        // vide. On étend le liquide jusqu'à recouvrir la surface du sol (rangée groundRow) → jamais de
+        // liquide qui vole. 'lave' = cuve de pierre MORTELLE (enfer) ; 'marine' = bassin de noyade.
+        hazards.push({ kind: 'water', x: x0 + wtr.x, w: wtr.w, top, h: Math.max(2, groundRow + 1 - top), water: wtr.kind === 'lave' ? 'lave' : 'basin' })
       }
     }
     for (const s of piece.spawns) spawns.push({ monsterId: s.monsterId, x: x0 + s.x, ...(s.alt !== undefined ? { y: row(s.alt) } : {}) })
@@ -889,6 +904,7 @@ export interface ComposeOpts {
   midCount?: number      // nb de modules centraux (défaut 5)
   allowLadders?: boolean // autoriser les motifs à échelle (niveau 1 : false pour rester simple)
   waterKinds?: ModuleKind[] // plans d'eau imposés (variété entre niveaux)
+  lava?: boolean // ENFER : les cuves marine (bassin/tresor-bassin/petit-pont) deviennent de la LAVE mortelle
   seed?: string
 }
 
@@ -899,6 +915,19 @@ const FAMILY_BUCKET: Record<Family, 'filler' | 'traverse' | 'risque' | 'tension'
 export function composeLevel(o: ComposeOpts): LevelDef {
   const rng = mulberry32(hashSeed(o.seed ?? o.id))
   const pick = <T>(arr: T[]): T => arr[Math.floor(rng() * arr.length)] ?? arr[0]!
+  // DENSITÉ D'OISEAUX : les beats de PLEIN AIR respirent trop avec 1 seul oiseau. On densifie selon le
+  // motif — volée (grand ciel ouvert) 4-5, crêtes/corniches sur le vide 3, autres reliefs aérés 2.
+  const birdCountFor = (k: ModuleKind): number =>
+    k === 'volee' ? 4 + (hashSeed(o.id + ':' + k) % 2) : (k === 'crete' || k === 'corniche-vide') ? 3 : 2
+  // On CONSOMME exactement UN tirage rng (comme avant) pour le 1er oiseau → le flux RNG qui pilote le
+  // CHOIX des modules reste identique (géométrie inchangée) ; les oiseaux SUPPLÉMENTAIRES sont tirés
+  // d'une source à part (hashSeed), donc densifier ne perturbe pas le terrain.
+  const flock = (k: ModuleKind): string[] => {
+    const first = pick(o.birds)
+    const extra = Array.from({ length: Math.max(0, birdCountFor(k) - 1) },
+      (_, i) => o.birds[hashSeed(o.id + ':bird:' + k + ':' + i) % o.birds.length] ?? first)
+    return [first, ...extra]
+  }
   const cap = o.tierCap
   const allowLadders = o.allowLadders ?? true
   const mid = o.midCount ?? 5
@@ -951,7 +980,10 @@ export function composeLevel(o: ComposeOpts): LevelDef {
       const wk = waters.shift()!
       const spec = CATALOG[wk]
       if (spec.chest && chests < 3) chests++
-      modules.push(mk(wk, { ground: nextGround(), birds: spec.birds ? [pick(o.birds)] : undefined }))
+      modules.push(mk(wk, {
+        ground: nextGround(), birds: spec.birds ? [pick(o.birds)] : undefined,
+        ...(o.lava && spec.below === 'marine' ? { fillBelow: 'lave' as Fill } : {}),
+      }))
       lastKind = wk
       return
     }
@@ -970,7 +1002,7 @@ export function composeLevel(o: ComposeOpts): LevelDef {
     const mvpHere = o.mvp && bucket === 'risque' && idx >= order.length - 2 && !modules.some((m) => m.ground?.includes(o.mvp!))
     modules.push(mk(kind, {
       ground: [...(mvpHere ? [o.mvp!] : []), ...nextGround()],
-      birds: spec.birds && o.birds.length ? [pick(o.birds)] : undefined,
+      birds: spec.birds && o.birds.length ? flock(kind) : undefined,
     }))
     lastKind = kind
   })
@@ -979,7 +1011,10 @@ export function composeLevel(o: ComposeOpts): LevelDef {
   for (const wk of waters) {
     const spec = CATALOG[wk]
     if (spec.chest && chests < 3) chests++
-    modules.push(mk(wk, { ground: nextGround(), birds: spec.birds ? [pick(o.birds)] : undefined }))
+    modules.push(mk(wk, {
+      ground: nextGround(), birds: spec.birds ? [pick(o.birds)] : undefined,
+      ...(o.lava && spec.below === 'marine' ? { fillBelow: 'lave' as Fill } : {}),
+    }))
   }
 
   // 5) SORTIE à altitude ≠ du départ (mi-hauteur = BASE_ALT 5) :
