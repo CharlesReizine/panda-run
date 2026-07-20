@@ -20,13 +20,18 @@ export const ARMOR_SHOP: ShopItemDef[] = [
   { itemId: 'carapace-scarabee', price: 650 },
 ]
 
+// Chapeaux triés du moins cher au plus cher : le prix suit la rareté ET l'allure (plus c'est
+// cher, plus le dessin est spectaculaire — cf. drawCosmetic). Barème calé sur l'éco du jeu.
 export const HAT_SHOP: ShopItemDef[] = [
-  { itemId: 'sakkat', price: 130 },
-  { itemId: 'chapeau-poring', price: 110 },
-  { itemId: 'bonnet-champi', price: 150 },
-  { itemId: 'casque-orc', price: 420 },
-  { itemId: 'ailes-angeling', price: 520 },
-  { itemId: 'couronne-royale', price: 1100 },
+  { itemId: 'ruban', price: 120 },
+  { itemId: 'sakkat', price: 250 },
+  { itemId: 'bonnet-champi', price: 400 },
+  { itemId: 'chapeau-poring', price: 900 },
+  { itemId: 'casque-orc', price: 2200 },
+  { itemId: 'casque-croc', price: 2600 },
+  { itemId: 'ailes-angeling', price: 3800 },
+  { itemId: 'couronne-royale', price: 7000 },
+  { itemId: 'corne-kaho', price: 15000 },
 ]
 
 export interface QuestDef {

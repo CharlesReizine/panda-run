@@ -31,6 +31,10 @@ const WEAPON_TILT_DEG: Record<string, number> = {
   swordsman: 30, chevalier: 26,
   archer: 16, chasseur: 18,
 }
+// Distance (px) du CENTRE de la texture (92px de haut, origine 0.5) à la ligne des pieds
+// (FEET_Y=86 au bake) : sert à ré-ancrer les pieds quand un squash/stretch d'affichage change
+// scaleY (le scaling se fait autour du centre → sans compensation les pieds « décolleraient »).
+const FEET_FROM_CENTER = 40
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   stats: StatBlock
@@ -62,6 +66,17 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private flameUntil = 0
   private flameTimer: Phaser.Time.TimerEvent | null = null
   private attacking = false
+  // Animation d'affichage PROCÉDURALE (respiration / rebond de foulée / squash-stretch) : pilotée
+  // uniquement sur le RENDU (setScale + décalage vertical), jamais sur le corps physique. Le
+  // transform est POSÉ en POST_UPDATE (juste avant le rendu) puis RETIRÉ en PRE_UPDATE, AVANT que
+  // la physique ne relise l'échelle/position (ordre Phaser : PRE_UPDATE → physique → update →
+  // POST_UPDATE → rendu). La physique ne voit donc jamais qu'une échelle 1 → hitbox 34×62 intacte.
+  private breathT = 0 // horloge de respiration (état idle)
+  private strideDist = 0 // distance horizontale accumulée → cadence la foulée (fige à l'arrêt)
+  private strideLastX = 0
+  private landSquash = 0 // impulsion de squash d'atterrissage (décroît vers 0)
+  private dispDy = 0 // décalage vertical de rendu appliqué (retiré tel quel en PRE_UPDATE)
+  private dispApplied = false
   private hatImage: Phaser.GameObjects.Image | null = null
   private weaponImage: Phaser.GameObjects.Image | null = null
   // offset d'angle (radians) ajouté à l'arme pendant l'attaque : un tween le fait balayer de
@@ -99,6 +114,66 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // (POST_UPDATE, après world.postUpdate) : positions/flip du panda finalisés → ancrage rigide,
     // pas de traînée d'une frame en déplacement.
     this.scene.events.on(Phaser.Scenes.Events.POST_UPDATE, this.syncOverlays, this)
+    // retrait du transform d'affichage AVANT le pas physique (cf. commentaire des champs disp*)
+    this.scene.events.on(Phaser.Scenes.Events.PRE_UPDATE, this.resetDisplayTransform, this)
+    this.strideLastX = x
+  }
+
+  // PRE_UPDATE : rend au sprite son échelle 1 et sa position physique canonique AVANT que la
+  // physique ne s'exécute → le corps 34×62 n'est jamais impacté par le squash/stretch d'affichage.
+  private resetDisplayTransform() {
+    if (!this.active || !this.scene || !this.scene.sys) return
+    if (!this.dispApplied) return
+    this.setScale(1, 1)
+    this.y -= this.dispDy
+    this.dispDy = 0
+    this.dispApplied = false
+  }
+
+  // Calcule le transform d'affichage (échelle + décalage vertical) selon l'état courant, déduit du
+  // corps physique. Vie procédurale : respiration à l'arrêt, rebond+squash de foulée en course,
+  // stretch/squash au saut, plus l'impulsion d'atterrissage. Ne touche RIEN de la physique.
+  private computeDisplayTransform(delta: number): { sx: number; sy: number; dy: number } {
+    const body = this.body as Phaser.Physics.Arcade.Body
+    const moved = Math.abs(this.x - this.strideLastX)
+    this.strideLastX = this.x
+    let sx = 1, sy = 1, dy = 0
+
+    if (this.climbing) {
+      // escalade : poses + inclinaison gérées par animateClimb → pas de squash d'affichage
+    } else if (!body.blocked.down && !this.inWater) {
+      // SAUT : étirement vertical en montée (vy<0), compression à la retombée (vy>0)
+      const s = Phaser.Math.Clamp(-body.velocity.y / 850, -0.16, 0.18)
+      sy = 1 + s * 0.9
+      sx = 1 - s * 0.6
+    } else if (Math.abs(body.velocity.x) > 6) {
+      // COURSE : rebond de foulée cadencé par la distance parcourue + squash/stretch d'appui
+      this.strideDist += moved
+      const ph = (this.strideDist / 30) * Math.PI * 2 // 30 px ≈ un cycle de 2 appuis
+      dy = -Math.abs(Math.sin(ph)) * 4 // remonte à chaque poussée
+      const sq = Math.cos(ph) * 0.05 // compression à l'appui / extension en l'air
+      sy = 1 - sq
+      sx = 1 + sq
+    } else {
+      // IDLE : respiration douce (échelle qui pulse ±3 %) + micro-bob → plus de statue figée
+      this.breathT += delta / 1000
+      const b = Math.sin(this.breathT * 2.1)
+      sy = 1 + b * 0.03
+      sx = 1 - b * 0.03
+      dy = -Math.abs(b) * 1.3
+    }
+
+    // impulsion d'atterrissage : squash bref (aplati) qui se superpose puis décroît
+    if (this.landSquash > 0.01) {
+      sx += this.landSquash * 0.16
+      sy -= this.landSquash * 0.16
+      this.landSquash *= 0.8
+    } else this.landSquash = 0
+
+    // ré-ancrage des pieds : le scaling se fait autour du centre → on décale le rendu pour que la
+    // ligne des pieds ne bouge pas quand scaleY ≠ 1 (le panda reste posé au sol)
+    dy -= (sy - 1) * FEET_FROM_CENTER
+    return { sx, sy, dy }
   }
 
   // (ré)affiche le chapeau cosmétique équipé (ou le retire si le slot est vide)
@@ -122,18 +197,27 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // RIGIDE, aucun lissage/tween. Le chapeau se colle sur l'ancre de tête de la POSE COURANTE
   // (texture affichée) et non sur un offset fixe → il reste collé à la tête dans toutes les poses
   // (idle/course/saut/attaque/échelle), dont la hauteur de tête diffère.
-  private syncOverlays() {
+  private syncOverlays(_time: number, delta: number) {
     // garde de fermeture : pendant la sortie de niveau, POST_UPDATE peut encore se déclencher
     // alors que la scène/le corps sont déjà en cours de destruction → accès à this.scene = gel
     if (!this.active || !this.scene || !this.scene.sys) return
+    // pose le transform d'affichage procédural pour le rendu de cette frame (retiré en PRE_UPDATE)
+    const { sx, sy, dy } = this.computeDisplayTransform(delta)
+    this.setScale(sx, sy)
+    this.y += dy
+    this.dispDy = dy
+    this.dispApplied = true
     const flip = this.facing
     if (this.hatImage) {
       const a = PANDA_HEAD_ANCHORS[this.texture.key] ?? { dx: 0, dy: HAT_OFFSET_Y }
-      this.hatImage.setPosition(this.x + a.dx * flip, this.y + a.dy)
+      // l'échelle d'affichage déplace la tête (scaling autour du centre) → on répercute sx/sy sur
+      // l'ancrage pour que le chapeau reste COLLÉ à la tête malgré respiration/squash (this.y
+      // inclut déjà le bob dy, donc le chapeau suit tête ET rebond)
+      this.hatImage.setPosition(this.x + a.dx * flip * sx, this.y + a.dy * sy)
       this.hatImage.setFlipX(flip === -1)
     }
     if (this.weaponImage) {
-      this.weaponImage.setPosition(this.x + WEAPON_OFFSET_X * flip, this.y + WEAPON_OFFSET_Y)
+      this.weaponImage.setPosition(this.x + WEAPON_OFFSET_X * flip * sx, this.y + WEAPON_OFFSET_Y * sy)
       this.weaponImage.setFlipX(flip === -1)
       // arme tenue en biais dans la patte (pas plantée à la verticale dans la tête) ; l'angle suit
       // le flip pour rester penchée vers l'avant quel que soit le sens du regard
@@ -214,6 +298,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   destroy(fromScene?: boolean) {
     this.scene?.events?.off(Phaser.Scenes.Events.POST_UPDATE, this.syncOverlays, this)
+    this.scene?.events?.off(Phaser.Scenes.Events.PRE_UPDATE, this.resetDisplayTransform, this)
     this.swingTween?.remove()
     this.flameTimer?.remove()
     this.hatImage?.destroy()
@@ -311,16 +396,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
     this.jumpWasDown = c.jump
 
-    // Petit « splat » d'atterrissage : uniquement HORIZONTAL (scaleY reste 1). En Arcade
-    // (Phaser 4) le corps physique suit l'échelle du sprite ; l'ancien squash vertical
-    // (scaleY 0.9 puis retour à 1) rétrécissait puis regrandissait le corps pile en se posant
-    // sur une dalle one-way, ce qui rompait le contact et faisait RETRAVERSER le panda jusqu'au
-    // sol (bug du « 2e étage » d'un escalier de plateformes). En ne touchant qu'à l'axe X, la
-    // hauteur et la position verticale du corps restent canoniques → atterrissage fiable.
-    if (body.blocked.down && !this.wasGrounded) {
-      this.setScale(1.12, 1)
-      this.scene.time.delayedCall(100, () => this.setScale(1, 1))
-    }
+    // « splat » d'atterrissage : impulsion de squash purement D'AFFICHAGE (cf. computeDisplayTransform),
+    // posée en POST_UPDATE et retirée en PRE_UPDATE → le corps physique n'est jamais redimensionné
+    // (l'ancien setScale direct changeait la hitbox et cassait le contact sur les dalles one-way).
+    if (body.blocked.down && !this.wasGrounded) this.landSquash = 1
     this.wasGrounded = body.blocked.down
 
     // animations : attaque > saut (en l'air) > course > idle

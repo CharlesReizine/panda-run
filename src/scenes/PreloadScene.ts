@@ -958,74 +958,207 @@ export class PreloadScene extends Phaser.Scene {
     g.destroy()
   }
 
-  // chapeaux cosmétiques (slot 'hat') : dessinés pensés pour se poser sur le haut de la tête du panda
+  // éclaircit (f>1) ou assombrit (f<1) une couleur 0xRRGGBB — sert à fabriquer rim light et ombres
+  // à la main (fillGradientStyle est WebGL-only et ne bake pas en Canvas)
+  private shadeColor(hex: number, f: number): number {
+    const r = Math.min(255, Math.round(((hex >> 16) & 0xff) * f))
+    const g = Math.min(255, Math.round(((hex >> 8) & 0xff) * f))
+    const b = Math.min(255, Math.round((hex & 0xff) * f))
+    return (r << 16) | (g << 8) | b
+  }
+
+  // halo lumineux baké : cercles concentriques du plus large (faible alpha) au plus petit (vif) →
+  // lueur douce qui se fond vers le transparent aux bords (aucun cadre net)
+  private bakeGlow(g: Phaser.GameObjects.Graphics, cx: number, cy: number, rMax: number, color: number, steps = 7, aMax = 0.5) {
+    for (let i = 0; i < steps; i++) {
+      const t = i / (steps - 1) // 0 = extérieur diffus, 1 = cœur vif
+      g.fillStyle(color, 0.05 + (aMax - 0.05) * t).fillCircle(cx, cy, rMax * (1 - t) + 2 * t)
+    }
+  }
+
+  // chapeaux cosmétiques (slot 'hat') : dessinés pour se poser sur le haut de la tête du panda.
+  // Règle de style : plus l'objet est rare/cher, plus le rendu est spectaculaire (dégradés peints
+  // en couches, rim light, joyaux, halo/particules bakés). Texture 40×32, ancrée par le center.
   private drawCosmetic(id: string) {
     const g = this.add.graphics()
     switch (id) {
+      case 'ruban': {
+        // COMMUN (le moins cher) : petit nœud/ruban rouge mignon, simple mais net
+        const base = 0xe53950
+        g.fillStyle(this.shadeColor(base, 0.7)).fillTriangle(20, 18, 6, 10, 6, 26) // aile gauche (ombre)
+        g.fillStyle(this.shadeColor(base, 0.7)).fillTriangle(20, 18, 34, 10, 34, 26) // aile droite (ombre)
+        g.fillStyle(base).fillTriangle(20, 18, 7, 11, 7, 25)
+        g.fillStyle(base).fillTriangle(20, 18, 33, 11, 33, 25)
+        g.fillStyle(this.shadeColor(base, 1.35), 0.7).fillTriangle(20, 16, 9, 12, 12, 15) // reflet haut-gauche
+        g.fillStyle(this.shadeColor(base, 1.35), 0.7).fillTriangle(20, 16, 31, 12, 28, 15) // reflet haut-droit
+        g.fillStyle(this.shadeColor(base, 0.55)).fillEllipse(20, 18, 8, 12) // nœud central (ombré)
+        g.fillStyle(base).fillEllipse(20, 17, 6, 9)
+        g.fillStyle(this.shadeColor(base, 1.4), 0.8).fillEllipse(18, 15, 2.5, 4) // éclat sur le nœud
+        break
+      }
+      case 'sakkat': {
+        // COMMUN : chapeau conique en paille tressée, large bord, dégradé beige peint à la main
+        g.fillStyle(0x7d5f3d).fillEllipse(20, 26, 40, 12) // dessous du bord (ombre portée)
+        g.fillStyle(0xcaa574).fillEllipse(20, 24, 40, 10) // bord tressé
+        g.fillStyle(0xe8d3a8, 0.6).fillEllipse(18, 22, 28, 5) // reflet clair sur le bord
+        // cône en 3 bandes (foncé à droite → clair côté lumière) pour le volume
+        g.fillStyle(0xb08d5c).fillTriangle(3, 25, 37, 25, 20, 2)
+        g.fillStyle(0xc7a570).fillTriangle(3, 25, 20, 25, 20, 2)
+        g.fillStyle(0xdcbd8e).fillTriangle(9, 25, 20, 25, 20, 4) // arête éclairée
+        // brins de bambou rayonnant du sommet vers le bord
+        g.lineStyle(1, 0x7d5f3d, 0.7).beginPath()
+        for (const bx of [6, 13, 20, 27, 34]) { g.moveTo(20, 3); g.lineTo(bx, 24) }
+        g.strokePath()
+        g.lineStyle(1, 0x7d5f3d, 0.4).beginPath() // cerclages du tressage
+        g.moveTo(12, 14); g.lineTo(28, 14); g.moveTo(8, 20); g.lineTo(32, 20)
+        g.strokePath()
+        g.fillStyle(0x7d5f3d).fillCircle(20, 3, 2) // pointe du sommet
+        break
+      }
+      case 'bonnet-champi': {
+        // COMMUN : chapeau champignon rouge à points blancs, dégradé + petit reflet, tige claire
+        g.fillStyle(0xf5f5dc).fillRect(6, 23, 28, 6) // pied du champignon
+        g.fillStyle(0xe4e4c4).fillRect(6, 27, 28, 2) // ombre sous le pied
+        g.fillStyle(0xa41e1e).fillEllipse(20, 16, 36, 24) // chapeau (base sombre)
+        g.fillStyle(0xd32f2f).fillEllipse(20, 15, 33, 21) // rouge vif
+        g.fillStyle(0xf1584f, 0.8).fillEllipse(16, 11, 18, 9) // reflet supérieur
+        // points blancs (plus gros au centre, ombrés en bas)
+        for (const [px, py, pr] of [[11, 12, 3], [24, 8, 3.2], [30, 15, 2.8], [16, 19, 2.4], [20, 13, 2]] as const) {
+          g.fillStyle(0xe0e0d0).fillCircle(px, py + 0.8, pr)
+          g.fillStyle(0xffffff).fillCircle(px, py, pr)
+        }
+        break
+      }
       case 'chapeau-poring': {
-        // petite tête de Poring : blob rose bombé, ventre plus clair, gros reflet, joues + frimousse
-        g.fillStyle(0xd94f8a).fillEllipse(20, 19, 33, 25) // liseré rose foncé (donne le volume)
-        g.fillStyle(0xff7fb2).fillEllipse(20, 17, 30, 22) // corps rose bombé
-        g.fillStyle(0xff9fc8).fillEllipse(20, 21, 22, 13) // bas plus clair (dégradé)
-        g.fillStyle(0xffffff, 0.55).fillEllipse(13, 9, 12, 7) // gros reflet brillant (haut-gauche)
-        g.fillStyle(0xffffff, 0.8).fillCircle(27, 8, 1.8) // petit éclat
-        g.fillStyle(0xff5a9e, 0.5).fillCircle(10, 21, 3).fillCircle(30, 21, 3) // joues roses
-        g.fillStyle(0x2b2b2b).fillEllipse(14, 17, 4.5, 6).fillEllipse(26, 17, 4.5, 6) // yeux mignons
+        // PEU COMMUN : tête de Poring rose bombée — dégradé riche (3 tons), gros reflet, frimousse
+        const p = 0xff7fb2
+        g.fillStyle(this.shadeColor(p, 0.72)).fillEllipse(20, 19, 34, 26) // liseré foncé (volume)
+        g.fillStyle(p).fillEllipse(20, 17, 31, 23) // corps rose bombé
+        g.fillStyle(this.shadeColor(p, 1.18)).fillEllipse(20, 21, 24, 14) // ventre plus clair
+        g.fillStyle(0xffffff, 0.55).fillEllipse(13, 9, 13, 8) // gros reflet brillant
+        g.fillStyle(0xffffff, 0.85).fillCircle(27, 8, 1.8) // petit éclat
+        g.fillStyle(0xff5a9e, 0.5).fillCircle(10, 21, 3).fillCircle(30, 21, 3) // joues
+        g.fillStyle(0x2b2b2b).fillEllipse(14, 17, 4.5, 6).fillEllipse(26, 17, 4.5, 6) // yeux
         g.fillStyle(0xffffff).fillCircle(12.6, 15, 1.5).fillCircle(24.6, 15, 1.5) // reflets des yeux
-        g.lineStyle(1.8, 0x2b2b2b).beginPath() // petit sourire
+        g.lineStyle(1.8, 0x2b2b2b).beginPath()
         g.arc(20, 19, 4.5, Phaser.Math.DegToRad(25), Phaser.Math.DegToRad(155), false)
         g.strokePath()
         break
       }
-      case 'sakkat': {
-        // sakkat : chapeau conique en bambou/paille tressé, large bord, teintes beige/tan
-        g.fillStyle(0x8d6e4a).fillEllipse(20, 26, 40, 11) // dessous du bord (ombre portée)
-        g.fillStyle(0xd2b48c).fillEllipse(20, 24, 40, 10) // large bord tressé
-        g.fillStyle(0xe8d3a8, 0.5).fillEllipse(18, 23, 26, 5) // reflet clair sur le bord
-        g.fillStyle(0xc19a6b).fillTriangle(3, 25, 37, 25, 20, 2) // cône (face)
-        g.fillStyle(0xdcbd8e).fillTriangle(20, 2, 37, 25, 20, 25) // moitié droite plus claire (volume)
-        // brins de bambou rayonnant du sommet vers le bord
-        g.lineStyle(1, 0x8d6e4a, 0.7).beginPath()
-        g.moveTo(20, 3); g.lineTo(6, 24)
-        g.moveTo(20, 3); g.lineTo(13, 25)
-        g.moveTo(20, 3); g.lineTo(20, 25)
-        g.moveTo(20, 3); g.lineTo(27, 25)
-        g.moveTo(20, 3); g.lineTo(34, 24)
-        g.strokePath()
-        // cerclages du tressage
-        g.lineStyle(1, 0x8d6e4a, 0.45).beginPath()
-        g.moveTo(12, 14); g.lineTo(28, 14)
-        g.moveTo(8, 20); g.lineTo(32, 20)
-        g.strokePath()
-        g.fillStyle(0x8d6e4a).fillCircle(20, 3, 2) // pointe du sommet
+      case 'casque-orc': {
+        // RARE : heaume de métal sombre, rivets, cornes claires, rim light bleuté
+        const m = 0x556b60
+        g.fillStyle(0x2f4038).fillEllipse(20, 18, 34, 22) // calotte (base sombre)
+        g.fillStyle(m).fillEllipse(20, 17, 31, 19)
+        g.fillStyle(this.shadeColor(m, 1.4), 0.7).fillEllipse(16, 12, 18, 7) // reflet supérieur
+        g.fillStyle(0x9fb0a6, 0.6).fillEllipse(12, 11, 6, 3) // point de lumière vif
+        g.fillStyle(0x2b3640).fillRect(4, 15, 32, 7) // bande frontale
+        g.fillStyle(0x3d4a56).fillRect(4, 15, 32, 2) // arête éclairée de la bande
+        // cornes (dégradé os)
+        g.fillStyle(0x6d5a4a).fillTriangle(6, 17, 0, 3, 11, 17)
+        g.fillStyle(0x9c8468).fillTriangle(6, 17, 3, 6, 9, 17)
+        g.fillStyle(0x6d5a4a).fillTriangle(34, 17, 40, 3, 29, 17)
+        g.fillStyle(0x9c8468).fillTriangle(34, 17, 37, 6, 31, 17)
+        g.fillStyle(0x161c22).fillRect(14, 18, 12, 3) // fente de visière
+        for (const rx of [8, 20, 32]) { g.fillStyle(0x161c22).fillCircle(rx, 20, 1.5); g.fillStyle(0x8fa39a).fillCircle(rx - 0.4, 19.6, 0.7) } // rivets
         break
       }
-      case 'ailes-angeling':
-        g.lineStyle(2, 0xffd54f).strokeCircle(20, 6, 9) // auréole
-        g.fillStyle(0xffffff, 0.95).fillEllipse(6, 22, 12, 20).fillEllipse(34, 22, 12, 20) // ailes
-        g.fillStyle(0xe0e0e0, 0.6).fillEllipse(6, 22, 6, 12).fillEllipse(34, 22, 6, 12)
+      case 'casque-croc': {
+        // RARE : casque à crocs — métal froid, mâchoire de crocs, œil rougeoyant, rim light
+        const m = 0x5a6472
+        g.fillStyle(0x333b47).fillEllipse(20, 15, 34, 22) // dôme (base)
+        g.fillStyle(m).fillEllipse(20, 14, 31, 19)
+        g.fillStyle(this.shadeColor(m, 1.45), 0.7).fillEllipse(15, 9, 18, 7) // reflet
+        g.fillStyle(0xb9c4d2, 0.6).fillEllipse(12, 8, 6, 3) // éclat vif
+        g.fillStyle(0x232a33).fillRect(5, 16, 30, 4) // mâchoire supérieure
+        // crocs pointant vers le bas (dégradé ivoire)
+        for (let i = 0; i < 6; i++) {
+          const cx = 8 + i * 4.6
+          g.fillStyle(0xd7c9a8).fillTriangle(cx - 2, 19, cx + 2, 19, cx, 28)
+          g.fillStyle(0xfff6e0).fillTriangle(cx - 2, 19, cx, 19, cx - 0.4, 25) // arête claire du croc
+        }
+        this.bakeGlow(g, 20, 12, 6, 0xff3d3d, 5, 0.55) // œil/visière rougeoyant
+        g.fillStyle(0xff5252).fillEllipse(20, 12, 7, 3)
+        g.fillStyle(0xffd0d0, 0.9).fillCircle(18, 11, 1) // éclat de l'œil
         break
-      case 'couronne-royale':
-        g.fillStyle(0xffd700).fillRect(4, 18, 32, 8)
-        g.fillStyle(0xffd700).fillTriangle(4, 18, 10, 4, 16, 18)
-        g.fillStyle(0xffd700).fillTriangle(16, 18, 20, 0, 24, 18)
-        g.fillStyle(0xffd700).fillTriangle(24, 18, 30, 4, 36, 18)
-        g.fillStyle(0xd32f2f).fillCircle(10, 12, 2.5)
-        g.fillStyle(0x1e88e5).fillCircle(20, 6, 2.5)
-        g.fillStyle(0x43a047).fillCircle(30, 12, 2.5)
+      }
+      case 'ailes-angeling': {
+        // RARE (haut de gamme) : paire d'ailes blanches plumées + auréole rayonnante
+        this.bakeGlow(g, 20, 6, 10, 0xfff3b0, 6, 0.4) // halo derrière l'auréole
+        for (const side of [-1, 1] as const) {
+          const bx = 20 + side * 13
+          g.fillStyle(0xcfd6e0).fillEllipse(bx, 21, 15, 22) // aile (base ombrée)
+          g.fillStyle(0xffffff).fillEllipse(bx, 20, 12, 19) // plume principale claire
+          // rangées de plumes (arcs) pour le détail
+          for (let r = 0; r < 3; r++) {
+            const py = 13 + r * 6
+            g.fillStyle(0xeef2f7).fillEllipse(bx - side * 1, py, 11 - r * 2, 5)
+            g.fillStyle(0xffffff, 0.9).fillEllipse(bx - side * 2, py - 1, 8 - r * 2, 3)
+          }
+          g.fillStyle(0xb9c2d0, 0.5).fillEllipse(bx + side * 4, 26, 5, 9) // ombre du bord
+        }
+        g.lineStyle(3, 0xffe082).strokeCircle(20, 6, 9) // auréole dorée
+        g.lineStyle(1.5, 0xfff8e1).strokeCircle(20, 6, 9)
         break
-      case 'bonnet-champi':
-        g.fillStyle(0xd32f2f).fillEllipse(20, 16, 34, 22)
-        g.fillStyle(0xf5f5f5).fillCircle(11, 10, 3).fillCircle(24, 8, 3).fillCircle(30, 16, 3).fillCircle(16, 20, 2.5)
-        g.fillStyle(0xf5f5dc).fillRect(6, 24, 28, 5) // bord du bonnet
+      }
+      case 'couronne-royale': {
+        // ÉPIQUE : couronne d'or à joyaux — halo doré, dégradé or (3 tons), reflets et éclats
+        this.bakeGlow(g, 20, 12, 15, 0xffe27a, 7, 0.42) // halo doré (aura de prestige)
+        const gold = 0xffd23f
+        // bandeau + pointes (base foncée puis or vif + rim clair)
+        g.fillStyle(this.shadeColor(gold, 0.6)).fillRect(4, 17, 32, 10)
+        g.fillStyle(gold).fillRect(4, 17, 32, 8)
+        for (const [x0, xm, x1, ty] of [[4, 10, 16, 3], [15, 20, 25, -1], [24, 30, 36, 3]] as const) {
+          g.fillStyle(this.shadeColor(gold, 0.6)).fillTriangle(x0, 19, xm, ty + 2, x1, 19)
+          g.fillStyle(gold).fillTriangle(x0, 18, xm, ty, x1, 18)
+          g.fillStyle(this.shadeColor(gold, 1.35), 0.85).fillTriangle(xm - 3, 15, xm, ty, xm + 1, 14) // arête brillante
+        }
+        g.fillStyle(this.shadeColor(gold, 1.4), 0.8).fillRect(5, 18, 30, 1.6) // rim light du bandeau
+        // joyaux avec facette claire
+        for (const [jx, jy, col] of [[10, 22, 0xe6392f], [20, 22, 0x2f7de6], [30, 22, 0x2fb84a]] as const) {
+          g.fillStyle(this.shadeColor(col, 0.6)).fillCircle(jx, jy + 0.6, 2.8)
+          g.fillStyle(col).fillCircle(jx, jy, 2.6)
+          g.fillStyle(0xffffff, 0.9).fillCircle(jx - 0.9, jy - 0.9, 0.9)
+        }
+        // éclats scintillants (petits + baké)
+        for (const [sx, sy] of [[11, 6], [28, 5], [20, 2]] as const) {
+          g.fillStyle(0xffffff, 0.95).fillCircle(sx, sy, 1.4)
+          g.fillStyle(0xfff2b0, 0.6).fillCircle(sx, sy, 2.6)
+        }
         break
-      case 'casque-orc':
-        g.fillStyle(0x546e5a).fillEllipse(20, 18, 32, 20)
-        g.fillStyle(0x37474f).fillRect(4, 16, 32, 6) // bande frontale
-        g.fillStyle(0x8d6e63).fillTriangle(4, 16, 0, 4, 10, 16) // corne gauche
-        g.fillStyle(0x8d6e63).fillTriangle(36, 16, 40, 4, 30, 16) // corne droite
-        g.fillStyle(0x263238).fillRect(14, 18, 12, 3) // fente visière
+      }
+      case 'corne-kaho': {
+        // LÉGENDAIRE (le plus cher, le plus spectaculaire) : corne unique ardente de Lord Kaho,
+        // rayonnement de feu baké, dégradé braise → or, langues de flamme et éclats de gemme
+        this.bakeGlow(g, 20, 12, 19, 0xff5a1e, 8, 0.5) // grand halo ardent
+        this.bakeGlow(g, 20, 9, 10, 0xffd23f, 6, 0.55) // cœur doré plus vif
+        // langues de flamme derrière la corne
+        for (const [fx, tip, w] of [[11, -2, 5], [29, -1, 5], [20, -6, 6]] as const) {
+          g.fillStyle(0xff3d00, 0.85).fillTriangle(fx - w, 16, fx + w, 16, fx, tip)
+          g.fillStyle(0xffa726, 0.9).fillTriangle(fx - w * 0.6, 15, fx + w * 0.6, 15, fx, tip + 3)
+          g.fillStyle(0xfff176, 0.9).fillTriangle(fx - w * 0.3, 13, fx + w * 0.3, 13, fx, tip + 6)
+        }
+        // socle métallique sombre (attache de la corne sur le front)
+        g.fillStyle(0x2a1a12).fillEllipse(20, 24, 30, 10)
+        g.fillStyle(0x4a2f1e).fillEllipse(20, 23, 26, 7)
+        g.fillStyle(0x7a4a2c, 0.7).fillEllipse(16, 21, 12, 3) // reflet du socle
+        // corne courbe : base braise → pointe incandescente (couches empilées)
+        g.fillStyle(0x7a1500).fillTriangle(13, 24, 27, 24, 24, 1) // base sombre
+        g.fillStyle(0xd42a00).fillTriangle(14, 23, 26, 23, 23, 3) // braise
+        g.fillStyle(0xff5a1e).fillTriangle(16, 22, 25, 22, 22.5, 5) // rouge-orangé
+        g.fillStyle(0xffb547).fillTriangle(19, 21, 24, 21, 22, 7) // arête chaude
+        g.fillStyle(0xfff3c4, 0.95).fillTriangle(21, 19, 23, 19, 22.5, 8) // pointe incandescente
+        // gemme ardente sur le socle + éclat
+        g.fillStyle(0x7a0d0d).fillCircle(20, 24, 3.2)
+        g.fillStyle(0xff2a2a).fillCircle(20, 23.6, 2.6)
+        g.fillStyle(0xffd0a0, 0.95).fillCircle(19, 22.6, 1)
+        // étincelles bakées qui montent
+        for (const [sx, sy, sr] of [[11, 8, 1.3], [30, 7, 1.2], [24, 3, 1], [15, 4, 0.9]] as const) {
+          g.fillStyle(0xffe082, 0.95).fillCircle(sx, sy, sr)
+          g.fillStyle(0xff8a3d, 0.5).fillCircle(sx, sy, sr + 1.6)
+        }
         break
+      }
       default:
         g.fillStyle(0xce93d8).fillEllipse(20, 16, 26, 18)
     }
