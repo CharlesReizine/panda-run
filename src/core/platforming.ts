@@ -23,6 +23,14 @@ const SAFETY = 0.55
 export function maxJumpHeightPx(): number {
   return (JUMP_SPEED * JUMP_SPEED) / (2 * GRAVITY)
 }
+
+// Distance horizontale FRANCHISSABLE d'un trou au saut SIMPLE (sol → sol) : vitesse de course ×
+// temps de vol d'un saut à plat × marge de confort. Un trou plus large que ça n'est pas garanti
+// franchissable (voir level-validator.oversizedGaps). Même marge SAFETY que canReach.
+export function maxJumpGapPx(): number {
+  const airtime = (2 * JUMP_SPEED) / GRAVITY // durée d'un saut à plat (montée + descente)
+  return RUN_SPEED * airtime * SAFETY
+}
 export function maxJumpTiles(): number {
   return maxJumpHeightPx() / TILE
 }

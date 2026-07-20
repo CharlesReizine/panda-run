@@ -8,7 +8,7 @@
 // sommet d'une échelle est donc atteignable dès que son pied l'est, ce que le simple
 // `unreachablePlatforms` de platforming.ts (sauts uniquement) ne sait pas modéliser.
 
-import { groundRowFor, canReach, type Plat } from './platforming'
+import { groundRowFor, canReach, maxJumpGapPx, TILE, type Plat } from './platforming'
 import type { LevelDef } from '../data/levels'
 
 const ROW_TOL = 1 // tolérance verticale (en tuiles) pour « le dessus est à la rangée y »
@@ -17,6 +17,7 @@ interface Ladder { x: number; y: number; h: number }
 
 export interface LadderProblem { x: number; y: number; h: number; reason: 'sommet-sans-plateforme' | 'pied-dans-le-vide' }
 export interface ChestProblem { x: number; y: number }
+export interface GapProblem { x: number; w: number }
 
 function hgap(a: Plat, b: Plat): number {
   return Math.max(0, Math.max(a.x - (b.x + b.w), b.x - (a.x + a.w)))
@@ -105,6 +106,14 @@ export function unreachableLadders(level: LevelDef): LadderProblem[] {
     }
   }
   return out
+}
+
+// Trous du sol trop LARGES pour être franchis au saut simple (w × TILE > distance de saut
+// confortable). Le sol couvre toute la largeur (les plateformes restent atteignables du sol,
+// donc un trou ne casse jamais l'atteignabilité) ; on ne vérifie ici que la franchissabilité.
+export function oversizedGaps(level: LevelDef): GapProblem[] {
+  const max = maxJumpGapPx()
+  return (level.gaps ?? []).filter((g) => g.w * TILE > max).map((g) => ({ x: g.x, w: g.w }))
 }
 
 // Coffres posés sur plateforme (props avec y) dont la plateforme est absente ou injoignable.

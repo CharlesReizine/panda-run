@@ -5,6 +5,7 @@ import {
   laddersToNowhere,
   unreachableLadders,
   unreachableChests,
+  oversizedGaps,
 } from '../../src/core/level-validator'
 
 // Garantit que CHAQUE niveau est physiquement jouable : toute plateforme est atteignable
@@ -30,6 +31,11 @@ describe('atteignabilité physique de chaque niveau', () => {
     it(`${level.id} — coffres sur plateforme atteignable`, () => {
       const bad = unreachableChests(level)
       expect(bad, `${level.id}: coffres injoignables → ${JSON.stringify(bad)}`).toEqual([])
+    })
+
+    it(`${level.id} — trous franchissables au saut simple`, () => {
+      const bad = oversizedGaps(level)
+      expect(bad, `${level.id}: trous infranchissables → ${JSON.stringify(bad)}`).toEqual([])
     })
   }
 })

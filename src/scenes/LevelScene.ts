@@ -163,9 +163,21 @@ export class LevelScene extends Phaser.Scene {
     // texture « dalle flottante » pour les plateformes surélevées (tranche de terre marquée) ;
     // même taille 32×32 que le sol → corps de collision identique, seul le rendu change
     const platformKey = `platform-${this.levelDef.biome}`
+    // trous MORTELS : aux colonnes couvertes par un gap, on NE POSE PAS les tuiles de sol
+    // pleines (rangées groundRow/+1) → c'est le vide, et tomber dedans tue (voir checkPitDeath).
+    const isGapCol = (x: number) => (this.levelDef.gaps ?? []).some((g) => x >= g.x && x < g.x + g.w)
     for (let x = 0; x < this.levelDef.widthTiles; x++) {
+      if (isGapCol(x)) continue
       platforms.create(x * TILE + TILE / 2, this.groundRow * TILE + TILE, tileKey)
       platforms.create(x * TILE + TILE / 2, (this.groundRow + 1) * TILE + TILE, tileKey)
+    }
+    // bords de trou marqués : le sol s'arrête NET sur une fine paroi sombre de chaque côté du
+    // vide → le danger se voit avant d'y arriver.
+    for (const g of this.levelDef.gaps ?? []) {
+      const topY = this.groundRow * TILE + TILE / 2
+      const wallH = 2 * TILE
+      this.add.rectangle(g.x * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(1, 0).setDepth(-3)
+      this.add.rectangle((g.x + g.w) * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(0, 0).setDepth(-3)
     }
     // plateformes surélevées : on les traverse en montant et on se pose dessus en
     // retombant (voir landsFromAbove). Sans ça, une plateforme qui en surplombe une
@@ -187,6 +199,15 @@ export class LevelScene extends Phaser.Scene {
     }
 
     this.player = new Player(this, this.spawnX(), this.groundRow * TILE - 40)
+    // PLAFOND TRAVERSABLE (fini le rebond) : en Phaser 4, la collision aux bornes du monde est
+    // arbitrée par world.checkCollision (GLOBAL, partagé avec les ennemis) — désactiver le bord
+    // haut du joueur via body.checkCollision.up ne suffit donc pas. On donne au JOUEUR un
+    // rectangle de bornes PERSONNEL identique au monde en bas/gauche/droite mais dont le HAUT est
+    // repoussé très au-dessus (y négatif) : le panda peut monter au-dessus du haut du monde sans
+    // rebondir puis retomber, tandis que les ennemis gardent les bornes standard.
+    ;(this.player.body as Phaser.Physics.Arcade.Body).setBoundsRectangle(
+      new Phaser.Geom.Rectangle(0, -10000, widthPx, this.worldH + 10000),
+    )
     this.physics.add.collider(this.player, platforms)
     // collision one-way : validée seulement quand le panda retombe sur le dessus
     this.physics.add.collider(this.player, oneWay, undefined, this.landsFromAbove)
@@ -790,6 +811,30 @@ export class LevelScene extends Phaser.Scene {
       save(getPlayer())
       this.showGameOver()
     }
+  }
+
+  // le centre du panda est-il au-dessus d'un trou du sol (colonne de vide) ?
+  private overGap(x: number): boolean {
+    return (this.levelDef.gaps ?? []).some((g) => x >= g.x * TILE && x < (g.x + g.w) * TILE)
+  }
+
+  // Chute MORTELLE dans un trou (appelé chaque frame). Le panda meurt s'il est tombé sous le
+  // niveau du sol AU-DESSUS d'un trou (ses pieds/tête passés sous la surface, il n'y a pas de sol
+  // pour l'arrêter), ou s'il a atteint le bas du monde. Réutilise le chemin de mort standard
+  // (K.O. immédiat → checkpoint ou game over, comme les pics). Respecte le god mode.
+  private checkPitDeath() {
+    if ((globalThis as { __pandaGodMode?: boolean }).__pandaGodMode) return
+    if (this.player.hp <= 0) return
+    const body = this.player.body as Phaser.Physics.Arcade.Body
+    // « sous la surface » : la TÊTE (haut de la hitbox) est passée sous la ligne de sol +1 rangée
+    const belowSurface = body.top > (this.groundRow + 1) * TILE
+    const belowWorld = body.bottom >= this.worldH
+    if (!((this.overGap(this.player.x) && belowSurface) || belowWorld)) return
+    this.player.takeDamage(this.player.hp) // chute mortelle : K.O. immédiat
+    audio.playSfx('player-death')
+    if (this.lastCheckpoint) { this.respawnAtCheckpoint(); return }
+    save(getPlayer())
+    this.showGameOver()
   }
 
   // une bulle qui monte depuis la tête du panda et s'estompe (réutilise la texture fx-bubble,
@@ -2136,6 +2181,9 @@ export class LevelScene extends Phaser.Scene {
     if (this.bgFar) this.bgFar.tilePositionX = sx * 0.3
     if (this.bgNear) this.bgNear.tilePositionX = sx * 0.55
     if (this.aim) this.updateAimReticle()
+    if (this.player.hp <= 0) return
+    // chute mortelle dans un trou (ou sous le bas du monde) → mort ; peut réapparaître au checkpoint
+    this.checkPitDeath()
     if (this.player.hp <= 0) return
     this.player.regenEnergy(delta)
     // zones verticales chevauchées (échelle / eau) lues sur le centre du panda

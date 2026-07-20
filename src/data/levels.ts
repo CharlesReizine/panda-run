@@ -18,6 +18,11 @@ export interface LevelDef {
   // (hauteur en rangées). Sans top/h → ancienne bande près du sol (rétrocompat).
   hazards?: { kind: 'spikes' | 'water'; x: number; w: number; top?: number; h?: number }[]
   bridges?: { x: number; y: number; w: number }[] // ponts de planches (plateformes fines)
+  // trous MORTELS dans le sol : à ces emplacements (x en tuiles, largeur w en tuiles) on ne
+  // dessine PAS les rangées de sol pleines (groundRow/+1) → c'est le vide. Tomber dedans = mort.
+  // Chaque trou doit rester FRANCHISSABLE au saut simple (w ≤ distance de saut confortable,
+  // vérifié par level-validator.oversizedGaps / reachable.test.ts).
+  gaps?: { x: number; w: number }[]
   ladders?: { x: number; y: number; h: number }[] // échelles (x tuile, y tuile du haut, hauteur en tuiles)
   checkpoints?: { x: number }[] // drapeaux de réapparition (x en tuiles)
   boss?: string
@@ -26,6 +31,7 @@ export interface LevelDef {
 const plat = (x: number, y: number, w: number) => ({ x, y, w })
 const prop = (kind: string, x: number, y?: number) => ({ kind, x, y })
 const ladder = (x: number, y: number, h: number) => ({ x, y, h })
+const gap = (x: number, w: number) => ({ x, w })
 
 // RÈGLES DE VERTICALITÉ (toutes vérifiées par level-validator.ts, saut SIMPLE) :
 // - saut max ≈ 4 tuiles de haut ; le SOL couvre toute la largeur (écart horizontal = 0 vers
@@ -65,6 +71,7 @@ const list: LevelDef[] = [
     props: [prop('herbe', 30), prop('champignon', 105), prop('herbe', 155), prop('coffre', 39, 14), prop('coffre', 98, 16), prop('coffre', 146, 28)],
     hazards: [{ kind: 'water', x: 52, w: 16, top: 20, h: 18 }, { kind: 'spikes', x: 70, w: 4 }, { kind: 'water', x: 110, w: 12, top: 26, h: 12 }, { kind: 'spikes', x: 124, w: 4 }],
     bridges: [{ x: 51, y: 22, w: 18 }],
+    gaps: [gap(42, 3)],
     ladders: [ladder(39, 13, 10), ladder(98, 15, 11)],
     checkpoints: [{ x: 45 }, { x: 100 }, { x: 140 }] },
   // zone1-3 : FORÊT — TOUR D'ÉCHELLES (48 rangées, sol row46, w150). À gauche trois échelles
@@ -93,6 +100,7 @@ const list: LevelDef[] = [
     props: [prop('herbe', 30), prop('champignon', 104), prop('herbe', 165), prop('coffre', 41, 19), prop('coffre', 98, 22), prop('coffre', 148, 34)],
     hazards: [{ kind: 'water', x: 50, w: 18, top: 20, h: 24 }, { kind: 'spikes', x: 70, w: 4 }, { kind: 'water', x: 112, w: 12, top: 30, h: 14 }, { kind: 'spikes', x: 126, w: 4 }],
     bridges: [{ x: 49, y: 22, w: 20 }],
+    gaps: [gap(106, 3)],
     ladders: [ladder(41, 18, 11), ladder(98, 21, 11)],
     checkpoints: [{ x: 45 }, { x: 100 }, { x: 150 }] },
   { id: 'zone1-boss', name: 'Antre du Roi Gloopy', biome: 'foret', widthTiles: 40,
@@ -124,6 +132,7 @@ const list: LevelDef[] = [
     props: [prop('roche', 6), prop('herbe', 70), prop('roche', 105), prop('coffre', 12), prop('coffre', 40, 20), prop('coffre', 81, 34)],
     hazards: [{ kind: 'water', x: 48, w: 15, top: 22, h: 23 }, { kind: 'spikes', x: 84, w: 4 }],
     bridges: [{ x: 48, y: 30, w: 14 }],
+    gaps: [gap(102, 3)],
     ladders: [ladder(41, 19, 10)],
     checkpoints: [{ x: 30 }, { x: 75 }] },
   // zone2-3 : DÉSERT — FOSSE puis PIC (44 rangées, sol row42, w170). Départ dans une fosse basse
@@ -171,6 +180,7 @@ const list: LevelDef[] = [
     props: [prop('champignon', 30), prop('herbe', 88), prop('champignon', 150), prop('coffre', 43, 21), prop('coffre', 104, 24), prop('coffre', 166, 24)],
     hazards: [{ kind: 'water', x: 55, w: 16, top: 26, h: 20 }, { kind: 'spikes', x: 74, w: 4 }, { kind: 'water', x: 118, w: 14, top: 30, h: 16 }, { kind: 'spikes', x: 176, w: 4 }],
     bridges: [{ x: 54, y: 28, w: 18 }],
+    gaps: [gap(108, 3)],
     ladders: [ladder(43, 20, 11), ladder(104, 23, 11), ladder(166, 23, 11)],
     checkpoints: [{ x: 48 }, { x: 100 }, { x: 160 }] },
   // zone3-2 : JUNGLE — MARÉCAGE SUSPENDU (46 rangées, sol row44, w210). Quatre escaliers à
@@ -295,6 +305,7 @@ const list: LevelDef[] = [
     props: [prop('roche', 30), prop('herbe', 100), prop('roche', 165), prop('coffre', 42, 19), prop('coffre', 94, 22), prop('coffre', 145, 25)],
     hazards: [{ kind: 'water', x: 52, w: 12, top: 26, h: 18 }, { kind: 'spikes', x: 68, w: 4 }, { kind: 'water', x: 106, w: 12, top: 28, h: 16 }, { kind: 'spikes', x: 122, w: 4 }, { kind: 'spikes', x: 158, w: 4 }],
     bridges: [{ x: 51, y: 28, w: 14 }],
+    gaps: [gap(45, 3)],
     ladders: [ladder(42, 18, 11), ladder(94, 21, 11), ladder(145, 24, 11)],
     checkpoints: [{ x: 48 }, { x: 100 }, { x: 160 }] },
   // zone5-2 : CIMETIÈRE — CRYPTES (50 rangées, sol row48, w225). Flèche de crypte à gauche (deux
