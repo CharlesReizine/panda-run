@@ -185,194 +185,162 @@ function mkZone14(): LevelDef {
   })
 }
 
-// ─── Zone 3 — JUNGLE (PHASE MODULES) : même kit que la zone 1, rythmes DISTINCTS. ───────────────
-// Oiseau du biome : ara. Monstres jungle : singe-grimpeur, frelon-geant, flora-vorace, willow.
+// ─── Zone 3 — JUNGLE (PHASE MODULES) : construite par composeLevel du KIT (comme la zone 1), mais à
+// une COURBE plus haute (D3) et deux RYTHMES DISTINCTS. Biome très AQUATIQUE : chaque niveau impose
+// un bassin marine (noyade, coffre de plongée) ET une cascade claire remontable (plateformes des deux
+// côtés). Oiseau : ara. Monstres jungle au sol ET en hauteur : willow, frelon-geant, flora-vorace,
+// singe-grimpeur. Dosage ~30 % fillers / 40 % traversée+vertical / 20 % risque / 10 % tension ;
+// départ mi-hauteur sans monstre (R127), PORTE à altitude ≠.
 
-// zone3-1 : LISIÈRE — traversée → gué → colline (oiseaux) → bassin d'apnée → escalier → cascade
-// secrète → arène+PORTE tout en HAUT. Silhouette montante : la lisière grimpe vers la canopée.
+// zone3-1 : LISIÈRE — D3, sortie EN HAUT (la lisière grimpe vers la canopée). Bassin d'apnée +
+// cascade secrète ; échelles réintroduites.
 function mkZone31(): LevelDef {
-  return buildLevelFromModules([
-    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['willow'], spawnHere: true },
-    { kind: 'gue', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['frelon-geant'], birds: ['ara'] },
-    { kind: 'colline', widthRange: [18, 26], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['flora-vorace', 'singe-grimpeur'], birds: ['ara'] },
-    { kind: 'bassin', widthRange: [14, 20], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['willow'] },
-    { kind: 'escalier', widthRange: [14, 20], rise: 6, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['singe-grimpeur', 'flora-vorace'] },
-    { kind: 'cascade', widthRange: [18, 24], rise: 2, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['frelon-geant'], birds: ['ara'] },
-    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['singe-grimpeur', 'frelon-geant'], exitHere: true }, // PORTE tout en HAUT (départ à mi-hauteur)
-  ], { id: 'zone3-1', name: 'Lisière de la jungle', biome: 'jungle' })
+  return composeLevel({
+    id: 'zone3-1', name: 'Lisière de la jungle', biome: 'jungle',
+    tierCap: 3, ending: 'haut', allowLadders: true, midCount: 6,
+    ground: ['willow', 'frelon-geant', 'flora-vorace', 'singe-grimpeur'], birds: ['ara'],
+    waterKinds: ['bassin', 'cascade'], seed: 'zone3-1a',
+  })
 }
 
-// zone3-2 : MARÉCAGES — escalier → bassin → corniche & vide (oiseaux) → cascade → bassin → grotte →
-// descente → arène+PORTE en contrebas. Le plus AQUATIQUE (deux bassins) et le plus long de la zone.
+// zone3-2 : MARÉCAGES — D3, le plus LONG et le plus AQUATIQUE de la zone (bassin-trésor profond +
+// cascade), sortie EN BAS (grande dévalade vers l'arène-climax des marais).
 function mkZone32(): LevelDef {
-  return buildLevelFromModules([
-    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['frelon-geant'], spawnHere: true },
-    { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['singe-grimpeur', 'flora-vorace'] },
-    { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['willow'] },
-    { kind: 'corniche-vide', widthRange: [16, 24], fillBelow: 'vide', fillAbove: 'air', tags: ['relief', 'oiseaux', 'danger'], ground: ['flora-vorace'], birds: ['ara', 'ara'] },
-    { kind: 'cascade', widthRange: [18, 24], rise: 2, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['singe-grimpeur'], birds: ['ara'] },
-    { kind: 'bassin', widthRange: [14, 20], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['willow', 'frelon-geant'] },
-    { kind: 'grotte', widthRange: [12, 18], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['singe-grimpeur', 'flora-vorace'] },
-    { kind: 'descente', widthRange: [14, 20], rise: -12, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['singe-grimpeur', 'flora-vorace'] },
-    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['frelon-geant', 'singe-grimpeur'], exitHere: true }, // PORTE en contrebas, au sol (départ à mi-hauteur)
-  ], { id: 'zone3-2', name: 'Marécages suspendus', biome: 'jungle' })
+  return composeLevel({
+    id: 'zone3-2', name: 'Marécages suspendus', biome: 'jungle',
+    tierCap: 3, ending: 'bas', allowLadders: true, midCount: 7,
+    ground: ['frelon-geant', 'flora-vorace', 'singe-grimpeur', 'willow'], birds: ['ara'],
+    waterKinds: ['tresor-bassin', 'cascade'], seed: 'zone3-2c',
+  })
 }
 
-// ─── Route alternative PLAGE (PHASE MODULES) — oiseau : ara. Monstres : crabe-geant, meduse, harpie.
+// ─── Route alternative PLAGE (PHASE MODULES, composeLevel) — oiseau : ara. Monstres côtiers au sol
+// ET en hauteur : crabe-geant, meduse, harpie. Beaucoup d'eau (lagons marine + cascade).
 
-// plage-1 : RIVAGE — plateau → colline (oiseaux) → lagon d'apnée → gué → cascade → descente →
-// arène+PORTE au ras du sable. Rythme court et côtier, finit en contrebas.
+// plage-1 : RIVAGE — D3, court et côtier, sortie EN BAS (arène au ras du sable). Lagon d'apnée +
+// cascade.
 function mkPlage1(): LevelDef {
-  return buildLevelFromModules([
-    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['crabe-geant'], spawnHere: true },
-    { kind: 'colline', widthRange: [16, 24], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['meduse'], birds: ['ara'] },
-    { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['crabe-geant'] },
-    { kind: 'gue', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['harpie'], birds: ['ara'] },
-    { kind: 'cascade', widthRange: [18, 24], rise: 2, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['meduse'], birds: ['ara'] },
-    { kind: 'descente', widthRange: [12, 18], rise: -9, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['crabe-geant', 'harpie'] },
-    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['meduse', 'crabe-geant'], exitHere: true }, // PORTE au ras du sable (départ à mi-hauteur)
-  ], { id: 'plage-1', name: 'Rivage de corail', biome: 'plage' })
+  return composeLevel({
+    id: 'plage-1', name: 'Rivage de corail', biome: 'plage',
+    tierCap: 3, ending: 'bas', allowLadders: true, midCount: 6,
+    ground: ['crabe-geant', 'meduse', 'harpie'], birds: ['ara'],
+    waterKinds: ['bassin', 'cascade'], seed: 'plage-1h',
+  })
 }
 
-// plage-2 : RÉCIF IMMERGÉ — escalier → lagon → colline (oiseaux) → corniche & vide → cascade →
-// second lagon → crête aérienne+PORTE. Le plus grand récif : deux lagons, finish sur une arête haute.
+// plage-2 : RÉCIF IMMERGÉ — D3+, le plus grand et le plus dur (tierCap 4 : tension à pics en hauteur),
+// DEUX lagons marine, sortie EN HAUT sur une arête aérienne. Le climax de la route côtière.
 function mkPlage2(): LevelDef {
-  return buildLevelFromModules([
-    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['meduse'], spawnHere: true },
-    { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['crabe-geant', 'harpie'] },
-    { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['crabe-geant'] },
-    { kind: 'colline', widthRange: [18, 26], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['meduse', 'harpie'], birds: ['ara'] },
-    { kind: 'corniche-vide', widthRange: [16, 24], fillBelow: 'vide', fillAbove: 'air', tags: ['relief', 'oiseaux', 'danger'], ground: ['meduse'], birds: ['ara', 'ara'] },
-    { kind: 'cascade', widthRange: [18, 24], rise: 2, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['crabe-geant'], birds: ['ara'] },
-    { kind: 'bassin', widthRange: [14, 20], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['meduse'] },
-    { kind: 'crete', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'oiseaux', 'danger'], ground: ['harpie', 'crabe-geant'], birds: ['ara', 'ara'], exitHere: true }, // PORTE sur l'arête haute (départ à mi-hauteur)
-  ], { id: 'plage-2', name: 'Récif immergé', biome: 'plage' })
+  return composeLevel({
+    id: 'plage-2', name: 'Récif immergé', biome: 'plage',
+    tierCap: 4, ending: 'haut', allowLadders: true, midCount: 7,
+    ground: ['meduse', 'harpie', 'crabe-geant'], birds: ['ara'],
+    waterKinds: ['bassin', 'tresor-bassin'], seed: 'plage-2b',
+  })
 }
 
-// ─── Zone 4 refondue (PHASE MODULES) : MONTAGNE + route alternative CARRIÈRE. Même KIT DE MODULES
-// que la zone 1 (src/data/level-modules.ts) : 6-10 modules collés bout à bout, silhouette COLLINES,
-// ≤3 paliers, eau en cuves (marine=noyade / cascade=remontable), DÉPART à mi-hauteur, PORTE à une
-// altitude ≠. Montagne = crêtes aériennes & descentes de col ; carrière = galeries de roche & fosses.
-// Monstres au sol ET en hauteur (posés sur les corniches des modules élevés) + faucons en plein air.
+// ─── Zone 4 refondue (PHASE 2 — composeLevel) : MONTAGNE + route alternative CARRIÈRE. Construite par
+// composeLevel (comme zone1) : DOSAGE 30/40/20/10, COURBE de difficulté par tierCap, DÉPART plat à
+// mi-hauteur sans monstre (R127), PORTE à une altitude ≠ (ending bas/haut), eau en cuves (marine=noyade
+// / cascade=remontable), coffres atteignables. Chaque niveau est DISTINCT (biome, tierCap, ending,
+// midCount, waterKinds, pool de monstres, seed). Difficulté croissante : zone4-1≈D3, zone4-2≈D3-4,
+// carriere-1≈D3, carriere-2≈D4 (les tiers 3-4 débloquent crêtes, pics en hauteur et galeries de roche).
+// Montagne = crêtes/collines/vistas + cascades + pics d'altitude ; carrière = galeries de pierre
+// (grotte/couloir-pics) + fosses noyées + gardien-pierre en climax. Monstres sol ET hauteur (posés sur
+// les corniches des modules élevés par l'assembleur) + faucons en plein air.
 
-// zone4-1 : MONTAGNE — SENTIER DES CIMES. Ascension aérienne : plateau → escalier → colline → crête
-// (oiseaux) → cascade secrète → lac alpin (bassin marine) → escalier → crête sommitale + PORTE en
-// haut. Deux crêtes ventées, la plus « oiseaux » de la zone.
+// zone4-1 : MONTAGNE — SENTIER DES CIMES. D3, ASCENSION aérienne (ending haut), la plus « oiseaux » :
+// deux plans d'eau (cascade secrète + lac alpin), crêtes/collines ventées, PORTE tout en haut.
 function mkZone41(): LevelDef {
-  return buildLevelFromModules([
-    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['yeti'], spawnHere: true },
-    { kind: 'escalier', widthRange: [14, 20], rise: 6, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['harpie'] },
-    { kind: 'colline', widthRange: [16, 24], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['yeti', 'harpie'], birds: ['faucon'] },
-    { kind: 'crete', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'oiseaux', 'danger'], ground: ['harpie'], birds: ['faucon', 'faucon'] },
-    { kind: 'cascade', widthRange: [18, 24], rise: 3, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['louveteau'], birds: ['faucon'] },
-    { kind: 'bassin', widthRange: [12, 18], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['yeti'] },
-    { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée', 'combat'], ground: ['harpie', 'yeti'] },
-    { kind: 'crete', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'oiseaux', 'danger'], ground: ['harpie'], birds: ['faucon', 'faucon'], exitHere: true }, // PORTE tout en HAUT sur la cime (départ à mi-hauteur)
-  ], { id: 'zone4-1', name: 'Sentier des cimes', biome: 'montagne' })
+  return composeLevel({
+    id: 'zone4-1', name: 'Sentier des cimes', biome: 'montagne',
+    tierCap: 3, ending: 'haut', allowLadders: true, midCount: 6,
+    ground: ['harpie', 'yeti', 'louveteau'], birds: ['faucon'],
+    waterKinds: ['cascade', 'bassin'], seed: 'z4-1',
+  })
 }
 
-// zone4-2 : MONTAGNE — COL GLACÉ. Traversée de col avec grotte de glace et grande descente : plateau
-// → escalier → crête (oiseaux) → lac gelé (bassin marine) → grotte → longue descente → colline →
-// arène + PORTE en contrebas. Rythme « passage » : on monte, on s'enfonce, puis on redescend le col.
+// zone4-2 : MONTAGNE — COL GLACÉ. D3-4, TRAVERSÉE DE COL puis grande DESCENTE (ending bas) : on monte,
+// on s'enfonce (galeries + pics d'altitude débloqués par le tier 4), puis on dévale vers l'arène en
+// contrebas. Lac gelé unique (bassin), rythme « passage » distinct de l'ascension du 4-1.
 function mkZone42(): LevelDef {
-  return buildLevelFromModules([
-    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['yeti'], spawnHere: true },
-    { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['harpie'] },
-    { kind: 'crete', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'oiseaux', 'danger'], ground: ['harpie'], birds: ['faucon', 'faucon'] },
-    { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['yeti'] },
-    { kind: 'grotte', widthRange: [12, 18], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['yeti', 'louveteau'] },
-    { kind: 'descente', widthRange: [14, 20], rise: -12, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['harpie', 'yeti'] },
-    { kind: 'colline', widthRange: [16, 22], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['yeti'], birds: ['faucon'] },
-    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['harpie', 'yeti'], exitHere: true }, // PORTE tout en bas du col (départ à mi-hauteur)
-  ], { id: 'zone4-2', name: 'Col glacé', biome: 'montagne' })
+  return composeLevel({
+    id: 'zone4-2', name: 'Col glacé', biome: 'montagne',
+    tierCap: 4, ending: 'bas', allowLadders: true, midCount: 7,
+    ground: ['yeti', 'harpie', 'louveteau'], birds: ['faucon'],
+    waterKinds: ['bassin'], seed: 'z4-2',
+  })
 }
 
-// carriere-1 : CARRIÈRE — TERRASSES D'EXTRACTION. Descente dans la roche : plateau → escalier
-// (terrasses) → galerie (grotte) → gué de dalles au-dessus de la fosse → bassin noyé → descente →
-// arène gardée + PORTE en bas. Rythme minier : pierre, gouffres, un gardien au bout.
+// carriere-1 : CARRIÈRE — TERRASSES D'EXTRACTION. D3, DESCENTE minière (ending bas) vers une arène
+// GARDÉE par le gardien-pierre (mvp de climax). Fosse noyée (bassin), galeries de roche, biome pierre.
 function mkCarriere1(): LevelDef {
-  return buildLevelFromModules([
-    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['golem-de-pierre'], spawnHere: true },
-    { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['gobelin-mineur', 'golem-de-pierre'] },
-    { kind: 'grotte', widthRange: [12, 18], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['golem-de-pierre', 'gobelin-mineur'] },
-    { kind: 'gue', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['gobelin-mineur'], birds: ['faucon'] },
-    { kind: 'bassin', widthRange: [12, 18], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['golem-de-pierre'] },
-    { kind: 'descente', widthRange: [14, 20], rise: -12, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['gobelin-mineur', 'golem-de-pierre'] },
-    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['gardien-pierre', 'golem-de-pierre'], exitHere: true }, // arène gardée, PORTE au fond de la carrière (départ à mi-hauteur)
-  ], { id: 'carriere-1', name: 'Carrière abandonnée', biome: 'carriere' })
+  return composeLevel({
+    id: 'carriere-1', name: 'Carrière abandonnée', biome: 'carriere',
+    tierCap: 3, ending: 'bas', allowLadders: true, midCount: 6,
+    ground: ['gobelin-mineur', 'golem-de-pierre', 'gargouille'], birds: ['faucon'],
+    mvp: 'gardien-pierre', waterKinds: ['bassin'], seed: 'carr-1',
+  })
 }
 
-// carriere-2 : CARRIÈRE — FOSSE DES GOLEMS. Le plus enterré : plateau → fosse noyée (bassin marine)
-// → galerie → escalier → seconde galerie → source claire (cascade secrète) → corniche sur le vide
-// (oiseaux) → arène gardée + PORTE tout en haut (on remonte de la fosse). Deux grottes, une remontée.
+// carriere-2 : CARRIÈRE — FOSSE DES GOLEMS. D4, le plus enterré : on REMONTE de la fosse (ending haut,
+// climax = grande escalade de sortie, ≠ de l'arène gardée du 4-1 en bas). Tier 4 → un maximum de
+// galeries de pierre + pics (grotte/couloir-pics/pics-quinconce). Deux plans d'eau (fosse noyée +
+// source claire remontable). (Le gardien-pierre veille dans carriere-1 ; ici le péril est la remontée.)
 function mkCarriere2(): LevelDef {
-  return buildLevelFromModules([
-    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['gobelin-mineur'], spawnHere: true },
-    { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['golem-de-pierre'] },
-    { kind: 'grotte', widthRange: [12, 18], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['golem-de-pierre', 'gobelin-mineur'] },
-    { kind: 'escalier', widthRange: [14, 20], rise: 6, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['gobelin-mineur'] },
-    { kind: 'grotte', widthRange: [12, 18], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['golem-de-pierre', 'gobelin-mineur'] },
-    { kind: 'cascade', widthRange: [18, 24], rise: 3, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['gobelin-mineur'], birds: ['faucon'] },
-    { kind: 'corniche-vide', widthRange: [16, 24], fillBelow: 'vide', fillAbove: 'air', tags: ['relief', 'oiseaux', 'danger'], ground: ['gobelin-mineur'], birds: ['faucon', 'faucon'] },
-    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['gardien-pierre', 'golem-de-pierre'], exitHere: true }, // PORTE tout en HAUT, sortie de la fosse (départ à mi-hauteur)
-  ], { id: 'carriere-2', name: 'Fosse des golems', biome: 'carriere' })
+  return composeLevel({
+    id: 'carriere-2', name: 'Fosse des golems', biome: 'carriere',
+    tierCap: 4, ending: 'haut', allowLadders: true, midCount: 7,
+    ground: ['gobelin-mineur', 'golem-de-pierre', 'gargouille'], birds: ['faucon'],
+    waterKinds: ['bassin', 'cascade'], seed: 'carr-2',
+  })
 }
 
-// ─── Zone 5 — CIMETIÈRE (refondue PHASE MODULES) ────────────────────────────────────────────
-// Ambiance sombre : tombes, tunnels, arêtes battues par les vents, embuscades. Eau en cuves
-// (bassin marine = noyade, cascade claire remontable). Oiseau = harfang-spectral. DÉPART à
-// mi-hauteur, PORTE à altitude ≠. Deux rythmes DISTINCTS entre 5-1 et 5-2.
+// ─── Zone 5 — CIMETIÈRE (refondue PHASE MODULES, composeLevel) ──────────────────────────────
+// Les niveaux les PLUS DURS jusqu'ici (D4) : ambiance sombre — cryptes, tunnels de roche, arêtes
+// battues par les vents, embuscades en hauteur. Dosage décalé vers la TENSION (tierCap 4 débloque
+// couloir-pics / pics-quinconce / échelle-exposée + traversées D3 crêtes/triple-saut) tout en
+// gardant ~30 % de respiration. Eau en cuves : bassin marine (noyade, coffre de plongée) + cascade
+// claire remontable. Oiseau = harfang-spectral. MVP = spectre-ancien (climax). DÉPART mi-hauteur,
+// PORTE à altitude ≠. Deux RYTHMES DISTINCTS : 5-1 PLONGE (sortie bas), 5-2 REMONTE (sortie haut).
 
-// zone5-1 : NÉCROPOLE — plateau → descente vers les tombes → grotte → bassin d'apnée → corniche &
-// vide (harfangs) → cascade secrète → colline (spectre-ancien) → arène+PORTE. Rythme « on s'enfonce
-// dans la nécropole » : chute contrôlée, tunnel, embuscade en hauteur, climax d'arène.
+// zone5-1 : NÉCROPOLE — D4, sortie EN BAS. Rythme « on s'enfonce » : longue dévalade finale vers la
+// fosse-arène où veille le spectre ancien. Bassin d'apnée (coffre) + cascade secrète, harfangs en vol.
 function mkZone51(): LevelDef {
-  return buildLevelFromModules([
-    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['squelette'], spawnHere: true },
-    { kind: 'descente', widthRange: [14, 20], rise: -8, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['goule', 'squelette'] },
-    { kind: 'grotte', widthRange: [14, 20], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['fantome', 'goule'] },
-    { kind: 'bassin', widthRange: [14, 18], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['banshee'] },
-    { kind: 'corniche-vide', widthRange: [16, 24], fillBelow: 'vide', fillAbove: 'air', tags: ['relief', 'oiseaux', 'danger'], ground: ['goule'], birds: ['harfang-spectral'] },
-    { kind: 'cascade', widthRange: [18, 24], rise: 3, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['fantome'], birds: ['harfang-spectral'] },
-    { kind: 'colline', widthRange: [18, 26], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['spectre-ancien', 'goule'], birds: ['harfang-spectral'] },
-    { kind: 'descente', widthRange: [16, 22], rise: -12, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['pretre-goule', 'banshee'], exitHere: true }, // gradins vers la fosse-arène, PORTE en contrebas (altitude ≠ départ)
-  ], { id: 'zone5-1', name: 'Nécropole oubliée', biome: 'cimetiere' })
+  return composeLevel({
+    id: 'zone5-1', name: 'Nécropole oubliée', biome: 'cimetiere',
+    tierCap: 4, ending: 'bas', allowLadders: true, midCount: 7,
+    ground: ['squelette', 'goule', 'banshee', 'fantome', 'pretre-goule'], birds: ['harfang-spectral'],
+    mvp: 'spectre-ancien', waterKinds: ['bassin', 'cascade'], seed: 'ossuaire',
+  })
 }
 
-// zone5-2 : CRYPTES HURLANTES — plateau → gué → arête (harfangs) → bassin → escalier montant →
-// corniche & vide → grotte → cascade secrète → arête+PORTE. Rythme AÉRIEN et sinueux : gouffres,
-// arêtes fines au-dessus du vide, vagues de banshees, double eau.
+// zone5-2 : CRYPTES HURLANTES — D4, sortie EN HAUT (remontée finale vers une arête ventée). Rythme
+// AÉRIEN et sinueux : arêtes fines sur le vide, gouffres, vagues de banshees. Bassin-trésor profond +
+// cascade secrète, harfangs plus présents. Distinct de 5-1 (qui plonge) par l'eau, l'ordre et la sortie.
 function mkZone52(): LevelDef {
-  return buildLevelFromModules([
-    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['banshee'], spawnHere: true },
-    { kind: 'gue', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['goule'], birds: ['harfang-spectral'] },
-    { kind: 'crete', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'oiseaux', 'danger'], ground: ['fantome'], birds: ['harfang-spectral', 'harfang-spectral'] },
-    { kind: 'bassin', widthRange: [14, 18], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['banshee'] },
-    { kind: 'escalier', widthRange: [14, 20], rise: 6, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['squelette', 'goule'] },
-    { kind: 'corniche-vide', widthRange: [16, 24], fillBelow: 'vide', fillAbove: 'air', tags: ['relief', 'oiseaux', 'danger'], ground: ['goule'], birds: ['harfang-spectral'] },
-    { kind: 'grotte', widthRange: [14, 20], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['pretre-goule', 'fantome'] },
-    { kind: 'cascade', widthRange: [18, 24], rise: 2, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['banshee'], birds: ['harfang-spectral'] },
-    { kind: 'crete', widthRange: [16, 22], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'oiseaux', 'danger'], ground: ['spectre-ancien'], birds: ['harfang-spectral'], exitHere: true },
-  ], { id: 'zone5-2', name: 'Cryptes hurlantes', biome: 'cimetiere' })
+  return composeLevel({
+    id: 'zone5-2', name: 'Cryptes hurlantes', biome: 'cimetiere',
+    tierCap: 4, ending: 'haut', allowLadders: true, midCount: 7,
+    ground: ['goule', 'fantome', 'banshee', 'squelette', 'pretre-goule'], birds: ['harfang-spectral'],
+    mvp: 'spectre-ancien', waterKinds: ['tresor-bassin', 'cascade'], seed: 'arete',
+  })
 }
 
-// ─── Zone 6 — ENFER (refondue PHASE MODULES) ────────────────────────────────────────────────
-// zone6-1 : SENTIER DES DAMNÉS — plateau → escalier (corbeaux) → rivière de feu (bassin) → corniche
-// & vide → goulet gardé (gardien-flamme) → cascade secrète → grotte (mini-baphomet) → volée de
-// corbeaux → descente vers l'arène-climax (dragon-flamme)+PORTE. Le plus long : ascension
-// infernale, embuscades aériennes, chokepoint gardé. Oiseau = corbeau.
+// ─── Zone 6 — ENFER (refondue PHASE MODULES, composeLevel) ──────────────────────────────────
+// zone6-1 : SENTIER DES DAMNÉS — le niveau le PLUS DUR du jeu (D4-5, tierCap 5 débloque l'atterrissage
+// étroit D5). Le plus LONG (midCount 8). Sortie EN BAS : longue dévalade vers l'arène-climax où rugit
+// le dragon de flamme (MVP). Tension maximale — couloirs de pics, atterrissages étroits, triples sauts,
+// embuscades de corbeaux ; un gardien-flamme posté en chokepoint sur le chemin. Bassin de lave (apnée,
+// coffre) + sortie humide secrète. Monstres au sol ET en hauteur : diablotin, mage-noir, gargouille,
+// mini-baphomet, gardien-flamme ; corbeaux en vol ; dragon-flamme en climax.
 function mkZone61(): LevelDef {
-  return buildLevelFromModules([
-    { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['diablotin'], spawnHere: true },
-    { kind: 'escalier', widthRange: [14, 20], rise: 6, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['gargouille', 'diablotin'], birds: ['corbeau'] },
-    { kind: 'bassin', widthRange: [14, 18], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['mage-noir'] },
-    { kind: 'corniche-vide', widthRange: [16, 24], fillBelow: 'vide', fillAbove: 'air', tags: ['relief', 'oiseaux', 'danger'], ground: ['diablotin'], birds: ['corbeau', 'corbeau'] },
-    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat', 'danger'], ground: ['gardien-flamme', 'gargouille'] },
-    { kind: 'cascade', widthRange: [18, 24], rise: 3, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['mage-noir'], birds: ['corbeau'] },
-    { kind: 'grotte', widthRange: [14, 20], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['mini-baphomet', 'diablotin'] },
-    { kind: 'volee', widthRange: [16, 24], fillBelow: 'sol', fillAbove: 'air', tags: ['oiseaux', 'danger'], ground: ['gargouille'], birds: ['corbeau', 'corbeau', 'corbeau'] },
-    { kind: 'descente', widthRange: [16, 22], rise: -14, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['dragon-flamme', 'gargouille'], exitHere: true }, // longue dévalade vers l'arène-climax, PORTE en contrebas (altitude ≠ départ)
-  ], { id: 'zone6-1', name: 'Sentier des Damnés', biome: 'enfer' })
+  return composeLevel({
+    id: 'zone6-1', name: 'Sentier des Damnés', biome: 'enfer',
+    tierCap: 5, ending: 'bas', allowLadders: true, midCount: 10,
+    ground: ['diablotin', 'mage-noir', 'gargouille', 'mini-baphomet', 'gardien-flamme'], birds: ['corbeau'],
+    mvp: 'dragon-flamme', waterKinds: ['bassin', 'sortie-humide'], seed: 'damnes-2',
+  })
 }
 
 const list: LevelDef[] = [
@@ -383,57 +351,72 @@ const list: LevelDef[] = [
   { id: 'zone1-boss', name: 'Antre du Roi Gloopy', biome: 'foret', widthTiles: 40,
     platforms: [plat(8, 10, 4), plat(28, 10, 4)],
     spawns: [], boss: 'roi-gloopy' },
-  // zone2-1 : DÉSERT (KIT MODULES) — Dunes de Sograt. Rythme dunaire : plateau (départ mi-hauteur) →
-  // gué de dunes → colline/vista → oasis marine (apnée) → montée → corniche & vide (faucons) →
-  // descente de combat → arène + PORTE en contrebas, au sol (altitude ≠ départ).
+  // zone2-1 : DÉSERT (KIT MODULES) — DUNES DE SOGRAT (≈ D2). Le plus doux du désert : traversée
+  // dunaire ensoleillée, deux points d'eau sûrs, pente de combat finale. plateau (départ mi-hauteur)
+  // → escalier de dune → gué (crevasses de sable) → colline/vista (faucons) → petit-pont d'oasis
+  // (bassin peu profond, petit trésor) → oasis d'apnée (bassin marine, coffre au fond) → descente de
+  // combat → arène-climax + PORTE en contrebas, au sol (altitude ≠ départ). Dosage doux : ~½ filler/
+  // traversée, un seul vrai risque (l'oasis profonde), pas de pics (réservés aux niveaux suivants).
   buildLevelFromModules([
     { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['scorpion'], spawnHere: true },
-    { kind: 'gue', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['scorpion'], birds: ['faucon'] },
-    { kind: 'colline', widthRange: [18, 26], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['vautour', 'momie'], birds: ['faucon'] },
-    { kind: 'bassin', widthRange: [12, 18], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['momie'] },
-    { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['orc-guerrier'] },
-    { kind: 'corniche-vide', widthRange: [16, 24], fillBelow: 'vide', fillAbove: 'air', tags: ['relief', 'oiseaux', 'danger'], ground: ['scorpion'], birds: ['faucon', 'faucon'] },
+    { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['scorpion'] },
+    { kind: 'gue', widthRange: [16, 22], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['vautour'], birds: ['faucon'] },
+    { kind: 'colline', widthRange: [18, 26], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['momie'], birds: ['faucon'] },
+    { kind: 'petit-pont', widthRange: [12, 18], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'respiration'], ground: ['scorpion'] }, // gué d'oasis peu profond, petit trésor au fond
+    { kind: 'bassin', widthRange: [14, 20], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['momie'] }, // oasis d'apnée, coffre au fond
     { kind: 'descente', widthRange: [14, 20], rise: -12, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['orc-guerrier', 'vautour'] },
-    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['scorpion', 'orc-seigneur'], exitHere: true }, // orc-seigneur = élite MVP en climax
+    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['scorpion', 'orc-seigneur'], exitHere: true }, // orc-seigneur = élite MVP en climax, PORTE au sol
   ], { id: 'zone2-1', name: 'Dunes de Sograt', biome: 'desert' }),
-  // zone2-2 : DÉSERT (KIT MODULES) — Oasis perdue. Rythme aquatique : plateau (départ) → colline →
-  // cascade claire secrète (remontable) → grande oasis marine (apnée) → gué → volée de faucons →
-  // montée → arène + PORTE en HAUT (altitude ≠ départ).
+  // zone2-2 : DÉSERT (KIT MODULES) — OASIS PERDUE (≈ D2-3). Rythme AQUATIQUE et plus tendu : cascade
+  // secrète à remonter, PREMIERS PICS en hauteur (faux-plat), grande oasis, volée de faucons, remontée
+  // finale. plateau (départ) → colline (faucons) → cascade claire (remontable, coffre secret) →
+  // faux-plat (corniche semée de pics isolés à enjamber, tier 3) → grande oasis marine (apnée, coffre)
+  // → gué → volée de faucons → escalier → arène + PORTE tout en HAUT (altitude ≠ départ). Deux plans
+  // d'eau (cascade + bassin), un beat de pics, un beat d'oiseaux : plus varié et plus long que 2-1.
   buildLevelFromModules([
     { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['scorpion'], spawnHere: true },
     { kind: 'colline', widthRange: [16, 24], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['vautour'], birds: ['faucon'] },
     { kind: 'cascade', widthRange: [18, 24], rise: 2, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['momie'], birds: ['faucon'] },
+    { kind: 'faux-plat', widthRange: [14, 20], fillBelow: 'sol', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['scorpion'] }, // pics isolés à enjamber sur la corniche (tier 3)
     { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['momie'] },
-    { kind: 'gue', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['scorpion'], birds: ['faucon'] },
-    { kind: 'volee', widthRange: [16, 24], fillBelow: 'sol', fillAbove: 'air', tags: ['oiseaux', 'danger'], ground: ['scorpion'], birds: ['faucon', 'faucon', 'faucon'] },
+    { kind: 'gue', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['vautour'], birds: ['faucon'] },
+    { kind: 'volee', widthRange: [18, 24], fillBelow: 'sol', fillAbove: 'air', tags: ['oiseaux', 'danger'], ground: ['scorpion'], birds: ['faucon', 'faucon', 'faucon'] },
     { kind: 'escalier', widthRange: [14, 20], rise: 6, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['orc-guerrier'] },
-    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['momie', 'vautour'], exitHere: true },
+    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['momie', 'zombie'], exitHere: true }, // PORTE tout en HAUT
   ], { id: 'zone2-2', name: 'Oasis perdue', biome: 'desert' }),
-  // zone2-3 : DÉSERT (KIT MODULES) — Vallée des tombeaux. Rythme sépulcral : plateau (départ) →
-  // montée → grotte (tunnel de roche) → descente de combat → gué → oasis marine → remontée →
-  // crête aérienne haute (faucons) + PORTE (altitude ≠ départ).
+  // zone2-3 : DÉSERT (KIT MODULES) — VALLÉE DES TOMBEAUX (≈ D3). Le plus DUR du désert, sépulcral et
+  // vertical : tunnel de roche, SLALOM DE PICS EN HAUTEUR (pics-quinconce, tier 4), embuscade d'élite,
+  // finish sur une arête ventée. plateau (départ) → escalier → grotte (tunnel de pierre fermé) →
+  // pics-quinconce (pics au sol + mini-corniches à pics, slalom en hauteur) → descente de combat
+  // (mini-baphomet élite) → gué → oasis marine (apnée, coffre) → remontée → crête aérienne haute
+  // (faucons) + PORTE (altitude ≠ départ). Tension marquée : un vrai tunnel + un beat de précision.
   buildLevelFromModules([
     { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['momie'], spawnHere: true },
     { kind: 'escalier', widthRange: [14, 20], rise: 6, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['zombie'], birds: ['faucon'] },
-    { kind: 'grotte', widthRange: [12, 18], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['momie', 'zombie'] },
-    { kind: 'descente', widthRange: [14, 20], rise: -8, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['mini-baphomet', 'zombie'] }, // mini-baphomet = élite cornue des tombeaux
-    { kind: 'gue', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['vautour'], birds: ['faucon'] },
+    { kind: 'grotte', widthRange: [14, 20], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['momie', 'zombie'] }, // boyau de pierre fermé (roche dessus + dessous)
+    { kind: 'pics-quinconce', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['tension', 'danger'], ground: ['zombie'] }, // slalom de pics en hauteur (tier 4)
+    { kind: 'descente', widthRange: [14, 20], rise: -10, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['mini-baphomet', 'zombie'] }, // mini-baphomet = élite cornue des tombeaux
+    { kind: 'gue', widthRange: [16, 22], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['vautour'], birds: ['faucon'] },
     { kind: 'bassin', widthRange: [12, 18], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['zombie'] },
     { kind: 'escalier', widthRange: [14, 20], rise: 6, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['momie'] },
-    { kind: 'crete', widthRange: [14, 20], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'oiseaux', 'danger'], ground: ['vautour'], birds: ['faucon', 'faucon'], exitHere: true },
+    { kind: 'crete', widthRange: [16, 22], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'oiseaux', 'danger'], ground: ['vautour'], birds: ['faucon', 'faucon'], exitHere: true }, // PORTE sur l'arête ventée, tout en haut
   ], { id: 'zone2-3', name: 'Vallée des tombeaux', biome: 'desert' }),
-  // cave-1 : CAVE (KIT MODULES) — Cave aux échos. Rythme souterrain : plateau (départ) → colline →
-  // cascade claire secrète (remontable) → lac marin souterrain (apnée) → grotte (boyau de roche) →
-  // gouffre à corniches (corbeaux) → montée → arène + PORTE (altitude ≠ départ).
+  // cave-1 : CAVE (KIT MODULES) — CAVE AUX ÉCHOS (≈ D3). Vrai niveau de GROTTE : DEUX tunnels de
+  // pierre FERMÉS (roche au-dessus ET en dessous) + un couloir à pics sous plafond de roche encadrent
+  // le parcours souterrain. plateau (départ) → colline (corbeaux) → cascade claire (source secrète,
+  // coffre) → grotte (BOYAU DE PIERRE #1) → lac marin souterrain (apnée, coffre) → couloir-pics
+  // (plafond de roche + lits de pics, tier 4) → grotte (BOYAU DE PIERRE #2) → escalier → arène-climax
+  // + PORTE en HAUT (altitude ≠ départ). Ambiance fermée et resserrée, distincte des dunes ouvertes.
   buildLevelFromModules([
     { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['chauve-souris'], spawnHere: true },
     { kind: 'colline', widthRange: [16, 24], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['squelette'], birds: ['corbeau'] },
     { kind: 'cascade', widthRange: [18, 24], rise: 2, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['fantome'], birds: ['corbeau'] },
-    { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['squelette'] },
-    { kind: 'grotte', widthRange: [12, 18], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['mage-noir', 'chauve-souris'] },
-    { kind: 'corniche-vide', widthRange: [16, 24], fillBelow: 'vide', fillAbove: 'air', tags: ['relief', 'oiseaux', 'danger'], ground: ['squelette'], birds: ['corbeau', 'corbeau'] },
+    { kind: 'grotte', widthRange: [14, 20], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gobelin-mineur', 'chauve-souris'] }, // boyau de pierre fermé #1
+    { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['squelette'] }, // lac marin souterrain, coffre au fond
+    { kind: 'couloir-pics', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'roche', tags: ['tension', 'danger'], ground: ['golem-de-pierre'] }, // plafond de roche + lits de pics (tier 4)
+    { kind: 'grotte', widthRange: [14, 20], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['mage-noir', 'chauve-souris'] }, // boyau de pierre fermé #2
     { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['fantome'] },
-    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['mage-noir', 'squelette', 'chauve-souris'], exitHere: true },
+    { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['mage-noir', 'squelette', 'gobelin-mineur'], exitHere: true }, // PORTE en HAUT, sortie de la caverne
   ], { id: 'cave-1', name: 'Cave aux échos', biome: 'cave' }),
   { id: 'zone2-boss', name: 'Pyramide du Pharaon', biome: 'desert', widthTiles: 40,
     platforms: [plat(8, 10, 4), plat(28, 10, 4)],
