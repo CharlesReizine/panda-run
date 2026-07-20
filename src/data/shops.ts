@@ -6,10 +6,16 @@ export interface ShopItemDef { itemId: string; price: number }
 
 export const POTION_PRICE = 20
 
+// Armes vendues à l'armurerie, une palette par archétype (épée / arc / bâton) et une montée en
+// gamme : communes bon marché → rares milieu de tableau → griffe royale épique en pièce de choix.
+// Prix calés sur l'éco (les rares comblent le trou entre communes et épique).
 export const WEAPON_SHOP: ShopItemDef[] = [
   { itemId: 'epee-bambou', price: 90 },
   { itemId: 'arc-souple', price: 110 },
   { itemId: 'baton-feuillu', price: 140 },
+  { itemId: 'sabre-acier', price: 260 },
+  { itemId: 'arc-composite', price: 300 },
+  { itemId: 'baton-cristal', price: 340 },
   { itemId: 'griffe-royale', price: 850 },
 ]
 

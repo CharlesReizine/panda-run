@@ -5,6 +5,7 @@ export interface MapNode {
   y: number
   levelId?: string
   type: 'town' | 'level' | 'boss'
+  theme?: 'europeen' | 'marocain' // thème visuel de la ville (pilote TownScene) ; absent = terrain
 }
 
 export const START_NODE = 'prontera'
@@ -18,13 +19,13 @@ export const START_NODE = 'prontera'
 // nœuds comme étiquettes (voir espacements ≥90px horizontal / ≥55px vertical).
 export const WORLD_NODES: MapNode[] = [
   // Zone 1 — plaine & forêt (rangée du haut, gauche → droite)
-  { id: 'prontera', name: 'Prontera', x: 60, y: 112, type: 'town' },
+  { id: 'prontera', name: 'Prontera', x: 60, y: 112, type: 'town', theme: 'europeen' },
   { id: 'plaine-1', name: 'Prairie', x: 178, y: 112, levelId: 'zone1-1', type: 'level' },
   { id: 'plaine-2', name: 'Champs', x: 300, y: 70, levelId: 'zone1-2', type: 'level' },
   { id: 'foret-1', name: 'Orée', x: 300, y: 155, levelId: 'zone1-3', type: 'level' },
   { id: 'foret-2', name: 'Forêt', x: 422, y: 112, levelId: 'zone1-4', type: 'level' },
   { id: 'boss-1', name: 'Antre du Roi', x: 545, y: 112, levelId: 'zone1-boss', type: 'boss' },
-  { id: 'morroc', name: 'Morroc', x: 690, y: 130, type: 'town' },
+  { id: 'morroc', name: 'Morroc', x: 690, y: 130, type: 'town', theme: 'marocain' },
   // Zone 2 — désert & cave (rangée du milieu, droite → gauche)
   { id: 'desert-1', name: 'Dunes', x: 778, y: 240, levelId: 'zone2-1', type: 'level' },
   { id: 'cave-a', name: 'Cave', x: 778, y: 325, levelId: 'cave-1', type: 'level' },

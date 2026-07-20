@@ -6,6 +6,7 @@ import { canCraft, doCraft } from '../core/craft'
 import { canReforge, doReforge, reforgeCost, upgradedBonus, sellItem, sellValue, MAX_REFORGE_LEVEL } from '../core/reforge'
 import { acceptQuest, refreshQuestProgress, claimQuest } from '../core/quests'
 import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, HAT_SHOP, QUESTS, type ShopItemDef } from '../data/shops'
+import { WORLD_NODES } from '../data/worldmap'
 import { ITEMS, rarityColor, SLOT_ORDER, SLOT_LABEL_PLURAL } from '../data/items'
 import type { EquipSlot } from '../core/types'
 import { MATERIALS } from '../data/materials'
@@ -67,6 +68,8 @@ class TopDownJoystick {
 }
 
 type SpotKind = 'potions' | 'armes' | 'vetements' | 'forge' | 'quete'
+type BuildingKind = 'potions' | 'armes' | 'vetements' | 'forge'
+type TownTheme = 'europeen' | 'marocain'
 
 interface TownSpot {
   id: SpotKind
@@ -76,37 +79,86 @@ interface TownSpot {
 }
 
 interface TownBuilding {
-  id: SpotKind
+  id: BuildingKind
   name: string
   x: number
   y: number
   w: number
   h: number
-  roofColor: number
-  wallColor: number
 }
 
-// Disposition « place de village » : 4 boutiques aux quatre coins (toutes entièrement visibles
-// dans le viewport 960×540), château décoratif au centre en fond, garde de quête planté au
-// centre devant. Les zones d'interaction (SPOTS) suivent automatiquement ces coordonnées.
-const BUILDINGS: TownBuilding[] = [
-  { id: 'potions', name: 'Herboristerie', x: 150, y: 195, w: 148, h: 100, roofColor: 0xc62828, wallColor: 0xffca28 },
-  { id: 'vetements', name: 'Boutique de vêtements', x: 810, y: 195, w: 148, h: 100, roofColor: 0x6a1b9a, wallColor: 0xce93d8 },
-  { id: 'forge', name: 'Forge', x: 240, y: 405, w: 150, h: 98, roofColor: 0x37474f, wallColor: 0x8d6e63 },
-  { id: 'armes', name: 'Armurerie', x: 720, y: 405, w: 150, h: 98, roofColor: 0x455a64, wallColor: 0xb0bec5 },
-]
+// Chaque ville est plus GRANDE que le viewport (960×540) : la caméra suit le panda et on se
+// balade dans les 4 directions. Palette + disposition + décor sont propres au thème pour que
+// Prontera (européen médiéval) et Morroc (marocain, désert) ne se ressemblent en rien.
+interface ThemeConfig {
+  worldW: number
+  worldH: number
+  buildings: TownBuilding[]
+  questDoor: { x: number; y: number }
+  playerStart: { x: number; y: number }
+  subtitle: string
+  groundTop: number
+  groundBottom: number
+  plaza: number
+  plazaLine: number
+  accent: number // bannières / dômes / auvents
+  buildingTint: number // teinte des façades FALLBACK (art non encore thématisé)
+  bannerFill: string
+  bannerStroke: string
+}
 
-// zone d'interaction du garde, centrée sur son sprite (le PNJ personnage npc-garde)
-const QUEST_DOOR = { x: 480, y: 385 }
+const BUILDING_NAME: Record<BuildingKind, string> = {
+  potions: 'Herboristerie',
+  vetements: 'Boutique de vêtements',
+  forge: 'Forge',
+  armes: 'Armurerie',
+}
 
-const SPOTS: TownSpot[] = [
-  ...BUILDINGS.map((b) => ({ id: b.id, label: b.name, doorX: b.x, doorY: b.y + b.h / 2 + 10 })),
-  { id: 'quete', label: QUESTS['chasse-aux-monstres']!.npcName, doorX: QUEST_DOOR.x, doorY: QUEST_DOOR.y },
-]
+// Prontera — bourg européen médiéval : quatre boutiques disposées en carré autour d'une grande
+// place pavée, château + maisons à colombage en fond, bannières bleu-sarcelle, arbres, fontaine.
+const THEME_EUROPEEN: ThemeConfig = {
+  worldW: 1440, worldH: 860,
+  buildings: [
+    { id: 'potions', name: BUILDING_NAME.potions, x: 300, y: 300, w: 152, h: 100 },
+    { id: 'vetements', name: BUILDING_NAME.vetements, x: 1140, y: 300, w: 152, h: 100 },
+    { id: 'forge', name: BUILDING_NAME.forge, x: 300, y: 660, w: 152, h: 100 },
+    { id: 'armes', name: BUILDING_NAME.armes, x: 1140, y: 660, w: 152, h: 100 },
+  ],
+  questDoor: { x: 720, y: 600 },
+  playerStart: { x: 720, y: 760 },
+  subtitle: 'Cité royale',
+  groundTop: 0x93c25a, groundBottom: 0x6fa03e,
+  plaza: 0xbcb3a2, plazaLine: 0x8d8577,
+  accent: 0x00838f,
+  buildingTint: 0xffffff,
+  bannerFill: '#00695c', bannerStroke: '#e0f2f1',
+}
 
-// illustration rastérisée (public/art/town-*.png) associée à chaque bâtiment ; la porte de
-// l'image est calée sur le bas, alignée sur doorY pour rester cohérente avec la zone d'interaction
-const BUILDING_TEXTURE: Record<'potions' | 'armes' | 'vetements' | 'forge', string> = {
+// Morroc — cité marocaine du désert : souk aux boutiques dispersées en biais, palais à dôme et
+// arches en fond, palmiers, lanternes suspendues, auvents à rayures, sol d'adobe ocre.
+const THEME_MAROCAIN: ThemeConfig = {
+  worldW: 1440, worldH: 860,
+  buildings: [
+    { id: 'potions', name: BUILDING_NAME.potions, x: 250, y: 340, w: 152, h: 100 },
+    { id: 'armes', name: BUILDING_NAME.armes, x: 480, y: 250, w: 152, h: 100 },
+    { id: 'vetements', name: BUILDING_NAME.vetements, x: 1010, y: 320, w: 152, h: 100 },
+    { id: 'forge', name: BUILDING_NAME.forge, x: 760, y: 690, w: 152, h: 100 },
+  ],
+  questDoor: { x: 330, y: 660 },
+  playerStart: { x: 620, y: 780 },
+  subtitle: 'Cité des sables',
+  groundTop: 0xe6c27c, groundBottom: 0xcaa257,
+  plaza: 0xd9a86a, plazaLine: 0xa9743b,
+  accent: 0xd84315,
+  buildingTint: 0xf3b878,
+  bannerFill: '#bf360c', bannerStroke: '#ffe0b2',
+}
+
+const THEMES: Record<TownTheme, ThemeConfig> = { europeen: THEME_EUROPEEN, marocain: THEME_MAROCAIN }
+
+// illustration rastérisée de secours (public/art/town-*.png) associée à chaque bâtiment ; sert de
+// FALLBACK quand l'art thématisé town-<townId>-<bâtiment>.png n'existe pas encore.
+const BUILDING_TEXTURE: Record<BuildingKind, string> = {
   potions: 'town-potion',
   armes: 'town-armes',
   vetements: 'town-vetements',
@@ -114,11 +166,21 @@ const BUILDING_TEXTURE: Record<'potions' | 'armes' | 'vetements' | 'forge', stri
 }
 
 // boutiquier posté devant chaque façade (illustration panda détourée npc-<id>, bakée en Preload)
-const SHOP_NPC: Record<'potions' | 'armes' | 'vetements' | 'forge', string> = {
+const SHOP_NPC: Record<BuildingKind, string> = {
   potions: 'npc-herboriste',
   armes: 'npc-armurier',
   vetements: 'npc-tailleur',
   forge: 'npc-forgeron',
+}
+
+// interpolation linéaire entre deux couleurs 0xRRGGBB (bandes de dégradé du sol)
+function lerpColor(a: number, b: number, t: number): number {
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff
+  const r = Math.round(ar + (br - ar) * t)
+  const g = Math.round(ag + (bg - ag) * t)
+  const bl = Math.round(ab + (bb - ab) * t)
+  return (r << 16) | (g << 8) | bl
 }
 
 export class TownScene extends Phaser.Scene {
@@ -129,100 +191,121 @@ export class TownScene extends Phaser.Scene {
   private interactBtn?: Phaser.GameObjects.Text
   private panel?: Phaser.GameObjects.Container
   private feedback?: Phaser.GameObjects.Text
+  private townId = 'prontera'
+  private cfg: ThemeConfig = THEME_EUROPEEN
+  private spots: TownSpot[] = []
 
   constructor() { super('Town') }
 
+  // ville courante (nœud carte) + son thème visuel ; défaut Prontera/européen si introuvable
+  private resolveTown() {
+    this.townId = getPlayer().currentNode
+    const node = WORLD_NODES.find((n) => n.id === this.townId)
+    const theme: TownTheme = node?.theme ?? 'europeen'
+    this.cfg = THEMES[theme]
+    return { node, theme }
+  }
+
   preload() {
+    this.resolveTown()
     this.load.image('town-bg', 'town/bg.png')
-    // façades illustrées + PNJ + décors (public/art/town-*.png)
+    // façades de secours + PNJ + décors (public/art/town-*.png)
     this.load.image('town-potion', 'art/town-potion.png')
     this.load.image('town-armes', 'art/town-armes.png')
     this.load.image('town-vetements', 'art/town-vetements.png')
     this.load.image('town-forge', 'art/town-forge.png')
     this.load.image('town-chateau', 'art/town-chateau.png')
     this.load.image('town-maison', 'art/town-maison.png')
+    // art thématisé par ville (généré plus tard) : town-<townId>-<bâtiment>.png + fond. Chargé de
+    // façon optionnelle — les 404 sont ignorés, le code retombe sur les façades de secours ci-dessus
+    // et se met à niveau automatiquement dès que ces images existent.
+    this.load.on('loaderror', () => { /* art thématisé pas encore fourni : fallback assuré */ })
+    for (const b of ['potions', 'armes', 'vetements', 'forge'] as const) {
+      this.load.image(`town-${this.townId}-${b}`, `art/town-${this.townId}-${b}.png`)
+    }
+    this.load.image(`town-${this.townId}-bg`, `art/town-${this.townId}-bg.png`)
   }
 
   create() {
     this.panel = undefined
     this.nearSpot = null
+    const { node, theme } = this.resolveTown()
+    const cfg = this.cfg
+    const townName = node?.name ?? 'Ville'
 
     audio.playMusic('ville')
 
-    this.physics.world.setBounds(0, 0, 960, 540)
-    this.cameras.main.setBounds(0, 0, 960, 540)
+    this.physics.world.setBounds(0, 0, cfg.worldW, cfg.worldH)
+    this.cameras.main.setBounds(0, 0, cfg.worldW, cfg.worldH)
 
-    // fond illustré (rue pavée + collines) — remplace les anciens aplats de couleur
-    this.add.image(480, 270, 'town-bg').setDisplaySize(960, 540)
+    this.drawGround(cfg)
+    this.drawThemeDecor(theme, cfg)
 
-    // décors non interactifs (pas de collision) posés AVANT les bâtiments : le château au
-    // centre en fond, deux maisons dans les intervalles entre boutiques. Placés en premier,
-    // ils passent derrière les façades interactives et le panda joueur.
-    const placeDecor = (key: string, x: number, baseY: number, width: number) => {
-      const img = this.add.image(x, baseY, key).setOrigin(0.5, 1)
-      img.setDisplaySize(width, width * (img.height / img.width))
-    }
-    // château central entièrement visible (taille/baseline bornées sous la bannière) + deux
-    // maisons dans les intervalles hauts pour équilibrer la place
-    placeDecor('town-chateau', 480, 258, 205)
-    placeDecor('town-maison', 320, 182, 104)
-    placeDecor('town-maison', 640, 182, 104)
-
-    // bannière du bourg, calée tout en haut au-dessus du château (aucun chevauchement)
-    this.add.text(480, 8, 'Prontera', {
-      fontSize: '26px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 4,
-    }).setOrigin(0.5, 0)
+    // zones d'interaction dérivées de la disposition de CE thème (portes de boutiques + garde)
+    this.spots = [
+      ...cfg.buildings.map((b) => ({ id: b.id as SpotKind, label: b.name, doorX: b.x, doorY: b.y + b.h / 2 + 10 })),
+      { id: 'quete', label: QUESTS['chasse-aux-monstres']!.npcName, doorX: cfg.questDoor.x, doorY: cfg.questDoor.y },
+    ]
 
     const wallsGroup = this.physics.add.staticGroup()
-    for (const b of BUILDINGS) {
-      // corps de collision invisible — emprise identique à l'ancien mur (x, y, w, h)
+    for (const b of cfg.buildings) {
+      // corps de collision invisible — emprise du bâtiment (x, y, w, h)
       const wall = this.add.rectangle(b.x, b.y, b.w, b.h).setVisible(false)
       this.physics.add.existing(wall, true)
       wallsGroup.add(wall)
-      // illustration du bâtiment, base (porte) calée sur le bas de la façade (aligne l'entrée
-      // visuelle sur la zone d'interaction — inchangée). Hauteur bornée pour que le toit ET le
-      // label tiennent dans le viewport (le bâtiment central laisse de la place sous « Prontera »).
+      // façade : art thématisé town-<townId>-<id> si présent, sinon secours town-<id> TEINTÉ au
+      // thème (pour distinguer les villes dès maintenant). Base calée sur le bas = zone d'interaction.
       const bottom = b.y + b.h / 2 + 12
-      const img = this.add.image(b.x, bottom, BUILDING_TEXTURE[b.id as keyof typeof BUILDING_TEXTURE]).setOrigin(0.5, 1)
-      const topClearance = b.x === 480 ? 74 : 40
-      const maxH = bottom - topClearance
-      let dispW = b.w + 40
+      const themedKey = `town-${this.townId}-${b.id}`
+      const useThemed = this.textures.exists(themedKey)
+      const img = this.add.image(b.x, bottom, useThemed ? themedKey : BUILDING_TEXTURE[b.id]).setOrigin(0.5, 1)
+      if (!useThemed) img.setTint(cfg.buildingTint)
+      let dispW = b.w + 44
       let dispH = dispW * (img.height / img.width)
+      const maxH = 210
       if (dispH > maxH) { const s = maxH / dispH; dispW *= s; dispH *= s }
       img.setDisplaySize(dispW, dispH)
       this.add.text(b.x, bottom - dispH - 4, b.name, {
-        fontSize: '13px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 3,
+        fontSize: '14px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 3,
       }).setOrigin(0.5, 1)
-      // boutiquier PNJ décoratif planté devant la façade (aucune collision : l'interaction
-      // reste sur la zone du bâtiment). Ajouté après la façade → rendu par-dessus.
-      this.placeNpc(SHOP_NPC[b.id as keyof typeof SHOP_NPC], b.x, bottom + 34, 96)
+      // boutiquier PNJ décoratif planté devant la façade (aucune collision). Rendu par-dessus.
+      this.placeNpc(SHOP_NPC[b.id], b.x, bottom + 34, 96)
     }
 
-    // PNJ de quête : le PERSONNAGE garde (panda à la lance), planté au centre devant sa zone.
-    // Décor uniquement — la zone d'interaction reste QUEST_DOOR (voir SPOTS).
-    this.placeNpc('npc-garde', QUEST_DOOR.x, 452, 120)
-    this.add.text(QUEST_DOOR.x, 328, QUESTS['chasse-aux-monstres']!.npcName, {
-      fontSize: '13px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 3,
+    // PNJ de quête : le garde (panda à la lance), planté devant sa zone. Décor uniquement.
+    this.placeNpc('npc-garde', cfg.questDoor.x, cfg.questDoor.y + 66, 120)
+    this.add.text(cfg.questDoor.x, cfg.questDoor.y - 58, QUESTS['chasse-aux-monstres']!.npcName, {
+      fontSize: '14px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 3,
     }).setOrigin(0.5)
 
-    // panneau de sortie — toujours accessible, ramène directement à la carte (coin haut-droit,
-    // au-dessus des façades ; le label « Boutique de vêtements » passe nettement dessous)
-    this.add.text(900, 22, 'Sortie →', { fontSize: '18px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 10, y: 6 } })
-      .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('WorldMap'))
+    // — HUD écran-fixe (scrollFactor 0) : la caméra suivant le panda, ces éléments restent collés —
+    // bannière du bourg (nom + sous-titre thématique) en haut au centre
+    this.add.text(480, 10, townName, {
+      fontSize: '26px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 4,
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(35)
+    this.add.text(480, 40, cfg.subtitle, {
+      fontSize: '13px', color: cfg.bannerStroke, fontStyle: 'italic', stroke: '#3e2723', strokeThickness: 3,
+    }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(35)
 
-    // panda joueur — posé un peu en avant du garde pour ne pas le masquer à l'arrivée
+    // panneau de sortie — toujours accessible, ramène directement à la carte (coin haut-droit)
+    this.add.text(900, 22, 'Sortie →', { fontSize: '18px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 10, y: 6 } })
+      .setOrigin(0.5).setScrollFactor(0).setDepth(35).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('WorldMap'))
+
+    // panda joueur + caméra qui le suit (la ville est plus grande que l'écran → on se balade)
     const p = getPlayer()
-    this.player = this.physics.add.sprite(560, 480, `panda-${p.classId}`)
+    this.player = this.physics.add.sprite(cfg.playerStart.x, cfg.playerStart.y, `panda-${p.classId}`)
     ;(this.player.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
     this.player.setCollideWorldBounds(true)
     // hitbox recentrée dans le cadre élargi PANDA_TEX (w 96) : (96-34)/2 = 31
     this.player.setSize(34, 40).setOffset(31, 46)
+    this.player.setDepth(5)
     this.player.play(`panda-${p.classId}-idle`)
     this.physics.add.collider(this.player, wallsGroup)
+    this.cameras.main.startFollow(this.player, true, 0.12, 0.12)
 
     this.cursors = this.input.keyboard!.createCursorKeys()
     this.input.addPointer(1)
-    this.joystick = new TopDownJoystick(this, new Phaser.Geom.Rectangle(0, 100, 400, 440))
+    this.joystick = new TopDownJoystick(this, new Phaser.Geom.Rectangle(0, 80, 480, 460))
 
     this.events.once('shutdown', () => {
       this.panel?.destroy()
@@ -235,8 +318,122 @@ export class TownScene extends Phaser.Scene {
   // hauteur cible voulue en px, aspect conservé. Sans collision : purement décoratif.
   private placeNpc(key: string, x: number, footY: number, height: number) {
     if (!this.textures.exists(key)) return
-    const img = this.add.image(x, footY, key).setOrigin(0.5, 1)
+    const img = this.add.image(x, footY, key).setOrigin(0.5, 1).setDepth(2)
     img.setDisplaySize(height * (img.width / img.height), height)
+  }
+
+  // ————— Sol et décor procéduraux, teintés au thème (villes visuellement distinctes dès maintenant) —————
+
+  private drawGround(cfg: ThemeConfig) {
+    const g = this.add.graphics().setDepth(-10)
+    const bands = 18
+    for (let i = 0; i < bands; i++) {
+      const col = lerpColor(cfg.groundTop, cfg.groundBottom, i / (bands - 1))
+      g.fillStyle(col, 1).fillRect(0, (cfg.worldH / bands) * i, cfg.worldW, cfg.worldH / bands + 1)
+    }
+    // grande place centrale carrelée (pavés européens / adobe marocain selon la palette)
+    const px = cfg.worldW / 2, py = cfg.worldH / 2
+    const pw = cfg.worldW - 260, ph = cfg.worldH - 300
+    g.fillStyle(cfg.plaza, 1).fillRoundedRect(px - pw / 2, py - ph / 2, pw, ph, 28)
+    g.lineStyle(2, cfg.plazaLine, 0.55)
+    for (let x = px - pw / 2; x <= px + pw / 2; x += 64) g.lineBetween(x, py - ph / 2, x, py + ph / 2)
+    for (let y = py - ph / 2; y <= py + ph / 2; y += 64) g.lineBetween(px - pw / 2, y, px + pw / 2, y)
+    g.lineStyle(4, cfg.plazaLine, 0.8).strokeRoundedRect(px - pw / 2, py - ph / 2, pw, ph, 28)
+  }
+
+  private drawThemeDecor(theme: TownTheme, cfg: ThemeConfig) {
+    const g = this.add.graphics().setDepth(-5)
+    if (theme === 'europeen') {
+      // château + maisons à colombage en fond
+      this.placeDecor('town-chateau', cfg.worldW / 2, 250, 300)
+      this.placeDecor('town-maison', cfg.worldW / 2 - 330, 210, 150)
+      this.placeDecor('town-maison', cfg.worldW / 2 + 330, 210, 150)
+      // fontaine au centre de la place
+      const fx = cfg.worldW / 2, fy = cfg.worldH / 2 + 20
+      g.fillStyle(0x9e9e9e, 1).fillCircle(fx, fy, 44)
+      g.fillStyle(0x4fc3f7, 1).fillCircle(fx, fy, 32)
+      g.fillStyle(0xbdbdbd, 1).fillCircle(fx, fy, 12)
+      // bannières bleu-sarcelle plantées aux abords de la place + arbres en périphérie
+      for (const [bx, by] of [[300, 470], [1140, 470], [560, 700], [880, 700]] as const) this.drawBanner(g, bx, by, cfg.accent)
+      for (const [tx, ty] of [[150, 780], [1290, 780], [150, 470], [1290, 470], [720, 800]] as const) this.drawTree(g, tx, ty)
+    } else {
+      // palais à dôme + arches en fond (centre-haut laissé libre par la disposition du souk)
+      this.drawPalace(g, cfg.worldW / 2, 220)
+      // palmiers dispersés
+      for (const [tx, ty] of [[150, 780], [1300, 760], [180, 500], [1280, 500], [470, 800], [900, 500]] as const) this.drawPalm(g, tx, ty)
+      // lanternes suspendues (halo chaud) en haut de la place
+      for (const lx of [560, 720, 880, 1040]) this.drawLantern(g, lx, 380)
+      // auvents à rayures du souk au-dessus des boutiques
+      for (const [ax, ay] of [[250, 288], [480, 198], [1010, 268], [760, 638]] as const) this.drawAwning(g, ax, ay, cfg.accent)
+    }
+  }
+
+  private placeDecor(key: string, x: number, baseY: number, width: number) {
+    if (!this.textures.exists(key)) return
+    const img = this.add.image(x, baseY, key).setOrigin(0.5, 1).setDepth(-4)
+    img.setDisplaySize(width, width * (img.height / img.width))
+  }
+
+  private drawTree(g: Phaser.GameObjects.Graphics, x: number, y: number) {
+    g.fillStyle(0x795548, 1).fillRect(x - 7, y - 30, 14, 30)
+    g.fillStyle(0x2e7d32, 1).fillCircle(x, y - 46, 26)
+    g.fillStyle(0x388e3c, 1).fillCircle(x - 20, y - 34, 18)
+    g.fillStyle(0x43a047, 1).fillCircle(x + 20, y - 34, 18)
+  }
+
+  private drawPalm(g: Phaser.GameObjects.Graphics, x: number, y: number) {
+    g.fillStyle(0x8d6e3f, 1).fillRect(x - 6, y - 78, 12, 78)
+    g.fillStyle(0x2e7d32, 1)
+    const top = y - 78
+    for (const dx of [-46, -26, 26, 46]) g.fillTriangle(x, top, x + dx, top - 16, x + dx * 0.7, top + 10)
+    g.fillTriangle(x, top - 30, x - 14, top, x + 14, top)
+    g.fillStyle(0x6d4c41, 1).fillCircle(x - 6, top + 4, 4).fillCircle(x + 6, top + 8, 4) // noix de coco
+  }
+
+  private drawLantern(g: Phaser.GameObjects.Graphics, x: number, y: number) {
+    g.lineStyle(2, 0x5d4037, 1).lineBetween(x, y - 34, x, y)
+    g.fillStyle(0xffb300, 0.28).fillCircle(x, y + 8, 18) // halo
+    g.fillStyle(0xffca28, 1).fillCircle(x, y + 8, 11)
+    g.fillStyle(0xff8f00, 1).fillCircle(x, y + 8, 5)
+    g.fillStyle(0x6d4c41, 1).fillRect(x - 6, y - 2, 12, 4).fillRect(x - 4, y + 16, 8, 5)
+  }
+
+  private drawBanner(g: Phaser.GameObjects.Graphics, x: number, y: number, color: number) {
+    g.lineStyle(4, 0x5d4037, 1).lineBetween(x, y, x, y - 66)
+    g.fillStyle(color, 1).fillTriangle(x + 2, y - 66, x + 2, y - 42, x + 40, y - 54)
+    g.fillStyle(0xffd54f, 1).fillCircle(x, y - 66, 4)
+  }
+
+  private drawAwning(g: Phaser.GameObjects.Graphics, x: number, y: number, color: number) {
+    const w = 108, stripes = 6, sw = w / stripes
+    for (let i = 0; i < stripes; i++) {
+      g.fillStyle(i % 2 === 0 ? color : 0xfff3e0, 1)
+      g.fillTriangle(x - w / 2 + i * sw, y, x - w / 2 + (i + 1) * sw, y, x - w / 2 + i * sw + sw / 2, y + 20)
+    }
+    g.fillStyle(color, 1).fillRect(x - w / 2, y - 6, w, 8)
+  }
+
+  // dôme bulbe (« oignon ») : demi-ellipse pleine + pointe effilée + liseré, sur une base cubique
+  private drawDome(g: Phaser.GameObjects.Graphics, x: number, baseY: number, rw: number, rh: number, fill: number) {
+    g.fillStyle(fill, 1).fillEllipse(x, baseY, rw * 2, rh * 2)
+    g.fillStyle(fill, 1).fillRect(x - rw, baseY, rw * 2, rh * 0.5) // raccord bombé/base
+    g.fillTriangle(x - rw * 0.5, baseY - rh * 1.4, x + rw * 0.5, baseY - rh * 1.4, x, baseY - rh * 2) // pointe
+    g.lineStyle(3, 0x7d3a17, 1).strokeEllipse(x, baseY, rw * 2, rh * 2)
+  }
+
+  private drawPalace(g: Phaser.GameObjects.Graphics, x: number, y: number) {
+    // corps adobe
+    g.fillStyle(0xcf9b5f, 1).fillRect(x - 150, y - 110, 300, 110)
+    g.lineStyle(4, 0xa9743b, 1).strokeRect(x - 150, y - 110, 300, 110)
+    // deux dômes latéraux puis le grand dôme central par-dessus + croissant doré
+    for (const dx of [-118, 118]) this.drawDome(g, x + dx, y - 110, 46, 42, 0xd88a4a)
+    this.drawDome(g, x, y - 110, 74, 66, 0xc85a2a)
+    g.lineStyle(3, 0x7d3a17, 1).lineBetween(x, y - 110 - 132, x, y - 110 - 158)
+    g.fillStyle(0xffd54f, 1).fillCircle(x, y - 110 - 164, 8)
+    // arches sombres (portail + fenêtres)
+    g.fillStyle(0x5d3a1a, 1)
+    g.fillRoundedRect(x - 34, y - 92, 68, 92, { tl: 34, tr: 34, bl: 0, br: 0 })
+    for (const dx of [-104, 104]) g.fillRoundedRect(x + dx - 22, y - 80, 44, 70, { tl: 22, tr: 22, bl: 0, br: 0 })
   }
 
   private readControls(): Town2DState {
@@ -270,7 +467,7 @@ export class TownScene extends Phaser.Scene {
 
     let closest: SpotKind | null = null
     let closestDist = INTERACT_RADIUS
-    for (const s of SPOTS) {
+    for (const s of this.spots) {
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, s.doorX, s.doorY)
       if (d <= closestDist) { closest = s.id; closestDist = d }
     }
@@ -279,18 +476,19 @@ export class TownScene extends Phaser.Scene {
       this.interactBtn?.destroy()
       this.interactBtn = undefined
       if (closest) {
-        const spot = SPOTS.find((s) => s.id === closest)!
+        const spot = this.spots.find((s) => s.id === closest)!
         this.interactBtn = this.add.text(480, 500, `Parler — ${spot.label}`, {
           fontSize: '18px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 16, y: 8 },
-        }).setOrigin(0.5).setDepth(30).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openSpot(closest!))
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(30).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openSpot(closest!))
       }
     }
   }
 
   private openSpot(kind: SpotKind) {
     if (kind === 'potions') this.openPotionShop()
-    else if (kind === 'armes') this.openItemShop('armes', WEAPON_SHOP)
-    else if (kind === 'vetements') this.openItemShop('vetements', [...ARMOR_SHOP, ...HAT_SHOP])
+    // armurerie = ARMES + ARMURES (le tri par type les regroupe) ; tailleur = CHAPEAUX/cosmétiques
+    else if (kind === 'armes') this.openItemShop('armes', [...WEAPON_SHOP, ...ARMOR_SHOP])
+    else if (kind === 'vetements') this.openItemShop('vetements', HAT_SHOP)
     else if (kind === 'forge') this.openForge()
     else if (kind === 'quete') this.openQuestNpc()
   }
@@ -426,7 +624,7 @@ export class TownScene extends Phaser.Scene {
   private openPotionShop() {
     this.closePanel()
     const w = 380, h = 300
-    const c = this.add.container(0, 0).setDepth(50)
+    const c = this.add.container(0, 0).setDepth(50).setScrollFactor(0)
     this.panel = c
     const top = this.drawPanelFrame(c, w, h, 'Herboristerie')
     const p = getPlayer()
@@ -506,7 +704,7 @@ export class TownScene extends Phaser.Scene {
     const w = Math.min(920, Math.max(360, cols * cardW + (cols - 1) * gapX + 60))
     const headerH = 100, footerH = 64
     const h = Math.min(500, headerH + contentH + footerH)
-    const c = this.add.container(0, 0).setDepth(50)
+    const c = this.add.container(0, 0).setDepth(50).setScrollFactor(0)
     this.panel = c
     const top = this.drawPanelFrame(c, w, h, title)
     const p = getPlayer()
@@ -554,7 +752,7 @@ export class TownScene extends Phaser.Scene {
   private openQuestNpc() {
     this.closePanel()
     const def = QUESTS['chasse-aux-monstres']!
-    const c = this.add.container(0, 0).setDepth(50)
+    const c = this.add.container(0, 0).setDepth(50).setScrollFactor(0)
     this.panel = c
     c.add(this.add.rectangle(480, 270, 560, 280, 0x0d1b2a, 0.96))
     c.add(this.add.text(480, 160, def.npcName, { fontSize: '22px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
@@ -613,7 +811,7 @@ export class TownScene extends Phaser.Scene {
 
   private openForgePanel(tab: 'craft' | 'reforge' | 'sell', page = 0) {
     this.closePanel()
-    const c = this.add.container(0, 0).setDepth(50)
+    const c = this.add.container(0, 0).setDepth(50).setScrollFactor(0)
     this.panel = c
     if (tab === 'craft') this.renderCraft(c, page)
     else if (tab === 'reforge') this.renderReforge(c, page)
