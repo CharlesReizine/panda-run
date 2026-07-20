@@ -46,6 +46,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   onLadder = false
   ladderCenterX = 0 // centre x de l'échelle courante : sert à recentrer le panda en grimpant
   inWater = false
+  // cascade REMONTABLE : dans une colonne de cascade (courant ascendant), on nage sans noyade et un
+  // léger courant nous pousse vers le haut → on la « remonte » comme une échelle d'eau.
+  inCascade = false
   private climbing = false
   // cycle d'escalade : phase (0/1) alternant deux poses de membres opposés, avancée par la
   // distance verticale réellement parcourue (climbAccum), pas par une horloge → fige à l'arrêt
@@ -476,7 +479,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     body.setAllowGravity(false)
     if (c.up || c.jump) this.setVelocityY(-SWIM_SPEED)
     else if (c.down) this.setVelocityY(SWIM_SPEED)
-    else this.setVelocityY(SWIM_DRIFT) // léger enfoncement, façon flottaison
+    // cascade : courant ASCENDANT au repos (on la remonte) ; bassin : léger enfoncement (flottaison)
+    else this.setVelocityY(this.inCascade ? -SWIM_SPEED * 0.5 : SWIM_DRIFT)
     this.wasGrounded = false
     if (!this.attacking) {
       if (c.left || c.right) this.play(this.anim('run'), true)

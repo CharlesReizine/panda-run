@@ -935,6 +935,18 @@ export class PreloadScene extends Phaser.Scene {
         g.fillStyle(0xff7043).fillEllipse(r, r + r / 1.5, r / 2, r / 6) // souffle de feu
         g.fillStyle(0xffca28, 0.7).fillCircle(r, s + 2, r / 1.4) // aura de braises au sol
         break
+      case 'corbeau': {
+        // oiseau (placeholder) : corps sombre fuselé, deux grandes ailes déployées en V, bec jaune,
+        // œil vif. Silhouette clairement AÉRIENNE (distincte des mobs au sol). Art Gemini plus tard.
+        g.fillStyle(this.shadeColor(m.color, 1.5)).fillTriangle(0, r - 4, r - 4, r - 2, 4, r + 10) // aile gauche déployée
+        g.fillStyle(this.shadeColor(m.color, 1.5)).fillTriangle(s, r - 4, r + 4, r - 2, s - 4, r + 10) // aile droite déployée
+        g.fillStyle(m.color).fillEllipse(r, r + 2, r / 1.3, r) // corps fuselé
+        g.fillStyle(this.shadeColor(m.color, 1.4)).fillEllipse(r, r - 4, r / 1.8, r / 1.6) // tête
+        g.fillStyle(0xffb300).fillTriangle(r + r / 3, r - 5, r + r / 3, r - 1, r + r / 1.3, r - 3) // bec
+        g.fillStyle(0xffffff).fillCircle(r + 2, r - 5, 2.5); g.fillStyle(0x000000).fillCircle(r + 3, r - 5, 1.2) // œil
+        g.fillStyle(this.shadeColor(m.color, 0.7)).fillTriangle(r - 2, s - 4, r + 2, s - 4, r, s + 4) // queue
+        break
+      }
       default:
         body(); eyes(); mouth()
     }

@@ -7,8 +7,20 @@ import {
   unreachableChests,
   oversizedGaps,
   oversizedLadders,
+  maxStackedTiers,
+  overStackedColumns,
+  openWaterHazards,
+  monstersOffSurface,
+  startExitProblems,
 } from '../../src/core/level-validator'
 import { MAX_LADDER_TILES } from '../../src/core/platforming'
+import { MONSTERS } from '../../src/data/monsters'
+
+// Niveaux construits par le KIT DE MODULES (docs/level-module-kit.md) : ils doivent respecter les
+// règles de jouabilité ET de cohérence supplémentaires du kit (les 15 autres niveaux, non refondus,
+// gardent seulement les garanties historiques ci-dessus).
+const MODULAR_IDS = ['zone1-1', 'zone1-2', 'zone1-3', 'zone1-4']
+const isAerial = (id: string) => !!MONSTERS[id]?.aerial
 
 // Garantit que CHAQUE niveau est physiquement jouable : toute plateforme est atteignable
 // (au sol, de proche en proche, ou en grimpant une échelle), aucune échelle ne débouche sur
@@ -45,6 +57,85 @@ describe('atteignabilité physique de chaque niveau', () => {
       expect(bad, `${level.id}: échelles interminables → ${JSON.stringify(bad)}`).toEqual([])
     })
   }
+})
+
+// ─── KIT DE MODULES : jouabilité + cohérence sur les niveaux modulaires (zone1-1..zone1-4) ──────
+describe('kit de modules — jouabilité + cohérence des niveaux modulaires', () => {
+  for (const id of MODULAR_IDS) {
+    const level = LEVELS[id]!
+
+    it(`${id} — ≤ 3 paliers empilés (silhouette collines, pas de tour)`, () => {
+      const over = overStackedColumns(level, 3)
+      expect(over, `${id}: colonnes > 3 paliers → ${JSON.stringify(over.slice(0, 8))}`).toEqual([])
+      expect(maxStackedTiers(level)).toBeLessThanOrEqual(3)
+    })
+
+    it(`${id} — toute eau enclose dans une cuve (marine/cascade, jamais de nappe libre)`, () => {
+      const bad = openWaterHazards(level)
+      expect(bad, `${id}: eau non enclose → ${JSON.stringify(bad)}`).toEqual([])
+    })
+
+    it(`${id} — chaque monstre terrestre posé sur une surface où patrouiller`, () => {
+      const bad = monstersOffSurface(level, isAerial)
+      expect(bad, `${id}: monstres mal posés → ${JSON.stringify(bad)}`).toEqual([])
+    })
+
+    it(`${id} — départ à mi-hauteur, sortie à une autre altitude`, () => {
+      const bad = startExitProblems(level)
+      expect(bad, `${id}: ${bad.join(' ; ')}`).toEqual([])
+    })
+
+    it(`${id} — au moins un plan d'eau marine ET une cascade quelque part dans la zone`, () => {
+      // (vérifié à l'échelle de la ZONE : chaque niveau a de l'eau, la zone couvre les deux formes)
+      const waters = (level.hazards ?? []).filter((h) => h.kind === 'water')
+      expect(waters.length, `${id}: aucune eau`).toBeGreaterThan(0)
+    })
+  }
+
+  it('la zone modulaire contient bassin marine ET cascade remontable', () => {
+    const allWaters = MODULAR_IDS.flatMap((id) => (LEVELS[id]!.hazards ?? []).filter((h) => h.kind === 'water'))
+    expect(allWaters.some((h) => h.water === 'basin'), 'aucun bassin marine').toBe(true)
+    expect(allWaters.some((h) => h.water === 'cascade'), 'aucune cascade').toBe(true)
+  })
+})
+
+// CAS SYNTHÉTIQUES DE REJET du kit : le validateur doit casser sur une cuve sans mur (nappe libre)
+// et sur 4 paliers empilés (une échelle de 14 est déjà rejetée plus bas par oversizedLadders).
+describe('kit de modules — cas de rejet synthétiques', () => {
+  it('cuve d’eau NON enclose (nappe libre) → rejetée', () => {
+    const bad: LevelDef = {
+      id: 'synthetique-nappe', name: 't', biome: 'plaine', widthTiles: 30, spawns: [], platforms: [],
+      hazards: [{ kind: 'water', x: 5, w: 8, top: 8, h: 5 }], // pas de champ water → nappe libre
+    }
+    expect(openWaterHazards(bad)).toHaveLength(1)
+  })
+
+  it('bassin marine (basin) et cascade → acceptés (enclos)', () => {
+    const ok: LevelDef = {
+      id: 'synthetique-cuve', name: 't', biome: 'plaine', widthTiles: 30, spawns: [], platforms: [],
+      hazards: [{ kind: 'water', x: 5, w: 8, top: 8, h: 5, water: 'basin' }, { kind: 'water', x: 20, w: 2, top: 6, h: 7, water: 'cascade' }],
+    }
+    expect(openWaterHazards(ok)).toEqual([])
+  })
+
+  it('4 paliers empilés à une colonne → rejeté (≤ 3 exigé)', () => {
+    // sol (row 14) + 3 plateformes qui couvrent toutes la colonne x=10 → 4 paliers
+    const bad: LevelDef = {
+      id: 'synthetique-4tiers', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],
+      platforms: [{ x: 8, y: 12, w: 6 }, { x: 8, y: 9, w: 6 }, { x: 8, y: 6, w: 6 }],
+    }
+    expect(maxStackedTiers(bad)).toBe(4)
+    expect(overStackedColumns(bad, 3).length).toBeGreaterThan(0)
+  })
+
+  it('3 paliers empilés (sol + 2 plateformes) → accepté', () => {
+    const ok: LevelDef = {
+      id: 'synthetique-3tiers', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],
+      platforms: [{ x: 8, y: 12, w: 6 }, { x: 8, y: 9, w: 6 }],
+    }
+    expect(maxStackedTiers(ok)).toBe(3)
+    expect(overStackedColumns(ok, 3)).toEqual([])
+  })
 })
 
 // PLAFOND DE LONGUEUR D'ÉCHELLE : aucune échelle ne doit dépasser MAX_LADDER_TILES. Une montée

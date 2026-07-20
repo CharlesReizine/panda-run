@@ -58,6 +58,11 @@ export class LevelScene extends Phaser.Scene {
   private waterRects: Phaser.Geom.Rectangle[] = []
   // rideaux de cascade (water:'waterfall') : défilés verticalement dans update pour l'effet de chute
   private waterfalls: Phaser.GameObjects.TileSprite[] = []
+  // CASCADES REMONTABLES (water:'cascade') : colonnes d'eau CLAIRE en cuve, à courant ASCENDANT — on
+  // les remonte comme une échelle sans jamais se noyer (distinctes des bassins marine). Zones de
+  // contact (cascadeRects) + rideaux défilés vers le HAUT (cascadeSprites).
+  private cascadeRects: Phaser.Geom.Rectangle[] = []
+  private cascadeSprites: Phaser.GameObjects.TileSprite[] = []
   // Plongée : réserve d'apnée restante (ms), accumulateurs de ticks de noyade et d'émission de
   // bulles, voile bleuté quand la tête est immergée, petite jauge d'apnée au-dessus de la tête.
   private breathMs = BREATH_MAX_MS
@@ -123,6 +128,8 @@ export class LevelScene extends Phaser.Scene {
     this.ladderRects = []
     this.waterRects = []
     this.waterfalls = []
+    this.cascadeRects = []
+    this.cascadeSprites = []
     // plongée : on entame chaque niveau souffle plein, sans dette de noyade ; les overlays
     // (voile, jauge) sont recréés plus bas (la scène est réutilisée → références remises à zéro)
     this.breathMs = BREATH_MAX_MS
@@ -316,6 +323,24 @@ export class LevelScene extends Phaser.Scene {
         // bassin d'écume au pied de la chute
         this.add.ellipse(xPx + wPx / 2, waterBottom * TILE + TILE, wPx + 20, 16, 0xe3f2fd, 0.4).setDepth(-1)
         this.waterRects.push(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))
+        continue
+      }
+
+      if (hz.water === 'cascade') {
+        // CASCADE REMONTABLE : colonne d'eau CLAIRE en CUVE de pierre (murs rigides gauche/droite +
+        // fond = sol) à courant ASCENDANT. On la remonte comme une échelle SANS jamais se noyer
+        // (cascadeRects, distinct des bassins). Rideau défilé vers le HAUT (signale la montée).
+        const col = this.add.tileSprite(xPx, topPx, wPx, heightPx, 'waterfall').setOrigin(0, 0).setDepth(-2).setTint(0x9fe0ff).setAlpha(0.85)
+        this.cascadeSprites.push(col)
+        // écume claire en tête de colonne (là où on émerge)
+        this.add.ellipse(xPx + wPx / 2, topPx, wPx + 12, 12, 0xe3f2fd, 0.5).setDepth(-1)
+        this.cascadeRects.push(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))
+        // cadre rocheux de la cuve (DÉCO, sans collision) : la cascade se remonte en y entrant par
+        // le côté depuis la corniche basse → pas de mur rigide qui bloquerait l'accès latéral.
+        for (const wx of [hz.x - 1, hz.x + hz.w]) {
+          if (wx < 0 || wx >= this.levelDef.widthTiles) continue
+          this.add.tileSprite(wx * TILE, topPx, TILE / 2, heightPx, 'basin-wall').setOrigin(0, 0).setDepth(-3).setAlpha(0.9)
+        }
         continue
       }
 
@@ -905,6 +930,23 @@ export class LevelScene extends Phaser.Scene {
       save(getPlayer())
       this.showGameOver()
     }
+  }
+
+  // Y a-t-il une SURFACE SOLIDE (plateforme, pont, ou sol non troué) dont le dessus est ~au niveau
+  // de footYPx à la colonne xPx ? Utilisé par la patrouille des monstres pour la détection de rebord
+  // (demi-tour avant de tomber). Lecture pure de la géométrie statique du niveau.
+  floorAt(xPx: number, footYPx: number): boolean {
+    const tileX = Math.floor(xPx / TILE)
+    if (tileX < 0 || tileX >= this.levelDef.widthTiles) return false
+    for (const p of this.levelDef.platforms) {
+      if (tileX >= p.x && tileX < p.x + p.w && Math.abs(p.y * TILE - footYPx) <= TILE * 0.9) return true
+    }
+    for (const b of this.levelDef.bridges ?? []) {
+      if (tileX >= b.x && tileX < b.x + b.w && Math.abs(b.y * TILE - footYPx) <= TILE) return true
+    }
+    const isGap = (this.levelDef.gaps ?? []).some((g) => tileX >= g.x && tileX < g.x + g.w)
+    if (!isGap && Math.abs(this.groundRow * TILE - footYPx) <= TILE * 1.2) return true
+    return false
   }
 
   // le centre du panda est-il au-dessus d'un trou du sol (colonne de vide) ?
@@ -2276,8 +2318,10 @@ export class LevelScene extends Phaser.Scene {
     if (this.bgClouds) this.bgClouds.tilePositionX = sx * 0.1
     if (this.bgFar) this.bgFar.tilePositionX = sx * 0.3
     if (this.bgNear) this.bgNear.tilePositionX = sx * 0.55
-    // cascades : le rideau d'eau défile vers le bas (effet de chute continue)
+    // cascades décoratives : le rideau d'eau défile vers le bas (effet de chute continue)
     for (const wf of this.waterfalls) wf.tilePositionY += delta * 0.4
+    // cascades REMONTABLES : le rideau défile vers le HAUT (courant ascendant)
+    for (const cs of this.cascadeSprites) cs.tilePositionY -= delta * 0.35
     if (this.aim) this.updateAimReticle()
     if (this.player.hp <= 0) return
     // chute mortelle dans un trou (ou sous le bas du monde) → mort ; peut réapparaître au checkpoint
@@ -2288,7 +2332,10 @@ export class LevelScene extends Phaser.Scene {
     const onLad = this.ladderRects.find((r) => r.contains(this.player.x, this.player.y))
     this.player.onLadder = !!onLad
     if (onLad) this.player.ladderCenterX = onLad.centerX
-    this.player.inWater = this.waterRects.some((r) => r.contains(this.player.x, this.player.y))
+    // cascade REMONTABLE : on nage/grimpe dedans sans noyade (inCascade) ; le bassin marine, lui,
+    // noie (waterRects). inWater (mécanique de nage) couvre les deux.
+    this.player.inCascade = this.cascadeRects.some((r) => r.contains(this.player.x, this.player.y))
+    this.player.inWater = this.player.inCascade || this.waterRects.some((r) => r.contains(this.player.x, this.player.y))
     this.updateWater(delta)
     if (this.time.now < this.dashUntil) {
       // pendant la roulade : vitesse imposée, contrôles suspendus (le saut/déplacement

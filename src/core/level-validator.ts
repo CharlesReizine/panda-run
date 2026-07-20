@@ -58,6 +58,12 @@ function ladderFootReachable(l: Ladder, platforms: Plat[], reachable: Set<number
 // grimpant une échelle dont le pied est accessible. Point fixe (itération jusqu'à stabilité).
 export function unreachablePlatforms(level: LevelDef): Plat[] {
   const platforms = level.platforms
+  // Les PONTS sont des surfaces marchables (one-way) au même titre que les plateformes : on les
+  // inclut dans le graphe d'atteignabilité (comme relais), sinon une traversée qui passe par un
+  // pont (ex. franchir une cuve) ferait croire la rive opposée injoignable. On ne RAPPORTE que les
+  // plateformes injoignables ; les ponts ne servent que de relais.
+  const bridges = (level.bridges ?? []).map((b) => ({ x: b.x, y: b.y, w: b.w }))
+  const nodes: Plat[] = [...platforms, ...bridges]
   const ladders = (level.ladders ?? []) as Ladder[]
   const groundRow = groundRowFor(level.heightTiles)
   const ground: Plat = { x: 0, y: groundRow, w: level.widthTiles }
@@ -65,14 +71,14 @@ export function unreachablePlatforms(level: LevelDef): Plat[] {
   let changed = true
   while (changed) {
     changed = false
-    const surfaces = [ground, ...[...reachable].map((j) => platforms[j]!)]
-    for (let i = 0; i < platforms.length; i++) {
+    const surfaces = [ground, ...[...reachable].map((j) => nodes[j]!)]
+    for (let i = 0; i < nodes.length; i++) {
       if (reachable.has(i)) continue
-      const b = platforms[i]!
-      // (1) atteignable par saut depuis le sol ou une plateforme déjà atteignable
+      const b = nodes[i]!
+      // (1) atteignable par saut depuis le sol ou une surface déjà atteignable
       if (surfaces.some((a) => canReach(a.y, b, hgap(a, b)))) { reachable.add(i); changed = true; continue }
-      // (2) sommet d'une échelle dont le pied est accessible
-      if (ladders.some((l) => isLadderTop(b, l) && ladderFootReachable(l, platforms, reachable, groundRow))) {
+      // (2) sommet d'une échelle dont le pied est accessible (plateformes uniquement)
+      if (i < platforms.length && ladders.some((l) => isLadderTop(b, l) && ladderFootReachable(l, platforms, reachable, groundRow))) {
         reachable.add(i); changed = true
       }
     }
@@ -123,6 +129,84 @@ export function oversizedLadders(level: LevelDef): OversizedLadder[] {
 export function oversizedGaps(level: LevelDef): GapProblem[] {
   const max = maxJumpGapPx()
   return (level.gaps ?? []).filter((g) => g.w * TILE > max).map((g) => ({ x: g.x, w: g.w }))
+}
+
+// ─── VALIDATEURS DU KIT DE MODULES (jouabilité + cohérence, cf. docs/level-module-kit.md) ────
+
+export interface TierProblem { x: number; tiers: number }
+export interface WaterProblem { x: number; w: number; water?: string }
+export interface SpawnProblem { monsterId: string; x: number; y?: number; reason: string }
+
+// Nombre MAXIMAL de paliers empilés (plateformes/ponts + sol) à une colonne x. Une grande verticale
+// (tour d'échelles) empile beaucoup de paliers ; le kit impose ≤ 3 (silhouette collines).
+export function maxStackedTiers(level: LevelDef): number {
+  const groundRow = groundRowFor(level.heightTiles)
+  const isGap = (x: number) => (level.gaps ?? []).some((g) => x >= g.x && x < g.x + g.w)
+  const surfaces = [
+    ...level.platforms.map((p) => ({ x: p.x, w: p.w })),
+    ...(level.bridges ?? []).map((b) => ({ x: b.x, w: b.w })),
+  ]
+  let max = 0
+  for (let x = 0; x < level.widthTiles; x++) {
+    let n = isGap(x) ? 0 : 1 // le sol compte comme 1 palier (sauf trou)
+    for (const s of surfaces) if (x >= s.x && x < s.x + s.w) n++
+    if (n > max) max = n
+  }
+  return max
+}
+
+// Renvoie les colonnes où plus de `limit` paliers sont empilés (défaut 3).
+export function overStackedColumns(level: LevelDef, limit = 3): TierProblem[] {
+  const groundRow = groundRowFor(level.heightTiles)
+  const isGap = (x: number) => (level.gaps ?? []).some((g) => x >= g.x && x < g.x + g.w)
+  const surfaces = [
+    ...level.platforms.map((p) => ({ x: p.x, w: p.w })),
+    ...(level.bridges ?? []).map((b) => ({ x: b.x, w: b.w })),
+  ]
+  const out: TierProblem[] = []
+  for (let x = 0; x < level.widthTiles; x++) {
+    let n = isGap(x) ? 0 : 1
+    for (const s of surfaces) if (x >= s.x && x < s.x + s.w) n++
+    if (n > limit) out.push({ x, tiers: n })
+  }
+  void groundRow
+  return out
+}
+
+// Eau NON ENCLOSE dans une cuve de pierre : le kit n'autorise que 'basin' (marine) et 'cascade' —
+// des formes contenues (murs/fond posés par le moteur). Une nappe LIBRE (water absent) ou une
+// 'waterfall' décorative n'est pas une cuve jouable → rejetée pour un niveau modulaire.
+export function openWaterHazards(level: LevelDef): WaterProblem[] {
+  return (level.hazards ?? [])
+    .filter((h) => h.kind === 'water' && h.water !== 'basin' && h.water !== 'cascade')
+    .map((h) => ({ x: h.x, w: h.w, water: h.water }))
+}
+
+// Monstres TERRESTRES (non aériens) mal posés : un spawn avec y doit reposer sur une surface
+// (plateforme) présente à cette rangée, assez large pour patrouiller (≥ minWidth tuiles). Les
+// oiseaux (aerial) volent → exclus. Les spawns sans y sont au sol (toujours valides).
+export function monstersOffSurface(level: LevelDef, isAerial: (id: string) => boolean, minWidth = 3): SpawnProblem[] {
+  const out: SpawnProblem[] = []
+  for (const s of level.spawns) {
+    if (s.y === undefined || isAerial(s.monsterId)) continue
+    const plat = level.platforms.find((p) => s.x >= p.x - 1 && s.x <= p.x + p.w && p.y === s.y)
+    if (!plat) { out.push({ monsterId: s.monsterId, x: s.x, y: s.y, reason: 'aucune-surface' }); continue }
+    if (plat.w < minWidth) out.push({ monsterId: s.monsterId, x: s.x, y: s.y, reason: 'surface-trop-etroite' })
+  }
+  return out
+}
+
+// Problèmes de DÉPART / SORTIE : le départ doit exister à MI-HAUTEUR (ni collé au sol, ni au
+// plafond) et la sortie doit exister à une altitude NETTEMENT différente du départ (≥ 3 rangées).
+export function startExitProblems(level: LevelDef, minAltGap = 3): string[] {
+  const groundRow = groundRowFor(level.heightTiles)
+  const out: string[] = []
+  if (!level.start) { out.push('départ absent'); return out }
+  if (!level.exit) { out.push('sortie absente'); return out }
+  if (level.start.y >= groundRow) out.push('départ collé au sol (pas mi-hauteur)')
+  if (level.start.y <= 2) out.push('départ collé au plafond (pas mi-hauteur)')
+  if (Math.abs(level.start.y - level.exit.y) < minAltGap) out.push('sortie à la même altitude que le départ')
+  return out
 }
 
 // Coffres posés sur plateforme (props avec y) dont la plateforme est absente ou injoignable.

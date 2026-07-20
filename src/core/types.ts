@@ -84,5 +84,9 @@ export interface MonsterDef {
   behavior: MonsterBehavior
   boss?: boolean
   mvp?: boolean // élite rare : stats renforcées, drops rares, ni mob ni boss
+  // monstre VOLANT (oiseau) : gravité coupée, patrouille en sinus dans les airs et PIQUE vers le
+  // joueur par à-coups puis remonte. Ignore sol/rebords (voir Enemy). Exempté de la contrainte
+  // « posé sur une surface » des validateurs de niveau.
+  aerial?: boolean
   drops: DropEntry[]
 }

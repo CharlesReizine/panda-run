@@ -43,6 +43,15 @@ const FLIP_THRESHOLD = 20
 // fraction de la vitesse nominale à laquelle un monstre apeuré (Folie enragée) fuit le joueur :
 // assez lent pour rester rattrapable et frappable pendant qu'il détale.
 const FEAR_SPEED_MULT = 0.45
+// patrouille au repos (hors aggro) des monstres terrestres : ils arpentent leur corniche à vitesse
+// réduite, font demi-tour au MUR et au REBORD (détection de vide devant) → ne tombent JAMAIS.
+const PATROL_SPEED_MULT = 0.6
+// oiseau : vol en sinus (amplitude/période) + piqué vers le joueur par à-coups puis remontée.
+const BIRD_DIVE_COOLDOWN = 2200
+const BIRD_DIVE_MS = 620
+const BIRD_WANDER_AMP = 60 // px d'oscillation verticale du vol de croisière
+// avancée du point de sonde de rebord au-delà du bord du corps (px) pour la détection de vide devant.
+const TILE_PROBE = 20
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   monster: MonsterDef
@@ -68,11 +77,27 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   // (défense effective halvée) jusqu'à cette échéance. Les boss en sont toujours immunisés.
   private fearedUntil = 0
   private fearFx: Phaser.GameObjects.Text | null = null
+  // patrouille sûre (monstres terrestres au repos) : sens courant + demi-tour au bord/mur.
+  private patrolDir: 1 | -1 = 1
+  // oiseau : point d'attache du vol de croisière + cadence de piqué.
+  private homeX = 0
+  private homeY = 0
+  private nextDiveAt = 0
+  private diveUntil = 0
 
   constructor(scene: LevelScene, x: number, y: number, def: MonsterDef) {
     super(scene, x, y, `monster-${def.id}`)
     scene.add.existing(this)
     scene.physics.add.existing(this)
+    this.homeX = x; this.homeY = y
+    this.patrolDir = (Math.round(x / 32) % 2 === 0 ? 1 : -1)
+    // OISEAU : vol libre — gravité coupée et AUCUNE collision terrain (il traverse le décor), il ne
+    // se déplace que par sa vélocité. Le contact avec le joueur reste géré par overlap.
+    if (def.aerial) {
+      const b = this.body as Phaser.Physics.Arcade.Body
+      b.setAllowGravity(false)
+      b.checkCollision.none = true
+    }
     // borne tout ennemi dans l'arène : les bornes du monde physique valent (0..widthPx). Sans ça,
     // un chargeur lancé (vitesse persistante, drag nul) glisse hors de la zone jouable et ne revient
     // jamais — c'est le bug du boss « parti tout seul » hors écran.
@@ -186,6 +211,36 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     p.launch() // relance la vélocité (le groupe l'a remise à 0 sur add)
   }
 
+  // Y a-t-il un sol à ~1 tuile DEVANT (dans le sens `dir`), au niveau des pieds ? Sert à la
+  // patrouille sûre : un monstre terrestre fait demi-tour dès qu'il n'y a plus de sol devant lui
+  // (bord de corniche, trou) → il ne tombe JAMAIS. S'appuie sur la géométrie statique du niveau.
+  private floorAhead(dir: number): boolean {
+    const body = this.body as Phaser.Physics.Arcade.Body
+    const probeX = this.x + dir * (this.width * 0.5 + TILE_PROBE)
+    return this.levelScene.floorAt(probeX, body.bottom + 2)
+  }
+
+  // Vol de l'oiseau : croisière en sinus autour de son point d'attache, PIQUÉ vers le joueur par
+  // à-coups (dive) puis remontée. Gravité déjà coupée (constructeur). Jamais de collision terrain.
+  private flyUpdate(t: number, dist: number, dirX: number, player: { x: number; y: number }) {
+    const speed = this.monster.speed
+    if (dist < AGGRO_RANGE && t > this.nextDiveAt && t > this.diveUntil) {
+      this.diveUntil = t + BIRD_DIVE_MS
+      this.nextDiveAt = t + BIRD_DIVE_COOLDOWN
+    }
+    if (t < this.diveUntil) {
+      // piqué : fond droit sur le joueur
+      const dy = Math.sign(player.y - this.y) || 1
+      this.setVelocity(dirX * speed * 1.6, dy * speed * 1.4)
+    } else {
+      // croisière : oscille horizontalement autour de home + houle verticale ; dérive vers le joueur
+      const drift = dist < AGGRO_RANGE ? dirX * speed * 0.4 : Math.cos(t / 700) * speed * 0.5
+      this.setVelocityX(drift)
+      const targetY = this.homeY + Math.sin(t / 500) * BIRD_WANDER_AMP
+      this.setVelocityY(Phaser.Math.Clamp((targetY - this.y) * 3, -speed, speed))
+    }
+  }
+
   preUpdate(t: number, d: number) {
     super.preUpdate(t, d)
     const player = this.levelScene.player
@@ -202,6 +257,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // rattrapable pour le taper — et n'attaque plus. Les boss n'y sont jamais soumis.
     const feared = !this.monster.boss && t < this.fearedUntil
 
+    // OISEAU : IA de vol dédiée, court-circuite tout l'arbre terrestre ci-dessous.
+    if (this.monster.aerial) {
+      if (rooted) this.setVelocity(0, 0)
+      else if (feared) { this.setVelocity(-dir * this.monster.speed * FEAR_SPEED_MULT, 0) }
+      else this.flyUpdate(t, dist, dir, player)
+      this.updateVisuals(t)
+      return
+    }
+
     if (!rooted && feared) {
       this.setVelocityX(-dir * this.monster.speed * FEAR_SPEED_MULT)
     } else if (!rooted && dist < AGGRO_RANGE) {
@@ -214,8 +278,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         } else if (!this.isCharging) {
           // entre deux charges : on marche vers le joueur au lieu de conserver la vitesse de la
           // charge précédente (sinon dérive infinie hors de la zone → le boss « s'enfuit »),
-          // mais on s'arrête au corps-à-corps au lieu de le pousser sans fin
-          this.setVelocityX(dist > stopDist ? dir * this.monster.speed : 0)
+          // mais on s'arrête au corps-à-corps au lieu de le pousser sans fin ; borné au rebord
+          // (pas de chute bête si on est au sol et qu'il n'y a plus de sol devant)
+          const grounded = (this.body as Phaser.Physics.Arcade.Body).blocked.down
+          const step = dist > stopDist && !(grounded && !this.floorAhead(dir))
+          this.setVelocityX(step ? dir * this.monster.speed : 0)
         }
       } else if (this.monster.behavior === 'projectile' && t > this.nextActionAt) {
         this.fireProjectile()
@@ -237,17 +304,40 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         }
       } else if (this.monster.behavior !== 'projectile') {
         // 'contact' (et tout behavior inconnu non géré au-dessus) : avance vers le joueur puis
-        // S'ARRÊTE au corps-à-corps (dégâts de contact) au lieu de foncer/pousser sans fin
-        this.setVelocityX(dist > stopDist ? dir * this.monster.speed : 0)
+        // S'ARRÊTE au corps-à-corps (dégâts de contact). Borné au rebord : au sol, s'il n'y a plus
+        // de sol devant, on ne franchit pas le vide (pas de chute bête pendant la poursuite).
+        const grounded = (this.body as Phaser.Physics.Arcade.Body).blocked.down
+        const step = dist > stopDist && !(grounded && !this.floorAhead(dir))
+        this.setVelocityX(step ? dir * this.monster.speed : 0)
       }
     } else if (!rooted && this.monster.boss) {
       // hors aggro, le boss revient TOUJOURS vers le joueur tant qu'il est vivant : il ne
       // « s'endort » jamais hors écran et rejoint l'arène du joueur
       this.setVelocityX(dir * this.monster.speed)
+    } else if (!rooted && this.monster.speed > 0 && (this.monster.behavior === 'contact' || this.monster.behavior === 'charge')) {
+      // PATROUILLE SÛRE (hors aggro) : le monstre terrestre arpente sa corniche à vitesse réduite,
+      // demi-tour au MUR et au REBORD (plus de sol devant → il se retourne AVANT de tomber). Il
+      // ne quitte jamais sa plateforme.
+      const body = this.body as Phaser.Physics.Arcade.Body
+      const wall = this.patrolDir < 0 ? body.blocked.left : body.blocked.right
+      if (body.blocked.down && (wall || !this.floorAhead(this.patrolDir))) this.patrolDir = this.patrolDir === 1 ? -1 : 1
+      this.setVelocityX(this.patrolDir * this.monster.speed * PATROL_SPEED_MULT)
     } else {
-      // hors aggro (ou immobilisé) : on s'arrête net — pas de dérive
+      // hors aggro (immobiles : mandragore/casters/gardiens) : on s'arrête net — pas de dérive
       this.setVelocityX(0)
     }
+
+    this.updateVisuals(t)
+  }
+
+  // Tout le rendu flottant du monstre (orientation, dandinement, barre de vie, plaque de niveau,
+  // zzz, liserés de piège/terreur, halo d'élite). Extrait pour être partagé par l'IA terrestre ET
+  // l'IA de vol de l'oiseau.
+  private updateVisuals(t: number) {
+    const player = this.levelScene.player
+    const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y)
+    const rooted = t < this.rootedUntil
+    const feared = !this.monster.boss && t < this.fearedUntil
 
     // marche : dandinement + regarde dans son sens de déplacement ; sinon respiration
     const vx = (this.body as Phaser.Physics.Arcade.Body).velocity.x
