@@ -331,7 +331,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     for (const g of piece.gaps) gaps.push({ x: x0 + g.x, w: g.w })
     for (const s of piece.spikes) hazards.push({ kind: 'spikes', x: x0 + s.x, w: s.w })
     for (const wtr of piece.waters) {
-      const top = row(wtr.bankAlt) + 1 // surface d'eau juste sous les berges
+      const top = row(wtr.bankAlt) // surface d'eau À RAS du rebord (berges) — pas de bande d'air au-dessus
       const depth = groundRow - top // jusqu'au fond (sol)
       hazards.push({ kind: 'water', x: x0 + wtr.x, w: wtr.w, top, h: Math.max(2, depth), water: wtr.kind === 'marine' ? 'basin' : 'cascade' })
     }

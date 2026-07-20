@@ -72,6 +72,10 @@ export class LevelScene extends Phaser.Scene {
   private breathBarBg: Phaser.GameObjects.Rectangle | null = null
   private breathBar: Phaser.GameObjects.Rectangle | null = null
   private lastCheckpoint: { x: number; y: number } | null = null
+  // haut de la hitbox (px) au dernier contact avec le sol/une plateforme. Sert à la mort par trou :
+  // dès que les pieds sont passés nettement SOUS ce niveau marchable LOCAL au-dessus d'un trou → mort
+  // (robuste aux mondes à modules où la surface locale n'est pas au groundRow global).
+  private lastGroundedTop = 0
   // Géométrie verticale du monde courant : rangée de sol (bas du monde) et hauteur en pixels.
   // Recalculées à chaque niveau depuis levelDef.heightTiles (défaut 16 → groundRow 14, monde 540).
   private groundRow = groundRowFor()
@@ -232,6 +236,8 @@ export class LevelScene extends Phaser.Scene {
     const startX = start ? start.x * TILE + TILE / 2 : this.spawnX()
     const startY = (start ? start.y : this.groundRow) * TILE - 40
     this.player = new Player(this, startX, startY)
+    // le joueur démarre posé sur son rebord de départ : on amorce le repère de sol local dessus
+    this.lastGroundedTop = (this.player.body as Phaser.Physics.Arcade.Body).top
     // PLAFOND TRAVERSABLE (fini le rebond) : en Phaser 4, la collision aux bornes du monde est
     // arbitrée par world.checkCollision (GLOBAL, partagé avec les ennemis) — désactiver le bord
     // haut du joueur via body.checkCollision.up ne suffit donc pas. On donne au JOUEUR un
@@ -336,10 +342,12 @@ export class LevelScene extends Phaser.Scene {
         this.add.ellipse(xPx + wPx / 2, topPx, wPx + 12, 12, 0xe3f2fd, 0.5).setDepth(-1)
         this.cascadeRects.push(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))
         // cadre rocheux de la cuve (DÉCO, sans collision) : la cascade se remonte en y entrant par
-        // le côté depuis la corniche basse → pas de mur rigide qui bloquerait l'accès latéral.
+        // le côté depuis la corniche basse → pas de mur rigide qui bloquerait l'accès latéral. Parois
+        // pleine tuile CONTIGUËS à la colonne d'eau (bord intérieur collé au bord de l'eau) → aucun
+        // liseré d'air entre le mur et la flotte.
         for (const wx of [hz.x - 1, hz.x + hz.w]) {
           if (wx < 0 || wx >= this.levelDef.widthTiles) continue
-          this.add.tileSprite(wx * TILE, topPx, TILE / 2, heightPx, 'basin-wall').setOrigin(0, 0).setDepth(-3).setAlpha(0.9)
+          this.add.tileSprite(wx * TILE, topPx, TILE, heightPx, 'basin-wall').setOrigin(0, 0).setDepth(-3).setAlpha(0.9)
         }
         continue
       }
@@ -954,23 +962,28 @@ export class LevelScene extends Phaser.Scene {
     return (this.levelDef.gaps ?? []).some((g) => x >= g.x * TILE && x < (g.x + g.w) * TILE)
   }
 
-  // Chute MORTELLE dans un trou (appelé chaque frame). Le panda meurt s'il est tombé sous le
-  // niveau du sol AU-DESSUS d'un trou (ses pieds/tête passés sous la surface, il n'y a pas de sol
-  // pour l'arrêter), ou s'il a atteint le bas du monde. Réutilise le chemin de mort standard
-  // (K.O. immédiat → checkpoint ou game over, comme les pics). Respecte le god mode.
+  // Chute MORTELLE dans un trou (appelé chaque frame). Le panda meurt dès qu'il est CLAIREMENT passé
+  // sous le rebord marchable LOCAL (le dernier sol touché) au-dessus d'un trou — donc rapidement, sans
+  // attendre le fond du monde, y compris dans les mondes à modules où la surface locale n'est pas au
+  // groundRow global. `belowWorld` (fond du monde) reste un filet de sécurité. Contrairement aux autres
+  // morts (pics/monstres → checkpoint/game over), une chute dans un trou RECOMMENCE LE NIVEAU AU DÉBUT.
   private checkPitDeath() {
     if ((globalThis as { __pandaGodMode?: boolean }).__pandaGodMode) return
     if (this.player.hp <= 0) return
     const body = this.player.body as Phaser.Physics.Arcade.Body
-    // « sous la surface » : la TÊTE (haut de la hitbox) est passée sous la ligne de sol +1 rangée
-    const belowSurface = body.top > (this.groundRow + 1) * TILE
+    // passé nettement (≈2,5 tuiles) sous le dernier rebord marchable local, au-dessus d'une colonne de trou
+    const belowLocal = this.overGap(this.player.x) && body.top > this.lastGroundedTop + TILE * 2.5
     const belowWorld = body.bottom >= this.worldH
-    if (!((this.overGap(this.player.x) && belowSurface) || belowWorld)) return
-    this.player.takeDamage(this.player.hp) // chute mortelle : K.O. immédiat
+    if (!(belowLocal || belowWorld)) return
+    // MORT PAR TROU : K.O. + on RECOMMENCE LE NIVEAU AU DÉBUT (point de départ), jamais au checkpoint
+    this.player.takeDamage(this.player.hp)
     audio.playSfx('player-death')
-    if (this.lastCheckpoint) { this.respawnAtCheckpoint(); return }
-    save(getPlayer())
-    this.showGameOver()
+    this.scene.restart({
+      levelId: this.levelDef.id,
+      fromNode: this.fromNode ?? undefined,
+      targetNode: this.targetNode ?? undefined,
+      dir: this.dir,
+    })
   }
 
   // une bulle qui monte depuis la tête du panda et s'estompe (réutilise la texture fx-bubble,
@@ -2324,7 +2337,11 @@ export class LevelScene extends Phaser.Scene {
     for (const cs of this.cascadeSprites) cs.tilePositionY -= delta * 0.35
     if (this.aim) this.updateAimReticle()
     if (this.player.hp <= 0) return
-    // chute mortelle dans un trou (ou sous le bas du monde) → mort ; peut réapparaître au checkpoint
+    // repère de sol LOCAL : mémorise la hauteur de la hitbox à chaque contact avec le sol/plateforme
+    // (sert à la mort par trou, robuste aux mondes à modules)
+    const pbody = this.player.body as Phaser.Physics.Arcade.Body
+    if (pbody.blocked.down || pbody.touching.down) this.lastGroundedTop = pbody.top
+    // chute mortelle dans un trou (sous le rebord local, ou sous le bas du monde) → mort + recommence au début
     this.checkPitDeath()
     if (this.player.hp <= 0) return
     this.player.regenEnergy(delta)
