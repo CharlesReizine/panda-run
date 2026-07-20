@@ -1037,12 +1037,14 @@ export class LevelScene extends Phaser.Scene {
   // croissant de coup visible même dans le vide + petit élan du panda ; en mode "intense"
   // (gros coup), double croissant + léger tremblement de caméra
   private slashFx(cx: number, cy: number, w: number, color: number, intense = false) {
+    const f = this.player.facing
     const drawCrescent = (offsetDeg: number, scaleMul: number, alpha: number) => {
       const arc = this.add.graphics({ x: cx, y: cy }).setDepth(5)
       arc.lineStyle(intense ? 6 : 5, color, alpha).beginPath()
       arc.arc(0, 0, (w * 0.5) * scaleMul, Phaser.Math.DegToRad(-70 + offsetDeg), Phaser.Math.DegToRad(70 + offsetDeg), false)
       arc.strokePath()
-      this.tweens.add({ targets: arc, scale: 1.4, alpha: 0, duration: 170, onComplete: () => arc.destroy() })
+      arc.scaleX = f // mirror le croissant selon le sens du regard (sinon il ouvre toujours vers la droite)
+      this.tweens.add({ targets: arc, scaleX: 1.4 * f, scaleY: 1.4, alpha: 0, duration: 170, onComplete: () => arc.destroy() })
     }
     drawCrescent(0, 1, 0.95)
     if (intense) drawCrescent(16, 0.72, 0.55)
