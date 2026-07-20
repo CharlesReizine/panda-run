@@ -226,7 +226,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const cornW = 5
       const upW = Math.max(4, Math.min(Math.floor(w * 0.3), w - L - 2 - cornW - 2))
       p.platforms.push({ x: 0, alt: low, w: L }) // corniche basse d'accès
-      p.waters.push({ x: L, w: 2, kind: 'cascade', bankAlt: top }) // colonne de cascade (remontée fun)
+      p.waters.push({ x: L, w: 2, kind: 'cascade', bankAlt: top }) // colonne de cascade (remontée fun + chute mortelle au fond)
       p.platforms.push(...ramp(L + 2, upW, low, top)) // rampe montante (accès garanti), sautée par-dessus la colonne
       const topX = L + 2 + upW
       p.platforms.push({ x: topX, alt: top, w: cornW }) // corniche haute (sortie de cascade)
@@ -335,8 +335,17 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     for (const s of piece.spikes) hazards.push({ kind: 'spikes', x: x0 + s.x, w: s.w })
     for (const wtr of piece.waters) {
       const top = row(wtr.bankAlt) // surface d'eau À RAS du rebord (berges) — pas de bande d'air au-dessus
-      const depth = groundRow - top // jusqu'au fond (sol)
-      hazards.push({ kind: 'water', x: x0 + wtr.x, w: wtr.w, top, h: Math.max(2, depth), water: wtr.kind === 'marine' ? 'basin' : 'cascade' })
+      if (wtr.kind === 'cascade') {
+        // CASCADE claire REMONTABLE : elle COULE JUSQU'AU BAS DE LA CARTE (rangée heightTiles), au
+        // DESSUS DU VIDE (aucun sol dessous) — la descendre jusqu'au fond = chute mortelle
+        // (checkPitDeath). Aucune pierre/cuve : c'est de l'eau qui s'écoule, pas un bassin.
+        hazards.push({ kind: 'water', x: x0 + wtr.x, w: wtr.w, top, h: Math.max(2, heightTiles - top), water: 'cascade' })
+        gaps.push({ x: x0 + wtr.x, w: wtr.w }) // VIDE sous la cascade → descendre au fond = mort
+      } else {
+        // LAC marine (bassin) : le FOND repose TOUJOURS sur le SOL PLEIN, sans le moindre espace vide.
+        // On étend l'eau jusqu'à recouvrir la surface du sol (rangée groundRow) → jamais d'eau qui vole.
+        hazards.push({ kind: 'water', x: x0 + wtr.x, w: wtr.w, top, h: Math.max(2, groundRow + 1 - top), water: 'basin' })
+      }
     }
     for (const s of piece.spawns) spawns.push({ monsterId: s.monsterId, x: x0 + s.x, ...(s.alt !== undefined ? { y: row(s.alt) } : {}) })
     for (const pr of piece.props) props.push({ kind: pr.kind, x: x0 + pr.x, ...(pr.alt !== undefined ? { y: row(pr.alt) } : {}) })

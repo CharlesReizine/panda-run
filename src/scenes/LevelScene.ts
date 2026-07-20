@@ -199,13 +199,27 @@ export class LevelScene extends Phaser.Scene {
         runA = -1
       }
     }
-    // bords de trou marqués : le sol s'arrête NET sur une fine paroi sombre de chaque côté du
-    // vide → le danger se voit avant d'y arriver.
-    for (const g of this.levelDef.gaps ?? []) {
+    // bords de trou marqués : le sol s'arrête NET sur une fine paroi sombre → le danger se voit
+    // avant d'y arriver. Les trous CONTIGUS sont FUSIONNÉS en un seul grand trou (plus de barre
+    // verticale entre deux trous voisins) : on ne dessine la paroi qu'aux EXTRÉMITÉS extérieures du
+    // trou global. Les colonnes couvertes par une CASCADE (eau qui coule dans le vide) sont exclues :
+    // c'est l'eau qui signale le vide, pas une paroi sombre.
+    const cascadeRanges = (this.levelDef.hazards ?? [])
+      .filter((h) => h.kind === 'water' && h.water === 'cascade')
+      .map((h) => ({ x: h.x, end: h.x + h.w }))
+    const sortedGaps = [...(this.levelDef.gaps ?? [])].sort((a, b) => a.x - b.x)
+    const mergedGaps: { x: number; end: number }[] = []
+    for (const g of sortedGaps) {
+      const last = mergedGaps[mergedGaps.length - 1]
+      if (last && g.x <= last.end) last.end = Math.max(last.end, g.x + g.w)
+      else mergedGaps.push({ x: g.x, end: g.x + g.w })
+    }
+    for (const m of mergedGaps) {
+      if (cascadeRanges.some((c) => m.x >= c.x && m.end <= c.end)) continue
       const topY = this.groundRow * TILE + TILE / 2
       const wallH = 2 * TILE
-      this.add.rectangle(g.x * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(1, 0).setDepth(-3)
-      this.add.rectangle((g.x + g.w) * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(0, 0).setDepth(-3)
+      this.add.rectangle(m.x * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(1, 0).setDepth(-3)
+      this.add.rectangle(m.end * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(0, 0).setDepth(-3)
     }
     // plateformes surélevées : on les traverse en montant et on se pose dessus en retombant (voir
     // landsFromAbove). Rendu en UN TileSprite par plateforme ; collision en UN corps statique par
@@ -325,21 +339,25 @@ export class LevelScene extends Phaser.Scene {
       }
 
       if (hz.water === 'cascade') {
-        // CASCADE REMONTABLE : colonne d'eau CLAIRE en CUVE de pierre (murs rigides gauche/droite +
-        // fond = sol) à courant ASCENDANT. On la remonte comme une échelle SANS jamais se noyer
-        // (cascadeRects, distinct des bassins). Rideau défilé vers le HAUT (signale la montée).
-        const col = this.add.tileSprite(xPx, topPx, wPx, heightPx, 'waterfall').setOrigin(0, 0).setDepth(-2).setTint(0x9fe0ff).setAlpha(0.85)
+        // CASCADE REMONTABLE : colonne d'EAU CLAIRE qui COULE — AUCUNE pierre, aucun cadre, aucune
+        // cuve. On la remonte comme une échelle SANS jamais se noyer (cascadeRects, distinct des
+        // bassins marine). Le rideau DÉFILE vers le bas (écoulement visible, cf. update). L'eau
+        // descend jusqu'au BAS DE LA CARTE au-dessus du VIDE (h porté jusqu'à worldH par
+        // l'assembleur) → y descendre jusqu'au fond = chute mortelle (checkPitDeath).
+        const col = this.add.tileSprite(xPx, topPx, wPx, heightPx, 'waterfall').setOrigin(0, 0).setDepth(-2).setTint(0xa9e8ff).setAlpha(0.82)
         this.cascadeSprites.push(col)
-        // écume claire en tête de colonne (là où on émerge)
-        this.add.ellipse(xPx + wPx / 2, topPx, wPx + 12, 12, 0xe3f2fd, 0.5).setDepth(-1)
         this.cascadeRects.push(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))
-        // cadre rocheux de la cuve (DÉCO, sans collision) : la cascade se remonte en y entrant par
-        // le côté depuis la corniche basse → pas de mur rigide qui bloquerait l'accès latéral. Parois
-        // pleine tuile CONTIGUËS à la colonne d'eau (bord intérieur collé au bord de l'eau) → aucun
-        // liseré d'air entre le mur et la flotte.
-        for (const wx of [hz.x - 1, hz.x + hz.w]) {
-          if (wx < 0 || wx >= this.levelDef.widthTiles) continue
-          this.add.tileSprite(wx * TILE, topPx, TILE, heightPx, 'basin-wall').setOrigin(0, 0).setDepth(-3).setAlpha(0.9)
+        // HAUT ONDULÉ : au lieu d'une ligne droite, un chapelet de bulbes d'écume qui montent et
+        // descendent en décalé → vagues + remous animés en tête de cascade (là où l'eau jaillit et
+        // où l'on émerge). Chaque bulbe oscille en boucle autour du bord supérieur.
+        const foamN = Math.max(3, Math.round(wPx / 11))
+        for (let i = 0; i < foamN; i++) {
+          const fx = xPx + (i + 0.5) * (wPx / foamN)
+          const foam = this.add.ellipse(fx, topPx, 13, 9, 0xffffff, 0.72).setDepth(-1)
+          this.tweens.add({
+            targets: foam, y: topPx - 6, scaleX: 1.35, scaleY: 0.55,
+            duration: 380 + (i % 3) * 110, yoyo: true, repeat: -1, ease: 'Sine.inOut', delay: i * 130,
+          })
         }
         continue
       }
@@ -362,7 +380,8 @@ export class LevelScene extends Phaser.Scene {
           const collideH = (waterBottom + 1) * TILE - collideTopPx
           this.addStaticBand(basinWalls, wx * TILE, collideTopPx, TILE, collideH)
         }
-        this.addBasinBottomDeco(hz.x, hz.x + hz.w - 1, waterBottom)
+        // déco posée sur la SURFACE du sol (fond du lac) — l'eau recouvre désormais le sol plein
+        this.addBasinBottomDeco(hz.x, hz.x + hz.w - 1, this.groundRow - 1)
       }
     }
     this.physics.add.overlap(this.player, spikes, () => this.hitPlayer(35))
@@ -2288,8 +2307,9 @@ export class LevelScene extends Phaser.Scene {
     if (this.bgNear) this.bgNear.tilePositionX = sx * 0.55
     // cascades décoratives : le rideau d'eau défile vers le bas (effet de chute continue)
     for (const wf of this.waterfalls) wf.tilePositionY += delta * 0.4
-    // cascades REMONTABLES : le rideau défile vers le HAUT (courant ascendant)
-    for (const cs of this.cascadeSprites) cs.tilePositionY -= delta * 0.35
+    // cascades REMONTABLES : le rideau défile vers le BAS (écoulement visible — on COMPREND que ça
+    // coule, et qu'on le REMONTE à contre-courant)
+    for (const cs of this.cascadeSprites) cs.tilePositionY += delta * 0.45
     if (this.aim) this.updateAimReticle()
     if (this.player.hp <= 0) return
     // chute mortelle : uniquement quand le panda a plongé jusqu'au fond du monde dans un vrai trou

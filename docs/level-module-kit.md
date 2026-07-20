@@ -125,3 +125,85 @@ Exemple (silhouette vallonnée, ~8 modules) :
 - Chaque **monstre** est posé sur une surface ; un monstre terrestre dispose d'une plateforme d'au moins
   quelques tuiles pour patrouiller (pas coincé sur 1 tuile).
 - La **largeur** de chaque module est dans son `[min, max]`.
+
+---
+
+## RÉVISION (retours user) — conventions EAU, CASCADE, TROUS
+
+**Lac / bassin (marine, bleu marine, NOIE)**
+- CUVE de pierre : parois rocheuses rigides à GAUCHE et à DROITE (on ne traverse pas latéralement).
+- **FOND SOLIDE OBLIGATOIRE** : l'eau repose TOUJOURS sur une plateforme de TERRE PLEINE, sans le
+  moindre espace vide en dessous (sol de base du monde OU une autre plateforme solide juste sous le
+  fond de l'eau). JAMAIS d'eau qui « vole » / flotte au-dessus du vide.
+- Entrée par le HAUT (plonger), on nage, coffre au fond possible.
+
+**Cascade (bleu clair, REMONTABLE, ne noie pas)**
+- **AUCUNE pierre autour** (pas de cadre rocheux, pas de parois). C'est de l'eau qui COULE, pas une cuve.
+- **Effet d'écoulement VISIBLE** : le rideau défile (stries/vagues qui descendent) pour qu'on comprenne
+  que ça coule et que ça se remonte.
+- **Haut NON droit** : bord supérieur ondulé — petites VAGUES + REMOUS (écume qui bouge), pas une ligne
+  plate.
+- **Coule jusqu'en bas** : une cascade descend jusqu'au BAS DE LA CARTE, ou se jette dans un LAC à son
+  pied. Elle ne s'arrête pas en l'air.
+- **Mort en bas** : si on descend la cascade jusqu'au FOND DE LA CARTE (pas de lac au pied) → MORT
+  (chute réelle). Si elle se jette dans un lac, on plonge dans le lac (pas de mort, mais noyade du lac
+  s'applique).
+
+**Trous mortels adjacents**
+- Plusieurs trous côte à côte = les FUSIONNER en UN SEUL grand trou continu. PAS de barre/paroi
+  verticale entre deux trous voisins. Bords marqués seulement aux extrémités extérieures du trou.
+
+---
+
+## PHASE 2 — CATALOGUE ÉTENDU + COURBE DE DIFFICULTÉ (retours user, CANONIQUE)
+
+RÈGLE DIRECTRICE : **DIFFICULTÉ CROISSANTE** sur les 20 niveaux. Ce catalogue (≈40 motifs de l'user)
+NE REMPLACE PAS la liste des 30 ci-dessus : il la COMPLÈTE. On GARDE les 30 + on ajoute ceux-ci,
+dédupliqué (overlaps fusionnés) → bibliothèque totale ~50+. Le tri par tier de difficulté sert la courbe.
+Chaque motif porte : **tier de difficulté D1..D5**, **tags entrée/sortie** ∈ {bas, milieu, haut}
+(pour l'accroche : sortie(N) doit matcher entrée(N+1)), largeur variable réelle, et un flag ÉCHELLE si
+le motif en utilise une (les échelles doivent REVENIR — elles avaient disparu).
+
+### Règles de COMPOSITION (impératives)
+- **COURBE DE DIFFICULTÉ** : le tier max autorisé monte avec la progression. Niveau 1 = D1 SEULEMENT
+  (motifs simples). Puis élargir : zone1≈D1-2, zone2-3≈D2-3, zone4-5≈D3-4, zone6≈D4-5.
+- **DOSAGE par niveau** : ~30% FILLERS/respiration · ~40% TRAVERSÉE+VERTICAL · ~20% RISQUE/récompense ·
+  ~10% TENSION/précision. Décaler vers la tension au fil des 20 niveaux (garder ~30% filler partout
+  pour respirer).
+- **ANCRAGE** : sortie(N) altitude ≈ entrée(N+1) (± saut simple), sinon connecteur.
+- Spawn = filler simple à mi-hauteur (aucun monstre, cf. R127). Sortie à altitude ≠.
+
+### Fillers / respiration (D1)
+F1 Ligne droite (sas plat) · F2 Marche simple · F3 Descente douce · F4 Couloir large (bassin déco
+traversable) · F5 Petit pont (sur bassin peu profond) · F6 Échelle tranquille [ÉCHELLE] · F7 Balcon
+(surélevé, bonus opt.) · F8 Double sol (2 étages plats reliés par échelle, même sortie) [ÉCHELLE]
+
+### Traversée horizontale (D1–D3)
+T9 L'escalier (3-4 marches) · T10 Gap grandissant (3 trous +larges) · T11 Îlots réguliers (rythme fixe)
+· T12 Îlots irréguliers (rythme cassé) · T13 Trou avec filet (bassin au fond = raté→détour, pas mort)
+· T14 Trou sec (D3, sans bassin) · T15 Pas japonais sur l'eau · T16 Faux plat (pics isolés à enjamber)
+
+### Vertical / étages (D2–D4)
+V17 Zigzag (plateformes alternées) · V18 Cage d'échelles (2-3 échelles + paliers) [ÉCHELLE] · V19
+Échelle vs sauts (2 routes) [ÉCHELLE] · V20 Descente contrôlée (paliers + pics à l'atterrissage) ·
+V21 Tour creuse (puits, plateformes en quinconce) [ÉCHELLE] · V22 Puits de chute (chute longue vers
+bassin, obstacles en tombant)
+
+### Risque / récompense (D2–D4)
+R23 Chemin double (haut sûr long / bas rapide à pics) · R24 Trésor sous les pics · R25 Trésor au fond
+du bassin (détour aquatique) · R26 Détour du balcon [ÉCHELLE opt.] · R27 Raccourci payant (trou qui
+saute un étage, atterrissage précis) · R28 Fausse sortie (cul-de-sac visible, vrai chemin à observer)
+
+### Tension / précision (D3–D5)
+P29 Couloir de pics (plafond bas + pics sol) · P30 Échelle exposée (pics en haut, sortir du bon côté)
+[ÉCHELLE] · P31 Pics en quinconce · P32 Atterrissage étroit (1 case entre 2 pics) · P33 Remontée
+punitive (rater = retomber au début du pattern, pas la mort) · P34 Triple saut (3 gaps enchaînés)
+
+### Eau / cascade (D2–D4) — respecter la RÉVISION eau/cascade ci-dessus
+E35 Cascade rideau (pousse vers le bas, sauter en amont) · E36 Ascenseur inversé (descendre poussé
+par la cascade dans un puits, ressortir par le bassin) · E37 Nage à contre-courant (bassin alimenté
+par cascade qui dérive) · E38 Plongeon guidé (la cascade montre le point de chute sûr) · E39 Pics sous
+l'eau (nager en surface, fond piégé) · E40 Sortie humide (sortie derrière une cascade, indice visuel)
+
+NB : « échelle tranquille / cage d'échelles / échelle vs sauts / tour creuse / échelle exposée /
+double sol » ⇒ les ÉCHELLES sont de nouveau des motifs de plein droit (mécanique déjà là dans Player).
