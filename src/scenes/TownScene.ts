@@ -4,8 +4,8 @@ import { save } from '../core/save'
 import { buyPotion, buyItem } from '../core/shop'
 import { canCraft, doCraft } from '../core/craft'
 import { canReforge, doReforge, reforgeCost, upgradedBonus, sellItem, sellValue, MAX_REFORGE_LEVEL } from '../core/reforge'
-import { acceptQuest, refreshQuestProgress, claimQuest } from '../core/quests'
-import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, HAT_SHOP, QUESTS, type ShopItemDef } from '../data/shops'
+import { acceptQuest, refreshQuestProgress, claimQuest, currentChainQuest } from '../core/quests'
+import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, HAT_SHOP, QUEST_CHAIN, type QuestDef, type ShopItemDef } from '../data/shops'
 import { WORLD_NODES } from '../data/worldmap'
 import { ITEMS, rarityColor, SLOT_ORDER, SLOT_LABEL_PLURAL } from '../data/items'
 import type { EquipSlot } from '../core/types'
@@ -244,7 +244,7 @@ export class TownScene extends Phaser.Scene {
     // zones d'interaction dérivées de la disposition de CE thème (portes de boutiques + garde)
     this.spots = [
       ...cfg.buildings.map((b) => ({ id: b.id as SpotKind, label: b.name, doorX: b.x, doorY: b.y + b.h / 2 + 10 })),
-      { id: 'quete', label: QUESTS['chasse-aux-monstres']!.npcName, doorX: cfg.questDoor.x, doorY: cfg.questDoor.y },
+      { id: 'quete', label: QUEST_CHAIN[0]!.npcName, doorX: cfg.questDoor.x, doorY: cfg.questDoor.y },
     ]
 
     const wallsGroup = this.physics.add.staticGroup()
@@ -274,17 +274,21 @@ export class TownScene extends Phaser.Scene {
 
     // PNJ de quête : le garde (panda à la lance), planté devant sa zone. Décor uniquement.
     this.placeNpc('npc-garde', cfg.questDoor.x, cfg.questDoor.y + 66, 120)
-    this.add.text(cfg.questDoor.x, cfg.questDoor.y - 58, QUESTS['chasse-aux-monstres']!.npcName, {
+    this.add.text(cfg.questDoor.x, cfg.questDoor.y - 58, QUEST_CHAIN[0]!.npcName, {
       fontSize: '14px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 3,
     }).setOrigin(0.5)
 
-    // marqueur de quête flottant au-dessus du garde : « ❗ » si une quête est à PRENDRE, « ❓ » si une
-    // récompense est PRÊTE à réclamer. Rien tant qu'une quête est en cours (non finie) ou déjà réclamée.
+    // marqueur de quête flottant au-dessus du garde : « ❗ » si la quête courante de la chaîne est à
+    // PRENDRE, « ❓ » si sa récompense est PRÊTE à réclamer. Rien tant qu'elle est en cours ou que
+    // toute la chaîne est accomplie.
     const qp = getPlayer()
-    const qdef = QUESTS['chasse-aux-monstres']!
-    refreshQuestProgress(qp, qdef.id)
-    const qs = qp.quests[qdef.id]
-    const questMark = !qs ? '❗' : (qs.done && !qs.claimed ? '❓' : null)
+    const qdef = currentChainQuest(qp)
+    let questMark: string | null = null
+    if (qdef) {
+      refreshQuestProgress(qp, qdef.id)
+      const qs = qp.quests[qdef.id]
+      questMark = !qs ? '❗' : (qs.done && !qs.claimed ? '❓' : null)
+    }
     if (questMark) {
       const mk = this.add.text(cfg.questDoor.x, cfg.questDoor.y - 88, questMark, {
         fontSize: '32px', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 4,
@@ -771,52 +775,72 @@ export class TownScene extends Phaser.Scene {
     this.drawCloseCross(c, w, h)
   }
 
+  // libellé de récompense d'une quête : or (+ potions) (+ objet nommé, coloré par rareté)
+  private questRewardLabel(def: QuestDef): string {
+    const parts = [`${def.rewardGold} or`]
+    if (def.rewardPotions) parts.push(`${def.rewardPotions} potion${def.rewardPotions > 1 ? 's' : ''}`)
+    if (def.rewardItemId) parts.push(ITEMS[def.rewardItemId]!.name)
+    return parts.join(' + ')
+  }
+
   private openQuestNpc() {
     this.closePanel()
-    const def = QUESTS['chasse-aux-monstres']!
     const c = this.add.container(0, 0).setDepth(50).setScrollFactor(0)
     this.panel = c
-    c.add(this.add.rectangle(480, 270, 560, 280, 0x0d1b2a, 0.96))
-    c.add(this.add.text(480, 160, def.npcName, { fontSize: '22px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
+    c.add(this.add.rectangle(480, 270, 560, 300, 0x0d1b2a, 0.96))
+    c.add(this.add.text(480, 150, QUEST_CHAIN[0]!.npcName, { fontSize: '22px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
 
     const render = () => {
       const p = getPlayer()
-      refreshQuestProgress(p, def.id)
+      const def = currentChainQuest(p)
       for (const child of [...c.list].slice(2)) child.destroy()
-      c.add(this.add.text(480, 195, def.name, { fontSize: '17px', color: '#ffd54f' }).setOrigin(0.5))
-      c.add(
-        this.add.text(480, 222, def.description, { fontSize: '14px', color: '#cfd8dc', wordWrap: { width: 480 } }).setOrigin(0.5),
-      )
+
+      // toute la chaîne accomplie : plus rien à proposer
+      if (!def) {
+        c.add(this.add.text(480, 250, 'Tu as accompli toutes mes quêtes.\nLe pays te doit une fière chandelle, panda !', {
+          fontSize: '16px', color: '#80cbc4', align: 'center', wordWrap: { width: 480 },
+        }).setOrigin(0.5))
+        c.add(
+          this.add.text(480, 390, '← Fermer', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 } })
+            .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()),
+        )
+        this.drawCloseCross(c, 560, 300)
+        return
+      }
+
+      refreshQuestProgress(p, def.id)
+      c.add(this.add.text(480, 184, `Quête ${def.order}/${QUEST_CHAIN.length} — ${def.name}`, { fontSize: '17px', color: '#ffd54f' }).setOrigin(0.5))
+      c.add(this.add.text(480, 220, def.description, { fontSize: '14px', color: '#cfd8dc', align: 'center', wordWrap: { width: 480 } }).setOrigin(0.5))
+      c.add(this.add.text(480, 268, `Récompense : ${this.questRewardLabel(def)}`, { fontSize: '13px', color: '#ffb300', align: 'center', wordWrap: { width: 480 } }).setOrigin(0.5))
 
       const q = p.quests[def.id]
       if (!q) {
         c.add(
-          this.add.text(480, 270, 'Accepter la quête', {
+          this.add.text(480, 320, 'Accepter la quête', {
             fontSize: '16px', color: '#ffffff', backgroundColor: '#2e7d32', padding: { x: 14, y: 8 },
           }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
             acceptQuest(p, def.id); save(p); render()
           }),
         )
-      } else if (q.claimed) {
-        c.add(this.add.text(480, 270, 'Quête terminée. Merci, panda !', { fontSize: '15px', color: '#80cbc4' }).setOrigin(0.5))
       } else if (q.done) {
-        c.add(this.add.text(480, 260, `Progression : ${q.progress}/${def.targetCount} — terminée !`, { fontSize: '15px', color: '#ffd700' }).setOrigin(0.5))
+        c.add(this.add.text(480, 300, `Progression : ${q.progress}/${def.targetCount} — terminée !`, { fontSize: '15px', color: '#ffd700' }).setOrigin(0.5))
         c.add(
-          this.add.text(480, 300, `Réclamer la récompense (${def.rewardGold} or)`, {
+          this.add.text(480, 336, 'Réclamer la récompense', {
             fontSize: '16px', color: '#ffffff', backgroundColor: '#2e7d32', padding: { x: 14, y: 8 },
           }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
             if (claimQuest(p, def.id)) { save(p); render() }
           }),
         )
       } else {
-        c.add(this.add.text(480, 270, `Progression : ${q.progress}/${def.targetCount}`, { fontSize: '15px', color: '#ffd54f' }).setOrigin(0.5))
+        const verb = def.type === 'fetch' ? 'Rapportés' : 'Progression'
+        c.add(this.add.text(480, 320, `${verb} : ${q.progress}/${def.targetCount}`, { fontSize: '15px', color: '#ffd54f' }).setOrigin(0.5))
       }
 
       c.add(
-        this.add.text(480, 380, '← Fermer', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 } })
+        this.add.text(480, 390, '← Fermer', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 } })
           .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()),
       )
-      this.drawCloseCross(c, 560, 280)
+      this.drawCloseCross(c, 560, 300)
     }
     render()
   }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, HAT_SHOP, QUESTS } from '../../src/data/shops'
-import { ITEMS } from '../../src/data/items'
+import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, HAT_SHOP, QUESTS, buyPrice, sellPrice } from '../../src/data/shops'
+import { ITEMS, RARITY_PRICE } from '../../src/data/items'
+import type { Rarity } from '../../src/core/types'
 
 describe('données boutiques', () => {
   it('prix de la potion positif', () => {
@@ -36,5 +37,26 @@ describe('données boutiques', () => {
 
   it('la clé du record de quêtes correspond à l id', () => {
     for (const [key, q] of Object.entries(QUESTS)) expect(q.id).toBe(key)
+  })
+})
+
+describe('prix par rareté', () => {
+  it('le barème croît strictement avec la rareté', () => {
+    const order: Rarity[] = ['commun', 'rare', 'epique', 'legendaire']
+    for (let i = 1; i < order.length; i++) {
+      expect(RARITY_PRICE[order[i]!]).toBeGreaterThan(RARITY_PRICE[order[i - 1]!])
+    }
+  })
+
+  it('buyPrice renvoie le prix boutique, sinon retombe sur le barème par rareté', () => {
+    expect(buyPrice('epee-bambou')).toBe(WEAPON_SHOP[0]!.price)
+    // objet forgé, absent des boutiques → repli sur la rareté
+    expect(buyPrice('lame-scorpion')).toBe(RARITY_PRICE[ITEMS['lame-scorpion']!.rarity ?? 'commun'])
+  })
+
+  it('sellPrice vaut 50 % du prix d\'achat (arrondi)', () => {
+    for (const id of Object.keys(ITEMS)) {
+      expect(sellPrice(id)).toBe(Math.round(buyPrice(id) * 0.5))
+    }
   })
 })

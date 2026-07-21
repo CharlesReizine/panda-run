@@ -9,7 +9,8 @@ import {
   sellValue,
   sellItem,
 } from '../../src/core/reforge'
-import { ITEMS } from '../../src/data/items'
+import { ITEMS, RARITY_PRICE } from '../../src/data/items'
+import { buyPrice } from '../../src/data/shops'
 
 describe('reforgeCost', () => {
   it('croît strictement en or et en matériaux avec le niveau', () => {
@@ -92,22 +93,26 @@ describe('doReforge', () => {
 })
 
 describe('sellValue', () => {
-  it('renvoie le prix selon la rareté', () => {
-    expect(sellValue(ITEMS['epee-bambou']!)).toBe(20) // commun
-    expect(sellValue(ITEMS['carapace-scarabee']!)).toBe(60) // rare
-    expect(sellValue(ITEMS['griffe-royale']!)).toBe(150) // épique
-    expect(sellValue(ITEMS['lame-scorpion']!)).toBe(400) // légendaire
+  it('vaut 50 % du prix d\'achat en boutique', () => {
+    expect(sellValue(ITEMS['epee-bambou']!)).toBe(Math.round(buyPrice('epee-bambou') * 0.5))
+    expect(sellValue(ITEMS['carapace-scarabee']!)).toBe(Math.round(buyPrice('carapace-scarabee') * 0.5))
+    expect(sellValue(ITEMS['griffe-royale']!)).toBe(Math.round(buyPrice('griffe-royale') * 0.5))
+  })
+
+  it('retombe sur le barème par rareté pour un objet hors boutique (forgé)', () => {
+    // lame-scorpion (légendaire forgée) n'est vendue dans aucune boutique
+    expect(sellValue(ITEMS['lame-scorpion']!)).toBe(Math.round(RARITY_PRICE['legendaire'] * 0.5))
   })
 })
 
 describe('sellItem', () => {
-  it('retire l\'objet de l\'inventaire et crédite l\'or', () => {
+  it('retire l\'objet de l\'inventaire et crédite 50 % du prix d\'achat', () => {
     const p = newPlayer('Panda')
     p.gold = 10
     p.inventory = ['epee-bambou', 'griffe-royale']
     expect(sellItem(p, 0)).toBe(true)
     expect(p.inventory).toEqual(['griffe-royale'])
-    expect(p.gold).toBe(10 + 20)
+    expect(p.gold).toBe(10 + Math.round(buyPrice('epee-bambou') * 0.5))
   })
 
   it('refuse un index invalide sans muter', () => {

@@ -1,6 +1,7 @@
 import type { PlayerState } from './player-state'
-import type { ItemDef, Rarity, StatBlock } from './types'
+import type { ItemDef, StatBlock } from './types'
 import { ITEMS } from '../data/items'
+import { sellPrice } from '../data/shops'
 
 // Réforge : améliore une pièce d'équipement d'un cran. Chaque niveau majore le bonus de base
 // de l'objet de +20 % (voir upgradedBonus, appliqué dans computeStats). Coût croissant en or +
@@ -59,16 +60,10 @@ export function doReforge(p: PlayerState, itemId: string): boolean {
   return true
 }
 
-// Valeur de revente d'un objet selon sa rareté (~50 % du prix boutique).
-const SELL_BY_RARITY: Record<Rarity, number> = {
-  commun: 20,
-  rare: 60,
-  epique: 150,
-  legendaire: 400,
-}
-
+// Valeur de revente d'un objet : 50 % de son prix d'achat (cf. data/shops sellPrice — prix boutique
+// s'il est vendu en ville, sinon repli sur le barème par rareté).
 export function sellValue(item: ItemDef): number {
-  return SELL_BY_RARITY[item.rarity ?? 'commun']
+  return sellPrice(item.id)
 }
 
 // Vend l'objet à l'index donné de l'inventaire : le retire et crédite l'or. Renvoie false

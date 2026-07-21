@@ -64,3 +64,14 @@ const RARITY_COLORS: Record<Rarity, number> = {
 export function rarityColor(rarity: Rarity = 'commun'): number {
   return RARITY_COLORS[rarity]
 }
+
+// Barème de prix d'ACHAT de référence par rareté (or). Sert de base au prix boutique et de repli
+// pour les objets vendables non listés en boutique (forgés, butin). Fortement croissant : un rare
+// vaut bien plus qu'un commun, un épique bien plus qu'un rare, un légendaire hors de portée sans
+// effort. La valeur de REVENTE en découle (50 % du prix d'achat, cf. data/shops sellPrice).
+export const RARITY_PRICE: Record<Rarity, number> = {
+  commun: 100,
+  rare: 500,
+  epique: 2000,
+  legendaire: 8000,
+}
