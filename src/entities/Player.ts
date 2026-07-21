@@ -14,7 +14,12 @@ const SWIM_SPEED = 150 // vitesse verticale de nage dans l'eau (up/down)
 const SWIM_DRIFT = 40 // léger enfoncement quand on ne nage pas activement
 const SWIM_RUN_MULT = 0.7 // déplacement horizontal ralenti dans l'eau
 const MAX_ENERGY = 100
-const ENERGY_REGEN_PER_SEC = 22
+// Régénération PROGRESSIVE (~12,5 s pour refaire la jauge). Volontairement plus lente que
+// l'ancien réglage (22/s) : à 22/s la régén sur un cooldown de 2 s (44) dépassait le coût d'un
+// skill (10-45) → l'énergie se rechargeait plus vite qu'on ne la dépensait et les skills étaient
+// « gratuits ». À 8/s, enchaîner des skills VIDE bel et bien la jauge : l'énergie redevient une
+// vraie ressource à gérer.
+const ENERGY_REGEN_PER_SEC = 8
 const ENERGY_PER_BASIC_HIT = 6
 const DIVE_SPEED = 1400 // vitesse de piqué vertical du Plongeon (px/s)
 // Lignée du sabreur : ces classes disposent du DOUBLE SAUT (2 sauts). Les autres restent à 1.

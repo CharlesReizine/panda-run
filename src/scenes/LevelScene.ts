@@ -236,7 +236,7 @@ export class LevelScene extends Phaser.Scene {
     // plateforme (dessus à p.y*TILE, hauteur 1 tuile) — équivalent exact des anciennes tuiles.
     for (const p of this.levelDef.platforms) {
       this.add.tileSprite(p.x * TILE, p.y * TILE, p.w * TILE, TILE, platformKey).setOrigin(0, 0).setDepth(-4)
-      this.addStaticBand(oneWay, p.x * TILE, p.y * TILE, p.w * TILE, TILE)
+      this.addStaticBand(oneWay, p.x * TILE, p.y * TILE, p.w * TILE, TILE, true)
     }
     // ponts de planches : plateformes fines, elles aussi traversables par le bas. Rendu en UN
     // TileSprite ; collision en UN corps statique par pont. Le visuel ne fait que 12px de haut mais
@@ -245,7 +245,7 @@ export class LevelScene extends Phaser.Scene {
     for (const br of this.levelDef.bridges ?? []) {
       this.add.tileSprite(br.x * TILE, br.y * TILE, br.w * TILE, 12, 'bridge').setOrigin(0, 0).setDepth(-4)
       // corps 28px (le visuel ne fait que 12px) : même emprise que l'ancien plank (top br.y*TILE-8)
-      this.addStaticBand(oneWay, br.x * TILE, br.y * TILE - 8, br.w * TILE, 28)
+      this.addStaticBand(oneWay, br.x * TILE, br.y * TILE - 8, br.w * TILE, 28, true)
     }
     // BANDES DE ROCHE (plafond de tunnel + socle de départ) : dalles de pierre PLEINE rendues avec la
     // texture du biome, SANS collision (depth -5, derrière le joueur → il reste toujours visible ; le
@@ -744,13 +744,23 @@ export class LevelScene extends Phaser.Scene {
   // et positionné EXPLICITEMENT (setSize + position + updateCenter) : en Phaser 4, setScale+refreshBody
   // ne redimensionne PAS un corps statique (il restait 32px → chute à travers). Le sprite support est
   // invisible ; le RENDU est fait par un TileSprite séparé.
-  private addStaticBand(group: Phaser.Physics.Arcade.StaticGroup, leftPx: number, topPx: number, wPx: number, hPx: number) {
+  private addStaticBand(group: Phaser.Physics.Arcade.StaticGroup, leftPx: number, topPx: number, wPx: number, hPx: number, topOnly = false) {
     const band = group.create(leftPx + wPx / 2, topPx + hPx / 2, 'tile-plaine') as Phaser.Physics.Arcade.Sprite
     band.setVisible(false)
     const body = band.body as Phaser.Physics.Arcade.StaticBody
     body.setSize(wPx, hPx, false)
     body.position.set(leftPx, topPx)
     body.updateCenter()
+    // Plateformes ONE-WAY (escaliers/marches, ponts) : collision UNIQUEMENT par le DESSUS. On coupe
+    // les faces bas/gauche/droite → Arcade ne peut plus séparer HORIZONTALEMENT sur ces corps, donc
+    // le panda ne peut plus se COINCER entre deux marches (le wedge qui gelait le déplacement « entre
+    // deux marches »). On passe/traverse librement par les côtés et par le bas ; on se pose sur le
+    // dessus. Le processCallback landsFromAbove garde en plus le filtre de retombée.
+    if (topOnly) {
+      body.checkCollision.down = false
+      body.checkCollision.left = false
+      body.checkCollision.right = false
+    }
   }
 
   // DÉCO DE FOND de bassin (ambiance pure, AUCUNE physique/collision, depth arrière) : galets le
@@ -802,14 +812,20 @@ export class LevelScene extends Phaser.Scene {
   private spawnX(): number { return 2 * TILE }
   private exitX(): number { return this.levelDef.widthTiles * TILE - 2 * TILE }
 
-  // processCallback des plateformes one-way : la collision n'est retenue que si le panda
-  // descend (velocity.y >= 0) ET que ses pieds (début de frame) ne sont pas passés sous le
-  // DESSOUS de la dalle. On monte donc librement à travers, puis on se pose dessus en retombant
-  // sans risquer de retraverser en s'enfonçant d'un poil (voir landsOnOneWayPlatform).
+  // processCallback des plateformes one-way : la collision n'est retenue que si le panda RETOMBE
+  // franchement PAR LE DESSUS de la marche. On teste sur les pieds en DÉBUT de frame (pb.prev.y),
+  // c.-à-d. AVANT la chute de la frame courante : lors d'une vraie retombée ils étaient encore
+  // AU-DESSUS du dessus (bornés par la marge = distance chutable en une frame, anti-tunneling).
+  // Renvoyer false = AUCUNE séparation (ni verticale ni horizontale) → le panda ne peut plus se
+  // COINCER contre la CONTREMARCHE (face verticale) d'un escalier : ses pieds y sont alors sous le
+  // dessus de la marche visée (contact LATÉRAL), donc rejetés → fini le gel « entre deux marches ».
+  // (Ancien seuil = plat.bottom, dessous de la dalle : il acceptait les contacts latéraux dans la
+  // bande de 32 px sous le dessus et provoquait le wedge horizontal.)
   private readonly landsFromAbove: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (playerObj, platObj) => {
     const pb = (playerObj as Phaser.Physics.Arcade.Sprite).body as Phaser.Physics.Arcade.Body
     const plat = (platObj as Phaser.Physics.Arcade.Sprite).body as Phaser.Physics.Arcade.StaticBody
-    return landsOnOneWayPlatform(pb.prev.y + pb.height, pb.velocity.y, plat.bottom)
+    const margin = Math.abs(pb.velocity.y) * (this.game.loop.delta / 1000) + 4
+    return landsOnOneWayPlatform(pb.prev.y + pb.height, pb.velocity.y, plat.top + margin)
   }
 
   createExit() {
