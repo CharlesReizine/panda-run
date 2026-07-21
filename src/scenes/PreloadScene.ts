@@ -2,9 +2,9 @@ import Phaser from 'phaser'
 import { MONSTERS } from '../data/monsters'
 import { SKILLS } from '../data/skills'
 import { BIOMES } from '../data/biomes'
-import { ITEMS } from '../data/items'
+import { ITEMS, rarityColor } from '../data/items'
 import { LEVELS } from '../data/levels'
-import type { MonsterDef } from '../core/types'
+import type { MonsterDef, WeaponType } from '../core/types'
 import { stripBorderBackground } from '../core/image-strip'
 import { PANDA_TEX, PANDA_HEAD_ANCHORS } from '../entities/player-body'
 
@@ -504,25 +504,103 @@ export class PreloadScene extends Phaser.Scene {
       g.generateTexture(`weapon-${cls}`, 40, 60)
       g.destroy()
     }
+    this.bakeItemWeapons()
+  }
+
+  // Texture d'overlay PAR OBJET arme (`weapon-<itemId>`) : le panda affiche l'arme réellement
+  // équipée (ex. « katana d'éclair ») et non plus une arme générique de classe. Silhouette par
+  // famille (lame/arc/bâton), teintée par la rareté → chaque arme se reconnaît. Même cadre 40×60 et
+  // même grip (20,44) que les armes de classe : ancrage et échelle inchangés côté Player.
+  private bakeItemWeapons() {
+    for (const item of Object.values(ITEMS)) {
+      if (item.slot !== 'weapon' || !item.weaponType) continue
+      const g = this.add.graphics()
+      this.drawItemWeapon(g, item.weaponType, rarityColor(item.rarity), 20, 44)
+      g.generateTexture(`weapon-${item.id}`, 40, 60)
+      g.destroy()
+    }
   }
 
   // GROSSE épée large du sabreur / chevalier (overlay d'attaque). Grip ancré en (hx, hy) dans le
   // cadre 40×60 (comme les autres armes) → Player conserve l'ancrage à la patte et l'échelle.
+  // Silhouettes DISTINCTES : le SABREUR porte un sabre élancé à dos courbe (lame monotranchant,
+  // tsuba ronde) ; le CHEVALIER une épée noble cruciforme (lame droite large à gouttière, garde
+  // ailée dorée, pommeau serti) → on reconnaît la classe à la forme, pas seulement à la couleur.
   private drawBigSword(g: Phaser.GameObjects.Graphics, cls: ClassId, hx: number, hy: number) {
-    const blade = cls === 'chevalier' ? 0xeceff1 : 0xcfd8dc
-    const guard = cls === 'chevalier' ? 0xffca28 : 0xffd54f
-    // poignée + pommeau (vers la patte)
+    if (cls === 'chevalier') { this.drawKnightSword(g, hx, hy); return }
+    this.drawSabre(g, hx, hy)
+  }
+
+  // Sabre du sabreur : lame élancée monotranchant au dos légèrement courbe, tsuba (garde) ronde.
+  private drawSabre(g: Phaser.GameObjects.Graphics, hx: number, hy: number) {
+    // poignée tressée + pommeau
+    g.fillStyle(0x455a64).fillRect(hx - 2.5, hy + 2, 5, 11)
+    g.fillStyle(0x263238).fillCircle(hx, hy + 14, 3)
+    // tsuba ronde (garde circulaire typique du sabre)
+    g.fillStyle(0xffd54f).fillCircle(hx, hy, 6)
+    g.fillStyle(0xffecb3).fillCircle(hx, hy, 3)
+    // lame monotranchant : tranchant droit à gauche, dos courbé à droite, pointe fine relevée
+    g.fillStyle(0xcfd8dc)
+    g.fillTriangle(hx - 4, hy - 2, hx - 4, hy - 38, hx + 3, hy - 34)
+    g.fillTriangle(hx - 4, hy - 2, hx + 3, hy - 34, hx + 2, hy - 44)
+    // fil tranchant brillant (bord gauche) + reflet du dos
+    g.fillStyle(0xffffff, 0.9).fillRect(hx - 4, hy - 38, 1.8, 36)
+    g.fillStyle(0x90a4ae).fillTriangle(hx + 1, hy - 6, hx + 2.5, hy - 33, hx + 1.5, hy - 40)
+  }
+
+  // Épée du chevalier : lame droite LARGE à gouttière centrale, longue garde AILÉE dorée et
+  // pommeau serti — allure noble et lourde.
+  private drawKnightSword(g: Phaser.GameObjects.Graphics, hx: number, hy: number) {
+    // poignée gainée + gros pommeau serti
     g.fillStyle(0x6d4c41).fillRect(hx - 2.5, hy + 2, 5, 11)
-    g.fillStyle(0x4e342e).fillCircle(hx, hy + 14, 3)
-    // garde large
-    g.fillStyle(guard).fillRect(hx - 8, hy - 2, 18, 5)
-    // lame large remplie, montant jusqu'en haut du cadre, terminée en pointe acérée
-    g.fillStyle(blade)
+    g.fillStyle(0xffca28).fillCircle(hx, hy + 15, 3.4)
+    g.fillStyle(0xfff59d).fillCircle(hx - 0.8, hy + 14, 1.4)
+    // garde AILÉE : barre dorée remontant en ailerons aux extrémités (croix noble)
+    g.fillStyle(0xffca28).fillRect(hx - 9, hy - 2, 20, 5)
+    g.fillTriangle(hx - 9, hy - 2, hx - 12, hy - 8, hx - 6, hy - 2)
+    g.fillTriangle(hx + 11, hy - 2, hx + 14, hy - 8, hx + 8, hy - 2)
+    // lame droite large montant tout en haut, pointe symétrique
+    g.fillStyle(0xeceff1)
+    g.fillRect(hx - 6, hy - 38, 13, 38)
+    g.fillTriangle(hx - 6, hy - 36, hx + 7, hy - 36, hx + 0.5, hy - 45)
+    // gouttière (fuller) centrale sombre + arête brillante de chaque côté
+    g.fillStyle(0x90a4ae).fillRect(hx - 1, hy - 38, 3, 34)
+    g.fillStyle(0xffffff, 0.9).fillRect(hx - 4.5, hy - 38, 1.8, 34)
+    g.fillStyle(0xffffff, 0.6).fillRect(hx + 4, hy - 38, 1.6, 34)
+  }
+
+  // Overlay d'arme PROPRE À UN OBJET équipé : silhouette par famille (lame/arc/bâton) TEINTÉE par la
+  // rareté → deux objets d'un même type se distinguent (épée en bambou grise ↔ katana d'éclair doré).
+  // Grip ancré en (hx, hy) dans le cadre 40×60, comme les armes de classe.
+  private drawItemWeapon(g: Phaser.GameObjects.Graphics, type: WeaponType, tint: number, hx: number, hy: number) {
+    if (type === 'bow') {
+      // arc recourbé : bois brun, corde claire, poignée + nock TEINTÉS par la rareté
+      g.lineStyle(4, 0x6d4c41).beginPath()
+      g.arc(hx - 2, hy - 3, 15, Phaser.Math.DegToRad(-80), Phaser.Math.DegToRad(80), false); g.strokePath()
+      const c = Phaser.Math.DegToRad(-80), d = Phaser.Math.DegToRad(80)
+      g.lineStyle(1.5, 0xeeeeee).beginPath()
+      g.moveTo(hx - 2 + 15 * Math.cos(c), hy - 3 + 15 * Math.sin(c)); g.lineTo(hx - 2 + 15 * Math.cos(d), hy - 3 + 15 * Math.sin(d)); g.strokePath()
+      g.fillStyle(tint).fillCircle(hx - 2, hy - 3, 3) // poignée sertie (rareté)
+      g.fillStyle(tint).fillCircle(hx - 2 + 15 * Math.cos(c), hy - 3 + 15 * Math.sin(c), 2)
+      g.fillStyle(tint).fillCircle(hx - 2 + 15 * Math.cos(d), hy - 3 + 15 * Math.sin(d), 2)
+      return
+    }
+    if (type === 'staff') {
+      // bâton : hampe de bois + orbe rayonnant TEINTÉ par la rareté (halo + reflet)
+      g.lineStyle(4, 0x6d4c41).beginPath(); g.moveTo(hx, hy - 22); g.lineTo(hx + 2, hy + 10); g.strokePath()
+      g.fillStyle(tint, 0.35).fillCircle(hx, hy - 27, 9)
+      g.fillStyle(tint).fillCircle(hx, hy - 27, 6)
+      g.fillStyle(0xffffff, 0.85).fillCircle(hx - 2, hy - 29, 2)
+      return
+    }
+    // lame (épée / masse / faux / griffe) : grosse lame large TEINTÉE par la rareté, arête brillante
+    g.fillStyle(0x6d4c41).fillRect(hx - 2.5, hy + 2, 5, 11) // poignée
+    g.fillStyle(0x4e342e).fillCircle(hx, hy + 14, 3) // pommeau
+    g.fillStyle(0xffd54f).fillRect(hx - 8, hy - 2, 18, 5) // garde dorée
+    g.fillStyle(tint)
     g.fillRect(hx - 5, hy - 38, 11, 38)
     g.fillTriangle(hx - 5, hy - 36, hx + 6, hy - 36, hx + 0.5, hy - 43)
-    // arête centrale brillante + biseau sombre (relief de la lame)
-    g.fillStyle(0xffffff, 0.9).fillRect(hx - 0.5, hy - 38, 2.5, 34)
-    g.fillStyle(0x90a4ae).fillRect(hx + 3.5, hy - 38, 2.5, 36)
+    g.fillStyle(0xffffff, 0.9).fillRect(hx - 0.5, hy - 38, 2.5, 34) // arête brillante
   }
 
   // panda K.O. : allongé sur le dos, pattes en l'air, yeux en croix et langue pendante.
