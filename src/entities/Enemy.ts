@@ -364,7 +364,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   // à-coups (dive) puis remontée. Gravité déjà coupée (constructeur). Jamais de collision terrain.
   private flyUpdate(t: number, dist: number, dirX: number, player: { x: number; y: number }) {
     const speed = this.monster.speed
-    if (dist < AGGRO_RANGE && t > this.nextDiveAt && t > this.diveUntil) {
+    // AGGRO du piqué en distance HORIZONTALE (pas la distance 2D) : un oiseau croise HAUT dans le ciel,
+    // le joueur est AU SOL — l'écart vertical seul dépasse déjà AGGRO_RANGE, donc en 2D l'oiseau ne
+    // déclenchait JAMAIS de piqué (→ intouchable). En ne regardant que l'écart horizontal, un oiseau qui
+    // passe au-dessus du joueur pique sur lui et descend à sa hauteur (cf. ci-dessous) → touchable.
+    const horiz = Math.abs(player.x - this.x)
+    if (horiz < AGGRO_RANGE && t > this.nextDiveAt && t > this.diveUntil) {
       this.diveUntil = t + BIRD_DIVE_MS
       this.nextDiveAt = t + BIRD_DIVE_COOLDOWN
     }
@@ -381,7 +386,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.setVelocity(dirX * speed * 1.6, Phaser.Math.Clamp(dy * 6, -vCap, vCap))
     } else {
       // croisière : oscille horizontalement autour de home + houle verticale ; dérive vers le joueur
-      const drift = dist < AGGRO_RANGE ? dirX * speed * 0.4 : Math.cos(t / 700) * speed * 0.5
+      // (aggro horizontale, cf. piqué) pour se placer au-dessus de lui avant le prochain piqué.
+      const drift = horiz < AGGRO_RANGE ? dirX * speed * 0.4 : Math.cos(t / 700) * speed * 0.5
       this.setVelocityX(drift)
       const targetY = this.homeY + Math.sin(t / 500) * BIRD_WANDER_AMP
       this.setVelocityY(Phaser.Math.Clamp((targetY - this.y) * 3, -speed, speed))
@@ -422,14 +428,23 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   preUpdate(t: number, d: number) {
     super.preUpdate(t, d)
-    // FILET DE SÉCURITÉ ANTI-CHUTE HORS MAP : un monstre terrestre (ni aérien ni aquatique) ne doit
-    // JAMAIS disparaître sous la carte. Si, malgré la collision au sol, son corps se retrouve SOUS le
-    // bas du monde (tunneling, corps statique mal indexé…), on le repose sur la surface solide (sa
-    // hauteur d'apparition) et on annule sa vélocité. Les aériens volent → non concernés.
+    // FILET DE SÉCURITÉ ANTI-CHUTE HORS MAP : un monstre terrestre ne doit JAMAIS passer sous le sol ni
+    // disparaître sous la carte. La collision au sol peut lâcher pour un GROS corps (boss/élite 'grand')
+    // dont la scale — donc la hauteur du corps Arcade — oscille à chaque frame (respiration/dandinement) :
+    // sur une bande de sol fine, la séparation ne se stabilise plus et le monstre s'enfonce puis chute.
+    // On garde-fou en deux temps :
+    //  1) pieds enfoncés SOUS la surface de l'arène, AU-DESSUS d'un sol plein → on repose les pieds
+    //     PILE sur la surface et on coupe la vitesse verticale (il reste planté au sol, ne s'enfonce plus) ;
+    //  2) carrément sous le bas du monde (au-dessus d'un trou, tunneling) → retour au point d'apparition.
+    // Les aériens/aquatiques nagent/volent → non concernés.
     if (!this.monster.aerial && !this.monster.aquatic) {
       const body = this.body as Phaser.Physics.Arcade.Body
-      if (body.top > this.levelScene.worldFloorY()) {
-        this.setPosition(this.x, this.homeY)
+      const surface = this.levelScene.groundSurfaceY()
+      if (body.bottom > surface + 4 && this.levelScene.floorAt(this.x, surface + 2)) {
+        this.y -= body.bottom - surface // recale les pieds sur la surface solide
+        body.setVelocityY(0)
+      } else if (body.top > this.levelScene.worldFloorY()) {
+        this.setPosition(this.homeX, this.homeY)
         body.setVelocity(0, 0)
       }
     }
