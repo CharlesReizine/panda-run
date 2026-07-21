@@ -63,6 +63,9 @@ export class LevelScene extends Phaser.Scene {
   private oneWayPlatforms!: Phaser.Physics.Arcade.StaticGroup
   private ladderRects: Phaser.Geom.Rectangle[] = []
   private waterRects: Phaser.Geom.Rectangle[] = []
+  // ÉCLABOUSSURE d'entrée : état d'immersion de la frame précédente, pour détecter le front montant
+  // (hors-eau → dans l'eau) au moment où le panda franchit la surface et déclencher la gerbe de gouttes.
+  private wasInWater = false
   // rideaux de cascade (water:'waterfall') : défilés verticalement dans update pour l'effet de chute
   private waterfalls: Phaser.GameObjects.TileSprite[] = []
   // CASCADES REMONTABLES (water:'cascade') : colonnes d'eau CLAIRE en cuve, à courant ASCENDANT — on
@@ -145,6 +148,7 @@ export class LevelScene extends Phaser.Scene {
     // la scène est réutilisée entre niveaux : ces états doivent repartir de zéro
     this.ladderRects = []
     this.waterRects = []
+    this.wasInWater = false
     this.waterfalls = []
     this.cascadeRects = []
     this.cascadeSprites = []
@@ -1330,6 +1334,32 @@ export class LevelScene extends Phaser.Scene {
       ease: 'Sine.out',
       onComplete: () => b.destroy(),
     })
+  }
+
+  // ÉCLABOUSSURE d'entrée dans l'eau : quand le panda franchit la surface (hors-eau → dans l'eau), une
+  // gerbe de GOUTTELETTES bleu clair jaillit vers le haut/les côtés depuis le point d'impact puis
+  // retombe (spreadUp + gravity), doublée d'un petit anneau d'onde aplati qui s'ouvre à la surface,
+  // ET d'un CREUX de surface (ressac) : la ligne d'eau se creuse au point d'impact puis rebondit à
+  // plat en ~0,45 s (amorti). Léger, purement décoratif — aucun impact gameplay.
+  private waterSplashFx(x: number, surfaceY: number) {
+    // creux de surface (ressac) : une lentille couleur surface qui s'enfonce brièvement sous la ligne
+    // d'eau au point d'impact (creusement) puis remonte à plat avec un léger rebond amorti (Back.out).
+    const dip = this.add.ellipse(x, surfaceY, 34, 10, 0x9fdcff, 0.85).setDepth(-1)
+    this.tweens.add({
+      targets: dip, y: surfaceY + 11, scaleX: 1.2, scaleY: 1.5, duration: 120, ease: 'Quad.in',
+      onComplete: () => {
+        this.tweens.add({
+          targets: dip, y: surfaceY, scaleX: 1, scaleY: 0.3, alpha: 0, duration: 340, ease: 'Back.out',
+          onComplete: () => dip.destroy(),
+        })
+      },
+    })
+    // anneau d'onde aplati qui s'élargit à la surface
+    const ring = this.add.image(x, surfaceY, 'ring').setTint(0xb3e5fc)
+      .setBlendMode(Phaser.BlendModes.ADD).setDepth(this.player.depth - 1).setScale(0.12).setAlpha(0.75)
+    this.tweens.add({ targets: ring, scaleX: 1.4, scaleY: 0.5, alpha: 0, duration: 340, ease: 'Cubic.out', onComplete: () => ring.destroy() })
+    // gerbe de gouttelettes : éventail vers le haut qui retombe
+    this.burstParticles(x, surfaceY, 14, 0x81d4fa, { speed: 120, size: 4, durationMs: 460, spreadUp: true, gravity: true })
   }
 
   // petite jauge d'apnée au-dessus de la tête : visible seulement quand le souffle n'est pas plein
@@ -2945,6 +2975,14 @@ export class LevelScene extends Phaser.Scene {
     // noie (waterRects). inWater (mécanique de nage) couvre les deux.
     this.player.inCascade = this.cascadeRects.some((r) => r.contains(this.player.x, this.player.y))
     this.player.inWater = this.player.inCascade || this.waterRects.some((r) => r.contains(this.player.x, this.player.y))
+    // ENTRÉE dans l'eau (front montant de inWater) : le panda vient de franchir la surface → gerbe de
+    // gouttelettes à la surface de la nappe/colonne traversée. Purement décoratif, non bloquant.
+    if (this.player.inWater && !this.wasInWater) {
+      const splashRect = this.waterRects.find((r) => r.contains(this.player.x, this.player.y))
+        ?? this.cascadeRects.find((r) => r.contains(this.player.x, this.player.y))
+      if (splashRect) this.waterSplashFx(this.player.x, splashRect.top)
+    }
+    this.wasInWater = this.player.inWater
     this.updateWater(delta)
     this.updateLava(delta)
     if (this.time.now < this.dashUntil) {
