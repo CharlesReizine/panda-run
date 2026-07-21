@@ -15,6 +15,9 @@ export class WorldMapScene extends Phaser.Scene {
 
   create() {
     audio.playMusic('carte')
+    // la scène est réutilisée entre deux niveaux : on REMET À ZÉRO le verrou de voyage, sinon il
+    // reste bloqué à true après le 1er trajet (scene.start part pendant l'anim) → carte figée au retour.
+    this.traveling = false
 
     const byId = new Map(WORLD_NODES.map((n) => [n.id, n]))
     this.drawBackground()
