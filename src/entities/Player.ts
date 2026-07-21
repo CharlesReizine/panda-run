@@ -30,10 +30,18 @@ const DIVE_SPEED = 1400 // vitesse de piqué vertical du Plongeon (px/s)
 const DOUBLE_JUMP_SKILL = 'double-saut'
 const DOUBLE_JUMP_ENERGY_COST = 20 // énergie dépensée à chaque saut aérien
 const DOUBLE_JUMP_MIN_FRAC = 0.45 // hauteur du 2e saut au rang 1 (fraction du 1er saut)
+// VOL DU MAGE : skill passif 'vol-arcanique' (lignée mage/sorcier). Tant qu'il est appris, MAINTENIR
+// le saut en l'air fait VOLER le mage (gravité coupée, mouvement libre). Le vol dévore le mana très
+// vite : une jauge PLEINE tient exactement (rang) secondes → drain net = maxEnergy / rang par
+// seconde (rang 1 = 1 s, rang 2 = 2 s…). À court d'énergie, le vol s'arrête et le mage retombe.
+const FLIGHT_SKILL = 'vol-arcanique'
+const FLIGHT_VSPEED = 300 // vitesse verticale du vol (montée quand saut tenu, descente sur bas), px/s
 // Lignée du sabreur : la GROSSE épée n'est PAS affichée au repos ; elle n'apparaît (agrandie) que
 // le temps d'un coup (swingWeapon), puis se rétracte. Les autres classes gardent leur arme visible.
 const BIG_SWORD_CLASSES = new Set<string>(['swordsman', 'chevalier'])
-const BIG_SWORD_SCALE = 2.7 // agrandissement de la grosse épée à l'affichage (grosse GROSSE épée)
+// La grosse épée reste nettement plus grande que les autres armes (bien visible à l'attaque), mais
+// ramenée à une taille crédible : au-delà (~2,7) elle devenait démesurée / absurde à l'écran.
+const BIG_SWORD_SCALE = 1.7 // agrandissement de la grosse épée à l'affichage (grosse, mais raisonnable)
 const HAT_OFFSET_Y = -38 // place le chapeau au-dessus de la tête du panda illustré (crown haute)
 const WEAPON_OFFSET_X = 11 // décalage horizontal de l'arme (patte avant), mirroré selon l'orientation
 const WEAPON_OFFSET_Y = 12 // décalage vertical de l'arme (hauteur de la patte avant)
@@ -75,6 +83,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // (x, y, hauteur de chute) → LevelScene fait l'explosion proportionnelle à la hauteur.
   diving = false
   private diveStartY = 0
+  // VOL DU MAGE : actif tant qu'on maintient le saut en l'air (skill appris + énergie > 0). Gravité
+  // coupée pendant le vol ; l'énergie chute vite (voir updateFlight). flightFxAt limite le débit des
+  // étincelles arcaniques sous le panda pendant le vol.
+  private flying = false
+  private flightFxAt = 0
+  private flightLastT = 0 // horloge de jeu au dernier tick de vol (drain exact, cohérent avec regenEnergy)
   // Attaque chargée EN L'AIR : pendant le windup, le panda est FIGÉ en hauteur (gravité coupée,
   // vitesse nulle, contrôles ignorés) ; à la fin de la charge on relâche → il retombe (slam).
   private chargeLocked = false
@@ -343,6 +357,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     if (this.inWater) { this.updateSwim(c, body); return }
 
+    // VOL DU MAGE (passif maintenu) : ne s'engage qu'EN L'AIR (le saut au sol part d'abord
+    // normalement → petit saut au tap). Tenu en l'air, skill appris et énergie restante → vol libre
+    // (gravité coupée) ; ce bloc prend alors la main sur le saut/double-saut ci-dessous.
+    if (this.updateFlight(c, body)) return
+
     // SAUT + DOUBLE SAUT : compteur remis à 0 dès qu'on touche le sol ; on ne consomme un saut
     // que sur le FRONT MONTANT de `jump` (input maintenu). Le 2e saut (aérien) n'existe que si le
     // SKILL 'double-saut' est appris ; il COÛTE de l'énergie (échoue sans réserve suffisante) et
@@ -499,6 +518,55 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       const sh = this.scene.add.rectangle(this.x, y, 3, 9, 0xe1f5fe).setDepth(this.depth - 1).setBlendMode(Phaser.BlendModes.ADD)
       this.scene.tweens.add({ targets: sh, x: this.x + Math.cos(a) * 28, y: y - Math.sin(a) * 22, alpha: 0, duration: 260, onComplete: () => sh.destroy() })
     }
+  }
+
+  // rang investi dans le skill de vol du mage (0 = pas appris → saut normal, aucun vol)
+  private flightRank(): number {
+    return getPlayer().skillLevels[FLIGHT_SKILL] ?? 0
+  }
+
+  // Vol du mage : renvoie true quand le vol prend la main sur ce tick (le bloc saut est alors sauté).
+  // Conditions : skill appris, EN L'AIR, saut TENU et énergie > 0. Sinon, si on était en train de
+  // voler, on coupe le vol (gravité rétablie) et on rend la main au comportement de saut normal.
+  private updateFlight(c: ControlsState, body: Phaser.Physics.Arcade.Body): boolean {
+    if (this.flightRank() <= 0) { if (this.flying) this.endFlight(body); return false }
+    const wantFly = c.jump && !body.blocked.down && this.energy > 0
+    if (!wantFly) { if (this.flying) this.endFlight(body); return false }
+    const now = this.scene.time.now
+    if (!this.flying) { this.flying = true; this.flightLastT = now } // 1er tick : pas de drain (dt inconnu)
+    body.setAllowGravity(false)
+    // Drain : jauge PLEINE vidée en (rang) secondes → maxEnergy / rang par seconde. La scène ajoute
+    // ENERGY_REGEN_PER_SEC chaque frame ; on le compense ici pour que le drain NET reste exactement
+    // maxEnergy / rang par seconde (rang 1 = 1 s, rang 2 = 2 s, …). dt lu sur l'horloge de jeu
+    // (même base de temps que regenEnergy) → drain indépendant du framerate.
+    const rank = Phaser.Math.Clamp(this.flightRank(), 1, MAX_SKILL_RANK)
+    const dt = Phaser.Math.Clamp((now - this.flightLastT) / 1000, 0, 0.1) // clamp anti-spike (lag/pause)
+    this.flightLastT = now
+    const drainPerSec = this.maxEnergy / rank + ENERGY_REGEN_PER_SEC
+    this.energy = Math.max(0, this.energy - drainPerSec * dt)
+    // vertical : monte tant que le saut est tenu, descend sur bas ; horizontal déjà posé (bloc course)
+    this.setVelocityY(c.down ? FLIGHT_VSPEED : -FLIGHT_VSPEED)
+    if (!this.attacking) this.play(this.anim('jump'), true)
+    this.jumpWasDown = c.jump // consomme le front : pas de saut parasite quand le vol s'arrête
+    this.flightFx()
+    return true
+  }
+
+  // fin de vol : gravité rétablie → le mage retombe (relâchement du saut ou énergie à 0)
+  private endFlight(body: Phaser.Physics.Arcade.Body) {
+    this.flying = false
+    body.setAllowGravity(true)
+  }
+
+  // étincelles arcaniques violettes sous le panda pendant le vol (débit limité pour rester léger)
+  private flightFx() {
+    const now = this.scene.time.now
+    if (now < this.flightFxAt) return
+    this.flightFxAt = now + 70
+    const y = this.y + PANDA_BODY.h / 2
+    const sp = this.scene.add.rectangle(this.x + Phaser.Math.Between(-10, 10), y, 3, 8, 0xb388ff)
+      .setDepth(this.depth - 1).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.9)
+    this.scene.tweens.add({ targets: sp, y: y + Phaser.Math.Between(12, 22), alpha: 0, duration: 300, ease: 'Sine.out', onComplete: () => sp.destroy() })
   }
 
   // Attaque chargée : si le panda est EN L'AIR, on le FIGE en hauteur (gravité coupée, vitesse

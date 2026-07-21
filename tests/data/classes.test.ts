@@ -10,16 +10,13 @@ const BASE_OF: Partial<Record<ClassId, ClassId>> = Object.fromEntries(
 )
 
 describe('données classes/skills', () => {
-  it('7 classes ; novice 3 ; arbres : sabreur/chevalier/archer/chasseur 10, mage/sorcier 9', () => {
+  it('7 classes ; novice 3 ; arbres des classes combattantes : 10 compétences', () => {
     expect(Object.keys(CLASSES)).toHaveLength(7)
     expect(CLASSES.novice.skillIds).toHaveLength(3)
-    // arbres à branches offensives + buff unique + passifs (dont régén sabreur, réflexes archer)
-    for (const id of ['swordsman', 'chevalier', 'archer', 'chasseur'] as const) {
+    // arbres à branches offensives + buff unique + passifs (dont régén sabreur, réflexes archer,
+    // et le vol arcanique côté mage/sorcier)
+    for (const id of ['swordsman', 'chevalier', 'archer', 'chasseur', 'mage', 'sorcier'] as const) {
       expect(CLASSES[id].skillIds).toHaveLength(10)
-    }
-    // mage/sorcier : un passif de moins dans l'arbre → 9 compétences
-    for (const id of ['mage', 'sorcier'] as const) {
-      expect(CLASSES[id].skillIds).toHaveLength(9)
     }
   })
 

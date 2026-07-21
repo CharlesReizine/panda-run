@@ -30,6 +30,7 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'fureur-arcanique': { color: 0xce93d8, glyph: 'aura' },
   'maitrise-arcanique': { color: 0xba68c8, glyph: 'star' },
   'vitalite-magique': { color: 0x66bb6a, glyph: 'heart' },
+  'vol-arcanique': { color: 0xb388ff, glyph: 'jump' }, // vol du mage : réutilise le glyphe d'élévation (chevrons montants)
   'nova-de-givre': { color: 0x4dd0e1, glyph: 'snow' },
   'meteore': { color: 0xff8a65, glyph: 'meteor' },
   'soin-du-panda': { color: 0x81c784, glyph: 'cross' },

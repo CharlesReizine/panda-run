@@ -17,7 +17,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     id: 'mage', name: 'Mage', tint: 0x88aaff,
     baseStats: { atk: 20, def: 2, maxHp: 94, attackSpeed: 1.2 },
     growth: { atk: 4, def: 1, maxHp: 13, attackSpeed: 0 },
-    skillIds: ['boule-de-feu', 'eclair', 'mur-de-flamme', 'pluie-de-meteores', 'fureur-arcanique', 'nova-de-givre', 'soin-du-panda', 'maitrise-arcanique', 'vitalite-magique'],
+    skillIds: ['boule-de-feu', 'eclair', 'mur-de-flamme', 'pluie-de-meteores', 'fureur-arcanique', 'nova-de-givre', 'soin-du-panda', 'maitrise-arcanique', 'vitalite-magique', 'vol-arcanique'],
   },
   archer: {
     id: 'archer', name: 'Archer', tint: 0x88dd88,
@@ -35,7 +35,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     id: 'sorcier', name: 'Sorcier', tint: 0xaa66ff,
     baseStats: { atk: 36, def: 4, maxHp: 170, attackSpeed: 1.3 },
     growth: { atk: 7, def: 2, maxHp: 22, attackSpeed: 0 },
-    skillIds: ['cataclysme', 'faille-du-neant', 'benediction-du-panda', 'boule-de-feu', 'eclair', 'mur-de-flamme', 'pluie-de-meteores', 'fureur-arcanique', 'maitrise-arcanique'],
+    skillIds: ['cataclysme', 'faille-du-neant', 'benediction-du-panda', 'boule-de-feu', 'eclair', 'mur-de-flamme', 'pluie-de-meteores', 'fureur-arcanique', 'maitrise-arcanique', 'vol-arcanique'],
   },
   chasseur: {
     id: 'chasseur', name: 'Chasseur', tint: 0x33aa55,
