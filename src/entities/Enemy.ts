@@ -47,8 +47,8 @@ const FEAR_SPEED_MULT = 0.45
 // réduite, font demi-tour au MUR et au REBORD (détection de vide devant) → ne tombent JAMAIS.
 const PATROL_SPEED_MULT = 0.6
 // oiseau : vol en sinus (amplitude/période) + piqué vers le joueur par à-coups puis remontée.
-const BIRD_DIVE_COOLDOWN = 2200
-const BIRD_DIVE_MS = 620
+const BIRD_DIVE_COOLDOWN = 1900
+const BIRD_DIVE_MS = 820 // fenêtre de piqué allongée : le temps de descendre à hauteur du joueur (tirs) et d'y rester une lucarne touchable
 const BIRD_WANDER_AMP = 60 // px d'oscillation verticale du vol de croisière
 // avancée du point de sonde de rebord au-delà du bord du corps (px) pour la détection de vide devant.
 const TILE_PROBE = 20
@@ -369,9 +369,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.nextDiveAt = t + BIRD_DIVE_COOLDOWN
     }
     if (t < this.diveUntil) {
-      // piqué : fond droit sur le joueur
-      const dy = Math.sign(player.y - this.y) || 1
-      this.setVelocity(dirX * speed * 1.6, dy * speed * 1.4)
+      // PIQUÉ : l'oiseau fond sur le joueur ET DESCEND jusqu'à SA HAUTEUR — là où passent les tirs
+      // horizontaux (attaque de base mage/archer). Sans ça, il plongeait à peine (v.y bornée à ~speed)
+      // et restait bien au-dessus de la ligne de tir → intouchable. On vise la hauteur du corps du
+      // joueur avec un gain fort et un plancher de vitesse verticale généreux (indépendant de la
+      // vitesse nominale, souvent trop lente pour couvrir l'écart ciel→sol dans la fenêtre de piqué) ;
+      // en arrivant à hauteur (dy→0) la vitesse s'annule d'elle-même → il plane au niveau du joueur,
+      // touchable, avant de remonter en fin de piqué.
+      const dy = player.y - this.y
+      const vCap = Math.max(560, speed * 4)
+      this.setVelocity(dirX * speed * 1.6, Phaser.Math.Clamp(dy * 6, -vCap, vCap))
     } else {
       // croisière : oscille horizontalement autour de home + houle verticale ; dérive vers le joueur
       const drift = dist < AGGRO_RANGE ? dirX * speed * 0.4 : Math.cos(t / 700) * speed * 0.5
@@ -415,6 +422,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   preUpdate(t: number, d: number) {
     super.preUpdate(t, d)
+    // FILET DE SÉCURITÉ ANTI-CHUTE HORS MAP : un monstre terrestre (ni aérien ni aquatique) ne doit
+    // JAMAIS disparaître sous la carte. Si, malgré la collision au sol, son corps se retrouve SOUS le
+    // bas du monde (tunneling, corps statique mal indexé…), on le repose sur la surface solide (sa
+    // hauteur d'apparition) et on annule sa vélocité. Les aériens volent → non concernés.
+    if (!this.monster.aerial && !this.monster.aquatic) {
+      const body = this.body as Phaser.Physics.Arcade.Body
+      if (body.top > this.levelScene.worldFloorY()) {
+        this.setPosition(this.x, this.homeY)
+        body.setVelocity(0, 0)
+      }
+    }
     // NOYADE : un monstre terrestre tombé dans l'eau marine se noie (dégâts jusqu'à la mort). Testé
     // avant toute IA — un mob en train de couler ne patrouille/charge plus, il crève.
     if (this.checkDrown(d)) return

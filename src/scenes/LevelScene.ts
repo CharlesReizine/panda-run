@@ -804,6 +804,16 @@ export class LevelScene extends Phaser.Scene {
     body.setSize(wPx, hPx, false)
     body.position.set(leftPx, topPx)
     body.updateCenter()
+    // RÉINDEXATION DU RTREE STATIQUE (sinon on TRAVERSE le sol). Le corps est inséré dans l'arbre
+    // spatial des corps statiques AU MOMENT de group.create() — donc à la taille/position de la
+    // texture par défaut (32×32 au centre). Après l'avoir redimensionné et repositionné à la main,
+    // l'index spatial garde l'ANCIENNE emprise : la recherche de collision (world.step) ne retrouve
+    // pas la bande à sa vraie place. Ça restait invisible sur les niveaux à PLUSIEURS bandes (l'arbre
+    // finissait cohérent), mais sur une arène à UNE seule bande (entraînement), l'index restait décalé
+    // → joueur ET monstres passaient à travers le sol. On réinsère le corps avec ses bornes RÉELLES.
+    const tree = this.physics.world.staticTree
+    tree.remove(body)
+    tree.insert(body)
     // Plateformes ONE-WAY (escaliers/marches, ponts) : collision UNIQUEMENT par le DESSUS. On coupe
     // les faces bas/gauche/droite → Arcade ne peut plus séparer HORIZONTALEMENT sur ces corps, donc
     // le panda ne peut plus se COINCER entre deux marches (le wedge qui gelait le déplacement « entre
@@ -985,6 +995,11 @@ export class LevelScene extends Phaser.Scene {
 
   // dessus du sol de l'arène (px) — repère commun des frappes au sol / invocations.
   groundTopY(): number { return this.groundRow * TILE }
+  // bas du monde (px) : sous cette ligne, plus rien de jouable — sert de garde-fou anti-chute.
+  worldFloorY(): number { return this.worldH }
+  // dessus RÉEL de la bande de sol (surface solide sur laquelle on se pose) — décalé d'une demi-tuile
+  // sous groundTopY (cf. groundTopPx dans create). Sert au filet de sécurité des monstres.
+  groundSurfaceY(): number { return this.groundRow * TILE + TILE / 2 }
   // largeur jouable de l'arène (px).
   arenaWidthPx(): number { return this.levelDef.widthTiles * TILE }
 
