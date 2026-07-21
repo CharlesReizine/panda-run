@@ -1,5 +1,9 @@
 export type ClassId = 'novice' | 'swordsman' | 'mage' | 'archer' | 'chevalier' | 'sorcier' | 'chasseur'
 export type EquipSlot = 'weapon' | 'armor' | 'accessory' | 'hat'
+// Famille d'arme d'un objet weapon (silhouette + restriction de classe) : lame (mêlée : épée,
+// masse, faux, griffe), arc (tir : arc, arbalète) ou bâton (magie : sceptre, orbe). Sert à choisir
+// la silhouette affichée (Player/PreloadScene) et à savoir quelles classes peuvent l'équiper (equip.ts).
+export type WeaponType = 'sword' | 'bow' | 'staff'
 
 export interface StatBlock {
   atk: number
@@ -65,6 +69,9 @@ export interface ItemDef {
   bonus: Partial<Pick<StatBlock, 'atk' | 'def' | 'maxHp'>>
   rarity?: Rarity // défaut 'commun' si absent
   description?: string // phrase courte et thématique (fiche info de l'inventaire)
+  // Famille d'arme (uniquement pour slot 'weapon') : pilote la silhouette affichée et la restriction
+  // d'équipement par classe. Absente sur les objets non-weapon.
+  weaponType?: WeaponType
 }
 
 export interface DropEntry {
