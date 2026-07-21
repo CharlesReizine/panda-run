@@ -122,7 +122,13 @@ export class LevelScene extends Phaser.Scene {
     cancelAt: { x: number; y: number }
   } | null = null
 
-  constructor() { super('Level') }
+  // MODE ENTRAÎNEMENT (TrainingScene) : quand vrai, le joueur ne subit aucun dégât (hitPlayer no-op),
+  // aucune porte de sortie n'est posée, et le HUD est lancé en mode entraînement. Faux en jeu normal.
+  protected training = false
+
+  // clé de scène paramétrable : 'Level' en jeu normal, 'Training' pour la scène d'entraînement qui
+  // hérite de toute la machinerie (sol, joueur, skills, HUD) sans dupliquer le code.
+  constructor(key = 'Level') { super(key) }
 
   init(data: { levelId: string; fromNode?: string; targetNode?: string; dir?: 'forward' | 'backward' }) {
     this.levelDef = LEVELS[data.levelId]!
@@ -579,7 +585,9 @@ export class LevelScene extends Phaser.Scene {
 
     this.add.text(480, 8, this.levelDef.name, { fontSize: '15px', color: '#ffffff' }).setOrigin(0.5, 0).setScrollFactor(0)
 
-    this.scene.launch('UI')
+    // le HUD est lancé sur la clé de CETTE scène ('Level' ou 'Training') + le drapeau training,
+    // pour que barres/énergie se branchent sur la bonne scène et masquent les overlays inadaptés.
+    this.scene.launch('UI', { levelKey: this.scene.key, training: this.training })
     this.jumpHeld = false
     this.game.events.on('input-jump-down', this.onJumpDown, this)
     this.game.events.on('input-jump-up', this.onJumpUp, this)
@@ -902,6 +910,8 @@ export class LevelScene extends Phaser.Scene {
   }
 
   createExit() {
+    // ENTRAÎNEMENT : aucune porte de sortie — on ne « termine » pas l'arène (retour via les boutons dédiés).
+    if (this.training) return
     // sortie sur la corniche `exit` (altitude différente du départ) si définie, sinon au sol bord droit.
     const exitDef = this.levelDef.exit
     const doorX = exitDef ? exitDef.x * TILE + TILE / 2 : this.exitX()
@@ -1104,6 +1114,8 @@ export class LevelScene extends Phaser.Scene {
   }
 
   hitPlayer(rawAtk: number) {
+    // ENTRAÎNEMENT : le joueur ne subit AUCUN dégât (dummy + corbeaux frappent pour 0) → imperdable.
+    if (this.training) return
     // God mode DEV (émulateur/tests physiques) : le joueur ne perd jamais de PV. Inoffensif
     // en prod — window.__pandaGodMode est absent (donc falsy) par défaut.
     if ((globalThis as { __pandaGodMode?: boolean }).__pandaGodMode) return

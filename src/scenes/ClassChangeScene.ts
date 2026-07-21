@@ -21,6 +21,13 @@ export class ClassChangeScene extends Phaser.Scene {
     // sinon choix de la 1re classe (3 cartes, novice)
     if (canEvolveClass(getPlayer())) this.buildEvolution()
     else this.buildFirstChoice()
+
+    // accès à la page d'entraînement depuis le choix de classe (essayer les classes librement,
+    // mana infini + dummy invincible) — coin bas-gauche, à l'écart des cartes/du bouton d'évolution
+    this.add.text(20, 516, '⚔ Essayer les classes !', {
+      fontSize: '18px', color: '#ffd54f', fontStyle: 'bold', backgroundColor: '#00000066', padding: { x: 10, y: 6 },
+    }).setOrigin(0, 0.5).setDepth(2).setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.scene.start('Training'))
   }
 
   private buildFirstChoice() {

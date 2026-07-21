@@ -111,8 +111,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private nextDiveAt = 0
   private diveUntil = 0
   // GABARIT : scale de base du sprite (1 = normal, GRAND_SCALE pour les 'grand'). Le dandinement de
-  // updateVisuals se REMULTIPLIE par cette base pour ne pas écraser l'agrandissement.
-  private baseScale = 1
+  // updateVisuals se REMULTIPLIE par cette base pour ne pas écraser l'agrandissement. Public :
+  // l'entraînement l'augmente pour grossir le dummy (le rendu suit, cf. updateVisuals).
+  baseScale = 1
+  // CIBLE D'ENTRAÎNEMENT (TrainingScene) : PV INFINIS — encaisse chaque coup (flash + chiffre) mais
+  // ne perd jamais de vie et ne meurt jamais. Faux en jeu normal → aucun impact sur le gameplay.
+  invincible = false
   // MÊLÉE en trois temps : prochaine attaque autorisée / fin du wind-up / fin de la fenêtre active +
   // garde-coup (le coup ne touche qu'une fois par swing) + sens verrouillé au déclenchement.
   private nextMeleeAt = 0
@@ -176,6 +180,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   takeDamage(amount: number) {
     if (!this.active) return
+    // Dummy d'entraînement : PV infinis → on montre le coup (flash + chiffre) sans jamais entamer la
+    // vie ni mourir. La barre reste pleine → « insubmersible ».
+    if (this.invincible) {
+      this.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL)
+      this.scene.time.delayedCall(80, () => { if (this.active) this.clearTint().setTintMode(Phaser.TintModes.MULTIPLY) })
+      this.levelScene.showDamageNumber(this.x, this.y - 30, amount, false)
+      return
+    }
     this.hp -= amount
     // Phaser 4 : le flash blanc se fait via setTint + mode FILL (setTintFill est un no-op déprécié)
     this.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL)

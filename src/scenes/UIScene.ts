@@ -33,7 +33,18 @@ export class UIScene extends Phaser.Scene {
   private spBadge!: Phaser.GameObjects.Container
   private spBadgeText!: Phaser.GameObjects.Text
 
+  // clé de la scène de jeu qui a lancé ce HUD ('Level' par défaut, 'Training' en entraînement) :
+  // on branche barres/énergie et pauses dessus. `training` masque les overlays inadaptés (pause,
+  // gestion des compétences, inventaire) dont le retour est câblé en dur sur 'Level'.
+  private levelKey = 'Level'
+  private training = false
+
   constructor() { super('UI') }
+
+  init(data?: { levelKey?: string; training?: boolean }) {
+    this.levelKey = data?.levelKey ?? 'Level'
+    this.training = !!data?.training
+  }
 
   create() {
     // Scène réutilisée à chaque niveau (launch depuis LevelScene) : ces tableaux sont des
@@ -63,10 +74,13 @@ export class UIScene extends Phaser.Scene {
     this.add.rectangle(14, 60, BAR_W + 4, 6, 0x000000, 0.6).setOrigin(0)
     this.xpBar = this.add.rectangle(16, 61, BAR_W, 4, 0xfdd835).setOrigin(0)
 
-    // toucher le panneau (barres) ouvre la gestion des skills en jeu
-    this.add.rectangle(8, 2, BAR_W + 16, 78, 0xffffff, 0.001).setOrigin(0).setInteractive()
-      .on('pointerdown', () => this.openSkillMenu())
-    this.add.text(16, 68, 'compétences ▸', { fontSize: '10px', color: '#b0bec5' })
+    // toucher le panneau (barres) ouvre la gestion des skills en jeu (désactivé en entraînement :
+    // l'écran SkillEquip resume 'Level' en dur → soft-lock si on l'ouvre depuis 'Training')
+    if (!this.training) {
+      this.add.rectangle(8, 2, BAR_W + 16, 78, 0xffffff, 0.001).setOrigin(0).setInteractive()
+        .on('pointerdown', () => this.openSkillMenu())
+      this.add.text(16, 68, 'compétences ▸', { fontSize: '10px', color: '#b0bec5' })
+    }
 
     // Badge « points à dépenser » : JUSTE à droite du panneau de vie, pastille dorée pulsante
     // avec une flèche qui pointe vers le panneau (où l'on ouvre le menu). Masqué s'il n'y a
@@ -99,15 +113,18 @@ export class UIScene extends Phaser.Scene {
     })
 
     // bouton pause discret, juste à gauche du mute : ouvre le menu de pause par-dessus le jeu gelé
-    const pauseBtn = this.add.text(908, 6, '⏸', { fontSize: '20px' })
-      .setOrigin(1, 0).setDepth(50).setInteractive({ useHandCursor: true })
-    pauseBtn.on('pointerdown', () => {
-      audio.playSfx('ui-tap')
-      this.freezeLevelForOverlay()
-      this.scene.launch('Pause')
-      this.scene.pause('Level')
-      this.scene.pause('UI')
-    })
+    // (masqué en entraînement : PauseScene resume/quit sur 'Level' en dur, inadapté à 'Training')
+    if (!this.training) {
+      const pauseBtn = this.add.text(908, 6, '⏸', { fontSize: '20px' })
+        .setOrigin(1, 0).setDepth(50).setInteractive({ useHandCursor: true })
+      pauseBtn.on('pointerdown', () => {
+        audio.playSfx('ui-tap')
+        this.freezeLevelForOverlay()
+        this.scene.launch('Pause')
+        this.scene.pause(this.levelKey)
+        this.scene.pause('UI')
+      })
+    }
 
     // Haut-droite : les 4 slots de skills côte à côte, décalés à GAUCHE du bouton PAUSE (SLOT_X0)
     for (let i = 0; i < 4; i++) {
@@ -142,12 +159,15 @@ export class UIScene extends Phaser.Scene {
     this.potionText = this.add.text(70, 490, '', { fontSize: '16px', color: '#ffffff' })
 
     // bouton inventaire (icône « tenue ») : EN HAUT À GAUCHE, juste à droite du panneau de vie
-    const invBtn = this.add.image(248, 40, 'ui-inventory').setDisplaySize(42, 42).setDepth(50).setInteractive({ useHandCursor: true })
-    invBtn.on('pointerdown', () => { this.pressFx(invBtn); this.openInventoryMenu() })
-    this.add.text(248, 64, 'SAC', { fontSize: '10px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5).setDepth(50)
+    // (masqué en entraînement : InventoryScene resume 'Level' en dur → soft-lock depuis 'Training')
+    if (!this.training) {
+      const invBtn = this.add.image(248, 40, 'ui-inventory').setDisplaySize(42, 42).setDepth(50).setInteractive({ useHandCursor: true })
+      invBtn.on('pointerdown', () => { this.pressFx(invBtn); this.openInventoryMenu() })
+      this.add.text(248, 64, 'SAC', { fontSize: '10px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5).setDepth(50)
+    }
 
-    // Écoute des mises à jour émises par LevelScene
-    const level = this.scene.get('Level')
+    // Écoute des mises à jour émises par la scène de jeu (Level ou Training)
+    const level = this.scene.get(this.levelKey)
     level.events.on('player-hp', this.onPlayerHp)
     level.events.on('player-buff', this.onBuff)
     level.events.on('player-buff-end', this.onBuffEnd)
@@ -171,7 +191,7 @@ export class UIScene extends Phaser.Scene {
   // resterait figée tant que le menu est ouvert. Le niveau reste bien figé par la pause de
   // scène ; on évite seulement de laisser le flag physique bloqué.
   private freezeLevelForOverlay() {
-    const level = this.scene.get('Level') as LevelScene | undefined
+    const level = this.scene.get(this.levelKey) as LevelScene | undefined
     level?.physics?.world?.resume()
   }
 
@@ -180,7 +200,7 @@ export class UIScene extends Phaser.Scene {
     audio.playSfx('ui-tap')
     this.freezeLevelForOverlay()
     this.scene.launch('SkillEquip')
-    this.scene.pause('Level')
+    this.scene.pause(this.levelKey)
     this.scene.pause('UI')
   }
 
@@ -189,7 +209,7 @@ export class UIScene extends Phaser.Scene {
     audio.playSfx('ui-tap')
     this.freezeLevelForOverlay()
     this.scene.launch('Inventory', { return: 'game', overlay: true })
-    this.scene.pause('Level')
+    this.scene.pause(this.levelKey)
     this.scene.pause('UI')
   }
 
@@ -252,7 +272,7 @@ export class UIScene extends Phaser.Scene {
   update(time: number) {
     // l'énergie change en continu (régén) : on la lit directement sur le Player plutôt
     // que via un événement par frame
-    const pl = (this.scene.get('Level') as LevelScene | undefined)?.player
+    const pl = (this.scene.get(this.levelKey) as LevelScene | undefined)?.player
     if (pl && this.energyBar) this.energyBar.setDisplaySize(BAR_W * (pl.energy / pl.maxEnergy), 8)
     for (let i = 0; i < 4; i++) {
       const ov = this.slotCooldownOverlays[i]!
