@@ -54,6 +54,27 @@ const WEAPON_TILT_DEG: Record<string, number> = {
   swordsman: 30, chevalier: 26,
   archer: 16, chasseur: 18,
 }
+// Décalage AVANT supplémentaire (px, dans le sens du regard) ajouté à WEAPON_OFFSET_X pour certaines
+// classes. Le BÂTON du mage/sorcier est long : au repos comme à l'attaque il doit DÉPASSER devant le
+// panda, pas rester collé au corps → on le pousse nettement vers l'avant. Les autres classes gardent
+// l'ancrage patte avant standard (0).
+const WEAPON_FWD_X: Record<string, number> = { mage: 13, sorcier: 13 }
+// Signature visuelle d'arme par CLASSE : échelle de base + couleur de lueur propres. Deux classes à
+// silhouette proche (sabreur/chevalier, mage/sorcier, archer/chasseur) restent alors nettement
+// distinctes — taille ET couleur de halo. La lueur est un halo additif DERRIÈRE l'arme (elle ne
+// salit pas les couleurs de la lame, contrairement à un tint direct que réserve le buff enflammé).
+// Pour les grosses épées, `scale` est un FACTEUR appliqué à BIG_SWORD_SCALE (0,9 reste la base) ;
+// pour les autres armes c'est l'échelle absolue de la texture.
+const WEAPON_STYLE: Record<string, { scale: number; glow: number }> = {
+  swordsman: { scale: 1, glow: 0x80d8ff }, // sabre acier, halo cyan vif
+  chevalier: { scale: 1.15, glow: 0xffd54f }, // épée de chevalier, plus grande, halo doré noble
+  mage: { scale: 1, glow: 0x64b5f6 }, // bâton, halo bleu arcanique
+  sorcier: { scale: 1.12, glow: 0xb388ff }, // bâton d'orbe évolué, plus grand, halo violet
+  archer: { scale: 1, glow: 0xa5d6a7 }, // arc léger, halo vert discret
+  chasseur: { scale: 1.12, glow: 0xffb74d }, // grand arc, halo ambre
+}
+// Teinte NOBLE du halo au palier max (or blanchi) — l'arme paraît légendaire aux hauts niveaux.
+const WEAPON_GLOW_TOP = 0xfff3c4
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   stats: StatBlock
@@ -108,6 +129,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private spinTimer: Phaser.Time.TimerEvent | null = null
   private hatImage: Phaser.GameObjects.Image | null = null
   private weaponImage: Phaser.GameObjects.Image | null = null
+  // Halo de classe derrière l'arme (montée en gamme) : même texture que l'arme, teintée de la couleur
+  // de classe, en fondu additif, échelle un peu plus grande → lueur qui suit rigidement l'arme.
+  private weaponGlow: Phaser.GameObjects.Image | null = null
   // offset d'angle (radians) ajouté à l'arme pendant l'attaque : un tween le fait balayer de
   // l'arrière vers l'avant/bas puis revenir à 0. Piloté ici, appliqué dans syncOverlays (qui repose
   // l'angle de repos chaque frame) → le swing prend le dessus tant qu'il n'est pas revenu à 0.
@@ -162,12 +186,41 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const cls = getPlayer().classId
     const key = `weapon-${cls}`
     this.weaponImage?.destroy()
-    if (!this.scene.textures.exists(key)) { this.weaponImage = null; return }
+    this.weaponGlow?.destroy()
+    this.weaponImage = null
+    this.weaponGlow = null
+    if (!this.scene.textures.exists(key)) return
+    const big = BIG_SWORD_CLASSES.has(cls)
+    const style = WEAPON_STYLE[cls] ?? { scale: 1, glow: 0xffffff }
+    const tier = this.weaponTier()
+    // échelle : base de classe (les grosses épées partent de BIG_SWORD_SCALE, jamais regrossi) et
+    // AGRANDIE par palier (+12 % par palier) → l'arme devient plus imposante au fil de la progression
+    const base = big ? BIG_SWORD_SCALE * style.scale : style.scale
+    const scale = base * (1 + 0.12 * tier)
     const w = this.scene.add.image(this.x + WEAPON_OFFSET_X, this.y + WEAPON_OFFSET_Y, key)
-      .setOrigin(0.5, 44 / 60).setDepth(this.depth + 1)
-    // Lignée du sabreur : GROSSE épée agrandie, MASQUÉE au repos → révélée le temps du balayage.
-    if (BIG_SWORD_CLASSES.has(cls)) w.setScale(BIG_SWORD_SCALE).setVisible(false)
+      .setOrigin(0.5, 44 / 60).setDepth(this.depth + 1).setScale(scale)
+    // halo de classe : n'apparaît qu'à partir du palier 1 et s'intensifie ensuite (montée en gamme).
+    // Couleur propre à la classe (distingue sabreur/chevalier, mage/sorcier…) ; teinte dorée noble au
+    // palier max. Derrière l'arme (depth − 1), fondu additif, un peu plus grand qu'elle.
+    if (tier >= 1) {
+      this.weaponGlow = this.scene.add.image(this.x + WEAPON_OFFSET_X, this.y + WEAPON_OFFSET_Y, key)
+        .setOrigin(0.5, 44 / 60).setDepth(this.depth).setScale(scale * 1.25)
+        .setTint(tier >= 3 ? WEAPON_GLOW_TOP : style.glow)
+        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.28 + 0.18 * tier)
+    }
+    // Lignée du sabreur : GROSSE épée MASQUÉE au repos → révélée (halo compris) le temps du balayage.
+    if (big) { w.setVisible(false); this.weaponGlow?.setVisible(false) }
     this.weaponImage = w
+  }
+
+  // Palier de « montée en gamme » déduit du NIVEAU perso existant (aucun nouveau système de save).
+  // Plus le palier monte, plus l'arme est grande et lumineuse (« de plus en plus badass »).
+  private weaponTier(): number {
+    const lvl = getPlayer().level
+    if (lvl >= 45) return 3
+    if (lvl >= 30) return 2
+    if (lvl >= 15) return 1
+    return 0
   }
 
   // Recale les overlays sur le panda (appelé en POST_UPDATE, après la synchro physique) : ancrage
@@ -186,14 +239,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.hatImage.setFlipX(flip === -1)
     }
     if (this.weaponImage) {
-      this.weaponImage.setPosition(this.x + WEAPON_OFFSET_X * flip, this.y + WEAPON_OFFSET_Y)
+      // décalage avant propre à la classe (bâton du mage/sorcier poussé nettement devant le panda)
+      const fwd = WEAPON_FWD_X[getPlayer().classId] ?? 0
+      const wx = this.x + (WEAPON_OFFSET_X + fwd) * flip
+      const wy = this.y + WEAPON_OFFSET_Y
+      this.weaponImage.setPosition(wx, wy)
       this.weaponImage.setFlipX(flip === -1)
       // arme tenue en biais dans la patte (pas plantée à la verticale dans la tête) ; l'angle suit
       // le flip pour rester penchée vers l'avant quel que soit le sens du regard
       const tilt = WEAPON_TILT_DEG[getPlayer().classId] ?? 0
       // angle de repos (tilt) + offset de swing d'attaque, le tout mirroré par le flip pour que
       // l'arme fende toujours vers l'avant quel que soit le sens du regard
-      this.weaponImage.setRotation((Phaser.Math.DegToRad(tilt) + this.attackSwing) * flip)
+      const rot = (Phaser.Math.DegToRad(tilt) + this.attackSwing) * flip
+      this.weaponImage.setRotation(rot)
+      // le halo colle rigidement à l'arme (même position/flip/rotation)
+      if (this.weaponGlow) {
+        this.weaponGlow.setPosition(wx, wy)
+        this.weaponGlow.setFlipX(flip === -1)
+        this.weaponGlow.setRotation(rot)
+      }
     }
     // aura de buff : suit le panda tant que le buff est actif, puis se dissout à l'échéance
     if (this.auraImage) {
@@ -273,6 +337,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.flameTimer?.remove()
     this.hatImage?.destroy()
     this.weaponImage?.destroy()
+    this.weaponGlow?.destroy()
     this.auraTween?.remove()
     this.auraImage?.destroy()
     this.rageTween?.remove()
@@ -302,7 +367,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Lignée du sabreur : la grosse épée n'apparaît QUE pendant le coup (révélée ici, rétractée à la
     // fin du retour au repos). Les autres armes restent visibles en permanence.
     const big = BIG_SWORD_CLASSES.has(getPlayer().classId)
-    if (big) this.weaponImage.setVisible(true)
+    if (big) { this.weaponImage.setVisible(true); this.weaponGlow?.setVisible(true) }
     this.swingTween?.remove()
     this.attackSwing = Phaser.Math.DegToRad(-60) // arme relevée vers l'arrière
     this.swingTween = this.scene.tweens.add({
@@ -313,7 +378,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       onComplete: () => {
         this.swingTween = this.scene?.tweens.add({
           targets: this, attackSwing: 0, duration: 130, ease: 'Cubic.out',
-          onComplete: () => { if (big) this.weaponImage?.setVisible(false) },
+          onComplete: () => { if (big) { this.weaponImage?.setVisible(false); this.weaponGlow?.setVisible(false) } },
         }) ?? null
       },
     })

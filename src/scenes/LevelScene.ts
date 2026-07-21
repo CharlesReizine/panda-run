@@ -2975,6 +2975,9 @@ export class LevelScene extends Phaser.Scene {
     this.events.emit('enemy-loot', e) // consommé en Task 13
     if (levelsGained > 0) {
       this.player.refreshStats()
+      // passage de niveau : PV + mana/énergie remis à 100 % (une seule fois, même si plusieurs
+      // niveaux gagnés d'un coup — restoreFull est idempotent sur le max)
+      this.player.restoreFull()
       this.game.events.emit('player-level-up', p.level)
       this.levelUpFx()
     }
