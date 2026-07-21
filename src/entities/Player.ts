@@ -24,6 +24,10 @@ const ENERGY_PER_BASIC_HIT = 6
 const DIVE_SPEED = 1400 // vitesse de piqué vertical du Plongeon (px/s)
 // Lignée du sabreur : ces classes disposent du DOUBLE SAUT (2 sauts). Les autres restent à 1.
 const DOUBLE_JUMP_CLASSES = new Set<string>(['swordsman', 'chevalier'])
+// Lignée du sabreur : la GROSSE épée n'est PAS affichée au repos ; elle n'apparaît (agrandie) que
+// le temps d'un coup (swingWeapon), puis se rétracte. Les autres classes gardent leur arme visible.
+const BIG_SWORD_CLASSES = new Set<string>(['swordsman', 'chevalier'])
+const BIG_SWORD_SCALE = 2.7 // agrandissement de la grosse épée à l'affichage (grosse GROSSE épée)
 const HAT_OFFSET_Y = -38 // place le chapeau au-dessus de la tête du panda illustré (crown haute)
 const WEAPON_OFFSET_X = 11 // décalage horizontal de l'arme (patte avant), mirroré selon l'orientation
 const WEAPON_OFFSET_Y = 12 // décalage vertical de l'arme (hauteur de la patte avant)
@@ -69,6 +73,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private flameUntil = 0
   private flameTimer: Phaser.Time.TimerEvent | null = null
   private attacking = false
+  // Tourbillon : pendant le skill, le panda TOURNE — flipX alterné gauche/droite plusieurs fois sur
+  // la durée → illusion de rotation. spinFlip = orientation courante du cycle ; remis au facing réel
+  // à la fin. Piloté par un timer, imposé dans updateFromControls/syncOverlays tant que ça tourne.
+  private spinUntil = 0
+  private spinFlip = false
+  private spinTimer: Phaser.Time.TimerEvent | null = null
   private hatImage: Phaser.GameObjects.Image | null = null
   private weaponImage: Phaser.GameObjects.Image | null = null
   // offset d'angle (radians) ajouté à l'arme pendant l'attaque : un tween le fait balayer de
@@ -118,11 +128,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // (ré)affiche l'arme de classe en overlay dans la patte avant (le panda illustré a les mains
   // vides) ; retirée si la classe n'a pas d'arme (novice). Suivie/mirrorée chaque frame.
   private refreshWeapon() {
-    const key = `weapon-${getPlayer().classId}`
+    const cls = getPlayer().classId
+    const key = `weapon-${cls}`
     this.weaponImage?.destroy()
-    this.weaponImage = this.scene.textures.exists(key)
-      ? this.scene.add.image(this.x + WEAPON_OFFSET_X, this.y + WEAPON_OFFSET_Y, key).setOrigin(0.5, 44 / 60).setDepth(this.depth + 1)
-      : null
+    if (!this.scene.textures.exists(key)) { this.weaponImage = null; return }
+    const w = this.scene.add.image(this.x + WEAPON_OFFSET_X, this.y + WEAPON_OFFSET_Y, key)
+      .setOrigin(0.5, 44 / 60).setDepth(this.depth + 1)
+    // Lignée du sabreur : GROSSE épée agrandie, MASQUÉE au repos → révélée le temps du balayage.
+    if (BIG_SWORD_CLASSES.has(cls)) w.setScale(BIG_SWORD_SCALE).setVisible(false)
+    this.weaponImage = w
   }
 
   // Recale les overlays sur le panda (appelé en POST_UPDATE, après la synchro physique) : ancrage
@@ -133,7 +147,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // garde de fermeture : pendant la sortie de niveau, POST_UPDATE peut encore se déclencher
     // alors que la scène/le corps sont déjà en cours de destruction → accès à this.scene = gel
     if (!this.active || !this.scene || !this.scene.sys) return
-    const flip = this.facing
+    // pendant le tourbillon, chapeau/arme suivent le flip de rotation (pas le facing réel)
+    const flip = this.isSpinning() ? (this.spinFlip ? -1 : 1) : this.facing
     if (this.hatImage) {
       const a = PANDA_HEAD_ANCHORS[this.texture.key] ?? { dx: 0, dy: HAT_OFFSET_Y }
       this.hatImage.setPosition(this.x + a.dx * flip, this.y + a.dy)
@@ -222,6 +237,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   destroy(fromScene?: boolean) {
     this.scene?.events?.off(Phaser.Scenes.Events.POST_UPDATE, this.syncOverlays, this)
     this.swingTween?.remove()
+    this.spinTimer?.remove()
     this.flameTimer?.remove()
     this.hatImage?.destroy()
     this.weaponImage?.destroy()
@@ -251,6 +267,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // No-op sans arme (novice). L'ampleur suit un peu la classe (épée = grand arc franc).
   swingWeapon() {
     if (!this.weaponImage) return
+    // Lignée du sabreur : la grosse épée n'apparaît QUE pendant le coup (révélée ici, rétractée à la
+    // fin du retour au repos). Les autres armes restent visibles en permanence.
+    const big = BIG_SWORD_CLASSES.has(getPlayer().classId)
+    if (big) this.weaponImage.setVisible(true)
     this.swingTween?.remove()
     this.attackSwing = Phaser.Math.DegToRad(-60) // arme relevée vers l'arrière
     this.swingTween = this.scene.tweens.add({
@@ -261,6 +281,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       onComplete: () => {
         this.swingTween = this.scene?.tweens.add({
           targets: this, attackSwing: 0, duration: 130, ease: 'Cubic.out',
+          onComplete: () => { if (big) this.weaponImage?.setVisible(false) },
         }) ?? null
       },
     })
@@ -324,6 +345,32 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       else if (c.left || c.right) this.play(this.anim('run'), true)
       else this.play(this.anim('idle'), true)
     }
+
+    // Tourbillon : la rotation (flipX alterné) prime sur le flip d'orientation tant qu'il tourne
+    if (this.isSpinning()) this.setFlipX(this.spinFlip)
+  }
+
+  // Tourbillon : fait TOURNER le panda visuellement — alterne rapidement flipX gauche↔droite sur la
+  // durée du skill (effet de rotation), puis rend l'orientation réelle (facing) à la fin.
+  spinWhirl(durationMs: number) {
+    this.spinUntil = this.scene.time.now + durationMs
+    this.spinFlip = this.facing === -1
+    this.spinTimer?.remove()
+    this.spinTimer = this.scene.time.addEvent({
+      delay: 60, loop: true, callback: () => {
+        if (!this.isSpinning()) {
+          this.spinTimer?.remove(); this.spinTimer = null
+          this.setFlipX(this.facing === -1) // retour à l'orientation réelle
+          return
+        }
+        this.spinFlip = !this.spinFlip
+        this.setFlipX(this.spinFlip)
+      },
+    })
+  }
+
+  isSpinning(): boolean {
+    return this.scene.time.now < this.spinUntil
   }
 
   // sur une échelle : gravité coupée, montée/descente au clavier/joystick, le saut détache
@@ -459,7 +506,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return this.scene.time.now < this.flameUntil
   }
 
-  // flammèche qui monte depuis la lame tant que le buff est actif ; s'auto-éteint à l'échéance
+  // flammèche qui monte LE LONG DE LA LAME tant que le buff est actif ; s'auto-éteint à l'échéance.
+  // Le feu est échantillonné du grip vers la pointe (selon l'angle/échelle courants de l'épée) →
+  // c'est l'ÉPÉE qui brûle, jamais le corps du panda. N'émet que quand la lame est visible (donc,
+  // pour la grosse épée du sabreur, uniquement pendant le coup).
   private emitFlame() {
     if (!this.isFlaming()) {
       this.flameTimer?.remove(); this.flameTimer = null
@@ -467,12 +517,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       return
     }
     const w = this.weaponImage
-    if (!w) return
-    const fx = w.x + Phaser.Math.Between(-7, 7)
-    const fy = w.y - Phaser.Math.Between(4, 18)
+    if (!w || !w.visible) return
+    // direction « vers la pointe » = (0,-1) local pivoté par la rotation courante de l'arme
+    const rot = w.rotation
+    const bladeLen = 40 * w.scaleY // longueur grip→pointe à l'échelle d'affichage
+    const t = Phaser.Math.FloatBetween(0.2, 1)
+    const fx = w.x + Math.sin(rot) * bladeLen * t + Phaser.Math.Between(-4, 4)
+    const fy = w.y - Math.cos(rot) * bladeLen * t + Phaser.Math.Between(-4, 4)
     const col = Phaser.Math.RND.pick([0xffca28, 0xff7043, 0xff5252])
-    const fl = this.scene.add.rectangle(fx, fy, 5, 10, col).setDepth(this.depth + 2).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.95)
-    this.scene.tweens.add({ targets: fl, y: fy - Phaser.Math.Between(16, 26), scaleX: 0.3, scaleY: 0.4, alpha: 0, duration: 300, ease: 'Sine.out', onComplete: () => fl.destroy() })
+    const fl = this.scene.add.rectangle(fx, fy, 5, 11, col).setDepth(this.depth + 2).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.95)
+    this.scene.tweens.add({ targets: fl, y: fy - Phaser.Math.Between(14, 24), scaleX: 0.3, scaleY: 0.4, alpha: 0, duration: 280, ease: 'Sine.out', onComplete: () => fl.destroy() })
   }
 
   takeDamage(amount: number) {

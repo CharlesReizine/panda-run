@@ -473,10 +473,32 @@ export class PreloadScene extends Phaser.Scene {
     for (const cls of CLASSES) {
       if (cls === 'novice') continue
       const g = this.add.graphics()
-      this.drawClassWeapon(g, cls, 20, 44)
+      // Lignée du sabreur : GROSSE épée large (lame remplie, dédiée à l'overlay). Elle n'apparaît
+      // qu'à l'attaque côté Player (masquée au repos) et est agrandie à l'affichage.
+      if (cls === 'swordsman' || cls === 'chevalier') this.drawBigSword(g, cls, 20, 44)
+      else this.drawClassWeapon(g, cls, 20, 44)
       g.generateTexture(`weapon-${cls}`, 40, 60)
       g.destroy()
     }
+  }
+
+  // GROSSE épée large du sabreur / chevalier (overlay d'attaque). Grip ancré en (hx, hy) dans le
+  // cadre 40×60 (comme les autres armes) → Player conserve l'ancrage à la patte et l'échelle.
+  private drawBigSword(g: Phaser.GameObjects.Graphics, cls: ClassId, hx: number, hy: number) {
+    const blade = cls === 'chevalier' ? 0xeceff1 : 0xcfd8dc
+    const guard = cls === 'chevalier' ? 0xffca28 : 0xffd54f
+    // poignée + pommeau (vers la patte)
+    g.fillStyle(0x6d4c41).fillRect(hx - 2.5, hy + 2, 5, 11)
+    g.fillStyle(0x4e342e).fillCircle(hx, hy + 14, 3)
+    // garde large
+    g.fillStyle(guard).fillRect(hx - 8, hy - 2, 18, 5)
+    // lame large remplie, montant jusqu'en haut du cadre, terminée en pointe acérée
+    g.fillStyle(blade)
+    g.fillRect(hx - 5, hy - 38, 11, 38)
+    g.fillTriangle(hx - 5, hy - 36, hx + 6, hy - 36, hx + 0.5, hy - 43)
+    // arête centrale brillante + biseau sombre (relief de la lame)
+    g.fillStyle(0xffffff, 0.9).fillRect(hx - 0.5, hy - 38, 2.5, 34)
+    g.fillStyle(0x90a4ae).fillRect(hx + 3.5, hy - 38, 2.5, 36)
   }
 
   // panda K.O. : allongé sur le dos, pattes en l'air, yeux en croix et langue pendante.
@@ -1705,22 +1727,22 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0xb39ddb, 0.9).fillCircle(8, 6, 2) // lueur froide
     g.fillStyle(0xd1c4e9, 0.85).fillCircle(9, 8, 1).fillCircle(12, 8, 1) // orbites (petit crâne suggéré)
     g.generateTexture('fx-necro', 20, 16); g.clear()
-    // pics MORTELS (rangée de pointes) — piège clairement dangereux : hautes pointes de métal
-    // sombre à extrémité ROUGE vif, socle rocheux, halo rouge d'avertissement. Texture plus haute
-    // (32×28 au lieu de 32×16) → pics nettement plus gros, on voit tout de suite que ça tue.
-    const SH = 28
+    // pics MORTELS GÉANTS (rangée de pointes) — piège clairement mortel : hautes pointes de métal
+    // sombre à extrémité ROUGE vif, socle rocheux, halo rouge d'avertissement. Texture ~2 tuiles de
+    // haut (32×60, ≈ hauteur du panda) → pics imposants qui tuent ONE-SHOT au contact (cf. hitSpikes).
+    const SH = 60
     // halo d'avertissement (lueur rouge diffuse derrière chaque pointe)
-    g.fillStyle(0xff1744, 0.16); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 - 1, SH, i * 8 + 4, 0, i * 8 + 9, SH)
+    g.fillStyle(0xff1744, 0.14); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 - 1, SH, i * 8 + 4, 2, i * 8 + 9, SH)
     // grande pointe : triangle de métal sombre, base au socle, sommet acéré tout en haut
-    g.fillStyle(0x546e7a); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8, SH - 3, i * 8 + 4, 1, i * 8 + 8, SH - 3)
+    g.fillStyle(0x546e7a); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8, SH - 4, i * 8 + 4, 2, i * 8 + 8, SH - 4)
     // arête claire (relief métallique) sur toute la hauteur
-    g.fillStyle(0xb0bec5); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 + 2, SH - 3, i * 8 + 4, 4, i * 8 + 6, SH - 3)
+    g.fillStyle(0xb0bec5); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 + 2.4, SH - 4, i * 8 + 4, 5, i * 8 + 5.6, SH - 4)
     // extrémité ROUGE vif (danger) sur le tiers supérieur de chaque pointe
-    g.fillStyle(0xff1744); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 + 1.4, 11, i * 8 + 4, 1, i * 8 + 6.6, 11)
-    g.fillStyle(0xff8a80); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 + 3, 7, i * 8 + 4, 1, i * 8 + 5, 7) // éclat sur la pointe
+    g.fillStyle(0xff1744); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 + 1.2, SH * 0.4, i * 8 + 4, 2, i * 8 + 6.8, SH * 0.4)
+    g.fillStyle(0xff8a80); for (let i = 0; i < 4; i++) g.fillTriangle(i * 8 + 2.8, SH * 0.26, i * 8 + 4, 2, i * 8 + 5.2, SH * 0.26) // éclat sur la pointe
     // socle rocheux sombre au pied des pointes
-    g.fillStyle(0x37474f).fillRect(0, SH - 5, 32, 5)
-    g.fillStyle(0x263238).fillRect(0, SH - 2, 32, 2)
+    g.fillStyle(0x37474f).fillRect(0, SH - 8, 32, 8)
+    g.fillStyle(0x263238).fillRect(0, SH - 3, 32, 3)
     g.generateTexture('spikes', 32, SH); g.clear()
     // eau (zone nageable, translucide : on voit le panda dedans)
     g.fillStyle(0x1e88e5, 0.38).fillRect(0, 0, 32, 32)

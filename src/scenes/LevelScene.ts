@@ -337,7 +337,10 @@ export class LevelScene extends Phaser.Scene {
         // Les pics sont posés SUR la surface (base au dessus de la corniche, pointes vers le haut).
         const surfaceTopPx = hz.top !== undefined ? hz.top * TILE : groundTopPx
         for (let i = 0; i < hz.w; i++) {
-          spikes.create((hz.x + i) * TILE + TILE / 2, surfaceTopPx - 8, 'spikes')
+          // pics GÉANTS (~2 tuiles) posés SUR la surface : base ancrée au sol (origine bas), pointes
+          // dressées vers le haut. refreshBody recale le corps statique sur la nouvelle géométrie.
+          const s = spikes.create((hz.x + i) * TILE + TILE / 2, surfaceTopPx + 2, 'spikes') as Phaser.Physics.Arcade.Sprite
+          s.setOrigin(0.5, 1).refreshBody()
         }
         continue
       }
@@ -442,7 +445,7 @@ export class LevelScene extends Phaser.Scene {
         this.addBasinBottomDeco(hz.x, hz.x + hz.w - 1, this.groundRow - 1)
       }
     }
-    this.physics.add.overlap(this.player, spikes, () => this.hitPlayer(35))
+    this.physics.add.overlap(this.player, spikes, () => this.hitSpikes())
     this.physics.add.collider(this.player, basinWalls)
     this.physics.add.collider(this.enemies, basinWalls)
 
@@ -985,6 +988,17 @@ export class LevelScene extends Phaser.Scene {
       save(getPlayer())
       this.showGameOver()
     }
+  }
+
+  // Pics MORTELS : contact = MORT IMMÉDIATE (one-shot), même chemin que la chute mortelle → écran
+  // « Essaie encore ! » puis reprise au début. Respecte le god mode (émulateur/tests).
+  private hitSpikes() {
+    if ((globalThis as { __pandaGodMode?: boolean }).__pandaGodMode) return
+    if (this.player.hp <= 0) return
+    this.player.takeDamage(this.player.hp) // one-shot : vide toute la vie d'un coup
+    audio.playSfx('player-death')
+    save(getPlayer())
+    this.showGameOver()
   }
 
   // écran K.O. avec choix « Réessayer » (relance le niveau au DÉBUT) ou « Carte »
@@ -1585,7 +1599,8 @@ export class LevelScene extends Phaser.Scene {
         this.explosionFx(px + f * skill.range * 0.7, py, skill.range * 1.2, color)
         this.hitStop(130)
         break
-      case 'tourbillon': // lames tournoyantes tout autour du panda
+      case 'tourbillon': // le panda TOURNE (flipX alterné) au milieu de lames tournoyantes
+        this.player.spinWhirl(640)
         this.whirlwindFx(px, py, skill.range, color)
         break
       case 'jugement-royal': // colonne de lumière céleste + arc géant + onde + flash + hit-stop
