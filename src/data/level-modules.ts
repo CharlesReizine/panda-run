@@ -1027,6 +1027,10 @@ export interface ComposeOpts {
   ending: 'bas' | 'haut' // sortie franchement plus BASSE ou plus HAUTE que le départ (mi-hauteur)
   ground: string[]       // pool de monstres terrestres (ordre = difficulté croissante)
   birds: string[]        // pool d'oiseaux du biome
+  // pool de monstres AQUATIQUES posés sur/au-dessus des cuves d'eau (bassin, passage immergé…). Seuls
+  // des mobs aquatiques (méduse, crabe) y sont cohérents ; par défaut VIDE → l'eau reste sans monstre
+  // plutôt que d'y placer un terrestre (règle de cohérence : jamais de mob terrestre au-dessus de l'eau).
+  aquatic?: string[]
   mvp?: string           // MVP rare posé dans un module de risque tardif
   midCount?: number      // nb de modules centraux (défaut 5)
   allowLadders?: boolean // autoriser les motifs à échelle (niveau 1 : false pour rester simple)
@@ -1109,7 +1113,7 @@ export function composeLevel(o: ComposeOpts): LevelDef {
       const spec = CATALOG[wk]
       if (spec.chest && chests < 3) chests++
       modules.push(mk(wk, {
-        ground: nextGround(), birds: spec.birds ? [pick(o.birds)] : undefined,
+        ground: o.aquatic ?? [], birds: spec.birds ? [pick(o.birds)] : undefined,
         ...(o.lava && spec.below === 'marine' ? { fillBelow: 'lave' as Fill } : {}),
       }))
       lastKind = wk
@@ -1140,7 +1144,7 @@ export function composeLevel(o: ComposeOpts): LevelDef {
     const spec = CATALOG[wk]
     if (spec.chest && chests < 3) chests++
     modules.push(mk(wk, {
-      ground: nextGround(), birds: spec.birds ? [pick(o.birds)] : undefined,
+      ground: o.aquatic ?? [], birds: spec.birds ? [pick(o.birds)] : undefined,
       ...(o.lava && spec.below === 'marine' ? { fillBelow: 'lave' as Fill } : {}),
     }))
   }

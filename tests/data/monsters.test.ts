@@ -20,8 +20,8 @@ describe('données monstres/items', () => {
     }
   })
 
-  it('exactement 6 boss', () => {
-    expect(Object.values(MONSTERS).filter((m) => m.boss)).toHaveLength(6)
+  it('exactement 10 boss (6 historiques + 4 nouveaux du monde carte A)', () => {
+    expect(Object.values(MONSTERS).filter((m) => m.boss)).toHaveLength(10)
   })
 
   it('chaque MVP droppe au moins un item épique ou légendaire, sans être un boss', () => {
