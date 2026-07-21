@@ -103,6 +103,10 @@ const OY = 14 // décalage vertical : laisse de la place au-dessus de la tête p
 // FALLBACK si une texture d'art venait à manquer au chargement.
 const ART_MONSTERS = Object.keys(MONSTERS)
 
+// Terrains disposant d'une VRAIE illustration de fond dédiée (public/art/bg-<id>.jpg). Les autres
+// niveaux du monde carte A retombent sur le fond de biome (biome-<clé>.jpg) — voir preload().
+const LEVELS_WITH_BG = new Set<string>(['cave-1', 'plage-1', 'plage-2', 'carriere-1'])
+
 // gabarit d'illustration : les boss, MVP et gardiens sont dessinés plus grands (≈76×82) que
 // les monstres normaux (≈40×46), comme le faisait drawMonster.
 const isBigArt = (m: MonsterDef): boolean => !!m.boss || !!m.mvp || m.id.startsWith('gardien-')
@@ -118,10 +122,11 @@ export class PreloadScene extends Phaser.Scene {
     // fonds de biome illustrés (public/art/biome-<clé>.jpg), affichés par LevelScene en FALLBACK
     for (const id of Object.keys(BIOMES)) this.load.image(`biome-${id}`, `art/biome-${id}.jpg`)
     // fonds PROPRES AU NIVEAU (public/art/bg-<levelId>.jpg) : un décor unique par terrain, affiché
-    // en PRIORITÉ par LevelScene.addBackground. Chargés en best-effort — seuls les niveaux non-boss
-    // en possèdent un ; les niveaux de boss n'ont pas d'image dédiée et retombent sur le fond de biome.
+    // en PRIORITÉ par LevelScene.addBackground. On ne charge QUE ceux qui existent réellement sur
+    // disque (LEVELS_WITH_BG) ; tous les autres niveaux retombent proprement sur le fond de biome
+    // (biome-<clé>) — pas de requête 404 pour les terrains sans image dédiée.
     for (const lvl of Object.values(LEVELS)) {
-      if (!lvl.boss) this.load.image(`bg-${lvl.id}`, `art/bg-${lvl.id}.jpg`)
+      if (!lvl.boss && LEVELS_WITH_BG.has(lvl.id)) this.load.image(`bg-${lvl.id}`, `art/bg-${lvl.id}.jpg`)
     }
     // illustrations du panda joueur : 4 poses par classe (idle/course/saut/attaque).
     // Chargées ici puis « bakées » (rognées + mises à l'échelle + ancrées pieds au sol) en

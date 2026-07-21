@@ -19,11 +19,20 @@ import { MONSTERS } from '../../src/data/monsters'
 // Niveaux construits par le KIT DE MODULES (docs/level-module-kit.md) : ils doivent respecter les
 // règles de jouabilité ET de cohérence supplémentaires du kit (les 15 autres niveaux, non refondus,
 // gardent seulement les garanties historiques ci-dessus).
-const MODULAR_IDS = ['zone1-1', 'zone1-2', 'zone1-3', 'zone1-4',
-  'zone2-1', 'zone2-2', 'zone2-3', 'cave-1',
-  'zone3-1', 'zone3-2', 'plage-1', 'plage-2',
-  'zone4-1', 'zone4-2', 'carriere-1', 'carriere-2',
-  'zone5-1', 'zone5-2', 'zone6-1']
+// Monde carte A : les 48 terrains sont TOUS générés par le kit de modules (composeLevel) ; seules
+// les 9 arènes de boss (boss-0X) sont hand-authored et exclues de ces contrôles supplémentaires.
+const MODULAR_IDS = [
+  'plaine-1', 'plaine-2', 'plaine-3', 'plaine-4', 'plaine-5', 'plaine-6', 'plaine-7',
+  'foret-1', 'foret-2', 'foret-3', 'foret-4', 'foret-5', 'foret-6', 'foret-7',
+  'desert-1', 'desert-2', 'desert-3', 'desert-4', 'desert-5', 'desert-6', 'desert-7', 'desert-8', 'desert-9', 'desert-10', 'desert-11',
+  'jungle-1', 'jungle-2', 'jungle-3', 'jungle-4', 'jungle-5',
+  'cave-1',
+  'montagne-1', 'montagne-2', 'montagne-3',
+  'cimetiere-1', 'cimetiere-2',
+  'plage-1', 'plage-2', 'plage-3', 'plage-4',
+  'carriere-1',
+  'enfer-1', 'enfer-2', 'enfer-3', 'enfer-4', 'enfer-5', 'enfer-6', 'enfer-7',
+]
 const isAerial = (id: string) => !!MONSTERS[id]?.aerial
 
 // Garantit que CHAQUE niveau est physiquement jouable : toute plateforme est atteignable

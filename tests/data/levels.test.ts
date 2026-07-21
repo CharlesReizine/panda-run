@@ -7,10 +7,10 @@ import { maxJumpTiles, MIN_LADDER_TILES } from '../../src/core/platforming'
 import { unreachablePlatforms } from '../../src/core/level-validator'
 
 describe('niveaux et carte', () => {
-  it('25 niveaux dont 6 boss', () => {
+  it('57 niveaux dont 9 boss (monde carte A : 48 terrains + 9 arènes)', () => {
     const all = Object.values(LEVELS)
-    expect(all).toHaveLength(25)
-    expect(all.filter((l) => l.boss)).toHaveLength(6)
+    expect(all).toHaveLength(57)
+    expect(all.filter((l) => l.boss)).toHaveLength(9)
   })
 
   // atteignabilité au sens PHYSIQUE : saut de proche en proche OU montée d'échelle. Les paliers
@@ -76,14 +76,14 @@ describe('niveaux et carte', () => {
 
   it('déblocage : départ ouvert, suivant fermé puis ouvert après complétion', () => {
     expect(isNodeUnlocked(START_NODE, [])).toBe(true)
-    expect(isNodeUnlocked('plaine-1', [])).toBe(true) // adjacent à la ville de départ
-    expect(isNodeUnlocked('plaine-2', [])).toBe(false)
-    expect(isNodeUnlocked('plaine-2', ['zone1-1'])).toBe(true)
+    expect(isNodeUnlocked('plaine-6', [])).toBe(true) // adjacent à la ville de départ (Prontera)
+    expect(isNodeUnlocked('foret-1', [])).toBe(false)
+    expect(isNodeUnlocked('foret-1', ['plaine-6'])).toBe(true)
   })
 
-  it('déblocage multi-hop : plaine-1 → plaine-2 → foret-2 → boss-1 → morroc → desert-1', () => {
-    const chain = ['zone1-1', 'zone1-2', 'zone1-4', 'zone1-boss']
+  it('déblocage multi-hop : prontera → plaine-6 → foret-1 → plaine-7 → foret-7 → desert-1', () => {
+    const chain = ['plaine-6', 'foret-1', 'plaine-7', 'foret-7']
     expect(isNodeUnlocked('desert-1', chain)).toBe(true)
-    expect(isNodeUnlocked('desert-1', ['zone1-1', 'zone1-2', 'zone1-4'])).toBe(false) // sans zone1-boss, morroc inatteignable
+    expect(isNodeUnlocked('desert-1', ['plaine-6', 'foret-1', 'plaine-7'])).toBe(false) // sans foret-7, desert-1 inatteignable
   })
 })
