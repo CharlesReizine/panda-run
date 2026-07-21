@@ -88,5 +88,8 @@ export interface MonsterDef {
   // joueur par à-coups puis remonte. Ignore sol/rebords (voir Enemy). Exempté de la contrainte
   // « posé sur une surface » des validateurs de niveau.
   aerial?: boolean
+  // GABARIT physique du monstre : 'grand' = rendu et hitbox agrandis (GRAND_SCALE dans Enemy),
+  // silhouette imposante (ours, golem). Absent → 'normal' (rétrocompat exacte).
+  size?: 'normal' | 'grand'
   drops: DropEntry[]
 }

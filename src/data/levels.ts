@@ -158,7 +158,7 @@ function mkZone11(): LevelDef {
     { kind: 'petit-pont', widthRange: [12, 16], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'respiration'], ground: ['fabre'] }, // gué peu profond, petit trésor au fond
     { kind: 'couloir-large', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], birds: ['corbeau'] },
     { kind: 'gue', widthRange: [12, 16], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['angeling'], birds: ['corbeau'] }, // trous minuscules (corniches flottantes)
-    { kind: 'descente-controlee', widthRange: [14, 18], rise: -8, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['gloopy'] },
+    { kind: 'descente-controlee', widthRange: [14, 18], rise: -8, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['gloopy', 'lapin-bondissant'] },
     { kind: 'arene', widthRange: [14, 20], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['fabre', 'angeling'], exitHere: true }, // PORTE tout en BAS
   ], { id: 'zone1-1', name: 'Prairie de Prontera', biome: 'plaine', seed: 'z1-1-flat' })
 }
@@ -170,7 +170,7 @@ function mkZone11(): LevelDef {
 function mkZone12(): LevelDef {
   return buildLevelFromModules([
     { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], spawnHere: true },
-    { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['gloopy'] },
+    { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['gloopy', 'lapin-bondissant'] },
     { kind: 'double-sol', widthRange: [12, 18], fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['mandragore'] }, // 2 étages + échelle
     { kind: 'bassin', widthRange: [14, 20], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['fabre'] }, // apnée profonde, coffre au fond
     { kind: 'zigzag', widthRange: [14, 20], fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['willow'] },
@@ -211,7 +211,7 @@ function mkZone14(): LevelDef {
     { kind: 'volee', widthRange: [18, 24], fillBelow: 'sol', fillAbove: 'air', tags: ['oiseaux', 'danger'], ground: ['mandragore'], birds: ['corbeau', 'corbeau', 'corbeau', 'corbeau'] }, // grande volée d'oiseaux
     { kind: 'gue', widthRange: [14, 18], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['louveteau'], birds: ['corbeau'] },
     { kind: 'zigzag', widthRange: [14, 20], fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['willow'] },
-    { kind: 'ligne-droite', widthRange: [10, 14], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['mandragore'] }, // connecteur plat (accroche zigzag → escalier)
+    { kind: 'ligne-droite', widthRange: [10, 14], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['mandragore', 'ronce-cracheuse'] }, // connecteur plat (accroche zigzag → escalier)
     { kind: 'escalier', widthRange: [16, 22], rise: 6, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['rocker', 'poring-dore'], exitHere: true }, // grande remontée, PORTE tout en HAUT, poring doré = MVP
   ], { id: 'zone1-4', name: 'Forêt profonde', biome: 'foret', seed: 'z1-4-long' })
 }
@@ -229,7 +229,7 @@ function mkZone31(): LevelDef {
   return composeLevel({
     id: 'zone3-1', name: 'Lisière de la jungle', biome: 'jungle',
     tierCap: 3, ending: 'haut', allowLadders: true, midCount: 6,
-    ground: ['willow', 'frelon-geant', 'flora-vorace', 'singe-grimpeur'], birds: ['ara'],
+    ground: ['willow', 'frelon-geant', 'ronce-cracheuse', 'flora-vorace', 'ours-brun', 'singe-grimpeur'], birds: ['ara'],
     waterKinds: ['bassin', 'cascade'], seed: 'zone3-1a',
   })
 }
@@ -240,7 +240,7 @@ function mkZone32(): LevelDef {
   return composeLevel({
     id: 'zone3-2', name: 'Marécages suspendus', biome: 'jungle',
     tierCap: 3, ending: 'bas', allowLadders: true, midCount: 7,
-    ground: ['frelon-geant', 'flora-vorace', 'singe-grimpeur', 'willow'], birds: ['ara'],
+    ground: ['frelon-geant', 'flora-vorace', 'ronce-cracheuse', 'singe-grimpeur', 'ours-brun', 'willow'], birds: ['ara'],
     waterKinds: ['tresor-bassin', 'cascade'], seed: 'zone3-2c',
   })
 }
@@ -286,7 +286,7 @@ function mkZone41(): LevelDef {
   return composeLevel({
     id: 'zone4-1', name: 'Sentier des cimes', biome: 'montagne',
     tierCap: 3, ending: 'haut', allowLadders: true, midCount: 6,
-    ground: ['harpie', 'yeti', 'louveteau'], birds: ['faucon'],
+    ground: ['harpie', 'ours-brun', 'yeti', 'louveteau'], birds: ['faucon'],
     waterKinds: ['cascade', 'bassin'], seed: 'z4-1',
   })
 }
@@ -314,7 +314,7 @@ function mkCarriere1(): LevelDef {
     { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], spawnHere: true },
     { kind: 'grotte', widthRange: [16, 22], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gobelin-mineur'] }, // BOYAU DE PIERRE #1
     { kind: 'grotte', widthRange: [16, 22], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['golem-de-pierre'] }, // BOYAU DE PIERRE #2 (galerie continue avec #1)
-    { kind: 'descente', widthRange: [14, 20], rise: -6, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['gargouille'], birds: ['faucon', 'faucon'] }, // terrasse d'extraction, respiration à l'air
+    { kind: 'descente', widthRange: [14, 20], rise: -6, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['gargouille', 'scarabee-cornu'], birds: ['faucon', 'faucon'] }, // terrasse d'extraction, respiration à l'air
     { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['gobelin-mineur'] }, // fosse noyée, coffre au fond
     { kind: 'couloir-pics', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'roche', tags: ['tension', 'danger'], ground: ['golem-de-pierre'] }, // galerie basse à lits de pics (plafond de roche)
     { kind: 'grotte', widthRange: [16, 22], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gargouille'] }, // BOYAU DE PIERRE #3
@@ -360,7 +360,7 @@ function mkZone51(): LevelDef {
   return composeLevel({
     id: 'zone5-1', name: 'Nécropole oubliée', biome: 'cimetiere',
     tierCap: 4, ending: 'bas', allowLadders: true, midCount: 7,
-    ground: ['squelette', 'goule', 'banshee', 'fantome', 'pretre-goule'], birds: ['harfang-spectral'],
+    ground: ['squelette', 'goule', 'totem-maudit', 'banshee', 'fantome', 'pretre-goule'], birds: ['harfang-spectral'],
     mvp: 'spectre-ancien', waterKinds: ['bassin', 'cascade'], seed: 'ossuaire',
   })
 }
@@ -372,7 +372,7 @@ function mkZone52(): LevelDef {
   return composeLevel({
     id: 'zone5-2', name: 'Cryptes hurlantes', biome: 'cimetiere',
     tierCap: 4, ending: 'haut', allowLadders: true, midCount: 7,
-    ground: ['goule', 'fantome', 'banshee', 'squelette', 'pretre-goule'], birds: ['harfang-spectral'],
+    ground: ['goule', 'fantome', 'totem-maudit', 'banshee', 'squelette', 'pretre-goule'], birds: ['harfang-spectral'],
     mvp: 'spectre-ancien', waterKinds: ['tresor-bassin', 'cascade'], seed: 'arete',
   })
 }
@@ -388,7 +388,7 @@ function mkZone61(): LevelDef {
   return composeLevel({
     id: 'zone6-1', name: 'Sentier des Damnés', biome: 'enfer',
     tierCap: 5, ending: 'bas', allowLadders: true, midCount: 10,
-    ground: ['diablotin', 'mage-noir', 'gargouille', 'mini-baphomet', 'gardien-flamme'], birds: ['corbeau'],
+    ground: ['diablotin', 'mage-noir', 'golem-de-lave', 'gargouille', 'mini-baphomet', 'gardien-flamme'], birds: ['corbeau'],
     mvp: 'dragon-flamme', waterKinds: ['bassin', 'sortie-humide'], lava: true, seed: 'damnes-2',
   })
 }
@@ -409,12 +409,12 @@ const list: LevelDef[] = [
   // traversée, un seul vrai risque (l'oasis profonde), pas de pics (réservés aux niveaux suivants).
   buildLevelFromModules([
     { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['scorpion'], spawnHere: true },
-    { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['scorpion'] },
+    { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['scorpion', 'fourmi-geante'] },
     { kind: 'gue', widthRange: [16, 22], fillBelow: 'vide', fillAbove: 'air', tags: ['traversée', 'danger'], ground: ['vautour'], birds: ['faucon', 'faucon'] },
     { kind: 'colline', widthRange: [18, 26], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['momie'], birds: ['faucon', 'faucon', 'faucon'] },
     { kind: 'petit-pont', widthRange: [12, 18], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'respiration'], ground: ['scorpion'] }, // gué d'oasis peu profond, petit trésor au fond
     { kind: 'bassin', widthRange: [14, 20], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['momie'] }, // oasis d'apnée, coffre au fond
-    { kind: 'descente', widthRange: [14, 20], rise: -12, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['orc-guerrier', 'vautour'] },
+    { kind: 'descente', widthRange: [14, 20], rise: -12, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['orc-guerrier', 'vautour', 'scarabee-cornu'] },
     { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['scorpion', 'orc-seigneur'], exitHere: true }, // orc-seigneur = élite MVP en climax, PORTE au sol
   ], { id: 'zone2-1', name: 'Dunes de Sograt', biome: 'desert' }),
   // zone2-2 : DÉSERT (KIT MODULES) — OASIS PERDUE (≈ D2-3). Rythme AQUATIQUE et plus tendu : cascade
@@ -442,7 +442,7 @@ const list: LevelDef[] = [
   // (faucons) + PORTE (altitude ≠ départ). Tension marquée : un vrai tunnel + un beat de précision.
   buildLevelFromModules([
     { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['momie'], spawnHere: true },
-    { kind: 'escalier', widthRange: [14, 20], rise: 6, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['zombie'], birds: ['faucon'] },
+    { kind: 'escalier', widthRange: [14, 20], rise: 6, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['zombie', 'scarabee-cornu'], birds: ['faucon'] },
     { kind: 'grotte', widthRange: [14, 20], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['momie', 'zombie'] }, // boyau de pierre fermé (roche dessus + dessous)
     { kind: 'pics-quinconce', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['tension', 'danger'], ground: ['zombie'] }, // slalom de pics en hauteur (tier 4)
     { kind: 'descente', widthRange: [14, 20], rise: -10, fillBelow: 'sol', fillAbove: 'air', tags: ['relief', 'combat'], ground: ['mini-baphomet', 'zombie'] }, // mini-baphomet = élite cornue des tombeaux
@@ -461,7 +461,7 @@ const list: LevelDef[] = [
     { kind: 'plateau', widthRange: [12, 16], fillBelow: 'sol', fillAbove: 'air', tags: ['respiration'], ground: ['chauve-souris'], spawnHere: true },
     { kind: 'colline', widthRange: [16, 24], rise: 0, fillBelow: 'sol', fillAbove: 'air', tags: ['relief'], ground: ['squelette'], birds: ['corbeau', 'corbeau', 'corbeau'] },
     { kind: 'cascade', widthRange: [18, 24], rise: 2, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['fantome'], birds: ['corbeau'] },
-    { kind: 'grotte', widthRange: [14, 20], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gobelin-mineur', 'chauve-souris'] }, // boyau de pierre fermé #1
+    { kind: 'grotte', widthRange: [14, 20], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gobelin-mineur', 'chauve-souris', 'fourmi-geante'] }, // boyau de pierre fermé #1
     { kind: 'bassin', widthRange: [16, 22], fillBelow: 'marine', fillAbove: 'air', tags: ['eau', 'danger'], ground: ['squelette'] }, // lac marin souterrain, coffre au fond
     { kind: 'couloir-pics', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'roche', tags: ['tension', 'danger'], ground: ['golem-de-pierre'] }, // plafond de roche + lits de pics (tier 4)
     { kind: 'grotte', widthRange: [14, 20], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['mage-noir', 'chauve-souris'] }, // boyau de pierre fermé #2

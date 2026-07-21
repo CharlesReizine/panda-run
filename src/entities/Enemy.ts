@@ -52,6 +52,23 @@ const BIRD_DIVE_MS = 620
 const BIRD_WANDER_AMP = 60 // px d'oscillation verticale du vol de croisière
 // avancée du point de sonde de rebord au-delà du bord du corps (px) pour la détection de vide devant.
 const TILE_PROBE = 20
+// MÊLÉE LISIBLE (mobile-mêlée ET immobile-mêlée) : au lieu de « frotter » le joueur au contact, le
+// monstre joue une VRAIE attaque en trois temps — télégraphe (wind-up) planté → coup (fenêtre active,
+// petit bond en avant + hitbox de portée) → récupération. Le coup fait plus mal qu'un simple contact.
+const MELEE_RANGE_PAD = 26 // portée du coup AU-DELÀ du bord du corps (px)
+const MELEE_WINDUP_MS = 340 // durée du télégraphe avant que le coup ne parte
+const MELEE_STRIKE_MS = 170 // fenêtre ACTIVE du coup (bond en avant, la hitbox touche)
+const MELEE_COOLDOWN = 1300 // récupération entre deux coups de mêlée
+const MELEE_DMG_MULT = 1.4 // un vrai coup fait plus mal que le frottement de contact (atk × ceci)
+// CHARGE : brève mise en garde avant la ruée, pour que la charge se LISE (on voit le monstre s'armer)
+// au lieu de foncer sans prévenir.
+const CHARGE_WINDUP_MS = 260
+// GABARIT 'grand' (ours, golem) : facteur d'agrandissement du rendu ET de la hitbox (le corps Arcade
+// suit la scale du sprite en Phaser 4, cf. Body.update → width = sourceWidth × scaleX).
+const GRAND_SCALE = 1.55
+// ÉLITE (MVP) : cadence du SKILL SIGNATURE unique — onde de choc télégraphiée (colosses) ou salve en
+// éventail (lanceurs). Les mobs normaux n'en ont pas ; les boss (3 skills) sont un chantier à part.
+const ELITE_SKILL_COOLDOWN = 6000
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   monster: MonsterDef
@@ -84,6 +101,19 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private homeY = 0
   private nextDiveAt = 0
   private diveUntil = 0
+  // GABARIT : scale de base du sprite (1 = normal, GRAND_SCALE pour les 'grand'). Le dandinement de
+  // updateVisuals se REMULTIPLIE par cette base pour ne pas écraser l'agrandissement.
+  private baseScale = 1
+  // MÊLÉE en trois temps : prochaine attaque autorisée / fin du wind-up / fin de la fenêtre active +
+  // garde-coup (le coup ne touche qu'une fois par swing) + sens verrouillé au déclenchement.
+  private nextMeleeAt = 0
+  private windUpUntil = 0
+  private strikeUntil = 0
+  private struckThisSwing = false
+  private attackDir: 1 | -1 = 1
+  private meleeFx: Phaser.GameObjects.Graphics | null = null
+  // ÉLITE : prochaine utilisation du skill signature.
+  private nextEliteSkillAt = 0
 
   constructor(scene: LevelScene, x: number, y: number, def: MonsterDef) {
     super(scene, x, y, `monster-${def.id}`)
@@ -102,6 +132,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // un chargeur lancé (vitesse persistante, drag nul) glisse hors de la zone jouable et ne revient
     // jamais — c'est le bug du boss « parti tout seul » hors écran.
     this.setCollideWorldBounds(true)
+    // GABARIT : les 'grand' (ours, golem) sont agrandis AVANT le calcul de hitbox — le corps Arcade
+    // reprend la scale du sprite (Phaser 4), donc la hitbox grossit avec le rendu.
+    this.baseScale = def.size === 'grand' ? GRAND_SCALE : 1
+    if (this.baseScale !== 1) this.setScale(this.baseScale)
     // hitbox = la créature seule (la texture a de la marge : ombre au sol + place au-dessus),
     // pour qu'elle repose au sol au même niveau que le panda
     const bw = this.width * 0.8
@@ -136,6 +170,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.burnTimer?.remove()
       this.snareFx?.destroy()
       this.fearFx?.destroy()
+      this.meleeFx?.destroy()
       this.destroy()
     }
   }
@@ -211,6 +246,75 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     p.launch() // relance la vélocité (le groupe l'a remise à 0 sur add)
   }
 
+  // MÊLÉE en trois temps (mobile-mêlée ET immobile-mêlée) : approche → wind-up planté → coup. Le rendu
+  // du télégraphe/slash est dans updateVisuals ; ici, la LOGIQUE et la hitbox du coup.
+  private meleeUpdate(t: number, dist: number, dir: number, stopDist: number) {
+    const attackReach = stopDist + MELEE_RANGE_PAD
+    // 1) FENÊTRE ACTIVE du coup : petit bond en avant (mobile) ; le coup touche UNE fois si le joueur
+    //    est encore à portée (s'il a esquivé, le coup passe dans le vide → attaque lisible/évitable).
+    if (t >= this.windUpUntil && t < this.strikeUntil) {
+      this.setVelocityX(this.monster.speed > 0 ? this.attackDir * this.monster.speed * 1.5 : 0)
+      if (!this.struckThisSwing && dist <= attackReach + 24) {
+        this.struckThisSwing = true
+        this.levelScene.hitPlayer(Math.round(this.monster.atk * MELEE_DMG_MULT))
+      }
+      return
+    }
+    // 2) TÉLÉGRAPHE : planté, armé (le monstre se prépare — cf. rendu du wind-up dans updateVisuals).
+    if (t < this.windUpUntil) { this.setVelocityX(0); return }
+    // 3) PRÊT : à portée + récupéré → arme une nouvelle attaque (wind-up puis coup puis cooldown).
+    if (dist <= attackReach && t > this.nextMeleeAt) {
+      this.attackDir = dir < 0 ? -1 : 1
+      this.windUpUntil = t + MELEE_WINDUP_MS
+      this.strikeUntil = t + MELEE_WINDUP_MS + MELEE_STRIKE_MS
+      this.struckThisSwing = false
+      this.nextMeleeAt = this.strikeUntil + MELEE_COOLDOWN
+      this.setVelocityX(0)
+      return
+    }
+    // 4) HORS DE PORTÉE : approche vers le joueur (mobile) ; immobile (speed 0) reste planté. Borné au
+    //    rebord : au sol, plus de sol devant → on ne franchit pas le vide (pas de chute bête).
+    const grounded = (this.body as Phaser.Physics.Arcade.Body).blocked.down
+    const step = dist > stopDist && !(grounded && !this.floorAhead(dir))
+    this.setVelocityX(step ? dir * this.monster.speed : 0)
+  }
+
+  // Y a-t-il un wind-up de mêlée ou une charge en cours ? (pilote le rendu du télégraphe.)
+  private isWindingUp(t: number): boolean {
+    return t < this.windUpUntil
+  }
+
+  private isStriking(t: number): boolean {
+    return t >= this.windUpUntil && t < this.strikeUntil
+  }
+
+  // SKILL SIGNATURE des élites (MVP) — un seul, cadencé par ELITE_SKILL_COOLDOWN :
+  //  - lanceurs (projectile/caster) : SALVE en éventail (3 tirs haut/droit/bas) ;
+  //  - colosses (contact/charge) : ONDE DE CHOC télégraphiée sous le joueur (sort de zone du moteur).
+  private useEliteSkill() {
+    const player = this.levelScene.player
+    if (this.monster.behavior === 'projectile' || this.monster.behavior === 'caster') {
+      for (let k = -1; k <= 1; k++) {
+        const spread = k
+        this.scene.time.delayedCall((k + 1) * 80, () => this.fireSpreadShot(spread))
+      }
+    } else {
+      this.levelScene.enemyGroundSpell(player.x, Math.round(this.monster.atk * 1.2))
+    }
+  }
+
+  // Un tir de la salve élite : projectile thématique dévié verticalement de `spread` (−1 haut, 0 droit,
+  // +1 bas). Même pipeline que fireProjectile (texture, groupe, relance de vélocité).
+  private fireSpreadShot(spread: number) {
+    if (!this.active) return
+    const player = this.levelScene.player
+    const dir = Math.sign(player.x - this.x) || 1
+    const p = new Projectile(this.scene, this.x + dir * 12, this.y - 10, dir, spread * 0.5, this.monster.atk, false, 620)
+    p.setTexture(ENEMY_PROJECTILE_TEX[this.monster.id] ?? 'fx-shot').clearTint().setScale(1.1)
+    this.levelScene.enemyProjectiles.add(p)
+    p.launch()
+  }
+
   // Y a-t-il un sol à ~1 tuile DEVANT (dans le sens `dir`), au niveau des pieds ? Sert à la
   // patrouille sûre : un monstre terrestre fait demi-tour dès qu'il n'y a plus de sol devant lui
   // (bord de corniche, trou) → il ne tombe JAMAIS. S'appuie sur la géométrie statique du niveau.
@@ -246,9 +350,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const player = this.levelScene.player
     const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y)
     const dir = Math.sign(player.x - this.x) || 1
-    // distance de corps-à-corps : au-delà on avance vers le joueur, en deçà on S'ARRÊTE
-    // (on reste planté à infliger les dégâts de contact) au lieu de foncer/pousser sans fin
-    const stopDist = this.width * 0.5 + 16
+    // distance de corps-à-corps (tenant compte du gabarit 'grand') : au-delà on avance vers le
+    // joueur, en deçà on S'ARRÊTE — puis, en mêlée, on ARME une vraie attaque au lieu de pousser.
+    const stopDist = this.width * this.baseScale * 0.5 + 16
 
     // Immobilisé par un piège : cloué sur place, aucune IA de déplacement tant que dure l'effet.
     const rooted = t < this.rootedUntil
@@ -269,12 +373,28 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (!rooted && feared) {
       this.setVelocityX(-dir * this.monster.speed * FEAR_SPEED_MULT)
     } else if (!rooted && dist < AGGRO_RANGE) {
+      // ÉLITE (MVP) : skill signature périodique EN PLUS du comportement de base — onde de choc
+      // télégraphiée (mêlée) ou salve en éventail (distance). Cadencé à part du reste de l'IA.
+      if (this.monster.mvp && t > this.nextEliteSkillAt) {
+        this.useEliteSkill()
+        this.nextEliteSkillAt = t + ELITE_SKILL_COOLDOWN
+      }
       if (this.monster.behavior === 'charge') {
-        if (t > this.nextActionAt) {
-          this.setVelocityX(dir * this.monster.speed * 3)
+        // CHARGE LISIBLE : bref télégraphe (planté, on voit le monstre s'armer) → RUÉE rapide.
+        if (t < this.windUpUntil) {
+          this.setVelocityX(0)
+        } else if (t > this.nextActionAt && !this.isCharging) {
+          this.attackDir = dir < 0 ? -1 : 1
+          this.windUpUntil = t + CHARGE_WINDUP_MS
           this.nextActionAt = t + CHARGE_COOLDOWN
-          this.isCharging = true
-          this.scene.time.delayedCall(400, () => { this.isCharging = false })
+          this.setVelocityX(0)
+          // la ruée part à la fin du télégraphe (annulée si entre-temps piégé/apeuré/mort)
+          this.scene.time.delayedCall(CHARGE_WINDUP_MS, () => {
+            if (!this.active || this.isRooted() || this.isFeared()) return
+            this.isCharging = true
+            this.setVelocityX(this.attackDir * this.monster.speed * 3)
+            this.scene.time.delayedCall(400, () => { this.isCharging = false })
+          })
         } else if (!this.isCharging) {
           // entre deux charges : on marche vers le joueur au lieu de conserver la vitesse de la
           // charge précédente (sinon dérive infinie hors de la zone → le boss « s'enfuit »),
@@ -303,12 +423,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           this.nextShootAt = t + SHOOT_COOLDOWN * 1.5
         }
       } else if (this.monster.behavior !== 'projectile') {
-        // 'contact' (et tout behavior inconnu non géré au-dessus) : avance vers le joueur puis
-        // S'ARRÊTE au corps-à-corps (dégâts de contact). Borné au rebord : au sol, s'il n'y a plus
-        // de sol devant, on ne franchit pas le vide (pas de chute bête pendant la poursuite).
-        const grounded = (this.body as Phaser.Physics.Arcade.Body).blocked.down
-        const step = dist > stopDist && !(grounded && !this.floorAhead(dir))
-        this.setVelocityX(step ? dir * this.monster.speed : 0)
+        // 'contact' = MÊLÉE (mobile si speed>0, immobile si speed=0) : avance jusqu'à portée puis
+        // joue une VRAIE attaque télégraphiée (wind-up + coup) au lieu de frotter le joueur.
+        this.meleeUpdate(t, dist, dir, stopDist)
       }
     } else if (!rooted && this.monster.boss) {
       // hors aggro, le boss revient TOUJOURS vers le joueur tant qu'il est vivant : il ne
@@ -345,19 +462,27 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // la dernière → supprime le tremblement de flip quand vx oscille près de 0
     if (Math.abs(vx) > FLIP_THRESHOLD) this.facingLeft = vx < 0
     this.setFlipX(this.facingLeft)
+    // le dandinement se REMULTIPLIE par baseScale (gabarit 'grand') pour ne pas écraser l'agrandissement.
     if (Math.abs(vx) > 5) {
       this.setRotation(Math.sin(t / 70) * 0.12)
-      this.setScale(1, 1 + 0.04 * Math.sin(t / 70))
+      this.setScale(this.baseScale, this.baseScale * (1 + 0.04 * Math.sin(t / 70)))
     } else {
       this.setRotation(0)
-      if (!this.isCharging) this.setScale(1, 1 + 0.05 * Math.sin(t / 300))
+      if (!this.isCharging) this.setScale(this.baseScale, this.baseScale * (1 + 0.05 * Math.sin(t / 300)))
     }
+    // gabarit courant (rendu) pour poser barres/plaques/liserés au bon endroit même sur les 'grand'.
+    const hh = this.displayHeight
+    const hw = this.displayWidth
+
+    // TÉLÉGRAPHE DE MÊLÉE/CHARGE : arc rouge qui se charge devant le monstre pendant le wind-up, puis
+    // éclair de coup (croissant blanc) durant la fenêtre active → « attaquer » devient LISIBLE.
+    this.drawMeleeTelegraph(t, hh, hw)
 
     // "zzz" hors aggro, caché dès que le monstre repère le joueur
     if (dist >= AGGRO_RANGE) {
-      // placé bien au-dessus de la plaque « Nv X » (y - height/2 - 22) pour ne pas la recouvrir
-      if (!this.zzz) this.zzz = this.scene.add.text(this.x, this.y - this.height / 2 - 42, 'zzz', { fontSize: '14px', color: '#ffffff' }).setOrigin(0.5)
-      this.zzz.setPosition(this.x, this.y - this.height / 2 - 42)
+      // placé bien au-dessus de la plaque « Nv X » (y - hh/2 - 22) pour ne pas la recouvrir
+      if (!this.zzz) this.zzz = this.scene.add.text(this.x, this.y - hh / 2 - 42, 'zzz', { fontSize: '14px', color: '#ffffff' }).setOrigin(0.5)
+      this.zzz.setPosition(this.x, this.y - hh / 2 - 42)
       if (t > this.nextZzzToggleAt) {
         this.zzz.setVisible(!this.zzz.visible)
         this.nextZzzToggleAt = t + 2000
@@ -370,22 +495,22 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // barre de vie flottante
     this.bar.clear()
     const w = this.monster.boss ? 60 : 30
-    this.bar.fillStyle(0x000000, 0.6).fillRect(this.x - w / 2, this.y - this.height / 2 - 12, w, 5)
-    this.bar.fillStyle(0x66bb6a).fillRect(this.x - w / 2, this.y - this.height / 2 - 12, w * Math.max(0, this.hp / this.monster.hp), 5)
+    this.bar.fillStyle(0x000000, 0.6).fillRect(this.x - w / 2, this.y - hh / 2 - 12, w, 5)
+    this.bar.fillStyle(0x66bb6a).fillRect(this.x - w / 2, this.y - hh / 2 - 12, w * Math.max(0, this.hp / this.monster.hp), 5)
 
     // « Nv X » juste au-dessus de la barre de vie
-    this.lvlText.setPosition(this.x, this.y - this.height / 2 - 22)
+    this.lvlText.setPosition(this.x, this.y - hh / 2 - 22)
 
     // liseré d'immobilisation (Piège) : anneau + « chaînes » qui pulsent aux pieds tant que l'effet dure
     if (this.snareFx) {
       if (rooted) {
         this.snareFx.clear()
-        const yFeet = this.y + this.height / 2 - 4
+        const yFeet = this.y + hh / 2 - 4
         const pulse = 0.5 + 0.35 * Math.sin(t / 90)
-        this.snareFx.lineStyle(3, 0xffca28, pulse).strokeEllipse(this.x, yFeet, this.width * 0.9, 14)
+        this.snareFx.lineStyle(3, 0xffca28, pulse).strokeEllipse(this.x, yFeet, hw * 0.9, 14)
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2 + t / 400
-          this.snareFx.fillStyle(0xfff59d, pulse).fillCircle(this.x + Math.cos(a) * this.width * 0.45, yFeet + Math.sin(a) * 7, 2.5)
+          this.snareFx.fillStyle(0xfff59d, pulse).fillCircle(this.x + Math.cos(a) * hw * 0.45, yFeet + Math.sin(a) * 7, 2.5)
         }
       } else {
         this.snareFx.destroy()
@@ -397,7 +522,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // tant que le monstre est apeuré.
     if (feared) {
       if (!this.fearFx) this.fearFx = this.scene.add.text(this.x, this.y, '!', { fontSize: '20px', color: '#e3f2fd', fontStyle: 'bold', stroke: '#4527a0', strokeThickness: 4 }).setOrigin(0.5)
-      this.fearFx.setPosition(this.x + Phaser.Math.Between(-2, 2), this.y - this.height / 2 - 34 + Phaser.Math.Between(-2, 2))
+      this.fearFx.setPosition(this.x + Phaser.Math.Between(-2, 2), this.y - hh / 2 - 34 + Phaser.Math.Between(-2, 2))
       this.fearFx.setAlpha(0.65 + 0.35 * Math.sin(t / 60))
     } else if (this.fearFx) {
       this.fearFx.destroy()
@@ -408,7 +533,40 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     if (this.eliteAura) {
       this.eliteAura.clear()
       const pulse = 0.35 + 0.2 * Math.sin(t / 220)
-      this.eliteAura.lineStyle(2, 0xffd54f, pulse).strokeCircle(this.x, this.y, this.width * 0.6)
+      this.eliteAura.lineStyle(2, 0xffd54f, pulse).strokeCircle(this.x, this.y, hw * 0.6)
+    }
+  }
+
+  // Rendu du télégraphe de mêlée/charge : pendant le WIND-UP, un arc rouge se REMPLIT devant le
+  // monstre (dans son sens d'attaque) — le joueur voit le coup venir et peut esquiver ; pendant la
+  // FENÊTRE ACTIVE, un croissant blanc « fend » l'air. Rien en dehors (graphics nettoyé).
+  private drawMeleeTelegraph(t: number, hh: number, hw: number) {
+    const winding = this.isWindingUp(t)
+    const striking = this.isStriking(t)
+    if (!winding && !striking) {
+      if (this.meleeFx) { this.meleeFx.destroy(); this.meleeFx = null }
+      return
+    }
+    if (!this.meleeFx) this.meleeFx = this.scene.add.graphics().setDepth(this.depth + 1)
+    const g = this.meleeFx
+    g.clear()
+    const cx = this.x + this.attackDir * hw * 0.4
+    const cy = this.y - hh * 0.1
+    const r = hw * 0.5
+    const a0 = this.attackDir === 1 ? -0.9 : Math.PI - 0.9
+    if (winding) {
+      // progression du wind-up (0 → 1) : l'arc rouge se remplit et s'intensifie.
+      const prog = Phaser.Math.Clamp(1 - (this.windUpUntil - t) / MELEE_WINDUP_MS, 0, 1)
+      g.lineStyle(4, 0xff5252, 0.35 + 0.5 * prog)
+      g.beginPath()
+      g.arc(cx, cy, r, a0, a0 + prog * 1.8)
+      g.strokePath()
+    } else {
+      // coup : croissant blanc franc, épais.
+      g.lineStyle(6, 0xffffff, 0.95)
+      g.beginPath()
+      g.arc(cx, cy, r * 1.15, a0 - 0.3, a0 + 1.9)
+      g.strokePath()
     }
   }
 }
