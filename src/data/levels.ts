@@ -65,6 +65,10 @@ export interface LevelDef {
   // dégagement > saut sous le plafond). Absent → dalle purement décorative (socle/mesa sous le sol).
   rockBands?: { x: number; y: number; w: number; h: number; solid?: boolean }[]
   ladders?: { x: number; y: number; h: number }[] // échelles (x tuile, y tuile du haut, hauteur en tuiles)
+  // POCHES D'AIR (niveaux immergés type Épave) : bulles d'air respirable disséminées dans l'eau. Quand
+  // le panda en touche une, son souffle remonte au MAX (comme une surface locale) — sans elles, rester
+  // sous l'eau = noyade continue. x,y en tuiles = CENTRE de la poche ; r = rayon en tuiles (défaut 1,6).
+  airPockets?: { x: number; y: number; r?: number }[]
   checkpoints?: { x: number }[] // drapeaux de réapparition (x en tuiles)
   boss?: string
 }
@@ -215,6 +219,56 @@ function arena(id: string, name: string, biome: string, boss: string, widthTiles
   return { id, name, biome, widthTiles, platforms, spawns: [], boss }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// ÉPAVE — niveau bespoke ENTIÈREMENT SOUS-MARIN (galion coulé), branché à gauche de la plage.
+// Tout est immergé : une seule cuve marine FERMÉE couvre le monde de la voûte de roche (toit de la
+// caverne noyée) jusqu'au fond de roche/épave. Il n'y a AUCUNE surface d'air praticable — le souffle
+// descend en continu et, une fois épuisé, la noyade s'installe. On survit en enchaînant les POCHES
+// D'AIR disséminées dans l'épave (elles rechargent le souffle au max, cf. LevelScene.updateWater).
+// Les coffres (récompenses de plongée) sont posés sur les débris de l'épave ; les mobs aquatiques
+// (crabe géant, méduse) nagent sans se noyer et gardent le butin. Dur mais jouable : poche → coffre
+// → poche. Géométrie correct-par-construction (chaîne de débris atteignable au saut depuis le fond,
+// cuve close à bancs égaux hors-monde, toit de roche à dégagement de saut) — vérifié par reachable.test.
+function epave(): LevelDef {
+  const W = 60
+  const H = 22
+  const groundRow = H - 2 // 20
+  const chest = (x: number, row: number) => ({ kind: 'coffre', x, y: row - 1 })
+  // débris de l'épave : chaîne de corniches atteignables au saut depuis le fond (rise ≤ 3, écart ≤ 3),
+  // sommet à la rangée 9 (dégagement > saut sous le toit de roche). Chaque corniche porte un coffre.
+  const platforms = [
+    { x: 5, y: 17, w: 6 }, { x: 13, y: 14, w: 6 }, { x: 21, y: 11, w: 6 }, { x: 30, y: 9, w: 7 },
+    { x: 40, y: 11, w: 6 }, { x: 48, y: 14, w: 6 }, { x: 55, y: 17, w: 5 },
+    { x: 17, y: 17, w: 4 }, { x: 36, y: 17, w: 4 }, { x: 51, y: 17, w: 4 },
+  ]
+  return {
+    id: 'epave-1', name: 'Épave', biome: 'plage', widthTiles: W, heightTiles: H,
+    start: { x: 3, y: 8 }, exit: { x: 57, y: 17 },
+    platforms,
+    // TOIT DE ROCHE de la caverne noyée : dalle pleine (collision) sur toute la largeur, sous la ligne
+    // d'eau → interdit de remonter respirer « en surface » (le souffle ne peut donc plus se recharger
+    // qu'aux poches d'air). Dégagement > saut sous le toit (sommet des débris rangée 9, bas du toit 3).
+    rockBands: [{ x: 0, y: 1, w: W, h: 3, solid: true }],
+    // UNE cuve marine FERMÉE couvre tout le monde (bords hors-carte → bancs à niveau, jamais suspendue).
+    hazards: [{ kind: 'water', x: 0, w: W, top: 0, h: H, water: 'basin' }],
+    // coffres = récompenses de plongée, un par débris (10 coffres)
+    props: platforms.map((p) => chest(p.x + Math.floor(p.w / 2), p.y)),
+    // mobs AQUATIQUES (nagent sans se noyer) : gardent le fond et les débris. Densité élevée = dur.
+    spawns: [
+      { monsterId: 'crabe-geant', x: 8 }, { monsterId: 'meduse', x: 15 },
+      { monsterId: 'crabe-geant', x: 24, y: 11 }, { monsterId: 'meduse', x: 33 },
+      { monsterId: 'crabe-geant', x: 38 }, { monsterId: 'meduse', x: 44 },
+      { monsterId: 'crabe-geant', x: 50, y: 14 }, { monsterId: 'meduse', x: 55 },
+      { monsterId: 'crabe-geant', x: 30 },
+    ],
+    // POCHES D'AIR disséminées : rechargent le souffle au max (route poche → coffre/mob → poche).
+    airPockets: [
+      { x: 16, y: 10 }, { x: 10, y: 17 }, { x: 21, y: 13 }, { x: 33, y: 11 },
+      { x: 44, y: 13 }, { x: 53, y: 16 },
+    ],
+  }
+}
+
 // Assemblés dans l'ORDRE DE PROGRESSION (pilote la courbe de niveau des monstres via mob-level.ts).
 const list: LevelDef[] = [
   // Plaine (avant Prontera)
@@ -284,6 +338,10 @@ const list: LevelDef[] = [
   terrain('enfer-6', 'Abîme', 'enfer', 6),
   terrain('enfer-7', 'Géhenne', 'enfer', 7),
   arena('boss-09', 'Antre du Seigneur Déchu', 'enfer', 'seigneur-dechu', 50, [plat(6, 12, 5), plat(15, 10, 7), plat(23, 8, 7), plat(31, 10, 7), plat(42, 12, 5)]),
+  // ÉPAVE — branche sous-marine de la plage (nœud à gauche de Corail sur la carte). Placée en FIN de
+  // liste : elle n'introduit aucun monstre inédit (crabe/méduse vus dès la plage), donc son rang ne
+  // recalibre AUCUN niveau de monstre (mob-level.ts lit l'ordre de `list`).
+  epave(),
 ]
 
 export const LEVELS: Record<string, LevelDef> = Object.fromEntries(list.map((l) => [l.id, l]))

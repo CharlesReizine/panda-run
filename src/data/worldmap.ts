@@ -69,6 +69,7 @@ export const WORLD_NODES: MapNode[] = [
   { id: 'plage-2', name: 'Lagon', x: 307, y: 484, levelId: 'plage-2', type: 'level' },
   { id: 'plage-3', name: 'Récif', x: 307, y: 439, levelId: 'plage-3', type: 'level' },
   { id: 'plage-4', name: 'Corail', x: 253, y: 394, levelId: 'plage-4', type: 'level' },
+  { id: 'epave-1', name: 'Épave', x: 200, y: 352, levelId: 'epave-1', type: 'level' },
   { id: 'boss-07', name: 'Roi Crabe', x: 200, y: 394, levelId: 'boss-07', type: 'boss' },
   { id: 'carriere-1', name: 'Carrière', x: 493, y: 484, levelId: 'carriere-1', type: 'level' },
   { id: 'boss-08', name: 'Golem Ancien', x: 547, y: 484, levelId: 'boss-08', type: 'boss' },
@@ -110,6 +111,8 @@ export const WORLD_EDGES: [string, string][] = [
   // branche plage → boss-07
   ['desert-10', 'plage-1'], ['plage-1', 'plage-2'], ['plage-2', 'plage-3'], ['plage-3', 'plage-4'],
   ['plage-4', 'boss-07'],
+  // branche sous-marine ÉPAVE (à gauche de Corail) — niveau entièrement immergé
+  ['plage-4', 'epave-1'],
   // branche carrière → boss-08
   ['desert-10', 'carriere-1'], ['carriere-1', 'boss-08'],
 ]

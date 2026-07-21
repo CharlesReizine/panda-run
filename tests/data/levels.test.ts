@@ -2,14 +2,17 @@ import { describe, it, expect } from 'vitest'
 import { LEVELS } from '../../src/data/levels'
 import { MONSTERS } from '../../src/data/monsters'
 import { PROPS } from '../../src/data/props'
-import { WORLD_NODES, WORLD_EDGES, START_NODE, isNodeUnlocked } from '../../src/data/worldmap'
-import { maxJumpTiles, MIN_LADDER_TILES } from '../../src/core/platforming'
-import { unreachablePlatforms } from '../../src/core/level-validator'
+import { WORLD_NODES, WORLD_EDGES, START_NODE, isNodeUnlocked, neighborsOf } from '../../src/data/worldmap'
+import { maxJumpTiles, MIN_LADDER_TILES, groundRowFor } from '../../src/core/platforming'
+import {
+  unreachablePlatforms, unreachableChests, unlevelWaterBanks, suspendedWaterBanks, caveCeilingClearance,
+} from '../../src/core/level-validator'
+import { breathMaxMs, BREATH_BASE_MS, BREATH_PER_LEVEL_MS } from '../../src/core/breath'
 
 describe('niveaux et carte', () => {
-  it('57 niveaux dont 9 boss (monde carte A : 48 terrains + 9 arènes)', () => {
+  it('58 niveaux dont 9 boss (monde carte A : 48 terrains + Épave sous-marine + 9 arènes)', () => {
     const all = Object.values(LEVELS)
-    expect(all).toHaveLength(57)
+    expect(all).toHaveLength(58)
     expect(all.filter((l) => l.boss)).toHaveLength(9)
   })
 
@@ -46,6 +49,9 @@ describe('niveaux et carte', () => {
         expect(l.props ?? []).toHaveLength(0)
         continue
       }
+      // Épave : niveau bespoke tout-immergé — aucune végétation de sol, mais BEAUCOUP de coffres de
+      // plongée. Il échappe au quota générique (2-4 props sol + 1-3 coffres) et a son propre test.
+      if (l.id === 'epave-1') continue
       expect(l.props, l.id).toBeDefined()
       const ground = l.props!.filter((p) => p.kind !== 'coffre')
       const chests = l.props!.filter((p) => p.kind === 'coffre')
@@ -89,5 +95,96 @@ describe('niveaux et carte', () => {
     const chain = [...toProntera, 'plaine-6', 'foret-1', 'plaine-7', 'foret-7']
     expect(isNodeUnlocked('desert-1', chain)).toBe(true)
     expect(isNodeUnlocked('desert-1', [...toProntera, 'plaine-6', 'foret-1', 'plaine-7'])).toBe(false) // sans foret-7, desert-1 inatteignable
+  })
+})
+
+// ─── ÉPAVE : niveau bespoke ENTIÈREMENT SOUS-MARIN branché à gauche de la plage (Corail) ─────────
+describe('niveau Épave (sous-marin)', () => {
+  const epave = LEVELS['epave-1']!
+
+  it('epave-1 existe, pointe un nœud « Épave » de type level à GAUCHE de Corail (plage-4)', () => {
+    expect(epave).toBeDefined()
+    const node = WORLD_NODES.find((n) => n.id === 'epave-1')!
+    expect(node, 'nœud epave-1 absent de la carte').toBeDefined()
+    expect(node.type).toBe('level')
+    expect(node.levelId).toBe('epave-1')
+    const corail = WORLD_NODES.find((n) => n.id === 'plage-4')!
+    expect(node.x, 'Épave doit être à GAUCHE de Corail').toBeLessThan(corail.x)
+  })
+
+  it('epave-1 est atteignable depuis plage-4 (arête plage-4 ↔ epave-1)', () => {
+    expect(neighborsOf('plage-4')).toContain('epave-1')
+    expect(neighborsOf('epave-1')).toContain('plage-4')
+    // débloqué dès que la branche plage est faite jusqu'à Corail (gating isNodeUnlocked existant)
+    const done = ['plaine-1', 'plaine-2', 'plaine-3', 'plaine-4', 'plaine-5', 'plaine-6', 'foret-1',
+      'plaine-7', 'foret-7', 'desert-1', 'desert-2', 'desert-3', 'desert-4', 'desert-7', 'jungle-1',
+      'desert-8', 'desert-9', 'montagne-1', 'desert-10', 'plage-1', 'plage-2', 'plage-3', 'plage-4']
+    expect(isNodeUnlocked('epave-1', done)).toBe(true)
+    expect(isNodeUnlocked('epave-1', [])).toBe(false) // gating : fermé tant que la branche plage n'est pas faite
+  })
+
+  it('niveau TOUT-MARINE : une cuve marine couvre toute la largeur, aucune autre forme d’eau', () => {
+    const waters = (epave.hazards ?? []).filter((h) => h.kind === 'water')
+    expect(waters.length).toBeGreaterThan(0)
+    expect(waters.every((h) => h.water === 'basin'), 'toute l’eau doit être marine').toBe(true)
+    const full = waters.find((h) => h.x === 0 && h.w === epave.widthTiles)!
+    expect(full, 'la cuve doit couvrir toute la largeur (tout immergé)').toBeDefined()
+    expect(full.top).toBe(0) // eau jusqu’à la voûte → pas de surface d’air praticable
+  })
+
+  it('cuve FERMÉE à bancs égaux : aucun lac SUSPENDU, aucun rebord désaxé', () => {
+    expect((epave.hazards ?? []).every((h) => h.kind !== 'water' || h.openSide === undefined), 'aucun bord ouvert').toBe(true)
+    expect(suspendedWaterBanks(epave), 'eau suspendue').toEqual([])
+    expect(unlevelWaterBanks(epave), 'rebords désaxés').toEqual([])
+  })
+
+  it('BEAUCOUP de coffres (récompenses de plongée), tous atteignables, aucun prop de sol', () => {
+    const chests = (epave.props ?? []).filter((p) => p.kind === 'coffre')
+    const ground = (epave.props ?? []).filter((p) => p.kind !== 'coffre')
+    expect(chests.length, 'beaucoup de coffres attendus').toBeGreaterThanOrEqual(6)
+    expect(ground.length, 'aucune végétation de sol dans l’épave').toBe(0)
+    expect(unreachablePlatforms(epave), 'débris injoignables').toEqual([])
+    expect(unreachableChests(epave), 'coffres injoignables').toEqual([])
+    expect(caveCeilingClearance(epave), 'toit de roche trop bas').toEqual([])
+  })
+
+  it('mobs AQUATIQUES uniquement (crabe géant / méduse), qui ne se noient pas', () => {
+    expect(epave.spawns.length).toBeGreaterThan(0)
+    for (const s of epave.spawns) {
+      const m = MONSTERS[s.monsterId]!
+      expect(m, s.monsterId).toBeDefined()
+      expect(m.aquatic, `${s.monsterId} n’est pas aquatique`).toBe(true)
+    }
+    expect(epave.spawns.some((s) => s.monsterId === 'crabe-geant')).toBe(true)
+    expect(epave.spawns.some((s) => s.monsterId === 'meduse')).toBe(true)
+  })
+
+  it('POCHES D’AIR présentes et immergées (dans la cuve), de quoi enchaîner poche → coffre → poche', () => {
+    const pockets = epave.airPockets ?? []
+    expect(pockets.length, 'aucune poche d’air').toBeGreaterThanOrEqual(4)
+    const water = (epave.hazards ?? []).find((h) => h.kind === 'water')!
+    const groundRow = groundRowFor(epave.heightTiles)
+    for (const p of pockets) {
+      expect(p.x, 'poche hors largeur').toBeGreaterThanOrEqual(water.x)
+      expect(p.x, 'poche hors largeur').toBeLessThan(water.x + water.w)
+      expect(p.y, 'poche au-dessus de la ligne d’eau').toBeGreaterThanOrEqual(water.top ?? 0)
+      expect(p.y, 'poche sous le fond').toBeLessThan(groundRow)
+    }
+  })
+})
+
+// ─── APNÉE liée au NIVEAU DU PERSO : 5000 + 250·niveau (cf. core/breath.ts) ──────────────────────
+describe('apnée dynamique (souffle max lié au niveau du perso)', () => {
+  it('breathMaxMs = 5000 + 250·niveau', () => {
+    expect(BREATH_BASE_MS).toBe(5000)
+    expect(BREATH_PER_LEVEL_MS).toBe(250)
+    expect(breathMaxMs(1)).toBe(5250)
+    expect(breathMaxMs(10)).toBe(7500)
+    expect(breathMaxMs(48)).toBe(17000)
+  })
+
+  it('le souffle max croît strictement avec le niveau', () => {
+    expect(breathMaxMs(20)).toBeGreaterThan(breathMaxMs(19))
+    expect(breathMaxMs(50) - breathMaxMs(49)).toBe(BREATH_PER_LEVEL_MS)
   })
 })

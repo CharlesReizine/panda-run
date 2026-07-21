@@ -107,7 +107,10 @@ const ART_MONSTERS = Object.keys(MONSTERS)
 
 // Terrains disposant d'une VRAIE illustration de fond dédiée (public/art/bg-<id>.jpg). Les autres
 // niveaux du monde carte A retombent sur le fond de biome (biome-<clé>.jpg) — voir preload().
-const LEVELS_WITH_BG = new Set<string>(['cave-1', 'plage-1', 'plage-2', 'carriere-1'])
+const LEVELS_WITH_BG = new Set<string>(['cave-1', 'plage-1', 'plage-2', 'carriere-1', 'epave-1'])
+
+// Fonds livrés en PNG (transparence / galion coulé) plutôt qu'en JPG — l'extension diffère au chargement.
+const BG_PNG = new Set<string>(['epave-1'])
 
 // POISSONS décoratifs des bassins : illustrations OPTIONNELLES (public/art/fish-<id>.png), chargées
 // en BEST-EFFORT. Elles seront générées par l'user ; tant qu'un fichier manque, le loader échoue
@@ -133,7 +136,7 @@ export class PreloadScene extends Phaser.Scene {
     // disque (LEVELS_WITH_BG) ; tous les autres niveaux retombent proprement sur le fond de biome
     // (biome-<clé>) — pas de requête 404 pour les terrains sans image dédiée.
     for (const lvl of Object.values(LEVELS)) {
-      if (!lvl.boss && LEVELS_WITH_BG.has(lvl.id)) this.load.image(`bg-${lvl.id}`, `art/bg-${lvl.id}.jpg`)
+      if (!lvl.boss && LEVELS_WITH_BG.has(lvl.id)) this.load.image(`bg-${lvl.id}`, `art/bg-${lvl.id}.${BG_PNG.has(lvl.id) ? 'png' : 'jpg'}`)
     }
     // illustrations du panda joueur : 4 poses par classe (idle/course/saut/attaque).
     // Chargées ici puis « bakées » (rognées + mises à l'échelle + ancrées pieds au sol) en

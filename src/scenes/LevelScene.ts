@@ -25,6 +25,7 @@ import { recordKill } from '../core/player-state'
 import type { DropEntry, SkillDef } from '../core/types'
 import type { UIScene } from './UIScene'
 import { TILE, DEFAULT_HEIGHT_TILES, groundRowFor, GRAVITY, landsOnOneWayPlatform } from '../core/platforming'
+import { breathMaxMs, BREATH_BASE_MS } from '../core/breath'
 import { BIOMES } from '../data/biomes'
 import { audio, type MusicTrack } from '../audio/audio-engine'
 
@@ -40,7 +41,9 @@ const BOSS_BAR_W = 440
 // Plongée sous l'eau : le panda peut s'enfoncer sous la surface (traversée verticale), mais tant
 // que sa TÊTE reste immergée il retient son souffle un court instant (apnée) puis se noie
 // PROGRESSIVEMENT — jamais de mort instantanée. Le souffle se recharge dès qu'il ressort la tête.
-const BREATH_MAX_MS = 5000 // délai de grâce d'apnée AVANT la noyade — nettement rallongé (eau moins punitive, traversées sous-marines survivables)
+// délai de grâce d'apnée AVANT la noyade. Il n'est plus fixe : le MAX dépend du NIVEAU DU PERSO
+// (breathMaxMs = 5000 + 250·niveau, cf. core/breath.ts). BREATH_BASE_MS ne sert que d'initialisation
+// avant que la scène ne connaisse le joueur ; toutes les bornes réelles passent par this.breathMax().
 const BREATH_RECHARGE_MULT = 3 // le souffle se recharge 3× plus vite qu'il ne se vide (retour surface = répit rapide)
 const DROWN_DPS = 4 // PV perdus par seconde une fois le souffle épuisé — adouci (rythme de noyade plus doux)
 const DROWN_TICK_MS = 300 // cadence des ticks de noyade : perte régulière, jamais d'un coup
@@ -80,9 +83,12 @@ export class LevelScene extends Phaser.Scene {
   private lavaAccumMs = 0
   // Plongée : réserve d'apnée restante (ms), accumulateurs de ticks de noyade et d'émission de
   // bulles, voile bleuté quand la tête est immergée, petite jauge d'apnée au-dessus de la tête.
-  private breathMs = BREATH_MAX_MS
+  private breathMs = BREATH_BASE_MS
   private drownAccumMs = 0
   private bubbleAccumMs = 0
+  // POCHES D'AIR (niveaux immergés) : zones de recharge de souffle (bulles d'air respirable). Touchées
+  // par le panda → le souffle remonte au max, comme une surface locale. Vide hors niveau immergé.
+  private airPocketRects: Phaser.Geom.Rectangle[] = []
   private submergeVeil: Phaser.GameObjects.Rectangle | null = null
   private breathBarBg: Phaser.GameObjects.Rectangle | null = null
   private breathBar: Phaser.GameObjects.Rectangle | null = null
@@ -156,9 +162,10 @@ export class LevelScene extends Phaser.Scene {
     this.cascadeSprites = []
     this.lavaRects = []
     this.lavaAccumMs = 0
+    this.airPocketRects = []
     // plongée : on entame chaque niveau souffle plein, sans dette de noyade ; les overlays
     // (voile, jauge) sont recréés plus bas (la scène est réutilisée → références remises à zéro)
-    this.breathMs = BREATH_MAX_MS
+    this.breathMs = this.breathMax()
     this.drownAccumMs = 0
     this.bubbleAccumMs = 0
     this.submergeVeil = null
@@ -493,6 +500,8 @@ export class LevelScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, spikes, () => this.hitSpikes())
     this.physics.add.collider(this.player, basinWalls)
     this.physics.add.collider(this.enemies, basinWalls, undefined, groundedEnemy)
+
+    this.addAirPockets()
 
     // voile bleuté discret, épinglé à l'écran, affiché seulement quand la tête est immergée
     // (alpha piloté dans updateWater). Sous les overlays de menu/K.O. (depth ≥ 20).
@@ -1223,13 +1232,25 @@ export class LevelScene extends Phaser.Scene {
   // le souffle se vide, des bulles montent depuis sa tête, et une fois le souffle épuisé il perd
   // de la vie par ticks réguliers (noyade douce, jamais instantanée). Dès qu'il ressort la tête,
   // la noyade s'arrête et le souffle se recharge vite. Respecte le god mode (via drownTick).
+  // MAX d'apnée courant (ms) — dynamique, lié au NIVEAU DU PERSO (5000 + 250·niveau, cf. core/breath.ts).
+  private breathMax(): number { return breathMaxMs(getPlayer().level) }
+
   private updateWater(delta: number) {
     const body = this.player.body as Phaser.Physics.Arcade.Body
     const rect = this.waterRects.find((r) => r.contains(this.player.x, this.player.y))
-    // marge de 4px : on ne compte comme immergé que quand la tête est franchement sous la surface
-    const submerged = !!rect && body.top >= rect.top + 4
+    // POCHE D'AIR : bulle d'air respirable au cœur de l'épave. En toucher une recharge le souffle au MAX
+    // (comme une surface locale) — dans un niveau sans surface d'air, c'est le seul répit possible.
+    const inAirPocket = this.airPocketRects.some((r) => r.contains(this.player.x, this.player.y))
+    // marge de 4px : on ne compte comme immergé que quand la tête est franchement sous la surface.
+    // Dans une poche d'air, on respire → jamais « submergé » (pas de bulles, pas de noyade).
+    const submerged = !inAirPocket && !!rect && body.top >= rect.top + 4
 
-    if (submerged) {
+    if (inAirPocket) {
+      // répit local : souffle plein, dette de noyade effacée
+      this.breathMs = this.breathMax()
+      this.drownAccumMs = 0
+      this.bubbleAccumMs = 0
+    } else if (submerged) {
       this.breathMs = Math.max(0, this.breathMs - delta)
       this.bubbleAccumMs += delta
       while (this.bubbleAccumMs >= BUBBLE_INTERVAL_MS) {
@@ -1246,7 +1267,7 @@ export class LevelScene extends Phaser.Scene {
       }
     } else {
       // tête hors de l'eau : répit — le souffle se recharge vite et la noyade s'interrompt
-      this.breathMs = Math.min(BREATH_MAX_MS, this.breathMs + delta * BREATH_RECHARGE_MULT)
+      this.breathMs = Math.min(this.breathMax(), this.breathMs + delta * BREATH_RECHARGE_MULT)
       this.drownAccumMs = 0
       this.bubbleAccumMs = 0
     }
@@ -1402,10 +1423,36 @@ export class LevelScene extends Phaser.Scene {
     }
   }
 
+  // POCHES D'AIR (niveaux immergés type Épave) : construit les zones de recharge de souffle et leur
+  // rendu (halo cyan qui palpite + chapelet de bulles qui remontent). Chaque poche est une zone
+  // circulaire ; y entrer recharge le souffle au max (cf. updateWater). No-op si le niveau n'en a pas.
+  private addAirPockets() {
+    for (const ap of this.levelDef.airPockets ?? []) {
+      const r = (ap.r ?? 1.6) * TILE
+      const cx = ap.x * TILE + TILE / 2
+      const cy = ap.y * TILE + TILE / 2
+      this.airPocketRects.push(new Phaser.Geom.Rectangle(cx - r, cy - r, r * 2, r * 2))
+      // halo respirable (cyan clair translucide) qui palpite doucement
+      const halo = this.add.circle(cx, cy, r, 0xbfefff, 0.22).setDepth(-1).setBlendMode(Phaser.BlendModes.ADD)
+      const ring = this.add.circle(cx, cy, r, 0xe8fbff).setStrokeStyle(2, 0xdff6ff, 0.5).setFillStyle(0, 0).setDepth(-1)
+      this.tweens.add({ targets: [halo, ring], scale: 1.12, alpha: { from: 0.9, to: 0.5 }, duration: 1200, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+      // chapelet de bulles qui montent en continu depuis le cœur de la poche
+      for (let i = 0; i < 4; i++) {
+        const bx = cx + Phaser.Math.Between(-Math.floor(r / 2), Math.floor(r / 2))
+        const bub = this.add.image(bx, cy + r * 0.5, 'fx-bubble').setDepth(-1).setScale(0.4).setAlpha(0.8)
+        this.tweens.add({
+          targets: bub, y: cy - r, alpha: 0, scale: 0.7,
+          duration: 1400 + i * 260, repeat: -1, repeatDelay: i * 180, ease: 'Sine.out',
+          onRepeat: () => { bub.setPosition(bx, cy + r * 0.5).setAlpha(0.8).setScale(0.4) },
+        })
+      }
+    }
+  }
+
   // petite jauge d'apnée au-dessus de la tête : visible seulement quand le souffle n'est pas plein
   // (donc invisible hors de l'eau). Vire au rouge quand le souffle est presque épuisé.
   private updateBreathGauge(body: Phaser.Physics.Arcade.Body, submerged: boolean) {
-    const show = submerged || this.breathMs < BREATH_MAX_MS - 1
+    const show = submerged || this.breathMs < this.breathMax() - 1
     if (!show) {
       this.breathBarBg?.setVisible(false)
       this.breathBar?.setVisible(false)
@@ -1414,7 +1461,7 @@ export class LevelScene extends Phaser.Scene {
     const w = 34
     const x = this.player.x - w / 2
     const y = body.top - 12
-    const frac = Phaser.Math.Clamp(this.breathMs / BREATH_MAX_MS, 0, 1)
+    const frac = Phaser.Math.Clamp(this.breathMs / this.breathMax(), 0, 1)
     if (!this.breathBarBg) {
       this.breathBarBg = this.add.rectangle(0, 0, w + 2, 6, 0x000000, 0.5).setOrigin(0, 0.5).setDepth(9)
       this.breathBar = this.add.rectangle(0, 0, w, 4, 0x4fc3f7).setOrigin(0, 0.5).setDepth(10)
