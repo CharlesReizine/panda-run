@@ -85,6 +85,11 @@ export interface MonsterDef {
   speed: number // px/s
   behavior: MonsterBehavior
   boss?: boolean
+  // ── BOSS (MVP « une classe ») : le boss incarne une CLASSE et se bat avec SES skills. La
+  // LOGIQUE des trois skills + grosse attaque chargée + invocation vit dans BossController ; ces
+  // champs ne portent que l'IDENTITÉ et le réglage (le script est choisi sur l'id du boss).
+  bossClass?: ClassId // classe incarnée (affichée à l'apparition ; pilote le kit de skills)
+  bossSummon?: string // id du mob invoqué par la vague d'adds (compte à rebours visible)
   mvp?: boolean // élite rare : stats renforcées, drops rares, ni mob ni boss
   // monstre VOLANT (oiseau) : gravité coupée, patrouille en sinus dans les airs et PIQUE vers le
   // joueur par à-coups puis remonte. Ignore sol/rebords (voir Enemy). Exempté de la contrainte

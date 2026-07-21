@@ -398,8 +398,10 @@ const list: LevelDef[] = [
   mkZone12(),
   mkZone13(),
   mkZone14(),
+  // ARÈNE — Roi Gloopy (NOVICE bondissant). Clairière ouverte à trois pods rebondissants, sol
+  // dégagé pour esquiver le bond fracassant. Silhouette basse et ludique.
   { id: 'zone1-boss', name: 'Antre du Roi Gloopy', biome: 'foret', widthTiles: 40,
-    platforms: [plat(8, 10, 4), plat(28, 10, 4)],
+    platforms: [plat(8, 11, 4), plat(18, 10, 5), plat(28, 11, 4)],
     spawns: [], boss: 'roi-gloopy' },
   // zone2-1 : DÉSERT (KIT MODULES) — DUNES DE SOGRAT (≈ D2). Le plus doux du désert : traversée
   // dunaire ensoleillée, deux points d'eau sûrs, pente de combat finale. plateau (départ mi-hauteur)
@@ -468,14 +470,18 @@ const list: LevelDef[] = [
     { kind: 'escalier', widthRange: [14, 20], rise: 5, fillBelow: 'sol', fillAbove: 'air', tags: ['montée'], ground: ['fantome'] },
     { kind: 'arene', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['combat'], ground: ['mage-noir', 'squelette', 'gobelin-mineur'], exitHere: true }, // PORTE en HAUT, sortie de la caverne
   ], { id: 'cave-1', name: 'Cave aux échos', biome: 'cave' }),
-  { id: 'zone2-boss', name: 'Pyramide du Pharaon', biome: 'desert', widthTiles: 40,
-    platforms: [plat(8, 10, 4), plat(28, 10, 4)],
+  // ARÈNE — Pharaon Scarabée (SABREUR). PYRAMIDE à gradins mirrorés convergeant vers un sommet
+  // central : on grimpe pour esquiver les taillades bondissantes et le plongeon chargé.
+  { id: 'zone2-boss', name: 'Pyramide du Pharaon', biome: 'desert', widthTiles: 44,
+    platforms: [plat(7, 12, 6), plat(13, 10, 5), plat(18, 8, 8), plat(26, 10, 5), plat(32, 12, 6)],
     spawns: [], boss: 'pharaon-scarabee' },
   // Zone 3 — jungle (+ route alternative plage) — refondue PHASE MODULES (cf. mkZone31/mkZone32).
   mkZone31(),
   mkZone32(),
-  { id: 'zone3-boss', name: 'Cœur de la Jungle', biome: 'jungle', widthTiles: 40,
-    platforms: [plat(8, 10, 4), plat(28, 10, 4)],
+  // ARÈNE — Seigneur Liane (MAGE). Canopée à plateaux de lianes épars et décalés : on saute de
+  // plateforme en plateforme pour trouver le TROU SÛR de la pluie de météores.
+  { id: 'zone3-boss', name: 'Cœur de la Jungle', biome: 'jungle', widthTiles: 42,
+    platforms: [plat(5, 11, 4), plat(13, 10, 5), plat(24, 10, 5), plat(33, 11, 4)],
     spawns: [], boss: 'seigneur-liane' },
   // Route alternative PLAGE — refondue PHASE MODULES (cf. mkPlage1/mkPlage2).
   mkPlage1(),
@@ -483,8 +489,10 @@ const list: LevelDef[] = [
   // Zone 4 — montagne (+ route alternative carrière) — REFONDUE PAR MODULES (voir mkZone41/42 ci-dessus)
   mkZone41(),
   mkZone42(),
-  { id: 'zone4-boss', name: 'Pic du Golem Ancien', biome: 'montagne', widthTiles: 40,
-    platforms: [plat(8, 10, 4), plat(28, 10, 4)],
+  // ARÈNE — Golem Ancien (ARCHER). Corniches de montagne en ESCALIER ASYMÉTRIQUE : on grimpe pour
+  // couper la ligne de tir des salves perçantes et survivre au déluge de pierres.
+  { id: 'zone4-boss', name: 'Pic du Golem Ancien', biome: 'montagne', widthTiles: 46,
+    platforms: [plat(6, 12, 5), plat(14, 10, 4), plat(24, 11, 5), plat(34, 10, 4), plat(40, 12, 4)],
     spawns: [], boss: 'golem-ancien' },
   // carriere-1 / carriere-2 : route alternative CARRIÈRE — REFONDUE PAR MODULES (voir mkCarriere1/2 ci-dessus)
   mkCarriere1(),
@@ -492,13 +500,17 @@ const list: LevelDef[] = [
   // Zone 5 — cimetière (refondue PHASE MODULES ; cf. mkZone51 / mkZone52 ci-dessus)
   mkZone51(),
   mkZone52(),
-  { id: 'zone5-boss', name: 'Trône du Roi Liche', biome: 'cimetiere', widthTiles: 40,
-    platforms: [plat(8, 10, 4), plat(28, 10, 4)],
+  // ARÈNE — Roi Liche (SORCIER). AUTEL SYMÉTRIQUE : dais central (trône) encadré de deux gradins et
+  // deux perchoirs hauts pour esquiver les novae nécrotiques.
+  { id: 'zone5-boss', name: 'Trône du Roi Liche', biome: 'cimetiere', widthTiles: 44,
+    platforms: [plat(6, 11, 6), plat(8, 9, 5), plat(17, 12, 10), plat(33, 11, 6), plat(31, 9, 5)],
     spawns: [], boss: 'roi-liche' },
   // Zone 6 — enfer (refondue PHASE MODULES ; cf. mkZone61 ci-dessus)
   mkZone61(),
-  { id: 'zone6-boss', name: 'Antre du Seigneur Déchu', biome: 'enfer', widthTiles: 40,
-    platforms: [plat(8, 10, 4), plat(28, 10, 4)],
+  // ARÈNE FINALE — Seigneur Déchu (TOUTES CLASSES). La plus VASTE : sanctuaire infernal multi-paliers
+  // avec autel central surélevé, de quoi grimper, esquiver et courir sous le déluge des quatre écoles.
+  { id: 'zone6-boss', name: 'Antre du Seigneur Déchu', biome: 'enfer', widthTiles: 50,
+    platforms: [plat(6, 12, 5), plat(15, 10, 7), plat(23, 8, 7), plat(31, 10, 7), plat(42, 12, 5)],
     spawns: [], boss: 'seigneur-dechu' },
 ]
 

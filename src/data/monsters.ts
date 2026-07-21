@@ -100,7 +100,7 @@ const list: MonsterDef[] = [
   },
   // Boss
   {
-    id: 'roi-gloopy', name: 'Roi Gloopy', lore: 'Le plus gros des slimes, couronné et fier, il écrase ses sujets sous sa masse rose.', color: 0xff5fa8, hp: 380, atk: 18, def: 5, xp: 3200, level: 18, speed: 55, behavior: 'charge', boss: true,
+    id: 'roi-gloopy', name: 'Roi Gloopy', lore: 'Le plus gros des slimes, couronné et fier, il écrase ses sujets sous sa masse rose.', color: 0xff5fa8, hp: 1150, atk: 52, def: 10, xp: 3200, level: 18, speed: 60, behavior: 'charge', boss: true, bossClass: 'novice', bossSummon: 'gloopy',
     drops: [
       { kind: 'gold', chance: 1, min: 60, max: 100 },
       { kind: 'item', itemId: 'epee-bambou', chance: 1, min: 1, max: 1 },
@@ -110,7 +110,7 @@ const list: MonsterDef[] = [
     ],
   },
   {
-    id: 'pharaon-scarabee', name: 'Pharaon Scarabée', lore: 'Souverain des sables réveillé de son sarcophage, il défend son trésor à coups de sortilèges antiques.', color: 0x3fb7b0, hp: 2600, atk: 48, def: 20, xp: 6000, level: 29, speed: 70, behavior: 'projectile', boss: true,
+    id: 'pharaon-scarabee', name: 'Pharaon Scarabée', lore: 'Souverain des sables réveillé de son sarcophage, il fend l\'air de sa lame d\'or et fond sur l\'intrus d\'un bond fulgurant.', color: 0x3fb7b0, hp: 3200, atk: 100, def: 26, xp: 6000, level: 29, speed: 120, behavior: 'charge', boss: true, bossClass: 'swordsman', bossSummon: 'scarabee-cornu',
     drops: [
       { kind: 'gold', chance: 1, min: 150, max: 250 },
       { kind: 'item', itemId: 'carapace-scarabee', chance: 1, min: 1, max: 1 },
@@ -156,7 +156,7 @@ const list: MonsterDef[] = [
   { id: 'gardien-flamme', name: 'Gardien Flamme', lore: 'Colosse ardent scellé aux portes de l\'enfer, brasier vivant qui calcine quiconque prétend passer.', color: 0xbf360c, hp: 5000, atk: 130, def: 65, xp: 6000, level: 60, speed: 0, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.25, min: 1, max: 2 }] },
   // Boss — zone 3 (jungle)
   {
-    id: 'seigneur-liane', name: 'Seigneur Liane', lore: 'Souverain de la jungle aux mille lianes, majestueux et vorace, il étreint ses proies dans un lacis vert.', color: 0x1b5e20, hp: 4200, atk: 65, def: 30, xp: 9000, level: 33, speed: 40, behavior: 'charge', boss: true,
+    id: 'seigneur-liane', name: 'Seigneur Liane', lore: 'Souverain de la jungle aux mille lianes, archimage sylvestre : il embrase l\'air de sphères ardentes et fait pleuvoir le feu du ciel.', color: 0x1b5e20, hp: 5200, atk: 122, def: 34, xp: 9000, level: 33, speed: 60, behavior: 'projectile', boss: true, bossClass: 'mage', bossSummon: 'flora-vorace',
     drops: [
       { kind: 'gold', chance: 1, min: 200, max: 320 },
       { kind: 'item', itemId: 'baton-feuillu', chance: 1, min: 1, max: 1 },
@@ -166,7 +166,7 @@ const list: MonsterDef[] = [
   },
   // Boss — zone 4 (montagne)
   {
-    id: 'golem-ancien', name: 'Golem Ancien', lore: 'Titan de pierre gravé de runes oubliées, réveillé après des éons, il fait trembler la montagne à chaque pas.', color: 0x78909c, hp: 6500, atk: 90, def: 45, xp: 13000, level: 40, speed: 30, behavior: 'contact', boss: true,
+    id: 'golem-ancien', name: 'Golem Ancien', lore: 'Titan de pierre gravé de runes oubliées : ses runes crachent des salves d\'éclats perçants et un déluge de pierres du ciel.', color: 0x78909c, hp: 7600, atk: 142, def: 50, xp: 13000, level: 40, speed: 55, behavior: 'projectile', boss: true, bossClass: 'archer', bossSummon: 'gobelin-mineur', size: 'grand',
     drops: [
       { kind: 'gold', chance: 1, min: 280, max: 420 },
       { kind: 'item', itemId: 'carapace-scarabee', chance: 1, min: 1, max: 1 },
@@ -176,7 +176,7 @@ const list: MonsterDef[] = [
   },
   // Boss — zone 5 (cimetière)
   {
-    id: 'roi-liche', name: 'Roi Liche', lore: 'Seigneur mort-vivant au sceptre glacé, il commande aux légions du cimetière depuis son trône d\'os.', color: 0x4527a0, hp: 9000, atk: 130, def: 40, xp: 18000, level: 50, speed: 40, behavior: 'projectile', boss: true,
+    id: 'roi-liche', name: 'Roi Liche', lore: 'Seigneur mort-vivant au sceptre glacé, sorcier suprême : il déchaîne des novae nécrotiques et des salves d\'os hurlantes depuis son trône.', color: 0x4527a0, hp: 10500, atk: 176, def: 46, xp: 18000, level: 50, speed: 50, behavior: 'projectile', boss: true, bossClass: 'sorcier', bossSummon: 'squelette',
     drops: [
       { kind: 'gold', chance: 1, min: 350, max: 520 },
       { kind: 'item', itemId: 'griffe-royale', chance: 1, min: 1, max: 1 },
@@ -186,7 +186,7 @@ const list: MonsterDef[] = [
   },
   // Boss final — zone 6 (enfer)
   {
-    id: 'seigneur-dechu', name: 'Seigneur Déchu', lore: 'Maître ultime des enfers, ange tombé rongé de haine : l\'affronter, c\'est défier l\'apocalypse elle-même.', color: 0x8a1414, hp: 14000, atk: 190, def: 55, xp: 30000, level: 53, speed: 70, behavior: 'charge', boss: true,
+    id: 'seigneur-dechu', name: 'Seigneur Déchu', lore: 'Maître ultime des enfers, ange tombé rongé de haine : il manie les meilleures armes de chaque classe — lame, feu, flèches et néant.', color: 0x8a1414, hp: 16500, atk: 205, def: 60, xp: 30000, level: 53, speed: 90, behavior: 'charge', boss: true, bossClass: 'chevalier', bossSummon: 'diablotin',
     drops: [
       { kind: 'gold', chance: 1, min: 500, max: 800 },
       { kind: 'item', itemId: 'griffe-royale', chance: 1, min: 1, max: 1 },

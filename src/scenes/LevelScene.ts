@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { LEVELS, type LevelDef } from '../data/levels'
 import { Player } from '../entities/Player'
 import { Enemy } from '../entities/Enemy'
+import { BossController } from '../entities/BossController'
 import { Projectile } from '../entities/Projectile'
 import { Prop } from '../entities/Prop'
 import { FlameWall } from '../entities/FlameWall'
@@ -100,8 +101,9 @@ export class LevelScene extends Phaser.Scene {
   private bossBar: Phaser.GameObjects.Rectangle | null = null
   private bossBarBg: Phaser.GameObjects.Rectangle | null = null
   private bossName: Phaser.GameObjects.Text | null = null
-  private bossVolley: Phaser.Time.TimerEvent | null = null
-  private bossPhase = 1
+  // Contrôleur de boss (« MVP une classe ») : pilote locomotion, télégraphes, skills, invocations
+  // et phases. Remplace l'ancienne salve scriptée générique.
+  private bossCtrl: BossController | null = null
   private bgFar?: Phaser.GameObjects.TileSprite
   private bgNear?: Phaser.GameObjects.TileSprite
   private bgClouds?: Phaser.GameObjects.TileSprite
@@ -531,8 +533,7 @@ export class LevelScene extends Phaser.Scene {
     this.bossBar = null
     this.bossBarBg = null
     this.bossName = null
-    this.bossVolley = null
-    this.bossPhase = 1
+    this.bossCtrl = null
     if (this.levelDef.boss) {
       this.spawnBoss()
     } else {
@@ -576,7 +577,8 @@ export class LevelScene extends Phaser.Scene {
       this.endAim() // sort proprement d'une éventuelle visée de zone en cours
       this.hitStopTimer?.remove()
       this.hitStopTimer = null
-      this.bossVolley?.remove()
+      this.bossCtrl?.destroy()
+      this.bossCtrl = null
       this.scene.stop('UI')
     })
     this.game.events.emit('hud-refresh')
@@ -870,54 +872,8 @@ export class LevelScene extends Phaser.Scene {
     this.bossBarBg = this.add.rectangle(480, 100, BOSS_BAR_W + 4, 20, 0x000000, 0.6).setScrollFactor(0).setStrokeStyle(1, 0xffffff, 0.3)
     this.bossBar = this.add.rectangle(480 - BOSS_BAR_W / 2, 100, BOSS_BAR_W, 16, 0xef5350).setOrigin(0, 0.5).setScrollFactor(0)
 
-    this.bossPhase = 1
-    this.startBossVolley(5000) // phase 1 : salve toutes les 5 s
-  }
-
-  // (re)programme la salve du boss courant ; le pattern dépend de la phase active
-  private startBossVolley(delay: number) {
-    this.bossVolley?.remove()
-    const boss = this.boss
-    if (!boss) return
-    const def = boss.monster
-    this.bossVolley = this.time.addEvent({
-      delay,
-      loop: true,
-      callback: () => {
-        if (!boss.active) return
-        if (this.bossPhase >= 2) {
-          // éventail de 5 projectiles + slam de zone télégraphié sous le joueur
-          for (const dy of [-0.5, -0.25, 0, 0.25, 0.5]) {
-            const proj = new Projectile(this, boss.x, boss.y - 20, this.player.x - boss.x, this.player.y - boss.y + dy * 260, def.atk, false, 650)
-            proj.setTexture('fx-shot').clearTint()
-            this.enemyProjectiles.add(proj)
-            proj.launch()
-          }
-          this.enemyGroundSpell(this.player.x, def.atk)
-        } else {
-          for (const dy of [-0.3, 0, 0.3]) {
-            const proj = new Projectile(this, boss.x, boss.y - 20, this.player.x - boss.x, this.player.y - boss.y + dy * 200, def.atk, false, 600)
-            proj.setTexture('fx-shot').clearTint()
-            this.enemyProjectiles.add(proj)
-            proj.launch()
-          }
-        }
-      },
-    })
-  }
-
-  // passage en furie sous 50 % PV : cadence accélérée + nouveau pattern, une seule fois
-  private enterBossPhase2() {
-    this.bossPhase = 2
-    this.startBossVolley(2500)
-    this.cameras.main.shake(300, 0.01)
-    const txt = this.add.text(480, 150, 'ENRAGÉ !', {
-      fontSize: '44px', color: '#ff1744', fontStyle: 'bold', stroke: '#000000', strokeThickness: 5,
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(30).setScale(0.3)
-    this.tweens.add({
-      targets: txt, scale: 1.2, duration: 260, ease: 'Back.out', yoyo: true, hold: 500,
-      onComplete: () => this.tweens.add({ targets: txt, alpha: 0, duration: 500, onComplete: () => txt.destroy() }),
-    })
+    // le contrôleur prend la main sur le boss (locomotion + skills + télégraphes + phases)
+    this.bossCtrl = new BossController(this, boss)
   }
 
   // sort de zone télégraphié posé au sol : marqueur qui se remplit ~600 ms, puis dégâts
@@ -939,6 +895,92 @@ export class LevelScene extends Phaser.Scene {
       if (Phaser.Math.Distance.Between(this.player.x, this.player.y, targetX, groundY) <= radius) {
         this.hitPlayer(damage)
       }
+    })
+  }
+
+  // ═══════════════ API BOSS (utilisée par BossController — « MVP une classe ») ═══════════════
+  // Ces helpers ENCAPSULENT les FX (aoeRing/explosionFx/impactFx/burstParticles restent privés) et
+  // le pipeline de dégâts (hitPlayer respecte god mode + invulnérabilité). Le contrôleur ne gère que
+  // le TIMING, les TÉLÉGRAPHES et l'ENCHAÎNEMENT des skills — jamais le rendu bas niveau.
+
+  // dessus du sol de l'arène (px) — repère commun des frappes au sol / invocations.
+  groundTopY(): number { return this.groundRow * TILE }
+  // largeur jouable de l'arène (px).
+  arenaWidthPx(): number { return this.levelDef.widthTiles * TILE }
+
+  // Invoque un ADD (mob de la zone) au sol à la colonne xPx (bornée à l'arène), ajouté au groupe des
+  // ennemis (il combat comme un mob normal). Volute d'invocation à l'apparition. Renvoie l'ennemi.
+  bossSpawnAdd(monsterId: string, xPx: number): Enemy | null {
+    const def = MONSTERS[monsterId]
+    if (!def) return null
+    const gy = this.groundRow * TILE
+    const x = Phaser.Math.Clamp(xPx, 48, this.arenaWidthPx() - 48)
+    const e = new Enemy(this, x, gy - 40, def)
+    this.enemies.add(e)
+    this.aoeRing(x, gy - 20, 46, 0xab47bc, true)
+    this.burstParticles(x, gy - 20, 12, 0xce93d8, { speed: 80, size: 4, durationMs: 420, spreadUp: true })
+    return e
+  }
+
+  // Tir DIRIGÉ du boss vers un point : projectile ennemi thématique (texture/échelle/portée libres).
+  bossShoot(fromX: number, fromY: number, targetX: number, targetY: number, damage: number, tex = 'fx-shot', scale = 1.2, rangePx = 1000) {
+    const p = new Projectile(this, fromX, fromY, targetX - fromX, targetY - fromY, damage, false, rangePx)
+    p.setTexture(tex).clearTint().setScale(scale)
+    this.enemyProjectiles.add(p)
+    p.launch()
+  }
+
+  // Explosion INSTANTANÉE de zone (retombée de slam/plongeon) : gros FX + dégâts au joueur s'il est
+  // dans le rayon au moment de l'impact (évitable si on a dégagé la zone à temps).
+  bossExplode(xPx: number, yPx: number, radius: number, damage: number, color: number) {
+    this.explosionFx(xPx, yPx, radius, color)
+    if (Phaser.Math.Distance.Between(this.player.x, this.player.y, xPx, yPx) <= radius) this.hitPlayer(damage)
+  }
+
+  // Frappe de zone TÉLÉGRAPHIÉE au sol : marqueur qui se remplit `delayMs`, PUIS onde + dégâts si le
+  // joueur est encore dans le cercle (rayon/couleur/délai paramétrables — lisible et évitable).
+  bossTelegraphStrike(xPx: number, radius: number, delayMs: number, damage: number, color: number) {
+    const groundY = this.groundRow * TILE - 10
+    const marker = this.add.graphics().setDepth(4)
+    const draw = (fill: number) => {
+      marker.clear()
+      marker.fillStyle(color, 0.12 + fill * 0.3).fillCircle(xPx, groundY, radius)
+      marker.lineStyle(3, color, 0.5 + fill * 0.5).strokeCircle(xPx, groundY, radius)
+    }
+    draw(0)
+    this.tweens.addCounter({ from: 0, to: 1, duration: delayMs, onUpdate: (tw) => draw(tw.getValue() ?? 0) })
+    this.time.delayedCall(delayMs, () => {
+      marker.destroy()
+      if (!this.sys.isActive()) return
+      this.bossExplode(xPx, groundY, radius, damage, color)
+    })
+  }
+
+  // Coup de MÊLÉE du boss : croissant tranchant devant lui (sens du joueur) + dégâts si le joueur est
+  // à portée frontale. Sert aux lunges/taillades des boss guerriers (chevalier/sabreur/déchu).
+  bossMeleeStrike(bossX: number, bossY: number, reachPx: number, damage: number, color: number) {
+    const dir = this.player.x < bossX ? -1 : 1
+    const cx = bossX + dir * reachPx * 0.5
+    const arc = this.add.graphics({ x: cx, y: bossY }).setDepth(6)
+    arc.lineStyle(7, color, 0.92).beginPath()
+    arc.arc(0, 0, reachPx * 0.6, Phaser.Math.DegToRad(-70), Phaser.Math.DegToRad(70), false)
+    arc.strokePath()
+    arc.scaleX = dir
+    this.tweens.add({ targets: arc, scaleX: 1.4 * dir, scaleY: 1.4, alpha: 0, duration: 190, onComplete: () => arc.destroy() })
+    this.impactFx(cx, bossY, color)
+    const dxFacing = (this.player.x - bossX) * dir
+    if (dxFacing > -30 && dxFacing < reachPx + 30 && Math.abs(this.player.y - bossY) < 120) this.hitPlayer(damage)
+  }
+
+  // Bannière « ENRAGÉ ! » du passage en phase 2 (sous 50 % PV) : secousse + texte pulsé.
+  showEnrageBanner() {
+    this.cameras.main.shake(300, 0.01)
+    const txt = this.add.text(480, 150, 'ENRAGÉ !', {
+      fontSize: '44px', color: '#ff1744', fontStyle: 'bold', stroke: '#000000', strokeThickness: 5,
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(30).setScale(0.3)
+    this.tweens.add({
+      targets: txt, scale: 1.2, duration: 260, ease: 'Back.out', yoyo: true, hold: 500,
+      onComplete: () => this.tweens.add({ targets: txt, alpha: 0, duration: 500, onComplete: () => txt.destroy() }),
     })
   }
 
@@ -2725,7 +2767,8 @@ export class LevelScene extends Phaser.Scene {
     if (e !== this.boss) return
     this.hitStop(90) // gel d'impact sur la mort du boss
     audio.playSfx('boss-victory')
-    this.bossVolley?.remove()
+    this.bossCtrl?.destroy()
+    this.bossCtrl = null
     this.bossBarBg?.destroy()
     this.bossBar?.destroy()
     this.bossName?.destroy()
@@ -2733,7 +2776,6 @@ export class LevelScene extends Phaser.Scene {
     this.bossBar = null
     this.bossBarBg = null
     this.bossName = null
-    this.bossVolley = null
     const txt = this.add.text(480, 200, 'VICTOIRE !', { fontSize: '56px', color: '#ffd700', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0)
     this.tweens.add({ targets: txt, scale: 1.2, yoyo: true, repeat: 3, duration: 300 })
     this.createExit()
@@ -2803,7 +2845,7 @@ export class LevelScene extends Phaser.Scene {
     }
     if (this.boss?.active && this.bossBar) {
       this.bossBar.setDisplaySize(BOSS_BAR_W * Math.max(0, this.boss.hp / this.boss.monster.hp), 16)
-      if (this.bossPhase === 1 && this.boss.hp <= this.boss.monster.hp * 0.5) this.enterBossPhase2()
+      this.bossCtrl?.step(this.time.now, delta)
     }
   }
 }

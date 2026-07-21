@@ -114,6 +114,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private meleeFx: Phaser.GameObjects.Graphics | null = null
   // ÉLITE : prochaine utilisation du skill signature.
   private nextEliteSkillAt = 0
+  // BOSS piloté de l'EXTÉRIEUR (BossController) : quand vrai, l'IA autonome ci-dessous est
+  // COURT-CIRCUITÉE — le contrôleur impose la vélocité et déclenche les skills. On garde le rendu
+  // flottant (barre, plaque, télégraphes) et la physique (gravité/collisions/bornes). Piège/terreur
+  // n'ont de toute façon aucune prise sur un boss.
+  aiDisabled = false
 
   constructor(scene: LevelScene, x: number, y: number, def: MonsterDef) {
     super(scene, x, y, `monster-${def.id}`)
@@ -347,6 +352,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   preUpdate(t: number, d: number) {
     super.preUpdate(t, d)
+    // BOSS piloté par le contrôleur : on ne joue AUCUNE IA autonome (le BossController impose la
+    // vélocité et les skills chaque frame). On conserve seulement le rendu flottant.
+    if (this.aiDisabled) { this.updateVisuals(t); return }
     const player = this.levelScene.player
     const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y)
     const dir = Math.sign(player.x - this.x) || 1
