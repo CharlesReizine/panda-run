@@ -78,6 +78,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private nextShootAt = 0
   private bar: Phaser.GameObjects.Graphics
   private lvlText: Phaser.GameObjects.Text
+  // Étiquette de rang flottante au-dessus de la plaque de nom : « ÉLITE » (doré) pour un mini-boss
+  // de map (mvp), « BOSS » (rouge) pour un boss de zone. Absente pour un mob normal.
+  private tierText: Phaser.GameObjects.Text | null = null
   private eliteAura: Phaser.GameObjects.Graphics | null = null
   private isCharging = false
   private facingLeft = false // orientation retenue (mise à jour seulement au-delà de FLIP_THRESHOLD)
@@ -155,6 +158,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // (danger). Les boss/MVP gardent leur indice distinct via la barre de vie large et le halo
     // d'élite ci-dessous — la COULEUR du nom, elle, suit l'écart.
     this.lvlText = scene.add.text(x, y, `Nv ${def.level}`, { fontSize: '17px', color: levelGapColor(def.level), fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5)
+    // rang affiché : ÉLITE en DORÉ pour un mini-boss de map, BOSS en rouge pour un boss de zone
+    if (def.boss || def.mvp) {
+      this.tierText = scene.add.text(x, y, def.boss ? 'BOSS' : 'ÉLITE', { fontSize: '13px', color: def.boss ? '#ff5252' : '#ffd54f', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5)
+    }
     if (def.mvp) this.eliteAura = scene.add.graphics()
   }
 
@@ -164,12 +171,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // Phaser 4 : le flash blanc se fait via setTint + mode FILL (setTintFill est un no-op déprécié)
     this.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL)
     this.scene.time.delayedCall(80, () => this.clearTint().setTintMode(Phaser.TintModes.MULTIPLY))
-    const txt = this.scene.add.text(this.x, this.y - 30, `${amount}`, { fontSize: '24px', color: '#ffee58', fontStyle: 'bold', stroke: '#000000', strokeThickness: 5 }).setOrigin(0.5)
-    this.scene.tweens.add({ targets: txt, y: txt.y - 30, alpha: 0, duration: 600, onComplete: () => txt.destroy() })
+    // chiffre de dégâts INFLIGÉS (taille ∝ ampleur, jaune→orange→rouge selon la force) — style et
+    // regroupement gérés par LevelScene, distinct du ROUGE des dégâts subis par le joueur
+    this.levelScene.showDamageNumber(this.x, this.y - 30, amount, false)
     if (this.hp <= 0) {
       this.scene.events.emit('enemy-died', this)
       this.bar.destroy()
       this.lvlText.destroy()
+      this.tierText?.destroy()
       this.eliteAura?.destroy()
       this.zzz?.destroy()
       this.burnTimer?.remove()
@@ -506,8 +515,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.bar.fillStyle(0x000000, 0.6).fillRect(this.x - w / 2, this.y - hh / 2 - 12, w, 5)
     this.bar.fillStyle(0x66bb6a).fillRect(this.x - w / 2, this.y - hh / 2 - 12, w * Math.max(0, this.hp / this.monster.hp), 5)
 
-    // « Nv X » juste au-dessus de la barre de vie
+    // « Nv X » juste au-dessus de la barre de vie ; l'étiquette de rang (ÉLITE/BOSS) au-dessus
     this.lvlText.setPosition(this.x, this.y - hh / 2 - 22)
+    this.tierText?.setPosition(this.x, this.y - hh / 2 - 39)
 
     // liseré d'immobilisation (Piège) : anneau + « chaînes » qui pulsent aux pieds tant que l'effet dure
     if (this.snareFx) {

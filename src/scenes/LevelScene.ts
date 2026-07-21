@@ -93,6 +93,8 @@ export class LevelScene extends Phaser.Scene {
   private wasd!: Record<string, Phaser.Input.Keyboard.Key>
   private jumpHeld = false
   private invulnUntil = 0
+  // chiffres de dégâts flottants actifs (garde-fou de perf : au-delà du plafond on n'en crée plus)
+  private activeDamageNumbers = 0
   private dashUntil = 0
   private dashCooldownUntil = 0
   private nextBasicAttackAt = 0
@@ -1061,13 +1063,40 @@ export class LevelScene extends Phaser.Scene {
     this.scene.start('WorldMap')
   }
 
+  // Chiffre de dégâts flottant : monte et s'estompe puis se détruit seul. La TAILLE ∝ ampleur du
+  // coup (petit coup = petit chiffre, gros coup = gros chiffre). `taken` = dégâts SUBIS par le
+  // joueur → toujours ROUGE ; sinon dégâts INFLIGÉS à un ennemi → jaune → orange → rouge-orangé
+  // (couleur DISTINCTE du rouge subi, plus chaude quand le coup est gros/critique). Léger et non
+  // bloquant : un JITTER x/y aléatoire + un léger délai étalent les hits simultanés pour qu'ils ne
+  // se superposent pas, et un plafond limite le nombre de chiffres à l'écran (perf multi-hits).
+  showDamageNumber(x: number, y: number, amount: number, taken: boolean) {
+    const amt = Math.round(amount)
+    if (amt <= 0 || this.activeDamageNumbers >= 28) return
+    // taille bornée croissant avec l'ampleur : ~18px (coup léger) → ~46px (gros coup)
+    const size = Math.round(Phaser.Math.Clamp(16 + Math.sqrt(amt) * 2.4, 18, 46))
+    const color = taken
+      ? (amt >= 60 ? '#ff1744' : '#ff5252') // subi : rouge, plus vif si le coup est fort
+      : (amt >= 120 ? '#ff7043' : amt >= 50 ? '#ffa726' : '#ffee58') // infligé : jaune→orange→rouge-orangé
+    const jx = Phaser.Math.Between(-22, 22)
+    const jy = Phaser.Math.Between(-14, 8)
+    const txt = this.add.text(x + jx, y + jy, `${amt}`, { fontSize: `${size}px`, color, fontStyle: 'bold', stroke: '#000000', strokeThickness: 5 }).setOrigin(0.5).setDepth(40)
+    this.activeDamageNumbers++
+    this.tweens.add({
+      targets: txt, y: txt.y - 34 - size * 0.5, alpha: 0, duration: 640, ease: 'Cubic.easeOut',
+      delay: Phaser.Math.Between(0, 90), // léger décalage temporel : évite l'empilement des hits simultanés
+      onComplete: () => { txt.destroy(); this.activeDamageNumbers-- },
+    })
+  }
+
   hitPlayer(rawAtk: number) {
     // God mode DEV (émulateur/tests physiques) : le joueur ne perd jamais de PV. Inoffensif
     // en prod — window.__pandaGodMode est absent (donc falsy) par défaut.
     if ((globalThis as { __pandaGodMode?: boolean }).__pandaGodMode) return
     if (this.time.now < this.invulnUntil || this.player.hp <= 0) return
     this.invulnUntil = this.time.now + 800
-    this.player.takeDamage(physicalDamage(rawAtk, this.player.stats.def))
+    const dmg = physicalDamage(rawAtk, this.player.stats.def)
+    this.showDamageNumber(this.player.x, this.player.y - 44, dmg, true) // chiffre ROUGE au-dessus de la tête
+    this.player.takeDamage(dmg)
     this.player.setVelocity(-this.player.facing * 200, -200)
     audio.playSfx(this.player.hp <= 0 ? 'player-death' : 'player-hit')
     if (this.player.hp <= 0) {
@@ -1082,6 +1111,7 @@ export class LevelScene extends Phaser.Scene {
   private hitSpikes() {
     if ((globalThis as { __pandaGodMode?: boolean }).__pandaGodMode) return
     if (this.player.hp <= 0) return
+    this.showDamageNumber(this.player.x, this.player.y - 44, this.player.hp, true) // gros chiffre ROUGE (coup fatal)
     this.player.takeDamage(this.player.hp) // one-shot : vide toute la vie d'un coup
     audio.playSfx('player-death')
     save(getPlayer())
@@ -1192,6 +1222,7 @@ export class LevelScene extends Phaser.Scene {
   private drownTick(amount: number) {
     if ((globalThis as { __pandaGodMode?: boolean }).__pandaGodMode) return
     if (this.player.hp <= 0) return
+    this.showDamageNumber(this.player.x, this.player.y - 44, amount, true) // chiffre ROUGE (noyade/lave)
     this.player.takeDamage(amount)
     if (this.player.hp <= 0) {
       audio.playSfx('player-death')

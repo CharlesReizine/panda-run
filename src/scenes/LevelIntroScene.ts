@@ -41,7 +41,7 @@ const css = (n: number) => `#${n.toString(16).padStart(6, '0')}`
 
 function monsterKind(m: MonsterDef): { label: string; color: number } {
   if (m.boss) return { label: 'BOSS', color: 0xff5252 }
-  if (m.mvp) return { label: 'MVP', color: 0xffd54f }
+  if (m.mvp) return { label: 'ÉLITE', color: 0xffd54f }
   return { label: 'Normal', color: 0x90a4ae }
 }
 
