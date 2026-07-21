@@ -96,5 +96,8 @@ export class MenuScene extends Phaser.Scene {
 
     this.add.text(770, 500, '📖 Bestiaire', { fontSize: '18px', color: '#ffffff', backgroundColor: '#37474f', padding: { x: 14, y: 8 } })
       .setOrigin(0.5).setInteractive().on('pointerdown', () => this.scene.start('Bestiary'))
+
+    this.add.text(770, 458, '⚔ Entraînement', { fontSize: '18px', color: '#ffffff', backgroundColor: '#37474f', padding: { x: 14, y: 8 } })
+      .setOrigin(0.5).setInteractive().on('pointerdown', () => this.scene.start('Training'))
   }
 }

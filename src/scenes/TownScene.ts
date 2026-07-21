@@ -278,6 +278,20 @@ export class TownScene extends Phaser.Scene {
       fontSize: '14px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 3,
     }).setOrigin(0.5)
 
+    // marqueur de quête flottant au-dessus du garde : « ❗ » si une quête est à PRENDRE, « ❓ » si une
+    // récompense est PRÊTE à réclamer. Rien tant qu'une quête est en cours (non finie) ou déjà réclamée.
+    const qp = getPlayer()
+    const qdef = QUESTS['chasse-aux-monstres']!
+    refreshQuestProgress(qp, qdef.id)
+    const qs = qp.quests[qdef.id]
+    const questMark = !qs ? '❗' : (qs.done && !qs.claimed ? '❓' : null)
+    if (questMark) {
+      const mk = this.add.text(cfg.questDoor.x, cfg.questDoor.y - 88, questMark, {
+        fontSize: '32px', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 4,
+      }).setOrigin(0.5).setDepth(6)
+      this.tweens.add({ targets: mk, y: mk.y - 9, yoyo: true, repeat: -1, duration: 640, ease: 'Sine.inOut' })
+    }
+
     // — HUD écran-fixe (scrollFactor 0) : la caméra suivant le panda, ces éléments restent collés —
     // bannière du bourg (nom + sous-titre thématique) en haut au centre
     this.add.text(480, 10, townName, {

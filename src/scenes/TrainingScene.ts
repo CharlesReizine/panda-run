@@ -57,6 +57,10 @@ export class TrainingScene extends LevelScene {
     if (this.phase === 'picker') { this.buildPicker(); return }
     // arène complète (sol, joueur, groupes physiques, entrées, HUD) via la machinerie LevelScene
     super.create()
+    // TrainingScene est déclarée APRÈS UIScene dans main.ts → elle se rend AU-DESSUS du HUD et son
+    // fond plein écran masquait les boutons saut/attaque/slots (invisibles + non cliquables). On
+    // remonte le HUD au premier plan pour l'entraînement (inutile en niveau normal : Level < UI).
+    this.scene.bringToTop('UI')
     this.spawnDummies()
     this.buildArenaOverlay()
   }

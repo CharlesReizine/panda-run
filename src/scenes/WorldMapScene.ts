@@ -147,8 +147,8 @@ export class WorldMapScene extends Phaser.Scene {
   // est nettement masqué.
   private readonly DARK_COLOR = 0x060812 // bleu nuit très sombre, jamais 0x000000
   private readonly DARK_ALPHA = 0.97 // opacité du voile (bien plus opaque qu'avant : lointain masqué)
-  private readonly REVEAL_IN = 48 // rayon du cercle INTÉRIEUR (net, 100 % clair) — modéré
-  private readonly REVEAL_OUT = 92 // rayon du cercle EXTÉRIEUR (anneau à 50 %, on devine)
+  private readonly REVEAL_IN = 66 // rayon du cercle INTÉRIEUR (net, 100 % clair) — découvre un peu plus loin
+  private readonly REVEAL_OUT = 124 // rayon du cercle EXTÉRIEUR (anneau à 50 %, on devine) — portée élargie
 
   private drawFog(anchors: Set<string>) {
     this.ensurePuffTexture()

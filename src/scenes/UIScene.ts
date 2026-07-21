@@ -143,6 +143,13 @@ export class UIScene extends Phaser.Scene {
       this.slotCooldownOverlays.push(ov)
     }
 
+    // bouton EXPLICITE « compétences » sous les slots (le clic sur la barre de vie l'ouvre aussi,
+    // mais un bouton dédié est bien plus découvrable) — disponible en jeu ET en entraînement.
+    const skillsBtn = this.add.rectangle(SLOT_X0 + 90, SLOT_Y + 40, 138, 24, 0x37474f, 0.9)
+      .setStrokeStyle(1, 0xffffff, 0.55).setInteractive({ useHandCursor: true })
+    this.add.text(SLOT_X0 + 90, SLOT_Y + 40, '⚙ Compétences', { fontSize: '12px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
+    skillsBtn.on('pointerdown', () => { this.pressFx(skillsBtn); this.openSkillMenu() })
+
     // Bas-droite : contrôles saut / attaque. Zone tactile ÉLARGIE (rayon ×1,3) au-delà du disque
     // visuel pour un tap plus tolérant, sans que saut et attaque ne se chevauchent (centres ~96px).
     const jump = this.add.circle(884, 468, 36, 0x1e88e5, 0.6)
@@ -205,6 +212,10 @@ export class UIScene extends Phaser.Scene {
     audio.playSfx('ui-tap')
     this.freezeLevelForOverlay()
     this.scene.launch('SkillEquip', { levelKey: this.levelKey, training: this.training })
+    // SkillEquip est déclarée AVANT TrainingScene dans main.ts : sans ceci, ouverte depuis
+    // l'entraînement elle se rend DERRIÈRE l'arène (invisible) alors que le jeu est en pause →
+    // soft-lock instantané (bouton « Reprendre » inatteignable). On la force au premier plan.
+    this.scene.bringToTop('SkillEquip')
     this.scene.pause(this.levelKey)
     this.scene.pause('UI')
   }
