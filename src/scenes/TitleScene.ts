@@ -93,17 +93,22 @@ export class TitleScene extends Phaser.Scene {
 
     const existing = this.safeLoad()
 
-    mkButton(existing ? 408 : 428, 'Nouvelle partie', () => {
+    mkButton(existing ? 384 : 400, 'Nouvelle partie', () => {
       setPlayer(newPlayer('Panda'))
       this.scene.start('WorldMap')
     })
 
     if (existing) {
-      mkButton(474, 'Continuer', () => {
+      mkButton(446, 'Continuer', () => {
         setPlayer(existing)
         this.scene.start('WorldMap')
       })
     }
+
+    // accès direct à la page d'entraînement (aucune partie requise : on choisit une classe sur place)
+    mkButton(existing ? 508 : 468, 'Essayer les classes !', () => {
+      this.scene.start('Training')
+    })
 
     this.add.text(20, 516, 'Exporter la sauvegarde', { fontSize: '14px', color: '#ffe0b2', fontStyle: 'bold' })
       .setShadow(0, 1, '#000000aa', 2, false, true)
