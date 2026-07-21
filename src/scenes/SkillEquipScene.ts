@@ -13,8 +13,18 @@ import type { ClassId, SkillDef } from '../core/types'
 // Lancée par-dessus le niveau en pause ; à la fermeture, on reprend le jeu.
 export class SkillEquipScene extends Phaser.Scene {
   private tab: ClassId | null = null
+  // scène de jeu à reprendre à la fermeture ('Level' en partie, 'Training' en entraînement) et mode
+  // entraînement : en training on NE persiste PAS les changements (sinon on écraserait la vraie
+  // sauvegarde avec le perso temporaire) — les swaps restent en mémoire, le temps de tester.
+  private levelKey = 'Level'
+  private training = false
 
   constructor() { super('SkillEquip') }
+
+  init(data?: { levelKey?: string; training?: boolean }) {
+    this.levelKey = data?.levelKey ?? 'Level'
+    this.training = !!data?.training
+  }
 
   create() {
     this.tab = null
@@ -22,10 +32,15 @@ export class SkillEquipScene extends Phaser.Scene {
   }
 
   private close() {
-    this.scene.resume('Level')
+    this.scene.resume(this.levelKey)
     this.scene.resume('UI')
     this.game.events.emit('hud-refresh')
     this.scene.stop('SkillEquip')
+  }
+
+  // persiste la fiche joueur — sauf en entraînement (perso temporaire, ne doit pas toucher le disque)
+  private persist(p: ReturnType<typeof getPlayer>) {
+    if (!this.training) save(p)
   }
 
   // Lignée de la classe : novice → classe de base → classe évoluée.
@@ -97,7 +112,7 @@ export class SkillEquipScene extends Phaser.Scene {
       this.add.text(x, 108, `${i + 1}`, { fontSize: '12px', color: '#ffd54f' }).setOrigin(0.5)
       if (sid) {
         this.add.image(x, 134, `skill-${sid}`).setDisplaySize(48, 48)
-          .setInteractive().on('pointerdown', () => { p.equippedSkills[i] = null; save(p); this.render() })
+          .setInteractive().on('pointerdown', () => { p.equippedSkills[i] = null; this.persist(p); this.render() })
       }
     }
 
@@ -154,7 +169,7 @@ export class SkillEquipScene extends Phaser.Scene {
       // Débloquer / +1 : masqué si verrouillé par l'arbre.
       if (!locked && p.skillPoints > 0 && rank < MAX_SKILL_RANK) {
         btn(x + colW - 54, y + 16, unlocked ? '+1 pt' : 'Débloquer', 0x8d6e00, () => {
-          p.skillPoints--; p.skillLevels[s.id] = rank + 1; save(p); this.render()
+          p.skillPoints--; p.skillLevels[s.id] = rank + 1; this.persist(p); this.render()
         })
       }
       // Les passifs ne s'équipent JAMAIS : appris = actif en permanence (via computeStats), hors des 4 slots.
@@ -163,7 +178,7 @@ export class SkillEquipScene extends Phaser.Scene {
       } else if (unlocked && !equipped) {
         btn(x + colW - 54, y + 44, 'Équiper', 0x33691e, () => {
           const free = p.equippedSkills.indexOf(null)
-          p.equippedSkills[free >= 0 ? free : 3] = s.id; save(p); this.render()
+          p.equippedSkills[free >= 0 ? free : 3] = s.id; this.persist(p); this.render()
         })
       } else if (equipped) {
         this.add.text(x + colW - 54, y + 44, 'Équipé ✓', { fontSize: '12px', color: '#80cbc4' }).setOrigin(0.5)

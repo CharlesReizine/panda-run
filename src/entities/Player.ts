@@ -39,9 +39,9 @@ const FLIGHT_VSPEED = 300 // vitesse verticale du vol (montée quand saut tenu, 
 // Lignée du sabreur : la GROSSE épée n'est PAS affichée au repos ; elle n'apparaît (agrandie) que
 // le temps d'un coup (swingWeapon), puis se rétracte. Les autres classes gardent leur arme visible.
 const BIG_SWORD_CLASSES = new Set<string>(['swordsman', 'chevalier'])
-// La grosse épée reste nettement plus grande que les autres armes (bien visible à l'attaque), mais
-// ramenée à une taille crédible : au-delà (~2,7) elle devenait démesurée / absurde à l'écran.
-const BIG_SWORD_SCALE = 1.7 // agrandissement de la grosse épée à l'affichage (grosse, mais raisonnable)
+// La grosse épée reste plus grande que les autres armes (bien visible à l'attaque), mais ramenée à
+// une taille crédible : ~1,7 la faisait encore paraître 2× trop grosse → divisée par ~2.
+const BIG_SWORD_SCALE = 0.9 // agrandissement de la grosse épée à l'affichage (grosse, mais raisonnable)
 const HAT_OFFSET_Y = -38 // place le chapeau au-dessus de la tête du panda illustré (crown haute)
 const WEAPON_OFFSET_X = 11 // décalage horizontal de l'arme (patte avant), mirroré selon l'orientation
 const WEAPON_OFFSET_Y = 12 // décalage vertical de l'arme (hauteur de la patte avant)

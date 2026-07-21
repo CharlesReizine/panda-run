@@ -74,13 +74,12 @@ export class UIScene extends Phaser.Scene {
     this.add.rectangle(14, 60, BAR_W + 4, 6, 0x000000, 0.6).setOrigin(0)
     this.xpBar = this.add.rectangle(16, 61, BAR_W, 4, 0xfdd835).setOrigin(0)
 
-    // toucher le panneau (barres) ouvre la gestion des skills en jeu (désactivé en entraînement :
-    // l'écran SkillEquip resume 'Level' en dur → soft-lock si on l'ouvre depuis 'Training')
-    if (!this.training) {
-      this.add.rectangle(8, 2, BAR_W + 16, 78, 0xffffff, 0.001).setOrigin(0).setInteractive()
-        .on('pointerdown', () => this.openSkillMenu())
-      this.add.text(16, 68, 'compétences ▸', { fontSize: '10px', color: '#b0bec5' })
-    }
+    // toucher le panneau (barres) ouvre la gestion des skills en jeu — dispo AUSSI en entraînement
+    // (on veut y tester/échanger ses skills) : SkillEquip reçoit désormais la clé de scène à reprendre
+    // (Level ou Training) et n'écrit pas la sauvegarde en mode training → plus de soft-lock.
+    this.add.rectangle(8, 2, BAR_W + 16, 78, 0xffffff, 0.001).setOrigin(0).setInteractive()
+      .on('pointerdown', () => this.openSkillMenu())
+    this.add.text(16, 68, 'compétences ▸', { fontSize: '10px', color: '#b0bec5' })
 
     // Badge « points à dépenser » : JUSTE à droite du panneau de vie, pastille dorée pulsante
     // avec une flèche qui pointe vers le panneau (où l'on ouvre le menu). Masqué s'il n'y a
@@ -129,8 +128,11 @@ export class UIScene extends Phaser.Scene {
     // Haut-droite : les 4 slots de skills côte à côte, décalés à GAUCHE du bouton PAUSE (SLOT_X0)
     for (let i = 0; i < 4; i++) {
       const x = SLOT_X0 + i * 60
+      // Zone tactile ÉLARGIE au-delà du visuel (60×66 vs 50×50) pour toucher plus facilement au
+      // doigt ; 60px = l'espacement des slots → les zones se touchent sans se chevaucher.
       const slot = this.add.rectangle(x, SLOT_Y, SLOT_SIZE, SLOT_SIZE, 0x000000, 0.5)
-        .setStrokeStyle(2, 0xffffff, 0.6).setInteractive()
+        .setStrokeStyle(2, 0xffffff, 0.6)
+        .setInteractive(new Phaser.Geom.Rectangle(-5, -8, 60, 66), Phaser.Geom.Rectangle.Contains)
       slot.on('pointerdown', () => { this.pressFx(slot); this.game.events.emit('input-skill', i) })
       this.add.text(x, SLOT_Y - SLOT_SIZE / 2 - 8, `${i + 1}`, { fontSize: '11px', color: '#ffd54f' }).setOrigin(0.5)
       this.slotIcons.push(this.add.image(x, SLOT_Y, '__DEFAULT').setDisplaySize(SLOT_SIZE - 8, SLOT_SIZE - 8).setVisible(false))
@@ -141,14 +143,17 @@ export class UIScene extends Phaser.Scene {
       this.slotCooldownOverlays.push(ov)
     }
 
-    // Bas-droite : contrôles saut / attaque
-    const jump = this.add.circle(884, 468, 36, 0x1e88e5, 0.6).setInteractive()
+    // Bas-droite : contrôles saut / attaque. Zone tactile ÉLARGIE (rayon ×1,3) au-delà du disque
+    // visuel pour un tap plus tolérant, sans que saut et attaque ne se chevauchent (centres ~96px).
+    const jump = this.add.circle(884, 468, 36, 0x1e88e5, 0.6)
+      .setInteractive(new Phaser.Geom.Circle(36, 36, 47), Phaser.Geom.Circle.Contains)
     this.add.image(884, 468, 'ui-jump').setDisplaySize(34, 34)
     this.add.text(884, 510, 'SAUT', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
     jump.on('pointerdown', () => { this.pressFx(jump); this.game.events.emit('input-jump-down') })
     jump.on('pointerup', () => this.game.events.emit('input-jump-up'))
     jump.on('pointerout', () => this.game.events.emit('input-jump-up'))
-    const atk = this.add.circle(792, 496, 32, 0xfb8c00, 0.7).setInteractive()
+    const atk = this.add.circle(792, 496, 32, 0xfb8c00, 0.7)
+      .setInteractive(new Phaser.Geom.Circle(32, 32, 42), Phaser.Geom.Circle.Contains)
     this.add.image(792, 496, 'ui-attack').setDisplaySize(30, 30)
     this.add.text(792, 534, 'ATTAQUE', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
     atk.on('pointerdown', () => { this.pressFx(atk); this.game.events.emit('input-attack') })
@@ -199,7 +204,7 @@ export class UIScene extends Phaser.Scene {
   private openSkillMenu() {
     audio.playSfx('ui-tap')
     this.freezeLevelForOverlay()
-    this.scene.launch('SkillEquip')
+    this.scene.launch('SkillEquip', { levelKey: this.levelKey, training: this.training })
     this.scene.pause(this.levelKey)
     this.scene.pause('UI')
   }
