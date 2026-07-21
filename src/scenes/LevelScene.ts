@@ -252,8 +252,11 @@ export class LevelScene extends Phaser.Scene {
     // dégagement sous un plafond est garanti > saut confortable côté assembleur, donc on ne se cogne
     // jamais). Referment visuellement les tunnels (roche dessus + sol/roche dessous) et masquent le
     // dessous de la bande de départ (mesa) → un seul niveau au spawn. Distinct du plafond du MONDE.
+    // Texture ROCHEUSE (celle des cuves de lac / grottes, 'basin-wall') pour le CORPS de pierre :
+    // socle des falaises/mesas sous la coiffe de biome, plafonds de grotte, support des cascades.
+    // Fini le gazon empilé — le corps est de la pierre, seule la coiffe (plateforme) garde le biome.
     for (const rb of this.levelDef.rockBands ?? []) {
-      this.add.tileSprite(rb.x * TILE, rb.y * TILE, rb.w * TILE, rb.h * TILE, tileKey).setOrigin(0, 0).setDepth(-5)
+      this.add.tileSprite(rb.x * TILE, rb.y * TILE, rb.w * TILE, rb.h * TILE, 'basin-wall').setOrigin(0, 0).setDepth(-5)
     }
 
     // départ : sur la corniche `start` (mi-hauteur) si le niveau en définit une, sinon au sol,

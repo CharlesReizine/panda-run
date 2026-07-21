@@ -127,6 +127,68 @@ function emptyPiece(exitAlt: number): Piece {
 const CAVE_CLEARANCE = 6
 const CAVE_CEILING_THICK = 4 // épaisseur de la dalle de plafond (rangées de roche pleine)
 
+// ─── SOCLE DE PIERRE sous les surfaces pleines (chantier « fini le gazon empilé ») ──────────
+// Sous la COIFFE marchable d'une surface PLEINE (biome en haut, ~1 tuile), on remplit le CORPS
+// avec de la ROCHE (rendue en texture rocheuse, cf. LevelScene) qui DESCEND jusqu'au sol du monde
+// → des FALAISES / MESAS de pierre à coiffe de biome, plus jamais de dalle de gazon qui flotte.
+// Ne s'applique QU'AUX modules à fond plein/eau (sol/marine/cascade/lave) : les corniches
+// au-dessus d'un TROU ('vide') et les plafonds de grotte ('roche') gardent leur rendu (elles
+// DOIVENT flotter / sont déjà pleines). Les colonnes d'EAU restent OUVERTES (on ne bouche pas la
+// cuve/la cascade). Purement RENDU (rockBands sans collision) → la jouabilité ne change pas.
+function addPedestals(p: Piece, w: number) {
+  // altitude de la plateforme la PLUS BASSE par colonne = la coiffe marchable de la silhouette.
+  // Les plateformes BONUS (balcon/leurre/palier d'échelle), toujours plus HAUTES qu'un sol qui les
+  // porte, ne sont jamais la plus basse → elles ne reçoivent PAS de socle et restent fines.
+  const floorAlt = new Array<number>(w).fill(0)
+  for (const pl of p.platforms) {
+    for (let x = Math.max(0, pl.x); x < Math.min(w, pl.x + pl.w); x++) {
+      if (floorAlt[x] === 0 || pl.alt < floorAlt[x]!) floorAlt[x] = pl.alt
+    }
+  }
+  const blocked = (x: number) =>
+    p.gaps.some((g) => x >= g.x && x < g.x + g.w) ||
+    p.waters.some((wt) => x >= wt.x && x < wt.x + wt.w)
+  // fusionne les colonnes de même altitude de coiffe en une seule bande de roche (1 → alt-1)
+  let runX = -1
+  let runAlt = 0
+  const flush = (endX: number) => {
+    // altBot 0 : le socle descend jusque DANS la bande de sol du monde (pas de liseré de fond
+    // visible entre le bas de la falaise et le sol). Rendu derrière le sol (depth), sans collision.
+    if (runX >= 0 && runAlt >= 2) p.rocks.push({ x: runX, altBot: 0, altTop: runAlt - 1, w: endX - runX })
+    runX = -1
+    runAlt = 0
+  }
+  for (let x = 0; x < w; x++) {
+    const a = blocked(x) ? 0 : floorAlt[x]!
+    if (a >= 2 && a === runAlt) continue
+    flush(x)
+    if (a >= 2) { runX = x; runAlt = a }
+  }
+  flush(w)
+}
+
+// ─── PLAFOND DE GROTTE VARIÉ (chantier « plafonds de grotte trop plats ») ────────────────────
+// Rend le plafond de roche d'un tunnel avec un bord inférieur ONDULÉ (dents / marches / vagues)
+// au lieu d'une ligne plate. Le sommet reste commun (masse connectée, épaisse) ; seul le BAS varie.
+// Le dégagement libre reste TOUJOURS > saut (min 5 rangées > maxJump ≈ 4) → on traverse le boyau
+// sans jamais se cogner. Purement RENDU (rockBands sans collision). `variant` ∈ {0,1,2}.
+function pushVariedCeiling(p: Piece, w: number, alt: number, variant: number) {
+  const base = alt + CAVE_CLEARANCE // dégagement de base (6 rangées)
+  const topAlt = base + CAVE_CEILING_THICK + 2 // sommet commun → dalle pleine et connectée
+  const seg = 4
+  let i = 0
+  for (let x = 0; x < w; x += seg, i++) {
+    const sw = Math.min(seg, w - x)
+    // offset du bord inférieur : négatif = DENT qui pend (dégagement plus court, jamais < 5),
+    // positif = RECREUSE (plus de dégagement). Amplitude bornée [-1, +2] → dégagement ∈ [5, 8].
+    let off: number
+    if (variant === 0) off = i % 2 === 0 ? -1 : 2 // DENTS / créneaux
+    else if (variant === 1) off = [0, 1, 2, 1][i % 4]! // MARCHES
+    else off = [2, 1, 0, 1][i % 4]! // ONDULATION douce
+    p.rocks.push({ x, altBot: base + off, altTop: topAlt, w: sw })
+  }
+}
+
 // Rampe de paliers : suite de plateformes ADJACENTES de fromAlt à toAlt par marches ≤3 rangées.
 // Les alt ≤ 0 (niveau du sol) ne posent PAS de plateforme (on marche sur le sol) — sauf si
 // keepGround (utile quand le sol est gappé et qu'il faut une vraie plateforme).
@@ -339,9 +401,8 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       if (alt >= 1) p.platforms.push({ x: 0, alt, w })
       // socle plein sous la surface (jusqu'au niveau du sol du monde ; le reste est fermé par le sol)
       if (alt - 1 >= 1) p.rocks.push({ x: 0, altBot: 1, altTop: alt - 1, w })
-      // plafond de roche : dalle pleine à partir de alt + CAVE_CLEARANCE, épaisse de CAVE_CEILING_THICK
-      const ceilBot = alt + CAVE_CLEARANCE
-      p.rocks.push({ x: 0, altBot: ceilBot, altTop: ceilBot + CAVE_CEILING_THICK - 1, w })
+      // PLAFOND DE ROCHE VARIÉ (dents/marches/vagues) au lieu d'une dalle plate
+      pushVariedCeiling(p, w, alt, Math.floor(rng() * 3))
       p.exitAlt = alt
       break
     }
@@ -612,8 +673,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // enchaîne des sauts par-dessus les lits, dégagement > saut sous le plafond.
       const alt = Math.max(2, entryAlt)
       p.platforms.push({ x: 0, alt, w })
-      const ceilBot = alt + CAVE_CLEARANCE
-      p.rocks.push({ x: 0, altBot: ceilBot, altTop: ceilBot + CAVE_CEILING_THICK - 1, w })
+      pushVariedCeiling(p, w, alt, Math.floor(rng() * 3)) // plafond de roche varié
       let x = 3
       while (x < w - 4) { p.spikes.push({ x, w: 2, alt }); x += 6 } // lit de 2 pics + 4 tuiles libres
       p.exitAlt = alt
@@ -681,6 +741,13 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     const cx = Math.min(pl.x + pl.w - 2, Math.max(pl.x + 1, pl.x + Math.floor(pl.w / 2)))
     p.spawns.push({ monsterId: id, x: cx, alt: pl.alt })
   })
+
+  // SOCLE DE PIERRE jusqu'au sol sous les surfaces PLEINES (mesa à coiffe de biome) + support
+  // continu le long des CASCADES/berges. Exclut le VIDE ('vide' : corniches qui doivent flotter)
+  // et la ROCHE ('roche' : grotte, déjà pleine + plafond). Colonnes d'eau laissées ouvertes.
+  if (m.fillBelow === 'sol' || m.fillBelow === 'marine' || m.fillBelow === 'cascade' || m.fillBelow === 'lave') {
+    addPedestals(p, w)
+  }
   return p
 }
 
@@ -714,9 +781,8 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     // départ / sortie
     if (m.spawnHere) {
       piece.start = { x: Math.floor(w / 2), alt: runningAlt }
-      // SOCLE PLEIN sous la bande de départ (mesa) : de la 1re rangée jusqu'à sous la surface → aucun
-      // « sol parallèle » sous le spawn, juste une bande plate posée sur un bloc de terre.
-      if (runningAlt - 1 >= 1) piece.rocks.push({ x: 0, altBot: 1, altTop: runningAlt - 1, w })
+      // le SOCLE PLEIN sous la bande de départ (mesa) est désormais posé par addPedestals (socle de
+      // pierre générique sous toute surface pleine) → une seule bande plate visible au départ.
     }
     if (m.exitHere) piece.exit = { x: w - 3, alt: piece.exitAlt }
     pieces.push({ piece, x0: cursorX, w })

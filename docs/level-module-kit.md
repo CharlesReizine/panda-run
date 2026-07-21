@@ -138,7 +138,11 @@ Exemple (silhouette vallonnée, ~8 modules) :
 - Entrée par le HAUT (plonger), on nage, coffre au fond possible.
 
 **Cascade (bleu clair, REMONTABLE, ne noie pas)**
-- **AUCUNE pierre autour** (pas de cadre rocheux, pas de parois). C'est de l'eau qui COULE, pas une cuve.
+- **Pas de CUVE** (pas de cadre rocheux fermé qui enferme l'eau) — c'est de l'eau qui COULE, pas un
+  bassin. MAIS depuis R135 la cascade s'appuie sur un **SUPPORT DE PIERRE CONTINU sur au moins un
+  côté, jusqu'en haut** (la falaise dont l'eau dévale la face) : les corniches/rampes latérales
+  reçoivent un socle de roche descendant jusqu'au sol (cf. `addPedestals`), pour que la chute ne
+  « flotte » plus. La colonne d'eau elle-même reste OUVERTE (elle tombe au-dessus du vide).
 - **Effet d'écoulement VISIBLE** : le rideau défile (stries/vagues qui descendent) pour qu'on comprenne
   que ça coule et que ça se remonte.
 - **Haut NON droit** : bord supérieur ondulé — petites VAGUES + REMOUS (écume qui bouge), pas une ligne
@@ -238,6 +242,18 @@ gagne quatre capacités. **APIs à connaître pour composer les niveaux qui suiv
 - Nouveaux motifs (tier ≥ 3, hors zone 1) : **`faux-plat`** (pics isolés à enjamber), **`couloir-pics`**
   (plafond de roche + lits de pics), **`pics-quinconce`** (pics au sol + mini-corniches à pics),
   **`atterrissage-etroit`** (1 case entre 2 pics). Dans l'assembleur : `Piece.spikes` porte un `alt`.
+
+### 3bis. SOCLE DE PIERRE + PLAFONDS VARIÉS (R135 — rendu, jouabilité inchangée)
+- **Socle de pierre jusqu'au sol** (`addPedestals`) : sous la COIFFE marchable d'une surface PLEINE
+  (module `fillBelow` ∈ sol/marine/cascade/lave), on remplit le corps avec de la ROCHE (texture
+  `basin-wall`, la même que les cuves/grottes) qui DESCEND jusqu'au sol du monde → des FALAISES /
+  MESAS à coiffe de biome, fini le gazon empilé qui flotte. Les corniches au-dessus d'un TROU
+  (`fillBelow:'vide'`) et les plateformes bonus (balcon/leurre/palier d'échelle, jamais la plus
+  basse de leur colonne) restent des dalles FINES qui flottent. Les colonnes d'EAU restent ouvertes.
+  Purement RENDU (`rockBands`, aucune collision) → jouabilité identique.
+- **Plafonds de grotte VARIÉS** (`pushVariedCeiling`) : le plafond de roche (`grotte`,
+  `couloir-pics`) a un bord inférieur ondulé (dents/marches/vagues) au lieu d'une ligne plate. Le
+  dégagement reste > saut (min 5 rangées). Sommet commun (masse pleine connectée), seul le bas varie.
 
 ### 4. DÉBUT STANDARDISÉ (bande plate)
 - Le PREMIER module est TOUJOURS une **bande PLATE à un seul niveau** (aucune rampe d'amorce, aucun sol
