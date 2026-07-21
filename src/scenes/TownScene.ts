@@ -8,6 +8,7 @@ import { acceptQuest, refreshQuestProgress, claimQuest, currentChainQuest } from
 import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, HAT_SHOP, QUEST_CHAIN, type QuestDef, type ShopItemDef } from '../data/shops'
 import { WORLD_NODES } from '../data/worldmap'
 import { ITEMS, rarityColor, SLOT_ORDER, SLOT_LABEL_PLURAL } from '../data/items'
+import { equipRestrictionMessage } from '../core/equip'
 import type { EquipSlot } from '../core/types'
 import { MATERIALS } from '../data/materials'
 import { RECIPES } from '../data/recipes'
@@ -599,6 +600,7 @@ export class TownScene extends Phaser.Scene {
     onBuy: () => boolean,
     onBought: () => void,
     owned = false,
+    restricted: string | null = null,
   ) {
     const parts: Phaser.GameObjects.GameObject[] = []
     const card = this.add.rectangle(x, y, w, h, 0x4e342e, 0.9).setStrokeStyle(2, 0x8d6e63, 1)
@@ -616,6 +618,18 @@ export class TownScene extends Phaser.Scene {
     const nameTxt = this.add.text(x, y - h / 2 + 52, name, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: w - 12 } }).setOrigin(0.5, 0)
     c.add(nameTxt); parts.push(nameTxt)
     if (sub) { const subTxt = this.add.text(x, y - h / 2 + 74, sub, { fontSize: '10px', color: '#90a4ae', align: 'center', wordWrap: { width: w - 12 } }).setOrigin(0.5, 0); c.add(subTxt); parts.push(subTxt) }
+
+    // arme hors spécialité de la classe : carte grisée, achat bloqué, libellé de restriction clair
+    // (« Réservé aux mages »…). Prioritaire sur « Possédé ».
+    if (restricted) {
+      for (const o of parts) (o as unknown as { setAlpha: (a: number) => void }).setAlpha(0.4)
+      card.setStrokeStyle(2, 0x6d5b52, 1)
+      const tag = this.add.text(x, y + h / 2 - 18, restricted, {
+        fontSize: '11px', color: '#ff8a80', backgroundColor: '#3a2b28', padding: { x: 8, y: 5 }, align: 'center', wordWrap: { width: w - 16 },
+      }).setOrigin(0.5)
+      c.add(tag)
+      return
+    }
 
     // objet déjà possédé (inventaire ou équipé) : carte grisée, achat bloqué, libellé « Possédé »
     if (owned) {
@@ -761,6 +775,7 @@ export class TownScene extends Phaser.Scene {
           () => { const pl = getPlayer(); return buyItem(pl, entry.itemId, entry.price) },
           () => { const pl = getPlayer(); save(pl); goldText.setText(`${pl.gold} or`) },
           owned.has(entry.itemId),
+          equipRestrictionMessage(p.classId, entry.itemId),
         )
       })
       y += cardH + gapY
