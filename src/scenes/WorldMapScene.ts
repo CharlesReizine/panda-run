@@ -92,6 +92,7 @@ export class WorldMapScene extends Phaser.Scene {
 
     // marqueur du panda sur le nœud courant
     const marker = this.add.image(current.x, current.y - RADIUS[current.type] - 14, `panda-${p.classId}`).setDisplaySize(26, 26).setDepth(8)
+    this.travelMarker = marker
     this.tweens.add({ targets: marker, y: marker.y - 5, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.inOut' })
 
     this.add.text(30, 495, 'Menu', { fontSize: '20px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 14, y: 6 } }).setDepth(20)
@@ -144,6 +145,10 @@ export class WorldMapScene extends Phaser.Scene {
   // cercle de révélation : un disque INTÉRIEUR (rayon modéré) 100 % clair — terrain net —, entouré
   // d'un ANNEAU EXTÉRIEUR à ~50 % — on devine sans voir net. Au-delà : voile sombre opaque (lointain
   // vraiment caché). Aucun noir pur : gris bleuté profond, alpha global élevé → le reste de la map
+  // marqueur panda (position courante) + garde-fou pour ne pas relancer un voyage pendant l'anim.
+  private travelMarker?: Phaser.GameObjects.Image
+  private traveling = false
+
   // est nettement masqué.
   private readonly DARK_COLOR = 0x060812 // bleu nuit très sombre, jamais 0x000000
   private readonly DARK_ALPHA = 0.97 // opacité du voile (bien plus opaque qu'avant : lointain masqué)
@@ -336,23 +341,39 @@ export class WorldMapScene extends Phaser.Scene {
   // voyage vers un nœud voisin débloqué : ville → déplace le marqueur et va en ville,
   // niveau/boss → entre dans le niveau avec la direction déduite de la position relative
   private travelTo(targetId: string) {
+    if (this.traveling) return // anim de voyage en cours : on ignore les taps supplémentaires
     const p = getPlayer()
     const byId = new Map(WORLD_NODES.map((n) => [n.id, n]))
-    const currentNode = byId.get(p.currentNode)!
     const target = byId.get(targetId)!
+    const tx = target.x
+    const ty = target.y - RADIUS[target.type] - 14
 
-    if (target.type === 'town') {
-      p.currentNode = targetId
-      save(p)
-      this.scene.start('Town')
-      return
-    }
+    // petite anim de voyage : on voit le panda AVANCER le long jusqu'au nœud choisi (~2 s) avant
+    // d'entrer. Simple et lisible : tween de position + léger dandinement, flipX selon la direction.
+    this.traveling = true
+    this.walkMarkerTo(tx, ty, () => {
+      if (target.type === 'town') {
+        p.currentNode = targetId
+        save(p)
+        this.scene.start('Town')
+        return
+      }
+      const dir = 'forward' as const // toujours gauche→droite : jouer un niveau « à l'envers » était contre-nature
+      const data = { levelId: target.levelId, fromNode: p.currentNode, targetNode: targetId, dir }
+      // Première entrée dans ce terrain → écran d'intro (présentation des monstres et loots).
+      // Les fois suivantes → directement le jeu, pas de re-présentation.
+      const scene = target.levelId && !isLevelSeen(target.levelId) ? 'LevelIntro' : 'Level'
+      this.scene.start(scene, data)
+    })
+  }
 
-    const dir = 'forward' as const // toujours gauche→droite : jouer un niveau « à l'envers » était contre-nature
-    const data = { levelId: target.levelId, fromNode: p.currentNode, targetNode: targetId, dir }
-    // Première entrée dans ce terrain → écran d'intro (présentation des monstres et loots).
-    // Les fois suivantes → directement le jeu, pas de re-présentation.
-    const scene = target.levelId && !isLevelSeen(target.levelId) ? 'LevelIntro' : 'Level'
-    this.scene.start(scene, data)
+  // déplace le marqueur panda jusqu'à (tx, ty) sur ~2 s avec un léger dandinement, puis appelle then().
+  private walkMarkerTo(tx: number, ty: number, then: () => void) {
+    const m = this.travelMarker
+    if (!m) { then(); return }
+    this.tweens.killTweensOf(m) // stoppe le bob sur place
+    m.setFlipX(tx < m.x) // le panda regarde vers sa destination
+    this.tweens.add({ targets: m, angle: { from: -7, to: 7 }, yoyo: true, repeat: -1, duration: 150 })
+    this.tweens.add({ targets: m, x: tx, y: ty, duration: 2000, ease: 'Sine.inOut', onComplete: () => then() })
   }
 }

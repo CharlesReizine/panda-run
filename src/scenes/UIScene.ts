@@ -84,7 +84,9 @@ export class UIScene extends Phaser.Scene {
     // Badge « points à dépenser » : JUSTE à droite du panneau de vie, pastille dorée pulsante
     // avec une flèche qui pointe vers le panneau (où l'on ouvre le menu). Masqué s'il n'y a
     // aucun point. Cliquer dessus ouvre le même menu des compétences que la barre de vie.
-    this.spBadge = this.add.container(BAR_W + 90, 24).setDepth(60)
+    // badge « point(s) de compétence dispo » : placé SOUS les slots de skills / le bouton Compétences
+    // (haut-droite), et non plus près de la barre de vie — c'est là qu'on gère les compétences.
+    this.spBadge = this.add.container(SLOT_X0 + 14, 104).setDepth(60)
     const badgeBg = this.add.rectangle(76, 0, 152, 32, 0xffca28, 0.97).setStrokeStyle(2, 0x7a4f00, 1)
     const badgeArrow = this.add.text(-4, 0, '◀', { fontSize: '20px', color: '#ffca28', fontStyle: 'bold', stroke: '#3a2600', strokeThickness: 4 }).setOrigin(1, 0.5)
     this.spBadgeText = this.add.text(14, 0, '', { fontSize: '15px', color: '#3a2600', fontStyle: 'bold' }).setOrigin(0, 0.5)
@@ -132,7 +134,7 @@ export class UIScene extends Phaser.Scene {
       // doigt ; 60px = l'espacement des slots → les zones se touchent sans se chevaucher.
       const slot = this.add.rectangle(x, SLOT_Y, SLOT_SIZE, SLOT_SIZE, 0x000000, 0.5)
         .setStrokeStyle(2, 0xffffff, 0.6)
-        .setInteractive(new Phaser.Geom.Rectangle(-5, -8, 60, 66), Phaser.Geom.Rectangle.Contains)
+        .setInteractive(new Phaser.Geom.Rectangle(-5, -16, 60, 84), Phaser.Geom.Rectangle.Contains)
       slot.on('pointerdown', () => { this.pressFx(slot); this.game.events.emit('input-skill', i) })
       this.add.text(x, SLOT_Y - SLOT_SIZE / 2 - 8, `${i + 1}`, { fontSize: '11px', color: '#ffd54f' }).setOrigin(0.5)
       this.slotIcons.push(this.add.image(x, SLOT_Y, '__DEFAULT').setDisplaySize(SLOT_SIZE - 8, SLOT_SIZE - 8).setVisible(false))
@@ -146,28 +148,32 @@ export class UIScene extends Phaser.Scene {
     // bouton EXPLICITE « compétences » sous les slots (le clic sur la barre de vie l'ouvre aussi,
     // mais un bouton dédié est bien plus découvrable) — disponible en jeu ET en entraînement.
     const skillsBtn = this.add.rectangle(SLOT_X0 + 90, SLOT_Y + 40, 138, 24, 0x37474f, 0.9)
-      .setStrokeStyle(1, 0xffffff, 0.55).setInteractive({ useHandCursor: true })
+      .setStrokeStyle(1, 0xffffff, 0.55)
+      .setInteractive(new Phaser.Geom.Rectangle(-11, -13, 160, 50), Phaser.Geom.Rectangle.Contains)
     this.add.text(SLOT_X0 + 90, SLOT_Y + 40, '⚙ Compétences', { fontSize: '12px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
     skillsBtn.on('pointerdown', () => { this.pressFx(skillsBtn); this.openSkillMenu() })
 
-    // Bas-droite : contrôles saut / attaque. Zone tactile ÉLARGIE (rayon ×1,3) au-delà du disque
-    // visuel pour un tap plus tolérant, sans que saut et attaque ne se chevauchent (centres ~96px).
+    // Bas-droite : contrôles saut / attaque. Zone tactile TRÈS ÉLARGIE au-delà du disque visuel pour
+    // un tap tolérant au doigt — SAUT prioritaire (le plus gros). Le disque ATTAQUE est ajouté APRÈS
+    // le SAUT : dans la zone où leurs hitboxes se recouvrent, c'est ATTAQUE qui prend le tap, donc le
+    // SAUT s'étale surtout vers le coin bas-droite libre sans « voler » les taps de l'attaque.
     const jump = this.add.circle(884, 468, 36, 0x1e88e5, 0.6)
-      .setInteractive(new Phaser.Geom.Circle(36, 36, 47), Phaser.Geom.Circle.Contains)
+      .setInteractive(new Phaser.Geom.Circle(36, 36, 66), Phaser.Geom.Circle.Contains)
     this.add.image(884, 468, 'ui-jump').setDisplaySize(34, 34)
     this.add.text(884, 510, 'SAUT', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
     jump.on('pointerdown', () => { this.pressFx(jump); this.game.events.emit('input-jump-down') })
     jump.on('pointerup', () => this.game.events.emit('input-jump-up'))
     jump.on('pointerout', () => this.game.events.emit('input-jump-up'))
     const atk = this.add.circle(792, 496, 32, 0xfb8c00, 0.7)
-      .setInteractive(new Phaser.Geom.Circle(32, 32, 42), Phaser.Geom.Circle.Contains)
+      .setInteractive(new Phaser.Geom.Circle(32, 32, 54), Phaser.Geom.Circle.Contains)
     this.add.image(792, 496, 'ui-attack').setDisplaySize(30, 30)
     this.add.text(792, 534, 'ATTAQUE', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
     atk.on('pointerdown', () => { this.pressFx(atk); this.game.events.emit('input-attack') })
 
-    // Bas-gauche : potion
-    const potion = this.add.image(52, 500, 'potion-drop').setScale(2.5).setInteractive()
-    potion.on('pointerdown', () => { this.pressFx(potion); this.game.events.emit('input-potion') })
+    // Bas-gauche : potion. Zone tactile élargie via un rectangle invisible plus grand que l'icône.
+    const potion = this.add.image(52, 500, 'potion-drop').setScale(2.5)
+    const potionHit = this.add.rectangle(52, 500, 92, 100, 0xffffff, 0.001).setInteractive({ useHandCursor: true })
+    potionHit.on('pointerdown', () => { this.pressFx(potion); this.game.events.emit('input-potion') })
     this.potionText = this.add.text(70, 490, '', { fontSize: '16px', color: '#ffffff' })
 
     // bouton inventaire (icône « tenue ») : EN HAUT À GAUCHE, juste à droite du panneau de vie
