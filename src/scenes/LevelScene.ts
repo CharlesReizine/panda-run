@@ -307,13 +307,18 @@ export class LevelScene extends Phaser.Scene {
     this.physics.add.collider(this.player, oneWay, undefined, this.landsFromAbove)
 
     this.enemies = this.physics.add.group()
-    this.physics.add.collider(this.enemies, platforms)
-    this.physics.add.collider(this.enemies, oneWay)
+    // Les AÉRIENS (oiseaux) traversent le décor : on les exclut des colliders terrain via ce
+    // processCallback (ils ne portent plus `checkCollision.none`, qui les rendait intouchables).
+    // Les terrestres, eux, collisionnent le sol/les plateformes comme le joueur → ils ne tombent
+    // plus à travers la map.
+    const groundedEnemy: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (eObj) => !((eObj as Enemy).monster?.aerial)
+    this.physics.add.collider(this.enemies, platforms, undefined, groundedEnemy)
+    this.physics.add.collider(this.enemies, oneWay, undefined, groundedEnemy)
 
     // Murs de flamme : groupe statique. Collider → les ennemis butent dessus (passage bloqué) ;
     // overlap → tout ennemi au contact prend une brûlure. Les membres détruits quittent le groupe.
     this.flameWalls = this.physics.add.staticGroup()
-    this.physics.add.collider(this.enemies, this.flameWalls)
+    this.physics.add.collider(this.enemies, this.flameWalls, undefined, groundedEnemy)
     this.physics.add.overlap(this.enemies, this.flameWalls, (eObj, wObj) => {
       const e = eObj as Enemy, w = wObj as FlameWall
       if (e.active) e.applyBurn(w.dmgPerTick, 900)
@@ -484,7 +489,7 @@ export class LevelScene extends Phaser.Scene {
     }
     this.physics.add.overlap(this.player, spikes, () => this.hitSpikes())
     this.physics.add.collider(this.player, basinWalls)
-    this.physics.add.collider(this.enemies, basinWalls)
+    this.physics.add.collider(this.enemies, basinWalls, undefined, groundedEnemy)
 
     // voile bleuté discret, épinglé à l'écran, affiché seulement quand la tête est immergée
     // (alpha piloté dans updateWater). Sous les overlays de menu/K.O. (depth ≥ 20).
@@ -1419,6 +1424,59 @@ export class LevelScene extends Phaser.Scene {
     return proj
   }
 
+  // Flèche AUTOGUIDÉE (archer / chasseur) : ne repose sur AUCUNE physique — elle traverse murs et
+  // terrain et enchaîne les ennemis. À chaque bond, on vise l'ennemi le PLUS PROCHE du point courant
+  // qu'on n'a PAS encore touché, dans une portée MAX (~largeur d'écran). Le nombre de cibles = le
+  // RANG (1→1 … 5→5) ; la chaîne s'arrête plus tôt s'il n'y a plus d'ennemi à portée. Dégâts appliqués
+  // immédiatement (fiable), la traînée n'est que du spectacle.
+  private castHomingArrow(skill: SkillDef, damage: number, rank: number, color: number) {
+    const maxTargets = Math.max(1, rank)
+    const maxDist = Math.max(skill.range, this.scale.width) // portée « visible »
+    const hit = new Set<Enemy>()
+    let fromX = this.player.x, fromY = this.player.y + 12
+    const points: { x: number; y: number }[] = [{ x: fromX, y: fromY }]
+    for (let i = 0; i < maxTargets; i++) {
+      let best: Enemy | null = null
+      let bestD = Infinity
+      for (const obj of this.enemies.getChildren()) {
+        const e = obj as Enemy
+        if (!e.active || hit.has(e)) continue
+        const d = Phaser.Math.Distance.Between(fromX, fromY, e.x, e.y)
+        if (d <= maxDist && d < bestD) { bestD = d; best = e }
+      }
+      if (!best) break // plus d'ennemi à portée → la chaîne s'épuise
+      hit.add(best)
+      points.push({ x: best.x, y: best.y })
+      best.takeDamage(physicalDamage(damage, best.effectiveDef()))
+      fromX = best.x; fromY = best.y
+    }
+    this.homingArrowFx(points, color)
+  }
+
+  // Traînée + flèche filante de la Flèche autoguidée : segments lumineux qui s'estompent entre les
+  // cibles successives, et une flèche qui bondit de l'une à l'autre (impact à chaque arrivée).
+  private homingArrowFx(points: { x: number; y: number }[], color: number) {
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i]!, b = points[i + 1]!
+      const line = this.add.line(0, 0, a.x, a.y, b.x, b.y, color, 0.9)
+        .setOrigin(0, 0).setLineWidth(2.5).setDepth(6).setBlendMode(Phaser.BlendModes.ADD)
+      this.tweens.add({ targets: line, alpha: 0, duration: 420, delay: i * 80, onComplete: () => line.destroy() })
+    }
+    if (points.length < 2) return
+    const arrow = this.add.image(points[0]!.x, points[0]!.y, 'fx-arrow').setTint(color).setScale(1.3).setDepth(7)
+    let seg = 0
+    const hop = () => {
+      if (!arrow.active || seg >= points.length - 1) { arrow.destroy(); return }
+      const b = points[seg + 1]!
+      arrow.setRotation(Math.atan2(b.y - arrow.y, b.x - arrow.x))
+      this.tweens.add({
+        targets: arrow, x: b.x, y: b.y, duration: 90,
+        onComplete: () => { this.impactFx(b.x, b.y, color); seg++; hop() },
+      })
+    }
+    hop()
+  }
+
   // projectile ennemi lancé EN CLOCHE (mandragore) : soumis à la gravité, décrit un arc vers le
   // joueur, puis retombe et S'ARRÊTE au sol (collision plateformes → petit impact, pas de rebond).
   spawnEnemyLob(x: number, y: number, targetX: number, damage: number) {
@@ -1649,6 +1707,9 @@ export class LevelScene extends Phaser.Scene {
         }
       }
       this.aoeRing(this.player.x, this.player.y, skill.range, color, true)
+    } else if (skill.kind === 'projectile' && skill.homing) {
+      // Flèche AUTOGUIDÉE : chaîne homing à travers murs/terrain (nombre de cibles = rang).
+      this.castHomingArrow(skill, atk * mult, rank, color)
     } else if (skill.kind === 'projectile') {
       // skills perçants (flèche perçante / laser) : traversent TOUT sur toute la largeur visible
       // → portée forcée à au moins la largeur caméra (~960px)
@@ -2974,13 +3035,16 @@ export class LevelScene extends Phaser.Scene {
     // cascade REMONTABLE : on nage/grimpe dedans sans noyade (inCascade) ; le bassin marine, lui,
     // noie (waterRects). inWater (mécanique de nage) couvre les deux.
     this.player.inCascade = this.cascadeRects.some((r) => r.contains(this.player.x, this.player.y))
+    const containingWater = this.waterRects.find((r) => r.contains(this.player.x, this.player.y))
+      ?? this.cascadeRects.find((r) => r.contains(this.player.x, this.player.y))
     this.player.inWater = this.player.inCascade || this.waterRects.some((r) => r.contains(this.player.x, this.player.y))
+    // surface (ligne d'eau) de la nappe/colonne courante : le Player s'en sert pour SORTIR de l'eau
+    // en sautant (près de la surface, nager vers le haut donne une vraie détente hors de l'eau).
+    this.player.waterSurfaceY = containingWater ? containingWater.top : Number.POSITIVE_INFINITY
     // ENTRÉE dans l'eau (front montant de inWater) : le panda vient de franchir la surface → gerbe de
     // gouttelettes à la surface de la nappe/colonne traversée. Purement décoratif, non bloquant.
-    if (this.player.inWater && !this.wasInWater) {
-      const splashRect = this.waterRects.find((r) => r.contains(this.player.x, this.player.y))
-        ?? this.cascadeRects.find((r) => r.contains(this.player.x, this.player.y))
-      if (splashRect) this.waterSplashFx(this.player.x, splashRect.top)
+    if (this.player.inWater && !this.wasInWater && containingWater) {
+      this.waterSplashFx(this.player.x, containingWater.top)
     }
     this.wasInWater = this.player.inWater
     this.updateWater(delta)

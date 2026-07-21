@@ -37,6 +37,8 @@ export interface SkillDef {
   requires?: string // id d'un skill prérequis à débloquer avant celui-ci (défaut : aucun)
   // ── Archer / Chasseur ──────────────────────────────────────────────────────
   arrows?: number // projectile : nombre de flèches tirées ensemble (double flèche = 2)
+  homing?: boolean // projectile : flèche AUTOGUIDÉE — traverse murs/terrain et enchaîne l'ennemi le plus proche non encore touché (nombre de cibles = rang du skill), dans une portée max ~largeur d'écran
+
   burn?: boolean // projectile : la flèche enflamme la cible (applyBurn / DoT) à l'impact
   explode?: boolean // projectile en cloche : explose à l'impact (sol ou ennemi) → dégâts de zone
   explodeRadius?: number // rayon de l'explosion (px) pour un projectile `explode`

@@ -42,6 +42,7 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'fleche-explosive': { color: 0xff8a65, glyph: 'boomarrow' },
   'pluie-de-fleches': { color: 0xa5d6a7, glyph: 'rain' },
   'tir-charge': { color: 0xffb74d, glyph: 'arrow' },
+  'fleche-autoguidee': { color: 0x64ffda, glyph: 'arrow2' },
   'oeil-de-lynx': { color: 0x69f0ae, glyph: 'eye' },
   'reflexes-felins': { color: 0x80deea, glyph: 'swift' },
   'fleche-de-bambou': { color: 0x9ccc65, glyph: 'arrow' },

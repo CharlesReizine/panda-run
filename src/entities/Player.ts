@@ -65,6 +65,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   onLadder = false
   ladderCenterX = 0 // centre x de l'échelle courante : sert à recentrer le panda en grimpant
   inWater = false
+  // ligne d'eau (y du dessus) de la nappe/colonne courante, posée par LevelScene chaque frame. Sert
+  // à SORTIR de l'eau : près de la surface, nager vers le haut déclenche une vraie détente (JUMP)
+  // qui éjecte le panda hors de l'eau au lieu de le laisser coincé à ras la surface.
+  waterSurfaceY = Number.POSITIVE_INFINITY
   // cascade REMONTABLE : dans une colonne de cascade (courant ascendant), on nage sans noyade et un
   // léger courant nous pousse vers le haut → on la « remonte » comme une échelle d'eau.
   inCascade = false
@@ -477,6 +481,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // dans l'eau : gravité coupée, flottaison + nage verticale ; ne tue jamais
   private updateSwim(c: ControlsState, body: Phaser.Physics.Arcade.Body) {
     body.setAllowGravity(false)
+    // SORTIE DE L'EAU : près de la surface, nager vers le haut ÉJECTE le panda hors de l'eau avec une
+    // vraie détente (JUMP_VELOCITY) au lieu de la lente vitesse de nage. Sans ça, à la surface la
+    // vélocité de nage (~150) était instantanément annulée par la gravité au franchissement → le
+    // panda restait coincé à ras l'eau, incapable de sauter dehors. La quille (body.top) doit être
+    // proche de la ligne d'eau pour armer la détente → on ne « fuse » pas depuis le fond du bassin.
+    const nearSurface = body.top <= this.waterSurfaceY + CLIMB_STRIDE
+    if ((c.up || c.jump) && nearSurface && !this.inCascade) { this.setVelocityY(JUMP_VELOCITY); return }
     // cascade : le COURANT POUSSE VERS LE BAS (elle fait tomber). On la REMONTE en maintenant HAUT
     // (grimpe à contre-courant, aucune noyade) ; BAS accélère la descente. Bassin : nage libre.
     if (c.up || c.jump) this.setVelocityY(-SWIM_SPEED)

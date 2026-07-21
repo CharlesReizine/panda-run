@@ -23,7 +23,7 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     id: 'archer', name: 'Archer', tint: 0x88dd88,
     baseStats: { atk: 15, def: 3, maxHp: 110, attackSpeed: 2.0 },
     growth: { atk: 3, def: 1, maxHp: 17, attackSpeed: 0 },
-    skillIds: ['fleche-percante', 'tir-charge', 'pluie-de-fleches', 'fleche-enflammee', 'fleche-explosive', 'oeil-de-lynx', 'tir-instinctif', 'double-tir', 'piege', 'reflexes-felins'],
+    skillIds: ['fleche-percante', 'tir-charge', 'pluie-de-fleches', 'fleche-enflammee', 'fleche-explosive', 'fleche-autoguidee', 'oeil-de-lynx', 'tir-instinctif', 'double-tir', 'piege', 'reflexes-felins'],
   },
   chevalier: {
     id: 'chevalier', name: 'Chevalier', tint: 0xffcc44,
@@ -41,6 +41,6 @@ export const CLASSES: Record<ClassId, ClassDef> = {
     id: 'chasseur', name: 'Chasseur', tint: 0x33aa55,
     baseStats: { atk: 26, def: 6, maxHp: 195, attackSpeed: 2.2 },
     growth: { atk: 5, def: 2, maxHp: 29, attackSpeed: 0 },
-    skillIds: ['fleche-mortelle', 'nuee-de-fleches', 'tir-du-faucon', 'fleche-percante', 'fleche-enflammee', 'fleche-explosive', 'pluie-de-fleches', 'tir-charge', 'oeil-de-lynx', 'reflexes-felins'],
+    skillIds: ['fleche-mortelle', 'nuee-de-fleches', 'tir-du-faucon', 'fleche-percante', 'fleche-enflammee', 'fleche-explosive', 'fleche-autoguidee', 'pluie-de-fleches', 'tir-charge', 'oeil-de-lynx', 'reflexes-felins'],
   },
 }

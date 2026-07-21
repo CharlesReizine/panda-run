@@ -1,5 +1,10 @@
 import Phaser from 'phaser'
 
+// Plancher de hitbox (px de texture source) : même une flèche fine et longue reçoit une boîte de
+// collision d'au moins ce côté → un tir qui passe sur un mob au même niveau le touche de façon
+// FIABLE (anti-tunnel), au lieu de le frôler sans jamais déclencher l'overlap.
+const HITBOX_MIN = 22
+
 export class Projectile extends Phaser.Physics.Arcade.Sprite {
   damage: number
   fromPlayer: boolean
@@ -35,6 +40,27 @@ export class Projectile extends Phaser.Physics.Arcade.Sprite {
     this.startY = y
     this.rangePx = rangePx
     if (!fromPlayer) this.setTint(0xff5252)
+    // hitbox généreuse et centrée dès la création (avant tout swap de texture)
+    this.syncHitbox()
+  }
+
+  // Hitbox GÉNÉREUSE et CENTRÉE, resynchronisée à CHAQUE changement de texture. Sans ça, le corps
+  // Arcade conservait la taille de la texture INITIALE ('projectile') après un setTexture (fx-arrow,
+  // fx-fireball…) : hitbox décalée et souvent trop petite → des tirs qui « ratent » un mob pourtant
+  // traversé. On plancher les deux côtés (HITBOX_MIN) pour fiabiliser la détection (anti-tunnel).
+  private syncHitbox() {
+    const body = this.body as Phaser.Physics.Arcade.Body | undefined
+    if (!body) return // appelé pendant la construction (super() → setTexture) : corps pas encore prêt
+    const w = Math.max(this.width, HITBOX_MIN)
+    const h = Math.max(this.height, HITBOX_MIN)
+    body.setSize(w, h, true) // center=true : la boîte est recentrée sur le frame courant
+  }
+
+  // resynchronise la hitbox après CHAQUE swap de texture (voir syncHitbox)
+  setTexture(key: string): this {
+    super.setTexture(key)
+    this.syncHitbox()
+    return this
   }
 
   // À rappeler APRÈS l'ajout à un groupe physique : un Phaser.Physics.Arcade.Group réapplique

@@ -142,12 +142,13 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     scene.physics.add.existing(this)
     this.homeX = x; this.homeY = y
     this.patrolDir = (Math.round(x / 32) % 2 === 0 ? 1 : -1)
-    // OISEAU : vol libre — gravité coupée et AUCUNE collision terrain (il traverse le décor), il ne
-    // se déplace que par sa vélocité. Le contact avec le joueur reste géré par overlap.
+    // OISEAU : vol libre — gravité coupée ; il traverse le décor (sa non-collision avec le sol/les
+    // plateformes est gérée par un processCallback côté LevelScene qui ignore les aériens). On NE met
+    // PLUS `checkCollision.none = true` : ce drapeau excluait l'oiseau de TOUS les overlaps Arcade
+    // (cf. World.collideSpriteVsGroup) → il était intouchable par les tirs du joueur et ne touchait
+    // jamais le joueur. Sans lui, l'overlap projectiles↔ennemis le touche enfin (notamment en piqué).
     if (def.aerial) {
-      const b = this.body as Phaser.Physics.Arcade.Body
-      b.setAllowGravity(false)
-      b.checkCollision.none = true
+      (this.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
     }
     // borne tout ennemi dans l'arène : les bornes du monde physique valent (0..widthPx). Sans ça,
     // un chargeur lancé (vitesse persistante, drag nul) glisse hors de la zone jouable et ne revient
@@ -396,11 +397,29 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     return false
   }
 
+  // FILET DE SÉCURITÉ anti-traversée de map : un monstre terrestre (ni aérien) qui a chuté jusqu'au
+  // FOND du monde (tombé dans un trou, ou passé sous la surface solide) est REPOSÉ sur son point
+  // d'apparition (surface solide garantie), vélocité nulle → « s'ils tombent, ils remontent », jamais
+  // disparu sous la carte. Les aériens (gravité coupée) ne sont pas concernés.
+  private checkFallThrough(): boolean {
+    if (this.monster.aerial) return false
+    const body = this.body as Phaser.Physics.Arcade.Body
+    const worldBottom = this.levelScene.physics.world.bounds.bottom
+    if (body.bottom >= worldBottom - 4) {
+      this.setPosition(this.homeX, this.homeY)
+      this.setVelocity(0, 0)
+      return true
+    }
+    return false
+  }
+
   preUpdate(t: number, d: number) {
     super.preUpdate(t, d)
     // NOYADE : un monstre terrestre tombé dans l'eau marine se noie (dégâts jusqu'à la mort). Testé
     // avant toute IA — un mob en train de couler ne patrouille/charge plus, il crève.
     if (this.checkDrown(d)) return
+    // FILET anti-chute hors map : reposé sur son spawn s'il a atteint le fond du monde.
+    if (this.checkFallThrough()) { this.updateVisuals(t); return }
     // BOSS piloté par le contrôleur : on ne joue AUCUNE IA autonome (le BossController impose la
     // vélocité et les skills chaque frame). On conserve seulement le rendu flottant.
     if (this.aiDisabled) { this.updateVisuals(t); return }
