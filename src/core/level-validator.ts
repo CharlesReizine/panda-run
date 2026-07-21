@@ -261,3 +261,150 @@ export function unreachableChests(level: LevelDef): ChestProblem[] {
   }
   return out
 }
+
+// ─── REBORDS DE PLAN D'EAU À NIVEAU (retour user : « rebord gauche plus haut que droite ») ───
+// La SURFACE d'un plan d'eau marine (ou d'une cuve de lave) est HORIZONTALE : ses DEUX berges
+// doivent border l'eau à la MÊME altitude (= la rangée de surface). Une berge plus basse que
+// l'autre = l'eau déborderait d'un côté → géométrie absurde. On lit, à la colonne juste HORS de
+// chaque bord de la cuve, la surface marchable la plus HAUTE (min y) : elle doit tomber pile sur la
+// rangée de surface de l'eau. Un bord OUVERT (openSide, passage sous-marin) est exempté : de ce
+// côté la cuve n'a pas de berge de surface (on ressort immergé). Une berge ABSENTE (bord de module)
+// n'est pas fautive (la continuité vient du module voisin).
+export interface BankProblem { x: number; w: number; side: 'gauche' | 'droite'; bankRow: number; surfaceRow: number }
+export function unlevelWaterBanks(level: LevelDef): BankProblem[] {
+  const surfaces: Plat[] = [...level.platforms, ...(level.bridges ?? [])]
+  // surface marchable la plus HAUTE (min y) couvrant la colonne col — sinon undefined.
+  const topSurfaceAt = (col: number): number | undefined => {
+    let best: number | undefined
+    for (const s of surfaces) if (col >= s.x && col < s.x + s.w) best = best === undefined ? s.y : Math.min(best, s.y)
+    return best
+  }
+  const out: BankProblem[] = []
+  for (const h of level.hazards ?? []) {
+    if (h.kind !== 'water' || (h.water !== 'basin' && h.water !== 'lave')) continue
+    const surfaceRow = h.top ?? groundRowFor(level.heightTiles) - 2
+    const openL = h.openSide === 'left' || h.openSide === 'both'
+    const openR = h.openSide === 'right' || h.openSide === 'both'
+    if (!openL) { const b = topSurfaceAt(h.x - 1); if (b !== undefined && b !== surfaceRow) out.push({ x: h.x, w: h.w, side: 'gauche', bankRow: b, surfaceRow }) }
+    if (!openR) { const b = topSurfaceAt(h.x + h.w); if (b !== undefined && b !== surfaceRow) out.push({ x: h.x, w: h.w, side: 'droite', bankRow: b, surfaceRow }) }
+  }
+  return out
+}
+
+// ─── ANTI-SOFTLOCK : « pas de piège sans retour » (retour user : on tombe, on est coincé vivant) ──
+// Depuis TOUTE position atteignable, si le joueur tombe sur un palier inférieur il doit TOUJOURS
+// pouvoir REMONTER vers la sortie (échelle/plateformes/nage) OU la chute doit être MORTELLE (trou
+// jusqu'au fond du monde, lave). On rejoue le MODÈLE DE MOUVEMENT (surfaces marchables reliées par
+// saut/chute/échelle/nage) et on casse sur toute surface atteignable depuis le départ d'où la
+// SORTIE est injoignable ET sur laquelle on ne peut pas mourir (donc coincé vivant, sans retour).
+export interface DeadEndProblem { x: number; y: number; w: number; kind: string }
+interface MSurf { y: number; x: number; w: number; kind: 'sol' | 'plat' | 'pont' }
+export function deadEndSurfaces(level: LevelDef): DeadEndProblem[] {
+  const W = level.widthTiles
+  const groundRow = groundRowFor(level.heightTiles)
+  const gaps = level.gaps ?? []
+  const waters = (level.hazards ?? []).filter((h) => h.kind === 'water')
+  const basins = waters.filter((h) => h.water === 'basin')
+  const lavas = waters.filter((h) => h.water === 'lave')
+  const isGap = (x: number) => gaps.some((g) => x >= g.x && x < g.x + g.w)
+  const inBasin = (x: number) => basins.some((h) => x >= h.x && x < h.x + h.w)
+  const inLava = (x: number) => lavas.some((h) => x >= h.x && x < h.x + h.w)
+  const groundWalk = (x: number) => !isGap(x) && !inBasin(x) && !inLava(x) // le sol est-il foulable ?
+
+  // 1) surfaces : segments de SOL foulable + plateformes + ponts
+  const surfaces: MSurf[] = []
+  let run = -1
+  for (let x = 0; x <= W; x++) {
+    const w = x < W && groundWalk(x)
+    if (w && run < 0) run = x
+    if (!w && run >= 0) { surfaces.push({ y: groundRow, x: run, w: x - run, kind: 'sol' }); run = -1 }
+  }
+  for (const p of level.platforms) surfaces.push({ y: p.y, x: p.x, w: p.w, kind: 'plat' })
+  for (const b of level.bridges ?? []) surfaces.push({ y: b.y, x: b.x, w: b.w, kind: 'pont' })
+
+  const N = surfaces.length
+  const hgapOf = (a: MSurf, b: MSurf) => Math.max(0, Math.max(a.x - (b.x + b.w), b.x - (a.x + a.w)))
+  const covers = (s: MSurf, x: number) => x >= s.x - 1 && x < s.x + s.w + 1
+  const adj: Set<number>[] = Array.from({ length: N }, () => new Set())
+  const canDie = new Array<boolean>(N).fill(false)
+
+  // 2a) SAUT (haut / travers) : modèle de parabole partagé avec platforming.canReach
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    if (i === j) continue
+    if (canReach(surfaces[i]!.y, surfaces[j]!, hgapOf(surfaces[i]!, surfaces[j]!))) adj[i]!.add(j)
+  }
+  // 2b) CHUTE : on marche jusqu'à une colonne de la surface (ou son bord) et on tombe sur la surface
+  // la plus HAUTE strictement en dessous ; rien dessous → gap/lave = mort, bassin = nage (ressort sur
+  // une berge OU se noie = mort), passage ouvert = ressort sur le côté.
+  for (let i = 0; i < N; i++) {
+    const a = surfaces[i]!
+    for (let x = a.x - 1; x <= a.x + a.w; x++) {
+      if (x < 0 || x >= W) continue
+      let best = -1, bestY = Infinity
+      for (let j = 0; j < N; j++) {
+        const b = surfaces[j]!
+        if (j === i || b.y <= a.y || !covers(b, x)) continue
+        if (b.y < bestY) { bestY = b.y; best = j }
+      }
+      if (best >= 0) { adj[i]!.add(best); continue }
+      if (inLava(x)) { canDie[i] = true; continue }
+      if (inBasin(x)) {
+        canDie[i] = true // noyade possible
+        const bas = basins.find((h) => x >= h.x && x < h.x + h.w)!
+        const top = bas.top ?? groundRow - 2
+        for (let j = 0; j < N; j++) {
+          const b = surfaces[j]!
+          if (Math.abs(b.y - top) <= 1 && b.x <= bas.x + bas.w && b.x + b.w >= bas.x) adj[i]!.add(j)
+          const os = bas.openSide
+          if ((os === 'right' || os === 'both') && Math.abs(b.x - (bas.x + bas.w)) <= 1) adj[i]!.add(j)
+          if ((os === 'left' || os === 'both') && Math.abs((b.x + b.w) - bas.x) <= 1) adj[i]!.add(j)
+        }
+        continue
+      }
+      if (isGap(x)) canDie[i] = true // chute mortelle jusqu'au fond du monde
+    }
+  }
+  // 2c) ÉCHELLES (montée/descente = lien bidirectionnel pied ↔ palier de sommet)
+  for (const l of (level.ladders ?? []) as Ladder[]) {
+    const footRow = l.y + l.h
+    const tops: number[] = [], feet: number[] = []
+    for (let j = 0; j < N; j++) {
+      const b = surfaces[j]!
+      const drop = b.y - l.y
+      if (drop >= 1 && drop <= 2 && l.x >= b.x - 1 && l.x <= b.x + b.w + 1) tops.push(j)
+      const grounded = footRow >= groundRow ? b.kind === 'sol' : Math.abs(b.y - footRow) <= ROW_TOL
+      if (grounded && l.x >= b.x - 1 && l.x <= b.x + b.w + 1) feet.push(j)
+    }
+    for (const t of tops) for (const f of feet) { adj[t]!.add(f); adj[f]!.add(t) }
+  }
+
+  // 3) surface de DÉPART et de SORTIE
+  const findSurf = (pt?: { x: number; y: number }): number => {
+    if (!pt) return -1
+    for (let j = 0; j < N; j++) { const b = surfaces[j]!; if (pt.x >= b.x - 1 && pt.x <= b.x + b.w && Math.abs(b.y - pt.y) <= 1) return j }
+    return -1
+  }
+  let startI = findSurf(level.start)
+  if (startI < 0) startI = surfaces.findIndex((s) => s.kind === 'sol')
+  let exitI = findSurf(level.exit)
+  if (exitI < 0) exitI = surfaces.reduce((acc, s, j) => (s.kind === 'sol' && (acc < 0 || s.x + s.w > surfaces[acc]!.x + surfaces[acc]!.w) ? j : acc), -1)
+  if (startI < 0 || exitI < 0) return [] // niveau sans départ/sortie exploitable → hors de portée de ce contrôle
+
+  const bfs = (from: number, graph: Set<number>[]): Set<number> => {
+    const seen = new Set([from]); const q = [from]
+    while (q.length) { const u = q.shift()!; for (const v of graph[u]!) if (!seen.has(v)) { seen.add(v); q.push(v) } }
+    return seen
+  }
+  const radj: Set<number>[] = Array.from({ length: N }, () => new Set())
+  for (let i = 0; i < N; i++) for (const j of adj[i]!) radj[j]!.add(i)
+  const reachFromStart = bfs(startI, adj)
+  const canReachExit = bfs(exitI, radj)
+
+  const out: DeadEndProblem[] = []
+  for (const i of reachFromStart) {
+    if (canReachExit.has(i) || canDie[i]) continue
+    const s = surfaces[i]!
+    out.push({ x: s.x, y: s.y, w: s.w, kind: s.kind })
+  }
+  return out
+}

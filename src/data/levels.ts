@@ -70,7 +70,7 @@ export interface LevelDef {
 }
 
 import { composeLevel, type ModuleKind, type Tier } from './level-modules'
-import { overStackedColumns } from '../core/level-validator'
+import { overStackedColumns, unlevelWaterBanks, deadEndSurfaces } from '../core/level-validator'
 
 const plat = (x: number, y: number, w: number) => ({ x, y, w })
 
@@ -109,6 +109,14 @@ const WATER_ROT: ModuleKind[][] = [
   ['bassin', 'sortie-humide'],
 ]
 
+// LAC EN U (passage sous-marin symétrique) : placé sur 1-2 niveaux à eau. Toujours APPARIÉ à une
+// cuve porteuse de coffre (cascade/bassin) → chaque niveau garde son coffre exigé. Plage = mobs
+// aquatiques (méduse/crabe) dans l'eau ; jungle = variété (eau sans mob aquatique, par cohérence).
+const LAC_EN_U_LEVELS: Record<string, ModuleKind[]> = {
+  'plage-2': ['lac-en-u', 'cascade'],
+  'jungle-5': ['lac-en-u', 'bassin'],
+}
+
 // Fait tourner le pool de monstres pour que deux niveaux d'un même biome ne se ressemblent pas.
 const rotate = <T>(arr: T[], by: number): T[] => (arr.length ? arr.map((_, i) => arr[(i + by) % arr.length]!) : arr)
 
@@ -134,19 +142,23 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
     // En ENFER, les cuves marine deviennent de la LAVE (aucun coffre de plongée) : on garantit alors
     // au moins une CASCADE remontable (seule cuve qui pose un coffre en biome lave) → chaque niveau
     // conserve son coffre exigé par la registry de props.
-    waterKinds: pool.lava && !WATER_ROT[idx % WATER_ROT.length]!.some((w) => w === 'cascade' || w === 'sortie-humide')
-      ? (['bassin', 'cascade'] as ModuleKind[])
-      : WATER_ROT[idx % WATER_ROT.length]!,
+    waterKinds: LAC_EN_U_LEVELS[id]
+      ? LAC_EN_U_LEVELS[id]!
+      : pool.lava && !WATER_ROT[idx % WATER_ROT.length]!.some((w) => w === 'cascade' || w === 'sortie-humide')
+        ? (['bassin', 'cascade'] as ModuleKind[])
+        : WATER_ROT[idx % WATER_ROT.length]!,
     ...(pool.lava ? { lava: true } : {}),
   }
-  // Certaines graines produisent une colonne à 4 paliers empilés (rejetée par reachable.test). On
-  // essaie des graines salées et on garde la PREMIÈRE silhouette « collines » conforme (≤ 3 paliers) —
-  // déterministe (aucun Math.random), donc stable d'un build à l'autre.
+  // Certaines graines produisent une colonne à 4 paliers empilés, un rebord de lac désaxé, ou un
+  // piège sans retour (softlock). On essaie des graines salées et on garde la PREMIÈRE silhouette
+  // conforme à TOUS ces invariants — déterministe (aucun Math.random), stable d'un build à l'autre.
+  const clean = (l: LevelDef) =>
+    overStackedColumns(l, 3).length === 0 && unlevelWaterBanks(l).length === 0 && deadEndSurfaces(l).length === 0
   const salts = [`${id}-${ending}`, ...Array.from({ length: 40 }, (_, i) => `${id}-${ending}-${i}`)]
   let level = composeLevel({ ...base, seed: salts[0]! })
   for (const seed of salts) {
     const l = composeLevel({ ...base, seed })
-    if (overStackedColumns(l, 3).length === 0) { level = l; break }
+    if (clean(l)) { level = l; break }
   }
   return level
 }
