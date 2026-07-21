@@ -1131,13 +1131,13 @@ export class LevelScene extends Phaser.Scene {
 
     // voile sombre plein écran, épinglé à l'écran
     this.add.rectangle(480, 270, 960, 540, 0x0b0b12, 0.72).setScrollFactor(0).setDepth(20)
-    this.add.text(480, 78, 'Essaie encore !', {
-      fontSize: '64px', color: '#ff5252', fontStyle: 'bold', stroke: '#000000', strokeThickness: 6,
+    this.add.text(480, 108, 'Essaie encore !', {
+      fontSize: '52px', color: '#ff5252', fontStyle: 'bold', stroke: '#000000', strokeThickness: 6,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(22)
 
-    // illustration K.O. (panda sur le dos + étoiles), centrée, avec fondu + léger zoom d'arrivée
-    const dead = this.add.image(480, 258, 'death-panda').setScrollFactor(0).setDepth(21)
-    const targetH = 250
+    // illustration K.O. (panda sur le dos + étoiles), centrée plus bas pour ne pas chevaucher le titre
+    const dead = this.add.image(480, 322, 'death-panda').setScrollFactor(0).setDepth(21)
+    const targetH = 195
     dead.setDisplaySize(targetH * (dead.width / dead.height), targetH)
     const sx = dead.scaleX, sy = dead.scaleY
     dead.setScale(sx * 0.7, sy * 0.7).setAlpha(0)
@@ -1145,7 +1145,7 @@ export class LevelScene extends Phaser.Scene {
     this.tweens.add({ targets: dead, scaleX: sx, scaleY: sy, duration: 440, ease: 'Back.out' })
 
     const mkButton = (x: number, label: string, bg: number, onTap: () => void) => {
-      const t = this.add.text(x, 448, label, {
+      const t = this.add.text(x, 478, label, {
         fontSize: '26px', color: '#ffffff', backgroundColor: `#${bg.toString(16).padStart(6, '0')}`,
         padding: { x: 22, y: 12 },
       }).setOrigin(0.5).setScrollFactor(0).setDepth(22).setInteractive({ useHandCursor: true })
