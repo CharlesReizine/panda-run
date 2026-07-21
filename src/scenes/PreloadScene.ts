@@ -21,11 +21,13 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'folie-enragee': { color: 0xd50000, glyph: 'rage' },
   'plongeon': { color: 0xff8a65, glyph: 'slam' },
   'double-saut': { color: 0x81d4fa, glyph: 'jump' },
+  'regeneration': { color: 0x66bb6a, glyph: 'regen' },
   'lame-ultime': { color: 0xffd54f, glyph: 'swordx' },
   'boule-de-feu': { color: 0xff7043, glyph: 'fireball' },
   'eclair': { color: 0x64b5ff, glyph: 'bolt' },
   'mur-de-flamme': { color: 0xff7043, glyph: 'flamewall' },
   'pluie-de-meteores': { color: 0xff8a65, glyph: 'meteors' },
+  'fureur-arcanique': { color: 0xce93d8, glyph: 'aura' },
   'maitrise-arcanique': { color: 0xba68c8, glyph: 'star' },
   'vitalite-magique': { color: 0x66bb6a, glyph: 'heart' },
   'nova-de-givre': { color: 0x4dd0e1, glyph: 'snow' },
@@ -39,6 +41,8 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'fleche-explosive': { color: 0xff8a65, glyph: 'boomarrow' },
   'pluie-de-fleches': { color: 0xa5d6a7, glyph: 'rain' },
   'tir-charge': { color: 0xffb74d, glyph: 'arrow' },
+  'oeil-de-lynx': { color: 0x69f0ae, glyph: 'eye' },
+  'reflexes-felins': { color: 0x80deea, glyph: 'swift' },
   'fleche-de-bambou': { color: 0x9ccc65, glyph: 'arrow' },
   'salve-ultime': { color: 0xffd54f, glyph: 'rain' },
   'rugissement-panda': { color: 0xffb300, glyph: 'roar' },
@@ -1487,6 +1491,25 @@ export class PreloadScene extends Phaser.Scene {
         g.fillStyle(0x7f0000).fillRect(cx - 3, cy + 5, 1.5, 4).fillRect(cx + 1.5, cy + 5, 1.5, 4) // dents
         break
       }
+      case 'regen': // régénération : cœur vert traversé d'une flèche montante (PV qui remontent)
+        g.fillStyle(c).fillCircle(cx - 5, cy - 1, 6).fillCircle(cx + 5, cy - 1, 6).fillTriangle(cx - 10, cy + 1, cx + 10, cy + 1, cx, cy + 12)
+        g.lineStyle(3, 0xe8f5e9).beginPath(); g.moveTo(cx, cy + 8); g.lineTo(cx, cy - 12); g.strokePath()
+        g.fillStyle(0xe8f5e9).fillTriangle(cx - 5, cy - 8, cx + 5, cy - 8, cx, cy - 16)
+        break
+      case 'aura': { // fureur arcanique : anneaux d'arcanes concentriques + étincelle centrale
+        g.lineStyle(2, c, 0.9).strokeCircle(cx, cy, 13).strokeCircle(cx, cy, 8)
+        g.fillStyle(0xffffff).fillCircle(cx, cy, 3)
+        for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; g.fillStyle(c).fillCircle(cx + Math.cos(a) * 16, cy + Math.sin(a) * 16, 1.8) }
+        break
+      }
+      case 'eye': // œil du lynx : œil en amande avec pupille verte
+        g.lineStyle(2, c).beginPath(); g.arc(cx, cy, 13, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340), false); g.strokePath()
+        g.beginPath(); g.arc(cx, cy, 13, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(160), false); g.strokePath()
+        g.fillStyle(c).fillCircle(cx, cy, 5); g.fillStyle(0x0d1b12).fillEllipse(cx, cy, 3, 7)
+        break
+      case 'swift': // réflexes félins : chevrons de vitesse enchaînés
+        g.lineStyle(3, c); for (let i = 0; i < 3; i++) { const ox = 10 + i * 8; g.beginPath(); g.moveTo(ox, 14); g.lineTo(ox + 8, cy); g.lineTo(ox, 30); g.strokePath() }
+        break
     }
     g.generateTexture(`skill-${id}`, 44, 44)
     g.destroy()

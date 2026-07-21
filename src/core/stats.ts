@@ -50,3 +50,14 @@ export function computeStats(p: PlayerState): StatBlock {
   }
   return s
 }
+
+// Régénération de PV par seconde apportée par les passifs appris (rang > 0), cumulée × rang.
+// Sabreur : passif « Régénération ». 0 si aucun passif de régén appris → aucun effet.
+export function hpRegenPerSec(p: PlayerState): number {
+  let regen = 0
+  for (const [id, rank] of Object.entries(p.skillLevels)) {
+    if (rank <= 0) continue
+    regen += (SKILLS[id]?.passive?.hpRegenPerSec ?? 0) * rank
+  }
+  return regen
+}

@@ -46,7 +46,8 @@ export interface SkillDef {
   blast?: number // projectile : rayon de la petite explosion déclenchée à l'impact (grosse boule de feu)
   meteors?: number // zone : nombre de météores qui tombent et explosent sur la zone visée
   wall?: { durationMs: number; height: number } // zone : mur de flammes temporaire (brûle + bloque les ennemis)
-  passive?: Partial<Pick<StatBlock, 'atk' | 'def' | 'maxHp' | 'attackSpeed'>> // passif : bonus de stat par rang appris (jamais équipé)
+  // passif : bonus par rang appris (jamais équipé). hpRegenPerSec = régénération de PV/s (sabreur).
+  passive?: { atk?: number; def?: number; maxHp?: number; attackSpeed?: number; hpRegenPerSec?: number }
 }
 
 export type Rarity = 'commun' | 'rare' | 'epique' | 'legendaire'

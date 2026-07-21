@@ -17,6 +17,7 @@ import { save } from '../core/save'
 import { CooldownTracker, energyCostOf } from '../core/skill-executor'
 import { ENERGY_ON_BASIC_HIT } from '../entities/Player'
 import { SKILLS } from '../data/skills'
+import { hpRegenPerSec } from '../core/stats'
 import { rollDrops } from '../core/loot'
 import type { DropEntry, SkillDef } from '../core/types'
 import type { UIScene } from './UIScene'
@@ -1319,6 +1320,7 @@ export class LevelScene extends Phaser.Scene {
     if (id === 'bambou-jete' || id === 'fleche-de-bambou') return 0x9ccc65 // bambou vert
     if (id.includes('fleche') || id.includes('tir') || id.includes('salve')) return 0xd7a86e
     if (id.includes('arcanique')) return 0xce93d8
+    if (id.includes('lynx')) return 0x69f0ae // buff archer : aura verte d'agilité
     return 0xffd54f
   }
 
@@ -1561,8 +1563,11 @@ export class LevelScene extends Phaser.Scene {
     // Tout skill porteur d'un buff booste l'ATK sortante ; l'Épée enflammée y ajoute la flamme
     // (lame embrasée + brûlure sur les coups), sinon onde de cri dorée classique.
     if (skill.buff) {
-      this.player.applyAtkBuff(skill.buff.atkMult, skill.buff.durationMs)
+      // Un seul buff par classe, chacun VISUELLEMENT DISTINCT : aura recolorée + FX propre à la classe.
+      this.player.applyAtkBuff(skill.buff.atkMult, skill.buff.durationMs, color)
       if (skill.flame) { this.player.applyFlameBuff(skill.buff.durationMs); this.flameEnchantFx(color) }
+      else if (skill.classId === 'mage' || skill.classId === 'sorcier') this.arcaneBuffFx(color)
+      else if (skill.classId === 'archer' || skill.classId === 'chasseur') this.agilityBuffFx(color)
       else this.warCryFx()
     }
     // Folie enragée : le panda entre en furie (aura ROUGE côté joueur) et TERRORISE tous les
@@ -1848,6 +1853,49 @@ export class LevelScene extends Phaser.Scene {
       const a = (i / 8) * Math.PI * 2
       const shard = this.add.rectangle(x, y - 10, 4, 12, 0xffe082).setDepth(6).setRotation(a)
       this.tweens.add({ targets: shard, x: x + Math.cos(a) * 46, y: y - 26 + Math.sin(a) * 22, alpha: 0, duration: 420, onComplete: () => shard.destroy() })
+    }
+  }
+
+  // Buff MAGE — Fureur arcanique : cercle de runes VIOLETTES qui tournoie + éclats d'arcanes montants
+  // + double halo additif. Signature nettement différente du cri de guerre doré.
+  private arcaneBuffFx(color: number) {
+    const x = this.player.x, y = this.player.y
+    this.cameras.main.shake(150, 0.005)
+    for (let i = 0; i < 2; i++) {
+      const halo = this.add.image(x, y, 'ring').setTint(color).setDepth(4).setBlendMode(Phaser.BlendModes.ADD).setScale(0.3).setAlpha(0.8)
+      this.tweens.add({ targets: halo, scale: 4.5 + i * 1.5, alpha: 0, duration: 520 + i * 140, delay: i * 90, ease: 'Cubic.out', onComplete: () => halo.destroy() })
+    }
+    // anneau de glyphes qui tourne autour du panda avant de se dissiper
+    const ring = this.add.container(x, y).setDepth(6)
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2
+      const glyph = this.add.text(Math.cos(a) * 40, Math.sin(a) * 40, ['✦', '✧', '❖', '✶'][i % 4]!, { fontSize: '15px', color: '#ce93d8' }).setOrigin(0.5)
+      glyph.setBlendMode(Phaser.BlendModes.ADD)
+      ring.add(glyph)
+    }
+    this.tweens.add({ targets: ring, angle: 220, scale: 1.5, alpha: 0, duration: 620, ease: 'Sine.out', onComplete: () => ring.destroy() })
+    // éclats d'arcanes qui montent
+    for (let i = 0; i < 10; i++) {
+      const sp = this.add.rectangle(x + Phaser.Math.Between(-26, 26), y + 12, 3, 10, color).setDepth(7).setBlendMode(Phaser.BlendModes.ADD)
+      this.tweens.add({ targets: sp, y: sp.y - Phaser.Math.Between(48, 82), alpha: 0, duration: 560, delay: i * 30, onComplete: () => sp.destroy() })
+    }
+  }
+
+  // Buff ARCHER — Œil du lynx : traits de vitesse VERTS qui filent horizontalement + double halo vert
+  // + plumes légères. Aura d'agilité, visuellement distincte du doré et du violet.
+  private agilityBuffFx(color: number) {
+    const x = this.player.x, y = this.player.y
+    this.cameras.main.shake(120, 0.004)
+    for (let i = 0; i < 2; i++) {
+      const halo = this.add.image(x, y, 'ring').setTint(color).setDepth(4).setBlendMode(Phaser.BlendModes.ADD).setScale(0.3).setAlpha(0.75)
+      this.tweens.add({ targets: halo, scale: 4 + i * 1.4, alpha: 0, duration: 460 + i * 120, delay: i * 80, ease: 'Cubic.out', onComplete: () => halo.destroy() })
+    }
+    // traits de vitesse qui filent de part et d'autre du panda
+    for (let i = 0; i < 10; i++) {
+      const dir = i % 2 === 0 ? 1 : -1
+      const sy = y + Phaser.Math.Between(-24, 24)
+      const streak = this.add.rectangle(x, sy, 22, 3, color).setDepth(7).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.9)
+      this.tweens.add({ targets: streak, x: x + dir * Phaser.Math.Between(60, 110), scaleX: 2.4, alpha: 0, duration: 380, delay: i * 26, onComplete: () => streak.destroy() })
     }
   }
 
@@ -2731,6 +2779,8 @@ export class LevelScene extends Phaser.Scene {
     this.checkPitDeath()
     if (this.player.hp <= 0) return
     this.player.regenEnergy(delta)
+    // Régénération PASSIVE (sabreur) : remonte lentement les PV hors combat si le passif est appris.
+    this.player.passiveRegen(delta, hpRegenPerSec(getPlayer()))
     // zones verticales chevauchées (échelle / eau) lues sur le centre du panda
     const onLad = this.ladderRects.find((r) => r.contains(this.player.x, this.player.y))
     this.player.onLadder = !!onLad

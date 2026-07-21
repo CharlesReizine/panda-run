@@ -21,6 +21,7 @@ const MAX_ENERGY = 100
 // « gratuits ». À 8/s, enchaîner des skills VIDE bel et bien la jauge : l'énergie redevient une
 // vraie ressource à gérer.
 const ENERGY_REGEN_PER_SEC = 8
+const REGEN_COMBAT_LOCK_MS = 3000 // délai « hors combat » après un coup reçu avant que la régén passive reprenne
 const ENERGY_PER_BASIC_HIT = 6
 const DIVE_SPEED = 1400 // vitesse de piqué vertical du Plongeon (px/s)
 // DOUBLE SAUT : n'est plus inné. C'est le SKILL passif 'double-saut' (lignée sabreur) qui l'ouvre.
@@ -105,6 +106,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private rageAura: Phaser.GameObjects.Image | null = null
   private rageTween: Phaser.Tweens.Tween | null = null
   private rageBlink: Phaser.Time.TimerEvent | null = null
+  // Régénération passive (sabreur) : dernier instant où le panda a été touché + accumulateur de PV
+  // fractionnaires. La régén ne coule que hors combat (quelques secondes après le dernier coup).
+  private lastDamagedAt = -99999
+  private regenAccum = 0
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, `panda-${getPlayer().classId}`)
@@ -198,12 +203,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   // applique (ou renouvelle) un buff d'attaque : multiplie les dégâts sortants un temps donné,
   // fait apparaître une aura dorée pulsante et notifie le HUD
-  applyAtkBuff(mult: number, durationMs: number) {
+  applyAtkBuff(mult: number, durationMs: number, auraColor = 0xffd54f) {
     this.buffMult = mult
     this.buffUntil = this.scene.time.now + durationMs
+    if (this.auraImage) this.auraImage.setTint(auraColor) // renouvellement : recolore l'aura selon la classe
     if (!this.auraImage) {
       this.auraImage = this.scene.add.image(this.x, this.y, 'ring')
-        .setTint(0xffd54f).setDepth(this.depth - 1).setAlpha(0.5).setScale(1.7)
+        .setTint(auraColor).setDepth(this.depth - 1).setAlpha(0.5).setScale(1.7)
       this.auraTween = this.scene.tweens.add({
         targets: this.auraImage, scale: 2.3, alpha: 0.8,
         duration: 480, yoyo: true, repeat: -1, ease: 'Sine.inOut',
@@ -581,9 +587,23 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   takeDamage(amount: number) {
     this.hp = Math.max(0, this.hp - amount)
+    this.lastDamagedAt = this.scene.time.now // suspend la régén passive un court instant (hors combat)
     this.setTint(0xff5555)
     this.scene.time.delayedCall(100, () => this.clearTint())
     this.emitHp()
+  }
+
+  // Régénération PASSIVE (sabreur) : rend `perSec` PV/s, mais uniquement hors combat (aucun coup reçu
+  // depuis REGEN_COMBAT_LOCK_MS). Accumule les PV fractionnaires pour rester fluide à bas taux.
+  passiveRegen(deltaMs: number, perSec: number) {
+    if (perSec <= 0 || this.hp <= 0 || this.hp >= this.stats.maxHp) return
+    if (this.scene.time.now < this.lastDamagedAt + REGEN_COMBAT_LOCK_MS) return
+    this.regenAccum += (perSec * deltaMs) / 1000
+    if (this.regenAccum >= 1) {
+      const whole = Math.floor(this.regenAccum)
+      this.regenAccum -= whole
+      this.heal(whole)
+    }
   }
 
   heal(amount: number) {

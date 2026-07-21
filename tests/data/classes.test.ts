@@ -10,15 +10,33 @@ const BASE_OF: Partial<Record<ClassId, ClassId>> = Object.fromEntries(
 )
 
 describe('données classes/skills', () => {
-  it('7 classes, novice 3 skills, sabreur/chevalier 10 (Folie enragée + Double saut), les autres 8', () => {
+  it('7 classes ; novice 3 ; arbres : sabreur/chevalier/archer/chasseur 10, mage/sorcier 9', () => {
     expect(Object.keys(CLASSES)).toHaveLength(7)
     expect(CLASSES.novice.skillIds).toHaveLength(3)
-    // le sabreur et son évolution portent Folie enragée + le passif Double saut en plus → 10 skills
-    for (const id of ['swordsman', 'chevalier'] as const) {
+    // arbres à branches offensives + buff unique + passifs (dont régén sabreur, réflexes archer)
+    for (const id of ['swordsman', 'chevalier', 'archer', 'chasseur'] as const) {
       expect(CLASSES[id].skillIds).toHaveLength(10)
     }
-    for (const id of ['mage', 'archer', 'sorcier', 'chasseur'] as const) {
-      expect(CLASSES[id].skillIds).toHaveLength(8)
+    // mage/sorcier : un passif de moins dans l'arbre → 9 compétences
+    for (const id of ['mage', 'sorcier'] as const) {
+      expect(CLASSES[id].skillIds).toHaveLength(9)
+    }
+  })
+
+  it('un seul skill de buff (kind buff, non-passif) par classe combattante', () => {
+    for (const id of ['swordsman', 'mage', 'archer', 'chevalier', 'sorcier', 'chasseur'] as const) {
+      const buffs = CLASSES[id].skillIds.filter((sid) => SKILLS[sid]!.kind === 'buff')
+      expect(buffs, `${id}: ${buffs.join(',')}`).toHaveLength(1)
+    }
+  })
+
+  it('chaque compétence à prérequis a son parent présent dans l arbre de la classe', () => {
+    for (const c of Object.values(CLASSES)) {
+      const ids = new Set(c.skillIds)
+      for (const sid of c.skillIds) {
+        const req = SKILLS[sid]!.requires
+        if (req) expect(ids.has(req), `${c.id} → ${sid} requiert ${req}`).toBe(true)
+      }
     }
   })
 

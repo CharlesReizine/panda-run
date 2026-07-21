@@ -65,7 +65,10 @@ export class SkillEquipScene extends Phaser.Scene {
     const p = getPlayer()
     this.add.rectangle(480, 270, 960, 540, 0x0d1b2a, 0.96)
     this.add.text(480, 16, 'Compétences', { fontSize: '24px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
-    this.add.text(480, 40, `Points à dépenser : ${p.skillPoints}`, { fontSize: '14px', color: '#ffd54f' }).setOrigin(0.5)
+    this.add.text(480, 36, `Points à dépenser : ${p.skillPoints}`, { fontSize: '14px', color: '#ffd54f' }).setOrigin(0.5)
+    // Légende de l'arbre : « ↳ » marque une compétence enfant (débloque son parent d'abord) ; les cartes
+    // verrouillées sont grisées et affichent la raison (niveau ou prérequis manquant).
+    this.add.text(480, 51, 'Arbre — ↳ = requiert la compétence parente · carte grisée = verrouillée (raison affichée)', { fontSize: '10px', color: '#78909c' }).setOrigin(0.5)
 
     const btn = (x: number, y: number, label: string, bg: number, onTap: () => void) =>
       this.add.text(x, y, label, { fontSize: '13px', color: '#ffffff', backgroundColor: `#${bg.toString(16)}`, padding: { x: 8, y: 4 } })
@@ -128,12 +131,21 @@ export class SkillEquipScene extends Phaser.Scene {
       // Tap sur l'icône = ouvre la fiche de détail
       icon.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showDetail(s))
 
-      // Aperçu = NOM SEUL (+ rang / état). Pas de description ici — elle est dans la fiche détail.
+      // Aperçu = NOM (préfixe ↳ pour un enfant d'arbre) + état. Description dans la fiche détail.
       const nameColor = unlocked ? '#ffffff' : locked ? '#607d8b' : '#b0bec5'
-      this.add.text(x + 62, y + 8, s.name, { fontSize: '13px', color: nameColor, fontStyle: 'bold', wordWrap: { width: colW - 168 }, lineSpacing: -2 })
-      const stateTxt = unlocked ? `Nv ${rank}/${MAX_SKILL_RANK}` : locked ? lock! : 'À débloquer'
+      const childMark = s.requires ? '↳ ' : ''
+      this.add.text(x + 62, y + 5, childMark + s.name, { fontSize: '13px', color: nameColor, fontStyle: 'bold', wordWrap: { width: colW - 150 }, lineSpacing: -3 })
+      // Ligne d'arbre PERSISTANTE : prérequis (parent) + niveau requis, en vert si rempli, rouge sinon.
+      const treeBits: string[] = []
+      if (s.requires) { const req = SKILLS[s.requires]; treeBits.push(req ? req.name : s.requires) }
+      if ((s.minLevel ?? 1) > 1) treeBits.push(`Nv ${s.minLevel}`)
+      if (treeBits.length) {
+        const reqMet = !this.lockReason(p, s)
+        this.add.text(x + 62, y + 29, `requiert : ${treeBits.join(' · ')}${reqMet ? ' ✓' : ''}`, { fontSize: '10px', color: reqMet ? '#81c784' : '#ef9a9a', wordWrap: { width: colW - 96 } })
+      }
+      const stateTxt = unlocked ? `Nv ${rank}/${MAX_SKILL_RANK}` : locked ? `🔒 ${lock!}` : 'À débloquer'
       const stateColor = unlocked ? '#ffd54f' : locked ? '#ef9a9a' : '#90caf9'
-      this.add.text(x + 62, y + 40, stateTxt, { fontSize: '11px', color: stateColor })
+      this.add.text(x + 62, y + 46, stateTxt, { fontSize: '11px', color: stateColor })
 
       // Bouton info (fiche de détail) — discret, à droite de l'icône
       this.add.text(x + 46, y + cardH / 2 + 14, 'ℹ', { fontSize: '13px', color: '#4fc3f7', backgroundColor: '#0b2536', padding: { x: 4, y: 1 } })
@@ -219,6 +231,7 @@ export class SkillEquipScene extends Phaser.Scene {
       if (s.passive?.maxHp) parts.push(`+${s.passive.maxHp} PV max`)
       if (s.passive?.def) parts.push(`+${s.passive.def} DÉF`)
       if (s.passive?.attackSpeed) parts.push(`+${s.passive.attackSpeed} vit. att.`)
+      if (s.passive?.hpRegenPerSec) parts.push(`+${s.passive.hpRegenPerSec} PV/s régén`)
       panel.add(this.add.text(left, y, 'Passif — toujours actif une fois appris (hors slots)', { fontSize: '13px', color: '#ce93d8' }).setOrigin(0, 0))
       y += 20
       panel.add(this.add.text(left, y, `Bonus par rang : ${parts.join('   ') || '—'}${rank > 0 ? `   (rang ${rank})` : ''}`, { fontSize: '13px', color: '#e1bee7', fontStyle: 'bold' }).setOrigin(0, 0))
