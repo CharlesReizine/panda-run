@@ -510,6 +510,14 @@ export class TownScene extends Phaser.Scene {
     txt.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel())
     c.add(bg)
     c.add(txt)
+    // La caméra suit le panda (monde 1440×860 > viewport) : le container est épinglé à l'écran via
+    // scrollFactor 0, MAIS le hit-test Phaser d'un ENFANT utilise le scrollFactor de l'enfant, pas
+    // celui du container. Resté à 1, il décale le hit-test de la valeur de scroll caméra → TOUS les
+    // boutons du panneau (Acheter, Forger, Vendre…) deviennent incliquables dès qu'on s'éloigne du
+    // point de départ. NB : `container.setScrollFactor(0, 0, true)` ne suffit PAS — son SetAll ignore
+    // les enfants dont `scrollFactorX` n'est qu'hérité du prototype (hasOwnProperty=false). On force
+    // donc explicitement chaque enfant à 0 (drawCloseCross est le dernier appel de chaque panneau).
+    for (const o of c.list) (o as Partial<Phaser.GameObjects.Components.ScrollFactor>).setScrollFactor?.(0)
   }
 
   // Contrôles de pagination (◀ Page x/y ▶) centrés dans le pied du panneau. N'affiche rien s'il
