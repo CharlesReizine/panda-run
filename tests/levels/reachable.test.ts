@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { LEVELS, type LevelDef } from '../../src/data/levels'
+import { LEVELS, LEVEL_MODULE_KINDS, type LevelDef } from '../../src/data/levels'
 import {
   unreachablePlatforms,
   laddersToNowhere,
@@ -13,6 +13,7 @@ import {
   monstersOffSurface,
   startExitProblems,
   unlevelWaterBanks,
+  suspendedWaterBanks,
   deadEndSurfaces,
 } from '../../src/core/level-validator'
 import { MAX_LADDER_TILES } from '../../src/core/platforming'
@@ -109,6 +110,11 @@ describe('kit de modules — jouabilité + cohérence des niveaux modulaires', (
     it(`${id} — rebords de plan d'eau À NIVEAU (surface horizontale, berges de même altitude)`, () => {
       const bad = unlevelWaterBanks(level)
       expect(bad, `${id}: rebords désaxés → ${JSON.stringify(bad)}`).toEqual([])
+    })
+
+    it(`${id} — aucun lac SUSPENDU (cuve fermée, jamais d'eau qui domine le vide sur un bord ouvert)`, () => {
+      const bad = suspendedWaterBanks(level)
+      expect(bad, `${id}: eau suspendue → ${JSON.stringify(bad)}`).toEqual([])
     })
 
     it(`${id} — aucun piège sans retour (remonter vers la sortie OU mourir, jamais coincé vivant)`, () => {
@@ -223,13 +229,44 @@ describe('kit de modules — cas de rejet synthétiques', () => {
     expect(b[0]!.side).toBe('droite')
   })
 
-  it('bord OUVERT (passage sous-marin) → berge de ce côté exemptée', () => {
+  it('bord OUVERT (passage sous-marin) → berge de ce côté exemptée par unlevelWaterBanks', () => {
     const ok: LevelDef = {
       id: 'synth-berges-open', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],
       platforms: [{ x: 3, y: 11, w: 4 }, { x: 15, y: 14, w: 4 }], // droite basse mais côté OUVERT
       hazards: [{ kind: 'water', x: 7, w: 8, top: 11, h: 6, water: 'basin', openSide: 'right' }],
     }
     expect(unlevelWaterBanks(ok)).toEqual([])
+  })
+
+  it('LAC SUSPENDU : bord OUVERT dont le sol voisin domine loin sous la surface → rejeté (eau qui vole)', () => {
+    // reproduit le bug systémique du passage-immerge (plaine-3/7) : surface à row 11, mais le seul sol
+    // du bord ouvert est 3 rangées PLUS BAS → la colonne d'eau flotte au-dessus du terrain.
+    const bad: LevelDef = {
+      id: 'synth-eau-suspendue', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],
+      platforms: [{ x: 3, y: 11, w: 4 }, { x: 15, y: 14, w: 4 }],
+      hazards: [{ kind: 'water', x: 7, w: 8, top: 11, h: 6, water: 'basin', openSide: 'right' }],
+    }
+    const b = suspendedWaterBanks(bad)
+    expect(b).toHaveLength(1)
+    expect(b[0]!.side).toBe('droite')
+  })
+
+  it('bord OUVERT dont le sol voisin est AU RAS de la surface → accepté (pas suspendu)', () => {
+    const ok: LevelDef = {
+      id: 'synth-eau-non-suspendue', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],
+      platforms: [{ x: 3, y: 11, w: 4 }, { x: 15, y: 11, w: 4 }], // bord droit ouvert MAIS au niveau
+      hazards: [{ kind: 'water', x: 7, w: 8, top: 11, h: 4, water: 'basin', openSide: 'right' }],
+    }
+    expect(suspendedWaterBanks(ok)).toEqual([])
+  })
+
+  it('cuve FERMÉE (aucun bord ouvert) → jamais signalée suspendue', () => {
+    const ok: LevelDef = {
+      id: 'synth-cuve-fermee', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],
+      platforms: [{ x: 3, y: 11, w: 4 }, { x: 15, y: 11, w: 4 }],
+      hazards: [{ kind: 'water', x: 7, w: 8, top: 11, h: 4, water: 'basin' }],
+    }
+    expect(suspendedWaterBanks(ok)).toEqual([])
   })
 
   it('piège sans retour : sortie HAUTE injoignable, aucune mort possible → rejeté', () => {
@@ -260,6 +297,36 @@ describe('kit de modules — cas de rejet synthétiques', () => {
       platforms: [{ x: 2, y: 14, w: 6 }, { x: 33, y: 5, w: 5 }],
     }
     expect(deadEndSurfaces(okDie)).toEqual([])
+  })
+})
+
+// ─── VARIÉTÉ DES MOTIFS : le générateur doit PARCOURIR le catalogue (anti-boring) ───────────────
+// Retour user : « les terrains se ressemblent, tu utilises bien tous tes motifs ? ». On verrouille
+// ici que les motifs jusque-là JAMAIS posés sont désormais utilisés, et qu'aucun motif ne monopolise.
+describe('variété des motifs de niveau (couverture du catalogue)', () => {
+  const freq: Record<string, number> = {}
+  let totalModules = 0
+  for (const kinds of Object.values(LEVEL_MODULE_KINDS)) for (const k of kinds) { freq[k] = (freq[k] ?? 0) + 1; totalModules++ }
+  const usedKinds = Object.keys(freq).length
+
+  it('les motifs d’eau jadis inutilisés (petit-pont, trou-filet, pas-japonais) sont désormais posés', () => {
+    for (const k of ['petit-pont', 'trou-filet', 'pas-japonais']) {
+      expect(freq[k] ?? 0, `${k} jamais utilisé`).toBeGreaterThan(0)
+    }
+  })
+
+  it('les marches de PIERRE (escalier-pierre) apparaissent en biome rocheux', () => {
+    expect(freq['escalier-pierre'] ?? 0, 'escalier-pierre jamais utilisé').toBeGreaterThan(0)
+  })
+
+  it('le générateur couvre largement le catalogue (≥ 38 motifs distincts)', () => {
+    expect(usedKinds, `seulement ${usedKinds} motifs distincts`).toBeGreaterThanOrEqual(38)
+  })
+
+  it('aucun motif de MILIEU ne monopolise (hors plateau de spawn, < 40 % des modules)', () => {
+    const nonSpawn = Object.entries(freq).filter(([k]) => k !== 'plateau')
+    const maxShare = Math.max(...nonSpawn.map(([, n]) => n)) / totalModules
+    expect(maxShare, `motif le plus fréquent = ${(maxShare * 100).toFixed(1)} %`).toBeLessThan(0.4)
   })
 })
 

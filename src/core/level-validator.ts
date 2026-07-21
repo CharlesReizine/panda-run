@@ -291,6 +291,35 @@ export function unlevelWaterBanks(level: LevelDef): BankProblem[] {
   return out
 }
 
+// ─── EAU SUSPENDUE DANS LE VIDE (retour user : « de l'eau qui vole », « rebord gauche plus haut ») ──
+// La SURFACE d'un lac marine est HORIZONTALE et PLANE : la cuve doit être FERMÉE sur ses deux bords,
+// bancs à la MÊME rangée que la surface. `unlevelWaterBanks` (ci-dessus) EXEMPTE les bords ouverts
+// (openSide, ex-passage sous-marin) — c'est justement le trou par lequel passait le lac « suspendu » :
+// un bord ouvert dont le sol voisin est BIEN PLUS BAS que la surface (colonne d'eau qui domine le
+// terrain de plusieurs rangées, sans paroi de ce côté) = de l'eau qui vole. On l'attrape ici : pour
+// chaque cuve marine/lave à bord OUVERT, on lit la surface marchable juste à l'extérieur de ce bord ;
+// si elle tombe SOUS la ligne d'eau (au-delà d'1 rangée de tolérance), la surface flotte → faute.
+const SUSPENDED_TOL = 1 // rangées de tolérance : au-delà, le sol voisin est trop bas → eau suspendue
+export function suspendedWaterBanks(level: LevelDef): BankProblem[] {
+  const surfaces: Plat[] = [...level.platforms, ...(level.bridges ?? [])]
+  const topSurfaceAt = (col: number): number | undefined => {
+    let best: number | undefined
+    for (const s of surfaces) if (col >= s.x && col < s.x + s.w) best = best === undefined ? s.y : Math.min(best, s.y)
+    return best
+  }
+  const out: BankProblem[] = []
+  for (const h of level.hazards ?? []) {
+    if (h.kind !== 'water' || (h.water !== 'basin' && h.water !== 'lave')) continue
+    const surfaceRow = h.top ?? groundRowFor(level.heightTiles) - 2
+    const openL = h.openSide === 'left' || h.openSide === 'both'
+    const openR = h.openSide === 'right' || h.openSide === 'both'
+    // on ne regarde QUE les bords ouverts : les bords fermés sont déjà couverts par unlevelWaterBanks.
+    if (openL) { const b = topSurfaceAt(h.x - 1); if (b !== undefined && b > surfaceRow + SUSPENDED_TOL) out.push({ x: h.x, w: h.w, side: 'gauche', bankRow: b, surfaceRow }) }
+    if (openR) { const b = topSurfaceAt(h.x + h.w); if (b !== undefined && b > surfaceRow + SUSPENDED_TOL) out.push({ x: h.x, w: h.w, side: 'droite', bankRow: b, surfaceRow }) }
+  }
+  return out
+}
+
 // ─── ANTI-SOFTLOCK : « pas de piège sans retour » (retour user : on tombe, on est coincé vivant) ──
 // Depuis TOUTE position atteignable, si le joueur tombe sur un palier inférieur il doit TOUJOURS
 // pouvoir REMONTER vers la sortie (échelle/plateformes/nage) OU la chute doit être MORTELLE (trou

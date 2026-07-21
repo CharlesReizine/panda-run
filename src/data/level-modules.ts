@@ -1105,6 +1105,7 @@ export interface ComposeOpts {
   mvp?: string           // MVP rare posé dans un module de risque tardif
   midCount?: number      // nb de modules centraux (défaut 5)
   allowLadders?: boolean // autoriser les motifs à échelle (niveau 1 : false pour rester simple)
+  stony?: boolean // biome ROCHEUX : autorise les marches de PIERRE rigides (escalier-pierre)
   waterKinds?: ModuleKind[] // plans d'eau imposés (variété entre niveaux)
   lava?: boolean // ENFER : les cuves marine (bassin/tresor-bassin/petit-pont) deviennent de la LAVE mortelle
   seed?: string
@@ -1115,6 +1116,13 @@ const FAMILY_BUCKET: Record<Family, 'filler' | 'traverse' | 'risque' | 'tension'
 }
 
 export function composeLevel(o: ComposeOpts): LevelDef {
+  return buildLevelFromModules(planModules(o), { id: o.id, name: o.name, biome: o.biome, seed: o.seed })
+}
+
+// Sélection DÉTERMINISTE de la liste de modules d'un niveau (sans expansion géométrique). Extrait de
+// composeLevel pour être INTROSPECTABLE (rapport de diversité des motifs, cf. LEVEL_MODULE_KINDS) —
+// composeLevel = planModules + buildLevelFromModules. Aucune logique de choix modifiée.
+export function planModules(o: ComposeOpts): Module[] {
   const rng = mulberry32(hashSeed(o.seed ?? o.id))
   const pick = <T>(arr: T[]): T => arr[Math.floor(rng() * arr.length)] ?? arr[0]!
   // DENSITÉ D'OISEAUX : les beats de PLEIN AIR respirent trop avec 1 seul oiseau. On densifie selon le
@@ -1144,7 +1152,8 @@ export function composeLevel(o: ComposeOpts): LevelDef {
       if (s.ladder && !allowLadders) return false
       if (s.water) return false // eau imposée séparément
       if (k === 'plateau' || k === 'arene') return false // réservés spawn / climax
-      if (k === 'escalier-pierre') return false // marches de PIERRE : posées EXPLICITEMENT (biomes rocheux), pas au hasard
+      // marches de PIERRE rigides : uniquement en biome ROCHEUX (ailleurs incongru), jamais ailleurs.
+      if (k === 'escalier-pierre') return !!o.stony
       return true
     })
 
@@ -1233,5 +1242,5 @@ export function composeLevel(o: ComposeOpts): LevelDef {
     else modules.push(mk('echelle-tranquille', { exitHere: true, ground: nextGround(), tags: ['montée'] }))
   }
 
-  return buildLevelFromModules(modules, { id: o.id, name: o.name, biome: o.biome, seed: o.seed })
+  return modules
 }

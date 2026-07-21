@@ -456,9 +456,10 @@ export class LevelScene extends Phaser.Scene {
         continue
       }
 
-      // NAPPE (basin OU libre) : rendu tuilé en UN TileSprite + liseré de surface.
+      // NAPPE (basin OU libre) : rendu tuilé en UN TileSprite + liseré de surface + ONDULATION continue.
       this.add.tileSprite(xPx, topPx, wPx, heightPx, 'water').setOrigin(0, 0).setDepth(-3)
       this.add.rectangle(xPx, topPx, wPx, 5, 0x9fdcff, 0.5).setOrigin(0, 0).setDepth(-1)
+      this.addSurfaceRipple(xPx, topPx, wPx) // vaguelettes qui bobbent le long de la surface
       this.waterRects.push(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))
 
       if (hz.water === 'basin') {
@@ -1356,17 +1357,16 @@ export class LevelScene extends Phaser.Scene {
     })
   }
 
-  // ÉCLABOUSSURE d'entrée dans l'eau : quand le panda franchit la surface (hors-eau → dans l'eau), une
-  // gerbe de GOUTTELETTES bleu clair jaillit vers le haut/les côtés depuis le point d'impact puis
-  // retombe (spreadUp + gravity), doublée d'un petit anneau d'onde aplati qui s'ouvre à la surface,
-  // ET d'un CREUX de surface (ressac) : la ligne d'eau se creuse au point d'impact puis rebondit à
-  // plat en ~0,45 s (amorti). Léger, purement décoratif — aucun impact gameplay.
+  // ONDULATION D'ENTRÉE dans un LAC MARINE : quand le panda franchit la surface, la ligne d'eau ONDULE
+  // au point d'impact — un CREUX de surface (ressac amorti) doublé de VAGUELETTES concentriques (2-3
+  // anneaux d'onde aplatis) qui s'ouvrent et s'estompent. Propre et discret — plus de gerbe de
+  // gouttelettes (retour user : « splash moche »). Purement décoratif, aucun impact gameplay.
   private waterSplashFx(x: number, surfaceY: number) {
     // creux de surface (ressac) : une lentille couleur surface qui s'enfonce brièvement sous la ligne
     // d'eau au point d'impact (creusement) puis remonte à plat avec un léger rebond amorti (Back.out).
-    const dip = this.add.ellipse(x, surfaceY, 34, 10, 0x9fdcff, 0.85).setDepth(-1)
+    const dip = this.add.ellipse(x, surfaceY, 30, 9, 0x9fdcff, 0.8).setDepth(-1)
     this.tweens.add({
-      targets: dip, y: surfaceY + 11, scaleX: 1.2, scaleY: 1.5, duration: 120, ease: 'Quad.in',
+      targets: dip, y: surfaceY + 9, scaleX: 1.15, scaleY: 1.4, duration: 120, ease: 'Quad.in',
       onComplete: () => {
         this.tweens.add({
           targets: dip, y: surfaceY, scaleX: 1, scaleY: 0.3, alpha: 0, duration: 340, ease: 'Back.out',
@@ -1374,12 +1374,30 @@ export class LevelScene extends Phaser.Scene {
         })
       },
     })
-    // anneau d'onde aplati qui s'élargit à la surface
-    const ring = this.add.image(x, surfaceY, 'ring').setTint(0xb3e5fc)
-      .setBlendMode(Phaser.BlendModes.ADD).setDepth(this.player.depth - 1).setScale(0.12).setAlpha(0.75)
-    this.tweens.add({ targets: ring, scaleX: 1.4, scaleY: 0.5, alpha: 0, duration: 340, ease: 'Cubic.out', onComplete: () => ring.destroy() })
-    // gerbe de gouttelettes : éventail vers le haut qui retombe
-    this.burstParticles(x, surfaceY, 14, 0x81d4fa, { speed: 120, size: 4, durationMs: 460, spreadUp: true, gravity: true })
+    // VAGUELETTES : anneaux d'onde aplatis concentriques qui s'élargissent à la surface, décalés dans
+    // le temps → l'eau « ondule » autour du point d'entrée (ripple), sans éclaboussure verticale.
+    for (let i = 0; i < 3; i++) {
+      const ring = this.add.ellipse(x, surfaceY, 18, 6, 0xbfe9ff, 0.6 - i * 0.12).setDepth(-1)
+      this.tweens.add({
+        targets: ring, scaleX: 2.4 + i * 0.7, scaleY: 1.5, alpha: 0,
+        duration: 460 + i * 140, delay: i * 90, ease: 'Cubic.out', onComplete: () => ring.destroy(),
+      })
+    }
+  }
+
+  // ONDULATION CONTINUE de la ligne d'eau d'un lac marine : un chapelet de vaguelettes bobbe doucement
+  // en décalé le long de la surface → la surface « respire » au lieu d'une ligne figée. Discret et sans
+  // coût dans update (tweens en boucle auto-animés). Posé au montage de chaque cuve marine.
+  private addSurfaceRipple(xPx: number, topPx: number, wPx: number) {
+    const n = Math.max(2, Math.round(wPx / 26))
+    for (let i = 0; i < n; i++) {
+      const wx = xPx + (i + 0.5) * (wPx / n)
+      const w = this.add.ellipse(wx, topPx, 22, 5, 0xbfe9ff, 0.5).setDepth(-1)
+      this.tweens.add({
+        targets: w, y: topPx - 2, scaleX: 1.3, scaleY: 0.7,
+        duration: 950 + (i % 3) * 240, yoyo: true, repeat: -1, ease: 'Sine.inOut', delay: i * 170,
+      })
+    }
   }
 
   // petite jauge d'apnée au-dessus de la tête : visible seulement quand le souffle n'est pas plein
@@ -3059,9 +3077,10 @@ export class LevelScene extends Phaser.Scene {
     // surface (ligne d'eau) de la nappe/colonne courante : le Player s'en sert pour SORTIR de l'eau
     // en sautant (près de la surface, nager vers le haut donne une vraie détente hors de l'eau).
     this.player.waterSurfaceY = containingWater ? containingWater.top : Number.POSITIVE_INFINITY
-    // ENTRÉE dans l'eau (front montant de inWater) : le panda vient de franchir la surface → gerbe de
-    // gouttelettes à la surface de la nappe/colonne traversée. Purement décoratif, non bloquant.
-    if (this.player.inWater && !this.wasInWater && containingWater) {
+    // ENTRÉE dans un LAC MARINE (front montant de inWater, hors cascade) : la surface ONDULE au point
+    // d'impact (ripple de vaguelettes). On EXCLUT la cascade — y « tomber » se fait par le bas de la
+    // colonne, un splash posé en haut du rideau serait faux (retour user : gouttes parasites en haut).
+    if (this.player.inWater && !this.wasInWater && !this.player.inCascade && containingWater) {
       this.waterSplashFx(this.player.x, containingWater.top)
     }
     this.wasInWater = this.player.inWater

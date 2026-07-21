@@ -69,8 +69,18 @@ export interface LevelDef {
   boss?: string
 }
 
-import { composeLevel, type ModuleKind, type Tier } from './level-modules'
-import { overStackedColumns, unlevelWaterBanks, deadEndSurfaces } from '../core/level-validator'
+import { composeLevel, planModules, type ComposeOpts, type ModuleKind, type Tier } from './level-modules'
+import {
+  overStackedColumns, unlevelWaterBanks, deadEndSurfaces, suspendedWaterBanks,
+  unreachablePlatforms, laddersToNowhere, unreachableLadders, unreachableChests,
+  oversizedGaps, oversizedLadders, monstersOffSurface,
+} from '../core/level-validator'
+import { MONSTERS } from './monsters'
+
+// Motifs (module kinds) EFFECTIVEMENT retenus par niveau de terrain — peuplé pendant la construction
+// de `list`. Sert au rapport de diversité (script d'instrumentation) et au test de variété : on peut
+// vérifier quels motifs sortent, leur fréquence, et qu'aucun catalogue n'est laissé inutilisé.
+export const LEVEL_MODULE_KINDS: Record<string, ModuleKind[]> = {}
 
 const plat = (x: number, y: number, w: number) => ({ x, y, w })
 
@@ -101,13 +111,23 @@ const POOLS: Record<string, BiomePool> = {
 }
 
 // Rotation de plans d'eau (variété d'un niveau à l'autre) : chaque entrée = les cuves imposées.
-// L'ensemble couvre bassin marine (noyade) ET cascade remontable (exigé par reachable.test).
+// L'ensemble couvre bassin marine (noyade) ET cascade remontable (exigé par reachable.test). Chaque
+// entrée porte AU MOINS un coffre (bassin/tresor-bassin/cascade/sortie-humide/petit-pont). TOUTES les
+// cuves sont FERMÉES à bancs égaux (plus de passage-immerge à bord ouvert = fini les lacs suspendus,
+// cf. suspendedWaterBanks). On enrichit la rotation pour SORTIR les motifs d'eau jusque-là inutilisés
+// (petit-pont, trou-filet, pas-japonais → pas de pierre / gués sur cuve) et varier les niveaux.
 const WATER_ROT: ModuleKind[][] = [
   ['bassin', 'cascade'],
+  ['tresor-bassin', 'sortie-humide'],
+  ['pas-japonais', 'cascade'],
+  ['petit-pont', 'bassin'],
+  ['trou-filet', 'cascade'],
   ['tresor-bassin', 'cascade'],
-  ['passage-immerge', 'bassin'],
-  ['bassin', 'sortie-humide'],
 ]
+
+// Biomes ROCHEUX : on y autorise les MARCHES DE PIERRE rigides (escalier-pierre), jusque-là jamais
+// posées. Ailleurs (prairie, forêt…) elles resteraient incongrues → réservées à la pierre/roche.
+const STONY_BIOMES = new Set(['cave', 'montagne', 'carriere', 'enfer'])
 
 // LAC EN U (passage sous-marin symétrique) : placé sur 1-2 niveaux à eau. Toujours APPARIÉ à une
 // cuve porteuse de coffre (cascade/bassin) → chaque niveau garde son coffre exigé. Plage = mobs
@@ -139,6 +159,7 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
     ...(useMvp ? { mvp: pool.mvp } : {}),
     midCount,
     allowLadders,
+    stony: STONY_BIOMES.has(biome),
     // En ENFER, les cuves marine deviennent de la LAVE (aucun coffre de plongée) : on garantit alors
     // au moins une CASCADE remontable (seule cuve qui pose un coffre en biome lave) → chaque niveau
     // conserve son coffre exigé par la registry de props.
@@ -152,14 +173,28 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   // Certaines graines produisent une colonne à 4 paliers empilés, un rebord de lac désaxé, ou un
   // piège sans retour (softlock). On essaie des graines salées et on garde la PREMIÈRE silhouette
   // conforme à TOUS ces invariants — déterministe (aucun Math.random), stable d'un build à l'autre.
+  // Conforme à TOUS les invariants vérifiés par reachable.test : silhouette (≤3 paliers), eau (bancs
+  // à niveau, jamais suspendue), pas de piège sans retour, ET atteignabilité physique complète
+  // (plateformes/échelles/coffres joignables, trous et échelles dans les bornes, monstres posables).
+  // La rotation de plans d'eau (WATER_ROT) + le rejet de l'eau suspendue font bouger la géométrie →
+  // sans cette batterie complète, une graine pouvait produire un niveau injouable non rejeté
+  // (plateforme injoignable). Déterministe (aucun Math.random) : même silhouette d'un build à l'autre.
+  const isAerial = (mid: string) => !!MONSTERS[mid]?.aerial
   const clean = (l: LevelDef) =>
-    overStackedColumns(l, 3).length === 0 && unlevelWaterBanks(l).length === 0 && deadEndSurfaces(l).length === 0
-  const salts = [`${id}-${ending}`, ...Array.from({ length: 40 }, (_, i) => `${id}-${ending}-${i}`)]
-  let level = composeLevel({ ...base, seed: salts[0]! })
+    overStackedColumns(l, 3).length === 0 && unlevelWaterBanks(l).length === 0
+    && suspendedWaterBanks(l).length === 0 && deadEndSurfaces(l).length === 0
+    && unreachablePlatforms(l).length === 0 && laddersToNowhere(l).length === 0
+    && unreachableLadders(l).length === 0 && unreachableChests(l).length === 0
+    && oversizedGaps(l).length === 0 && oversizedLadders(l).length === 0
+    && monstersOffSurface(l, isAerial).length === 0
+  const salts = [`${id}-${ending}`, ...Array.from({ length: 80 }, (_, i) => `${id}-${ending}-${i}`)]
+  let chosen = salts[0]!
+  let level = composeLevel({ ...base, seed: chosen })
   for (const seed of salts) {
     const l = composeLevel({ ...base, seed })
-    if (clean(l)) { level = l; break }
+    if (clean(l)) { level = l; chosen = seed; break }
   }
+  LEVEL_MODULE_KINDS[id] = planModules({ ...(base as ComposeOpts), seed: chosen }).map((m) => m.kind)
   return level
 }
 

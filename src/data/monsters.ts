@@ -88,7 +88,7 @@ const list: MonsterDef[] = [
     ],
   },
   {
-    id: 'dragon-flamme', name: 'Dragon de flamme', lore: 'Terreur écailleuse au souffle brûlant : majestueux, féroce, il ne laisse que des cendres.', color: 0xc62828, hp: 1450, atk: 235, def: 52, xp: 9500, level: 60, speed: 60, behavior: 'charge', mvp: true,
+    id: 'dragon-flamme', name: 'Dragon de flamme', lore: 'Terreur écailleuse au souffle brûlant : majestueux, féroce, il ne laisse que des cendres.', color: 0xc62828, hp: 1450, atk: 235, def: 52, xp: 9500, level: 59, speed: 60, behavior: 'charge', mvp: true,
     drops: [
       { kind: 'gold', chance: 1, min: 180, max: 300 },
       { kind: 'potion', chance: 0.6, min: 1, max: 1 },

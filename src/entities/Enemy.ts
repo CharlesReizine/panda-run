@@ -553,6 +553,19 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.setVelocityX(0)
     }
 
+    // GARDE-REBORD UNIVERSELLE (retour user : « des monstres qui se jettent tous dans le trou ») : un
+    // mob TERRESTRE (ni aquatique ni volant) ne franchit JAMAIS un bord vers le vide/l'eau mortelle,
+    // MÊME EN POURSUITE. La détection de rebord des branches ci-dessus n'agit qu'à l'approche (pas
+    // pendant une RUÉE de charge ni un BOND de coup) → on l'impose ici, en dernier ressort, sur la
+    // vélocité effective : s'il pousse vers une colonne sans sol au niveau de ses pieds (trou, cascade,
+    // cuve marine/lave profonde — floorAt y est faux), on annule sa vitesse horizontale. Il s'arrête au
+    // bord et continue de harceler à distance (tirs/sorts inchangés). Aquatiques/volants non concernés.
+    if (!this.monster.aquatic) {
+      const body = this.body as Phaser.Physics.Arcade.Body
+      const vx = body.velocity.x
+      if (body.blocked.down && Math.abs(vx) > 5 && !this.floorAhead(Math.sign(vx))) this.setVelocityX(0)
+    }
+
     this.updateVisuals(t)
   }
 
