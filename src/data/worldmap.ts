@@ -8,7 +8,9 @@ export interface MapNode {
   theme?: 'europeen' | 'marocain' // thème visuel de la ville (pilote TownScene) ; absent = terrain
 }
 
-export const START_NODE = 'prontera'
+// on démarre sur le premier terrain de plaine (Prairie, en haut-gauche), pas à Prontera :
+// le tronc plaine-1 → … → plaine-5 → prontera reste le parcours pour atteindre la ville juste après.
+export const START_NODE = 'plaine-1'
 
 // NOUVEAU MONDE — carte A (docs/worldmap-spec.md). Repère 960×540. Un sentier principal serpente
 // depuis la plaine de Prontera jusqu'aux enfers, en s'ouvrant régulièrement en branches (forêt, désert,

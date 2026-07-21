@@ -80,8 +80,9 @@ export class WorldMapScene extends Phaser.Scene {
       }
     }
 
-    // brouillard de guerre : couvre les nœuds encore non révélés (dessiné APRÈS les nœuds/labels
-    // pour les masquer ; sous les boutons d'UI ci-dessous, remontés à un depth supérieur)
+    // brouillard de guerre INVERSÉ : voile sombre plein écran, percé d'un halo de LUMIÈRE autour
+    // de chaque nœud RÉVÉLÉ (fait/courant/voisin révélé). Dessiné APRÈS les nœuds/labels pour teinter
+    // le lointain ; sous les boutons d'UI ci-dessous, remontés à un depth supérieur.
     this.drawFog(byId, revealed)
 
     // marqueur du panda sur le nœud courant
@@ -127,80 +128,26 @@ export class WorldMapScene extends Phaser.Scene {
     return revealed
   }
 
-  // Voile nuageux : par-dessus la carte NORMALE, un gros nuage gris semi-transparent masque les
-  // zones lointaines et se lève au fur et à mesure. Aucun noir opaque : un dégradé selon la
-  // distance (en sauts) au front de progression (nœuds révélés). Bord flou via un « puff » radial.
-  //   distance 0 (révélé)   → aucun voile
-  //   distance 1 (n+1)      → voile léger  (on devine le terrain)
-  //   distance 2 (n+2)      → voile moyen
-  //   distance ≥3 (lointain)→ voile plus dense mais JAMAIS opaque
-  private readonly VEIL_COLOR = 0x3a3f4a // gris bleuté, jamais 0x000000
-  private readonly BAND_ALPHA: Record<number, number> = { 1: 0.36, 2: 0.56, 3: 0.72 }
+  // Brouillard INVERSÉ : tout est OBSCUR par défaut. On peint un voile sombre plein écran dans une
+  // DynamicTexture, puis on PERCE un halo de lumière (trou flou → carte visible) autour de chaque
+  // nœud RÉVÉLÉ (fait / courant / voisin révélé, cf. computeRevealed) et le long du sentier qui relie
+  // deux nœuds révélés. Le lointain non découvert reste sous le voile. Aucun noir pur : gris bleuté
+  // profond, alpha global < 1 → on devine à peine les reliefs, ça reste lisible.
+  private readonly DARK_COLOR = 0x070912 // bleu nuit très sombre, jamais 0x000000
+  private readonly DARK_ALPHA = 0.85 // opacité du voile (le trou percé, lui, est totalement clair)
 
   private drawFog(byId: Map<string, MapNode>, revealed: Set<string>) {
     this.ensurePuffTexture()
-    const band = this.computeVeilBands(revealed)
-
-    const KEY = 'panda-run:map-fog-bands'
-    let prev: Record<string, number> = {}
-    try { prev = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Record<string, number> } catch { prev = {} }
-
-    // voile statique : chaque tranche est composée hors écran dans sa DynamicTexture (aplatie → les
-    // recouvrements d'une même tranche ne noircissent pas), puis affichée via une simple Image dont
-    // l'alpha global donne la transparence du voile (le lointain d'abord/dessous).
-    for (const b of [3, 2, 1]) {
-      const key = `fog-band-${b}`
-      const dt = this.getFogTexture(key)
-      let any = false
-      for (const n of WORLD_NODES) if (band.get(n.id) === b) { this.stampNodeVeil(dt, n, byId); any = true }
-      dt.render()
-      if (any) this.add.image(0, 0, key).setOrigin(0, 0).setDepth(6).setAlpha(this.BAND_ALPHA[b])
-    }
-
-    // fondu d'allègement : pour chaque nœud passé dans une tranche PLUS PROCHE depuis la dernière
-    // visite, on re-dessine son ancien voile (par-dessus) et on le fait disparaître en douceur.
-    if (Object.keys(prev).length > 0) {
-      const closingByBand: Record<number, MapNode[]> = {}
-      for (const n of WORLD_NODES) {
-        const nb = band.get(n.id)!
-        const ob = prev[n.id] ?? nb
-        if (nb < ob && ob >= 1) (closingByBand[ob] ??= []).push(n)
-      }
-      for (const ob of Object.keys(closingByBand).map(Number)) {
-        const key = `fog-fade-${ob}`
-        const dt = this.getFogTexture(key)
-        for (const n of closingByBand[ob]!) this.stampNodeVeil(dt, n, byId)
-        dt.render()
-        const img = this.add.image(0, 0, key).setOrigin(0, 0).setDepth(7).setAlpha(this.BAND_ALPHA[ob])
-        this.tweens.add({ targets: img, alpha: 0, duration: 900, delay: 200, ease: 'Sine.out', onComplete: () => img.destroy() })
-      }
-    }
-
-    const next: Record<string, number> = {}
-    for (const n of WORLD_NODES) next[n.id] = band.get(n.id)!
-    try { localStorage.setItem(KEY, JSON.stringify(next)) } catch { /* stockage indispo : pas de persistance du fondu */ }
+    const key = 'fog-dark'
+    const dt = this.getFogTexture(key)
+    dt.fill(this.DARK_COLOR, 1) // voile plein écran
+    // perce un halo lumineux autour de chaque nœud révélé
+    for (const n of WORLD_NODES) if (revealed.has(n.id)) this.punchNodeLight(dt, n, byId, revealed)
+    dt.render()
+    this.add.image(0, 0, key).setOrigin(0, 0).setDepth(6).setAlpha(this.DARK_ALPHA)
   }
 
-  // Distance en sauts (BFS) de chaque nœud au set révélé (front). 0 = révélé, borné à 3 (lointain).
-  private computeVeilBands(revealed: Set<string>): Map<string, number> {
-    const dist = new Map<string, number>()
-    const queue: string[] = []
-    for (const n of WORLD_NODES) if (revealed.has(n.id)) { dist.set(n.id, 0); queue.push(n.id) }
-    while (queue.length) {
-      const cur = queue.shift()!
-      const d = dist.get(cur)!
-      for (const nb of neighborsOf(cur)) {
-        if (dist.has(nb)) continue
-        dist.set(nb, d + 1)
-        queue.push(nb)
-      }
-    }
-    const band = new Map<string, number>()
-    for (const n of WORLD_NODES) band.set(n.id, Math.min(dist.get(n.id) ?? 99, 3))
-    return band
-  }
-
-  // DynamicTexture pleine page (réutilisée entre scènes) sur laquelle composer une tranche de voile.
+  // DynamicTexture pleine page (réutilisée entre scènes) sur laquelle composer le voile.
   private getFogTexture(key: string): Phaser.Textures.DynamicTexture {
     if (this.textures.exists(key)) {
       const t = this.textures.get(key) as Phaser.Textures.DynamicTexture
@@ -210,56 +157,57 @@ export class WorldMapScene extends Phaser.Scene {
     return this.textures.addDynamicTexture(key, 960, 540)!
   }
 
-  // Estampille le voile d'un nœud dans une DynamicTexture : un gros puff sur le nœud, un sur son
-  // étiquette (dessous), et des puffs le long de la moitié des chemins qui y mènent → un nuage
-  // continu à bords flous, sans coupe nette.
-  private stampNodeVeil(dt: Phaser.Textures.DynamicTexture, n: MapNode, byId: Map<string, MapNode>) {
-    this.puff(dt, n.x, n.y, 78)
-    this.puff(dt, n.x, n.y + 34, 60)
+  // Perce le voile (ERASE) autour d'un nœud révélé : un gros halo sur le nœud, un sur son étiquette
+  // (dessous), et des halos le long des chemins vers ses voisins RÉVÉLÉS → un couloir de lumière
+  // continu sur le sentier découvert, à bords flous, sans coupe nette. On ne perce PAS vers un voisin
+  // non révélé (la lumière ne bave pas dans l'inconnu).
+  private punchNodeLight(dt: Phaser.Textures.DynamicTexture, n: MapNode, byId: Map<string, MapNode>, revealed: Set<string>) {
+    this.punch(dt, n.x, n.y, 82)
+    this.punch(dt, n.x, n.y + 34, 58)
     for (const nbId of neighborsOf(n.id)) {
+      if (!revealed.has(nbId)) continue
       const m = byId.get(nbId)!
-      for (let i = 1; i <= 4; i++) {
-        const t = (i / 4) * 0.5
-        this.puff(dt, n.x + (m.x - n.x) * t, n.y + (m.y - n.y) * t, 46)
+      for (let i = 1; i <= 3; i++) {
+        const t = (i / 4) // jusqu'à mi-chemin ; le voisin révélé perce l'autre moitié
+        this.punch(dt, n.x + (m.x - n.x) * t, n.y + (m.y - n.y) * t, 42)
       }
     }
   }
 
-  // dessine un disque de nuage flou de rayon `radius` (px) centré en (x,y) dans la DynamicTexture.
-  // Estampillé opaque au centre → les recouvrements plafonnent ; c'est l'alpha global de l'Image
-  // d'affichage (par tranche) qui donne la transparence finale du voile.
-  private puff(dt: Phaser.Textures.DynamicTexture, x: number, y: number, radius: number) {
-    dt.stamp('fog-puff', undefined, x, y, { scale: (radius * 2) / 128, originX: 0.5, originY: 0.5 })
+  // efface un disque flou de rayon `radius` (px) centré en (x,y) dans la DynamicTexture (blend ERASE) :
+  // le dégradé radial du puff (opaque au centre → transparent au bord) retire l'alpha du voile de
+  // façon dégradée → trou de lumière aux contours adoucis.
+  private punch(dt: Phaser.Textures.DynamicTexture, x: number, y: number, radius: number) {
+    dt.stamp('fog-puff', undefined, x, y, {
+      scale: (radius * 2) / 128, originX: 0.5, originY: 0.5, blendMode: Phaser.BlendModes.ERASE,
+    })
   }
 
-  // texture « puff » : disque gris bleuté à dégradé radial (opaque au centre → transparent au bord)
-  // → estampillé en masse, il compose un nuage doux aux contours adoucis (pas de rectangles nets).
+  // texture « puff » : disque à dégradé radial (alpha opaque au centre → transparent au bord). Sert de
+  // masque : estampillé en ERASE, il perce des trous de lumière doux dans le voile (pas de bords nets).
   private ensurePuffTexture() {
     if (this.textures.exists('fog-puff')) return
     const size = 128
     const tex = this.textures.createCanvas('fog-puff', size, size)
     if (!tex) return
     const ctx = tex.getContext()
-    const r = (this.VEIL_COLOR >> 16) & 0xff, g = (this.VEIL_COLOR >> 8) & 0xff, b = this.VEIL_COLOR & 0xff
     const grd = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
-    grd.addColorStop(0, `rgba(${r},${g},${b},1)`)
-    grd.addColorStop(0.68, `rgba(${r},${g},${b},1)`)
-    grd.addColorStop(0.86, `rgba(${r},${g},${b},0.6)`)
-    grd.addColorStop(1, `rgba(${r},${g},${b},0)`)
+    grd.addColorStop(0, 'rgba(255,255,255,1)')
+    grd.addColorStop(0.6, 'rgba(255,255,255,1)')
+    grd.addColorStop(0.85, 'rgba(255,255,255,0.55)')
+    grd.addColorStop(1, 'rgba(255,255,255,0)')
     ctx.fillStyle = grd
     ctx.fillRect(0, 0, size, size)
     tex.refresh()
   }
 
-  // Fond illustré de la carte : la belle vue fantasy `map-monde.jpg`, mise à l'échelle « cover »
-  // pour couvrir tout l'écran (960×540) centrée, très en arrière (depth -30). Un léger voile
-  // sombre par-dessus assoit le contraste des labels/nœuds. Repli sur le parchemin procédural
-  // si l'illustration manque au chargement.
+  // Fond illustré de la carte : la belle vue fantasy `map-monde.jpg`, ÉTIRÉE pour remplir EXACTEMENT
+  // le cadre 960×540 dans lequel vivent les nœuds (setDisplaySize, pas de « cover » qui croppait le
+  // haut et décalait les points). Un nœud en (x,y) tombe ainsi pile sur la carte. Léger voile sombre
+  // par-dessus pour le contraste. Repli sur le parchemin procédural si l'illustration manque.
   private drawBackground() {
     if (this.textures.exists('map-monde')) {
-      const src = this.textures.get('map-monde').getSourceImage()
-      const cover = Math.max(960 / src.width, 540 / src.height)
-      this.add.image(480, 270, 'map-monde').setScale(cover).setDepth(-30)
+      this.add.image(480, 270, 'map-monde').setDisplaySize(960, 540).setDepth(-30)
       this.add.rectangle(480, 270, 960, 540, 0x1a1208, 0.2).setDepth(-29)
       return
     }

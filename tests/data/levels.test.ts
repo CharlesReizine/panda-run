@@ -74,16 +74,19 @@ describe('niveaux et carte', () => {
     for (const [a, b] of WORLD_EDGES) { expect(ids.has(a)).toBe(true); expect(ids.has(b)).toBe(true) }
   })
 
-  it('déblocage : départ ouvert, suivant fermé puis ouvert après complétion', () => {
-    expect(isNodeUnlocked(START_NODE, [])).toBe(true)
-    expect(isNodeUnlocked('plaine-6', [])).toBe(true) // adjacent à la ville de départ (Prontera)
-    expect(isNodeUnlocked('foret-1', [])).toBe(false)
-    expect(isNodeUnlocked('foret-1', ['plaine-6'])).toBe(true)
+  it('déblocage : départ ouvert (Prairie), suivant fermé puis ouvert après complétion', () => {
+    expect(isNodeUnlocked(START_NODE, [])).toBe(true) // plaine-1 (Prairie)
+    expect(isNodeUnlocked('plaine-2', [])).toBe(true) // adjacent au terrain de départ (Prairie)
+    expect(isNodeUnlocked('plaine-3', [])).toBe(false)
+    expect(isNodeUnlocked('plaine-3', ['plaine-1', 'plaine-2'])).toBe(true)
   })
 
-  it('déblocage multi-hop : prontera → plaine-6 → foret-1 → plaine-7 → foret-7 → desert-1', () => {
-    const chain = ['plaine-6', 'foret-1', 'plaine-7', 'foret-7']
+  it('déblocage multi-hop : Prairie → plaines → Prontera, puis au-delà', () => {
+    const toProntera = ['plaine-1', 'plaine-2', 'plaine-3', 'plaine-4', 'plaine-5']
+    expect(isNodeUnlocked('prontera', toProntera)).toBe(true) // on atteint la ville juste après la plaine
+    expect(isNodeUnlocked('prontera', ['plaine-1', 'plaine-2', 'plaine-3'])).toBe(false) // plaine incomplète → Prontera fermée
+    const chain = [...toProntera, 'plaine-6', 'foret-1', 'plaine-7', 'foret-7']
     expect(isNodeUnlocked('desert-1', chain)).toBe(true)
-    expect(isNodeUnlocked('desert-1', ['plaine-6', 'foret-1', 'plaine-7'])).toBe(false) // sans foret-7, desert-1 inatteignable
+    expect(isNodeUnlocked('desert-1', [...toProntera, 'plaine-6', 'foret-1', 'plaine-7'])).toBe(false) // sans foret-7, desert-1 inatteignable
   })
 })
