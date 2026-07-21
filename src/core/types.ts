@@ -57,6 +57,7 @@ export interface ItemDef {
   slot: EquipSlot
   bonus: Partial<Pick<StatBlock, 'atk' | 'def' | 'maxHp'>>
   rarity?: Rarity // défaut 'commun' si absent
+  description?: string // phrase courte et thématique (fiche info de l'inventaire)
 }
 
 export interface DropEntry {
