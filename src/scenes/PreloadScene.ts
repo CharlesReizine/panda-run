@@ -108,6 +108,11 @@ const ART_MONSTERS = Object.keys(MONSTERS)
 // niveaux du monde carte A retombent sur le fond de biome (biome-<clé>.jpg) — voir preload().
 const LEVELS_WITH_BG = new Set<string>(['cave-1', 'plage-1', 'plage-2', 'carriere-1'])
 
+// POISSONS décoratifs des bassins : illustrations OPTIONNELLES (public/art/fish-<id>.png), chargées
+// en BEST-EFFORT. Elles seront générées par l'user ; tant qu'un fichier manque, le loader échoue
+// sans crash (aucune texture créée) et LevelScene.addFish retombe sur le cercle rouge de repli.
+const FISH_IDS = ['poisson', 'poisson-tropical', 'piranha'] as const
+
 // gabarit d'illustration : les boss, MVP et gardiens sont dessinés plus grands (≈76×82) que
 // les monstres normaux (≈40×46), comme le faisait drawMonster.
 const isBigArt = (m: MonsterDef): boolean => !!m.boss || !!m.mvp || m.id.startsWith('gardien-')
@@ -144,6 +149,10 @@ export class PreloadScene extends Phaser.Scene {
     // PNJ pandas de la ville + illustration K.O. — détourés/rognés en create() (bakeCropped)
     for (const id of NPC_IDS) this.load.image(`npcart-${id}`, `art/npc-${id}.png`)
     this.load.image('deathart-panda', 'art/death-panda.png')
+    // POISSONS décoratifs (best-effort) : art/fish-<id>.png → textures fish-<id>. Si le fichier
+    // n'existe pas encore, le chargement échoue silencieusement (aucun crash) et addFish garde le
+    // cercle rouge — l'existence de la texture est testée à l'usage (cf. LevelScene.addFish).
+    for (const id of FISH_IDS) this.load.image(`fish-${id}`, `art/fish-${id}.png`)
     // icônes d'objet (public/art/item-<id>.png, fond transparent) : une par entrée d'ITEMS,
     // rognées à leur boîte englobante en create() → textures item-<id> (boutiques, forge, inventaire).
     for (const id of Object.keys(ITEMS)) this.load.image(`itemart-${id}`, `art/item-${id}.png`)

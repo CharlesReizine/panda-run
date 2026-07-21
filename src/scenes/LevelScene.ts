@@ -821,25 +821,40 @@ export class LevelScene extends Phaser.Scene {
     }
   }
 
-  // POISSONS (placeholder, sans visuel dédié) : de GROS CERCLES ROUGES qui nagent (dérivent en va-et-
-  // vient) dans un bassin. DÉCORATIFS — aucune collision, aucun dégât : au plus simple. Nombre et
-  // trajectoires pseudo-aléatoires déterministes sur le rectangle d'eau. Restent sous la surface.
+  // POISSONS DÉCORATIFS qui nagent (dérivent en va-et-vient) dans un bassin. Si une illustration de
+  // poisson est présente (textures fish-* chargées en best-effort par PreloadScene, art à générer)
+  // → on affiche le SPRITE (variante déterministe, flip selon le sens de nage) ; SINON on retombe sur
+  // un GROS CERCLE ROUGE (placeholder). DÉCORATIFS — aucune collision, aucun dégât : au plus simple.
+  // Nombre et trajectoires pseudo-aléatoires déterministes sur le rectangle d'eau ; restent immergés.
   private addFish(rect: Phaser.Geom.Rectangle) {
     const rnd = (seed: number) => { const s = Math.sin(seed * 91.7) * 43758.5453; return s - Math.floor(s) }
+    // variantes de poisson RÉELLEMENT chargées (les autres → fallback cercle rouge)
+    const fishTex = ['fish-poisson', 'fish-poisson-tropical', 'fish-piranha'].filter((k) => this.textures.exists(k))
     const n = Math.max(2, Math.round(rect.width / 120))
     for (let i = 0; i < n; i++) {
       const r = rnd(rect.x + i * 7 + 1)
-      const radius = 9 + r * 6 // gros cercles
+      const radius = 9 + r * 6 // gros cercles / gabarit du sprite
       const y = rect.top + 24 + rnd(rect.x + i * 13 + 3) * Math.max(20, rect.height - 48)
       const margin = radius + 6
       const xL = rect.left + margin
       const xR = Math.max(xL + 20, rect.right - margin)
-      const fish = this.add.circle(xL + rnd(rect.x + i * 5) * (xR - xL), y, radius, 0xe53935, 0.9).setDepth(-1)
-      // va-et-vient horizontal lent (dérive), en boucle — le poisson « nage » d'un bord à l'autre
-      this.tweens.add({
-        targets: fish, x: xR, duration: 2600 + r * 2200, yoyo: true, repeat: -1,
-        ease: 'Sine.inOut', delay: i * 300,
-      })
+      const startX = xL + rnd(rect.x + i * 5) * (xR - xL)
+      const duration = 2600 + r * 2200
+      if (fishTex.length) {
+        // SPRITE : variante déterministe parmi les textures présentes, mise à l'échelle sur ~2 rayons
+        // de haut. Le tween part vers la DROITE puis revient (yoyo) → on flippe selon le sens de nage.
+        const key = fishTex[Math.floor(rnd(rect.x + i * 17 + 5) * fishTex.length) % fishTex.length]!
+        const spr = this.add.image(startX, y, key).setDepth(-1)
+        spr.setScale((radius * 2.4) / Math.max(1, spr.height))
+        this.tweens.add({
+          targets: spr, x: xR, duration, yoyo: true, repeat: -1, ease: 'Sine.inOut', delay: i * 300,
+          onRepeat: () => spr.setFlipX(false), onYoyo: () => spr.setFlipX(true),
+        })
+      } else {
+        // FALLBACK : gros cercle rouge (placeholder, tant que l'art des poissons n'existe pas)
+        const circle = this.add.circle(startX, y, radius, 0xe53935, 0.9).setDepth(-1)
+        this.tweens.add({ targets: circle, x: xR, duration, yoyo: true, repeat: -1, ease: 'Sine.inOut', delay: i * 300 })
+      }
     }
   }
 
@@ -1230,6 +1245,13 @@ export class LevelScene extends Phaser.Scene {
       save(getPlayer())
       this.showGameOver()
     }
+  }
+
+  // Un point (ex. le centre d'un monstre) est-il immergé dans une eau MARINE noyante (bassin/nappe),
+  // hors cascade REMONTABLE (qu'on nage sans se noyer) ? Sert à noyer les monstres terrestres tombés
+  // à l'eau (cf. Enemy.checkDrown) — même zone noyante que pour le joueur (waterRects).
+  isMarineWater(xPx: number, yPx: number): boolean {
+    return this.waterRects.some((r) => r.contains(xPx, yPx)) && !this.cascadeRects.some((r) => r.contains(xPx, yPx))
   }
 
   // Y a-t-il une SURFACE SOLIDE (plateforme, pont, ou sol non troué) dont le dessus est ~au niveau

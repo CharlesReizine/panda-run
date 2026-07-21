@@ -69,6 +69,12 @@ const GRAND_SCALE = 1.55
 // ÉLITE (MVP) : cadence du SKILL SIGNATURE unique — onde de choc télégraphiée (colosses) ou salve en
 // éventail (lanceurs). Les mobs normaux n'en ont pas ; les boss (3 skills) sont un chantier à part.
 const ELITE_SKILL_COOLDOWN = 6000
+// NOYADE DES MONSTRES : un mob terrestre (ni aquatique ni volant) qui se retrouve immergé dans une
+// eau marine profonde SE NOIE — dégâts périodiques par le chemin de dégâts standard (takeDamage)
+// jusqu'à mourir. Pas d'apnée : l'eau n'est pas son élément (contrairement au joueur). Proportionnel
+// aux PV max → mort en un temps borné quel que soit le monstre. Les aquatiques (méduse/crabe) nagent.
+const MOB_DROWN_TICK_MS = 400 // cadence des ticks de noyade (perte régulière, jamais d'un coup)
+const MOB_DROWN_HP_FRAC_PER_S = 0.12 // fraction des PV max perdue par seconde une fois immergé (~8 s)
 
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   monster: MonsterDef
@@ -117,6 +123,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private meleeFx: Phaser.GameObjects.Graphics | null = null
   // ÉLITE : prochaine utilisation du skill signature.
   private nextEliteSkillAt = 0
+  // NOYADE : accumulateur de temps immergé (ticks de dégâts de noyade). Remis à zéro dès que le
+  // monstre n'est plus dans l'eau marine.
+  private drownAccumMs = 0
   // BOSS piloté de l'EXTÉRIEUR (BossController) : quand vrai, l'IA autonome ci-dessous est
   // COURT-CIRCUITÉE — le contrôleur impose la vélocité et déclenche les skills. On garde le rendu
   // flottant (barre, plaque, télégraphes) et la physique (gravité/collisions/bornes). Piège/terreur
@@ -359,8 +368,27 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
+  // NOYADE : si un monstre terrestre (ni aquatique ni volant ni boss) est immergé dans une eau
+  // marine profonde, il perd des PV par ticks réguliers (chemin de dégâts standard) jusqu'à mourir.
+  // Renvoie true si le monstre est mort ce tick (détruit) → l'appelant coupe le reste du preUpdate.
+  private checkDrown(d: number): boolean {
+    if (this.monster.aquatic || this.monster.aerial || this.monster.boss) return false
+    if (!this.levelScene.isMarineWater(this.x, this.y)) { this.drownAccumMs = 0; return false }
+    this.drownAccumMs += d
+    while (this.drownAccumMs >= MOB_DROWN_TICK_MS) {
+      this.drownAccumMs -= MOB_DROWN_TICK_MS
+      const amount = Math.max(2, Math.round(this.monster.hp * MOB_DROWN_HP_FRAC_PER_S * MOB_DROWN_TICK_MS / 1000))
+      this.takeDamage(amount)
+      if (!this.active) return true // mort noyé → détruit, on arrête là
+    }
+    return false
+  }
+
   preUpdate(t: number, d: number) {
     super.preUpdate(t, d)
+    // NOYADE : un monstre terrestre tombé dans l'eau marine se noie (dégâts jusqu'à la mort). Testé
+    // avant toute IA — un mob en train de couler ne patrouille/charge plus, il crève.
+    if (this.checkDrown(d)) return
     // BOSS piloté par le contrôleur : on ne joue AUCUNE IA autonome (le BossController impose la
     // vélocité et les skills chaque frame). On conserve seulement le rendu flottant.
     if (this.aiDisabled) { this.updateVisuals(t); return }

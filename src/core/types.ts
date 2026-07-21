@@ -95,6 +95,10 @@ export interface MonsterDef {
   // joueur par à-coups puis remonte. Ignore sol/rebords (voir Enemy). Exempté de la contrainte
   // « posé sur une surface » des validateurs de niveau.
   aerial?: boolean
+  // monstre AQUATIQUE (méduse, crabe) : nage sans souci dans l'eau marine. Les monstres NON
+  // aquatiques (ni volants) qui se retrouvent immergés dans une eau marine profonde SE NOIENT
+  // (dégâts périodiques jusqu'à la mort, cf. Enemy.checkDrown). Absent → terrestre, se noie.
+  aquatic?: boolean
   // GABARIT physique du monstre : 'grand' = rendu et hitbox agrandis (GRAND_SCALE dans Enemy),
   // silhouette imposante (ours, golem). Absent → 'normal' (rétrocompat exacte).
   size?: 'normal' | 'grand'
