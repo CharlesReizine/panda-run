@@ -20,7 +20,8 @@ import { CooldownTracker, energyCostOf } from '../core/skill-executor'
 import { ENERGY_ON_BASIC_HIT } from '../entities/Player'
 import { SKILLS } from '../data/skills'
 import { hpRegenPerSec } from '../core/stats'
-import { rollDrops } from '../core/loot'
+import { rollDrops, rollChestRareItem } from '../core/loot'
+import { recordKill } from '../core/player-state'
 import type { DropEntry, SkillDef } from '../core/types'
 import type { UIScene } from './UIScene'
 import { TILE, DEFAULT_HEIGHT_TILES, groundRowFor, GRAVITY, landsOnOneWayPlatform } from '../core/platforming'
@@ -2806,8 +2807,20 @@ export class LevelScene extends Phaser.Scene {
       const open = this.add.image(prop.x, prop.y, 'chest-open').setDepth(4)
       this.aoeRing(prop.x, prop.y, 40, 0xffd54f)
       this.tweens.add({ targets: open, y: open.y - 8, scale: 1.15, duration: 160, yoyo: true, onComplete: () => open.destroy() })
+      // très rarement, le coffre recèle un trésor épique/légendaire (révélation brillante réutilisée)
+      const rareItem = rollChestRareItem()
+      if (rareItem) this.spawnItemDrop(prop.x, prop.y, rareItem)
     }
     this.spawnDrops(prop.x, prop.y, prop.def.drops)
+  }
+
+  // Lâche un unique objet ramassable (icône illustrée si dispo, sinon pastille générique).
+  private spawnItemDrop(x: number, y: number, itemId: string) {
+    const illustrated = this.textures.exists(`item-${itemId}`)
+    const s = this.pickups.create(x + Phaser.Math.Between(-20, 20), y - 10, illustrated ? `item-${itemId}` : 'item-drop') as Phaser.Physics.Arcade.Sprite
+    s.setVelocity(Phaser.Math.Between(-80, 80), -200)
+    s.setData({ itemId })
+    if (illustrated) s.setDisplaySize(22, 22)
   }
 
   spawnDrops(x: number, y: number, drops: DropEntry[]) {
@@ -2992,6 +3005,7 @@ export class LevelScene extends Phaser.Scene {
     const p = getPlayer()
     audio.playSfx('enemy-death')
     p.monstersKilled += 1
+    recordKill(p, e.monster.id)
     const { levelsGained } = grantXp(p, playerXpGain(e.monster.xp))
     this.events.emit('enemy-loot', e) // consommé en Task 13
     if (levelsGained > 0) {

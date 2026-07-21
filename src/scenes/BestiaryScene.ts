@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { MONSTERS } from '../data/monsters'
 import { ITEMS, rarityColor } from '../data/items'
 import { MATERIALS } from '../data/materials'
+import { getPlayer } from '../state'
 import type { DropEntry, MonsterDef } from '../core/types'
 
 // Bestiaire — page en lecture seule listant tous les monstres, leurs stats et leur table de drop.
@@ -54,13 +55,24 @@ function dropLine(d: DropEntry): { label: string; color: number; chance: string;
   return { label, color, chance, qty }
 }
 
+// Teinte de silhouette pour un monstre non découvert (sprite assombri en ombre).
+const SILHOUETTE_TINT = 0x101820
+
 export class BestiaryScene extends Phaser.Scene {
   private page = 0
+  private kills: Record<string, number> = {}
 
   constructor() { super('Bestiary') }
 
   create() {
+    // lecture seule du suivi de kills ; robuste si aucun joueur n'est chargé
+    try { this.kills = getPlayer().killsByMonster ?? {} } catch { this.kills = {} }
     this.renderList()
+  }
+
+  // Un monstre est « découvert » (révélé) dès qu'il a été tué au moins une fois.
+  private discovered(m: MonsterDef): boolean {
+    return (this.kills[m.id] ?? 0) > 0
   }
 
   private clear() {
@@ -74,6 +86,11 @@ export class BestiaryScene extends Phaser.Scene {
   }
 
   private badge(x: number, y: number, m: MonsterDef, fontSize: string) {
+    // monstre non découvert : badge neutre masqué (ne révèle pas boss/élite)
+    if (!this.discovered(m)) {
+      return this.add.text(x, y, '???', { fontSize, color: '#cfd8dc', backgroundColor: css(0x455a64), fontStyle: 'bold', padding: { x: 5, y: 2 } })
+        .setOrigin(0.5)
+    }
     const { label, color } = monsterKind(m)
     return this.add.text(x, y, label, { fontSize, color: '#0d1b2a', backgroundColor: css(color), fontStyle: 'bold', padding: { x: 5, y: 2 } })
       .setOrigin(0.5)
@@ -100,10 +117,12 @@ export class BestiaryScene extends Phaser.Scene {
       const cx = gridLeft + col * cellW
       const cy = gridTop + row * cellH
 
+      const seen = this.discovered(m)
       this.add.rectangle(cx, cy, cellW - 8, cellH - 8, 0x000000, 0.3).setStrokeStyle(1, 0xffffff, 0.15)
         .setInteractive({ useHandCursor: true }).on('pointerdown', () => this.renderDetail(m))
-      this.add.image(cx, cy - 18, `monster-${m.id}`).setDisplaySize(40, 40)
-      this.add.text(cx, cy + 18, m.name, { fontSize: '12px', color: '#ffffff', align: 'center', wordWrap: { width: cellW - 14 } }).setOrigin(0.5, 0)
+      const sprite = this.add.image(cx, cy - 18, `monster-${m.id}`).setDisplaySize(40, 40)
+      if (!seen) sprite.setTint(SILHOUETTE_TINT).setAlpha(0.85) // silhouette sombre tant que pas tué
+      this.add.text(cx, cy + 18, seen ? m.name : '???', { fontSize: '12px', color: seen ? '#ffffff' : '#78909c', align: 'center', wordWrap: { width: cellW - 14 } }).setOrigin(0.5, 0)
       this.badge(cx, cy - 40, m, '10px')
     })
 
@@ -119,42 +138,55 @@ export class BestiaryScene extends Phaser.Scene {
 
   private renderDetail(m: MonsterDef) {
     this.clear()
+    const seen = this.discovered(m)
     const { label: kindLabel } = monsterKind(m)
+    const hidden = '—'
 
     // Colonne gauche : gros sprite, nom, type, phrase de bestiaire
-    this.add.image(160, 160, `monster-${m.id}`).setDisplaySize(120, 120)
-    this.add.text(160, 240, m.name, { fontSize: '26px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: 280 } }).setOrigin(0.5, 0)
+    const big = this.add.image(160, 160, `monster-${m.id}`).setDisplaySize(120, 120)
+    if (!seen) big.setTint(SILHOUETTE_TINT).setAlpha(0.85) // silhouette sombre tant que pas tué
+    this.add.text(160, 240, seen ? m.name : '???', { fontSize: '26px', color: seen ? '#ffffff' : '#78909c', fontStyle: 'bold', align: 'center', wordWrap: { width: 280 } }).setOrigin(0.5, 0)
     this.badge(160, 300, m, '15px')
-    // Lore : phrase qui vend du rêve sur le caractère du monstre
-    this.add.text(160, 328, m.lore, { fontSize: '13px', color: '#cfd8dc', align: 'center', fontStyle: 'italic', wordWrap: { width: 290 }, lineSpacing: 2 }).setOrigin(0.5, 0)
+    if (seen) {
+      // Lore : phrase qui vend du rêve sur le caractère du monstre
+      this.add.text(160, 328, m.lore, { fontSize: '13px', color: '#cfd8dc', align: 'center', fontStyle: 'italic', wordWrap: { width: 290 }, lineSpacing: 2 }).setOrigin(0.5, 0)
+      // nombre de fois vaincu
+      this.add.text(160, 400, `Vaincu ${this.kills[m.id]}×`, { fontSize: '13px', color: '#80cbc4', align: 'center' }).setOrigin(0.5, 0)
+    } else {
+      this.add.text(160, 328, 'Monstre non découvert.\nVaincs-le pour révéler sa fiche.', { fontSize: '13px', color: '#78909c', align: 'center', fontStyle: 'italic', wordWrap: { width: 290 }, lineSpacing: 2 }).setOrigin(0.5, 0)
+    }
 
-    // Stats
+    // Stats — masquées tant que le monstre n'a pas été vaincu
     this.add.text(360, 70, 'CARACTÉRISTIQUES', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' })
     const rows: [string, string][] = [
-      ['Type', kindLabel],
-      ['Niveau', `${m.level}`],
-      ['PV', `${m.hp}`],
-      ['ATK', `${m.atk}`],
-      ['DEF', `${m.def}`],
-      ['XP', `${m.xp}`],
-      ['Comportement', behaviorLabel(m)],
+      ['Type', seen ? kindLabel : hidden],
+      ['Niveau', seen ? `${m.level}` : hidden],
+      ['PV', seen ? `${m.hp}` : hidden],
+      ['ATK', seen ? `${m.atk}` : hidden],
+      ['DEF', seen ? `${m.def}` : hidden],
+      ['XP', seen ? `${m.xp}` : hidden],
+      ['Comportement', seen ? behaviorLabel(m) : hidden],
     ]
     rows.forEach(([k, v], i) => {
       const y = 104 + i * 30
       this.add.text(360, y, k, { fontSize: '15px', color: '#b0bec5' })
-      this.add.text(560, y, v, { fontSize: '15px', color: '#ffffff', fontStyle: 'bold' })
+      this.add.text(560, y, v, { fontSize: '15px', color: seen ? '#ffffff' : '#607d8b', fontStyle: 'bold' })
     })
 
-    // Table de butin
+    // Table de butin — masquée tant que le monstre n'a pas été vaincu
     this.add.text(650, 70, 'BUTIN', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' })
-    m.drops.forEach((d, i) => {
-      const { label, color, chance, qty } = dropLine(d)
-      const y = 104 + i * 28
-      this.add.circle(658, y + 9, 5, color)
-      this.add.text(672, y, label, { fontSize: '14px', color: css(color), wordWrap: { width: 180 } })
-      this.add.text(860, y, chance, { fontSize: '13px', color: '#ffd54f' })
-      this.add.text(915, y, qty, { fontSize: '13px', color: '#cfd8dc' }).setOrigin(1, 0)
-    })
+    if (seen) {
+      m.drops.forEach((d, i) => {
+        const { label, color, chance, qty } = dropLine(d)
+        const y = 104 + i * 28
+        this.add.circle(658, y + 9, 5, color)
+        this.add.text(672, y, label, { fontSize: '14px', color: css(color), wordWrap: { width: 180 } })
+        this.add.text(860, y, chance, { fontSize: '13px', color: '#ffd54f' })
+        this.add.text(915, y, qty, { fontSize: '13px', color: '#cfd8dc' }).setOrigin(1, 0)
+      })
+    } else {
+      this.add.text(672, 104, hidden, { fontSize: '14px', color: '#607d8b' })
+    }
 
     // Boutons
     this.btn(360, 508, '◀ Retour', 0x37474f, () => this.renderList())

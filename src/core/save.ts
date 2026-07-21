@@ -2,7 +2,7 @@ import type { PlayerState } from './player-state'
 import { START_NODE } from '../data/worldmap'
 
 export const SAVE_KEY = 'panda-run-save'
-const VERSION = 7
+const VERSION = 8
 
 interface SaveFile { version: number; player: PlayerState }
 
@@ -15,7 +15,7 @@ export function deserialize(json: string): PlayerState {
   const file = JSON.parse(json) as SaveFile
   if (file.version < 1 || file.version > VERSION) throw new Error(`version de sauvegarde inconnue : ${file.version}`)
   // migrations cumulatives vers la version courante
-  const raw = file.player as PlayerState & { unlockedSkills?: string[]; monstersKilled?: number; quests?: PlayerState['quests']; currentNode?: string; statPoints?: number; allocated?: PlayerState['allocated']; upgrades?: PlayerState['upgrades'] }
+  const raw = file.player as PlayerState & { unlockedSkills?: string[]; monstersKilled?: number; quests?: PlayerState['quests']; currentNode?: string; statPoints?: number; allocated?: PlayerState['allocated']; upgrades?: PlayerState['upgrades']; killsByMonster?: PlayerState['killsByMonster'] }
   let pl: PlayerState = raw
   if (file.version === 1) pl = { ...pl, materials: {} } // v1 → v2 : collection de matériaux
   if (file.version <= 2) {
@@ -40,6 +40,10 @@ export function deserialize(json: string): PlayerState {
   if (file.version <= 6) {
     // v6 → v7 : niveaux de réforge par objet
     pl = { ...pl, upgrades: raw.upgrades ?? {} }
+  }
+  if (file.version <= 7) {
+    // v7 → v8 : suivi des kills par type de monstre (découverte au Bestiaire)
+    pl = { ...pl, killsByMonster: raw.killsByMonster ?? {} }
   }
   return pl
 }

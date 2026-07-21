@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { rollDrops } from '../../src/core/loot'
+import { rollDrops, rollChestRareItem, CHEST_RARE_CHANCE, CHEST_RARE_POOL } from '../../src/core/loot'
+import { ITEMS } from '../../src/data/items'
 import type { DropEntry } from '../../src/core/types'
 
 const drops: DropEntry[] = [
@@ -29,5 +30,31 @@ describe('rollDrops', () => {
   it('un DropEntry material à chance 1 sort dans result.materials', () => {
     const r = rollDrops([{ kind: 'material', materialId: 'gemme-brute', chance: 1, min: 1, max: 1 }], () => 0)
     expect(r.materials).toEqual(['gemme-brute'])
+  })
+})
+
+describe('rollChestRareItem', () => {
+  it('le pool ne contient que des équipements épiques/légendaires', () => {
+    expect(CHEST_RARE_POOL.length).toBeGreaterThan(0)
+    for (const id of CHEST_RARE_POOL) {
+      const item = ITEMS[id]!
+      expect(item.slot).toBeTruthy()
+      expect(['epique', 'legendaire']).toContain(item.rarity)
+    }
+  })
+
+  it('rng au-dessus du seuil : aucun objet rare (tirage commun)', () => {
+    expect(rollChestRareItem(() => 0.99)).toBeNull()
+    expect(rollChestRareItem(() => CHEST_RARE_CHANCE)).toBeNull()
+  })
+
+  it('rng sous le seuil : un objet du pool rare est tiré', () => {
+    const id = rollChestRareItem(() => 0)
+    expect(id).not.toBeNull()
+    expect(CHEST_RARE_POOL).toContain(id)
+  })
+
+  it('la probabilité reste basse (événement rare)', () => {
+    expect(CHEST_RARE_CHANCE).toBeLessThanOrEqual(0.05)
   })
 })

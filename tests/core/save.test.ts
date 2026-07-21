@@ -81,6 +81,14 @@ describe('save', () => {
     expect(loaded.upgrades).toEqual({})
   })
 
+  it('migre une save v7 → v8 (killsByMonster par défaut {})', () => {
+    const p = newPlayer('Panda')
+    const legacy: Record<string, unknown> = { ...p }
+    delete legacy.killsByMonster
+    const loaded = deserialize(JSON.stringify({ version: 7, player: legacy }))
+    expect(loaded.killsByMonster).toEqual({})
+  })
+
   it('save/load via storage', () => {
     const s = fakeStorage()
     const p = newPlayer('Panda')

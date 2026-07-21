@@ -32,8 +32,15 @@ export interface PlayerState {
   completedLevels: string[]
   materials: Record<string, number> // matériaux collectés (id → quantité) — collection pure, craft à venir
   monstersKilled: number // compteur global, incrémenté dans LevelScene.onEnemyDied
+  killsByMonster: Record<string, number> // kills par type de monstre (id → nombre), boss inclus ; absent/0 = jamais tué
   quests: Record<string, QuestState> // quêtes acceptées en ville (id → progression)
   currentNode: string // nœud courant sur la carte du monde (id dans WORLD_NODES)
+}
+
+// Enregistre un kill pour un type de monstre donné (boss compris). Sert au Bestiaire (découverte)
+// et, à terme, aux quêtes de chasse ciblées.
+export function recordKill(p: PlayerState, monsterId: string): void {
+  p.killsByMonster[monsterId] = (p.killsByMonster[monsterId] ?? 0) + 1
 }
 
 export function newPlayer(name: string): PlayerState {
@@ -55,6 +62,7 @@ export function newPlayer(name: string): PlayerState {
     completedLevels: [],
     materials: {},
     monstersKilled: 0,
+    killsByMonster: {},
     quests: {},
     currentNode: START_NODE,
   }
