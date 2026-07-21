@@ -134,9 +134,13 @@ function isNodeCleared(nodeId: string, completedLevels: string[]): boolean {
 
 export function isNodeUnlocked(nodeId: string, completedLevels: string[]): boolean {
   if (nodeId === START_NODE) return true
-  // atteignable si un voisin est « clearé » ET lui-même débloqué (parcours depuis le départ)
+  // GATING de progression : on n'avance au-delà d'un nœud que s'il est « clearé » — y COMPRIS le
+  // nœud de DÉPART. Tant que le premier terrain (Prairie) n'est pas complété, rien derrière lui
+  // n'est atteignable : un niveau non fini bloque le terrain suivant (on peut le rejouer, pas le
+  // contourner). Les villes/branches déjà faites restent traversables (isNodeCleared vrai).
   const visited = new Set<string>([START_NODE])
-  const queue = [START_NODE]
+  const queue: string[] = []
+  if (isNodeCleared(START_NODE, completedLevels)) queue.push(START_NODE)
   while (queue.length) {
     const cur = queue.shift()!
     for (const nb of neighborsOf(cur)) {

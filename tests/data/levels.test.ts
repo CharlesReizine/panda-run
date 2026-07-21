@@ -76,7 +76,8 @@ describe('niveaux et carte', () => {
 
   it('déblocage : départ ouvert (Prairie), suivant fermé puis ouvert après complétion', () => {
     expect(isNodeUnlocked(START_NODE, [])).toBe(true) // plaine-1 (Prairie)
-    expect(isNodeUnlocked('plaine-2', [])).toBe(true) // adjacent au terrain de départ (Prairie)
+    expect(isNodeUnlocked('plaine-2', [])).toBe(false) // gating : suivant fermé tant que Prairie non complétée
+    expect(isNodeUnlocked('plaine-2', ['plaine-1'])).toBe(true) // ouvert après complétion de Prairie
     expect(isNodeUnlocked('plaine-3', [])).toBe(false)
     expect(isNodeUnlocked('plaine-3', ['plaine-1', 'plaine-2'])).toBe(true)
   })

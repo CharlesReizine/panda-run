@@ -23,7 +23,8 @@ export class WorldMapScene extends Phaser.Scene {
 
     const p = getPlayer()
     const current = byId.get(p.currentNode)!
-    const revealed = this.computeRevealed(p)
+    const anchors = this.computeAnchors(p)
+    const revealed = this.computeRevealed(anchors)
 
     this.drawRoads(byId)
 
@@ -41,7 +42,11 @@ export class WorldMapScene extends Phaser.Scene {
       // toujours le lointain non découvert → pas de « balade » vers l'inconnu.
       const canTravel = !isCurrent && unlocked && revealed.has(n.id)
       const canEnterTown = isCurrent && n.type === 'town'
-      const interactive = canTravel || canEnterTown
+      // nœud COURANT qui est un TERRAIN (ou boss), pas une ville : on le LANCE directement, comme on
+      // entre dans une ville. Indispensable pour (re)jouer le niveau courant NON complété — ex.
+      // Prairie au tout début : c'est le nœud courant, on doit pouvoir le démarrer depuis la carte.
+      const canEnterLevel = isCurrent && n.type !== 'town' && !!n.levelId
+      const interactive = canTravel || canEnterTown || canEnterLevel
       const radius = RADIUS[n.type]
       const color = interactive ? NODE_COLORS[n.type] : LOCKED_COLOR
 
@@ -80,10 +85,10 @@ export class WorldMapScene extends Phaser.Scene {
       }
     }
 
-    // brouillard de guerre INVERSÉ : voile sombre plein écran, percé d'un halo de LUMIÈRE autour
-    // de chaque nœud RÉVÉLÉ (fait/courant/voisin révélé). Dessiné APRÈS les nœuds/labels pour teinter
-    // le lointain ; sous les boutons d'UI ci-dessous, remontés à un depth supérieur.
-    this.drawFog(byId, revealed)
+    // brouillard de guerre INVERSÉ : voile sombre plein écran, percé autour de chaque nœud ANCRE
+    // (fait/courant) d'un double cercle de révélation (intérieur net + anneau à 50 %). Dessiné APRÈS
+    // les nœuds/labels pour teinter le lointain ; sous les boutons d'UI ci-dessous (depth supérieur).
+    this.drawFog(anchors)
 
     // marqueur du panda sur le nœud courant
     const marker = this.add.image(current.x, current.y - RADIUS[current.type] - 14, `panda-${p.classId}`).setDisplaySize(26, 26).setDepth(8)
@@ -119,30 +124,39 @@ export class WorldMapScene extends Phaser.Scene {
   // complété/courant (les prochains choix visibles). Les villes ne sont PAS pré-révélées : elles
   // se découvrent comme le reste. (Une ville reste ensuite révélée en permanence car son terrain
   // voisin complété la maintient adjacente à un nœud complété → on peut y re-voyager, voir plus bas.)
-  private computeRevealed(p: ReturnType<typeof getPlayer>): Set<string> {
-    const done = (n: MapNode) => (n.levelId ? p.completedLevels.includes(n.levelId) : false)
-    const anchors = new Set<string>()
-    for (const n of WORLD_NODES) if (done(n) || n.id === p.currentNode) anchors.add(n.id)
+  private computeRevealed(anchors: Set<string>): Set<string> {
     const revealed = new Set<string>(anchors)
     for (const id of anchors) for (const nb of neighborsOf(id)) revealed.add(nb)
     return revealed
   }
 
-  // Brouillard INVERSÉ : tout est OBSCUR par défaut. On peint un voile sombre plein écran dans une
-  // DynamicTexture, puis on PERCE un halo de lumière (trou flou → carte visible) autour de chaque
-  // nœud RÉVÉLÉ (fait / courant / voisin révélé, cf. computeRevealed) et le long du sentier qui relie
-  // deux nœuds révélés. Le lointain non découvert reste sous le voile. Aucun noir pur : gris bleuté
-  // profond, alpha global < 1 → on devine à peine les reliefs, ça reste lisible.
-  private readonly DARK_COLOR = 0x070912 // bleu nuit très sombre, jamais 0x000000
-  private readonly DARK_ALPHA = 0.85 // opacité du voile (le trou percé, lui, est totalement clair)
+  // Nœuds ANCRES : terrains complétés + nœud courant. Ce sont les seuls autour desquels on perce le
+  // brouillard (double cercle) ; leurs voisins ne sont que devinés via l'anneau à 50 %.
+  private computeAnchors(p: ReturnType<typeof getPlayer>): Set<string> {
+    const done = (n: MapNode) => (n.levelId ? p.completedLevels.includes(n.levelId) : false)
+    const anchors = new Set<string>()
+    for (const n of WORLD_NODES) if (done(n) || n.id === p.currentNode) anchors.add(n.id)
+    return anchors
+  }
 
-  private drawFog(byId: Map<string, MapNode>, revealed: Set<string>) {
+  // Brouillard INVERSÉ : tout est OBSCUR par défaut. On peint un voile sombre BIEN OPAQUE plein écran
+  // dans une DynamicTexture, puis on perce autour de chaque nœud ANCRE (fait / courant) un DOUBLE
+  // cercle de révélation : un disque INTÉRIEUR (rayon modéré) 100 % clair — terrain net —, entouré
+  // d'un ANNEAU EXTÉRIEUR à ~50 % — on devine sans voir net. Au-delà : voile sombre opaque (lointain
+  // vraiment caché). Aucun noir pur : gris bleuté profond, alpha global élevé → le reste de la map
+  // est nettement masqué.
+  private readonly DARK_COLOR = 0x060812 // bleu nuit très sombre, jamais 0x000000
+  private readonly DARK_ALPHA = 0.97 // opacité du voile (bien plus opaque qu'avant : lointain masqué)
+  private readonly REVEAL_IN = 48 // rayon du cercle INTÉRIEUR (net, 100 % clair) — modéré
+  private readonly REVEAL_OUT = 92 // rayon du cercle EXTÉRIEUR (anneau à 50 %, on devine)
+
+  private drawFog(anchors: Set<string>) {
     this.ensurePuffTexture()
     const key = 'fog-dark'
     const dt = this.getFogTexture(key)
     dt.fill(this.DARK_COLOR, 1) // voile plein écran
-    // perce un halo lumineux autour de chaque nœud révélé
-    for (const n of WORLD_NODES) if (revealed.has(n.id)) this.punchNodeLight(dt, n, byId, revealed)
+    // double cercle de révélation autour de chaque nœud ancre
+    for (const n of WORLD_NODES) if (anchors.has(n.id)) this.revealNode(dt, n)
     dt.render()
     this.add.image(0, 0, key).setOrigin(0, 0).setDepth(6).setAlpha(this.DARK_ALPHA)
   }
@@ -157,44 +171,43 @@ export class WorldMapScene extends Phaser.Scene {
     return this.textures.addDynamicTexture(key, 960, 540)!
   }
 
-  // Perce le voile (ERASE) autour d'un nœud révélé : un gros halo sur le nœud, un sur son étiquette
-  // (dessous), et des halos le long des chemins vers ses voisins RÉVÉLÉS → un couloir de lumière
-  // continu sur le sentier découvert, à bords flous, sans coupe nette. On ne perce PAS vers un voisin
-  // non révélé (la lumière ne bave pas dans l'inconnu).
-  private punchNodeLight(dt: Phaser.Textures.DynamicTexture, n: MapNode, byId: Map<string, MapNode>, revealed: Set<string>) {
-    this.punch(dt, n.x, n.y, 82)
-    this.punch(dt, n.x, n.y + 34, 58)
-    for (const nbId of neighborsOf(n.id)) {
-      if (!revealed.has(nbId)) continue
-      const m = byId.get(nbId)!
-      for (let i = 1; i <= 3; i++) {
-        const t = (i / 4) // jusqu'à mi-chemin ; le voisin révélé perce l'autre moitié
-        this.punch(dt, n.x + (m.x - n.x) * t, n.y + (m.y - n.y) * t, 42)
-      }
-    }
+  // Double cercle de révélation autour d'un nœud ancre : d'abord l'ANNEAU extérieur à 50 % (perce la
+  // moitié du voile → on devine), puis par-dessus le disque INTÉRIEUR à 100 % (perce tout → net), plus
+  // un petit disque net sous le nœud pour dégager son étiquette. Ordre important : le clair passe
+  // APRÈS le devine, sinon le 50 % re-voilerait le centre.
+  private revealNode(dt: Phaser.Textures.DynamicTexture, n: MapNode) {
+    this.punch(dt, 'fog-guess', n.x, n.y, this.REVEAL_OUT) // anneau extérieur ~50 % clair
+    this.punch(dt, 'fog-clear', n.x, n.y, this.REVEAL_IN) // disque intérieur 100 % clair
+    this.punch(dt, 'fog-clear', n.x, n.y + 26, this.REVEAL_IN * 0.72) // étiquette dégagée
   }
 
-  // efface un disque flou de rayon `radius` (px) centré en (x,y) dans la DynamicTexture (blend ERASE) :
-  // le dégradé radial du puff (opaque au centre → transparent au bord) retire l'alpha du voile de
-  // façon dégradée → trou de lumière aux contours adoucis.
-  private punch(dt: Phaser.Textures.DynamicTexture, x: number, y: number, radius: number) {
-    dt.stamp('fog-puff', undefined, x, y, {
+  // efface un disque flou de rayon `radius` (px) centré en (x,y) via le puff `key` (blend ERASE) :
+  // le puff `fog-clear` retire tout l'alpha (trou net) ; `fog-guess` n'en retire que ~50 % (voile
+  // aminci → on devine). Le puff fait 128 px (rayon 64) → scale = radius/64.
+  private punch(dt: Phaser.Textures.DynamicTexture, key: string, x: number, y: number, radius: number) {
+    dt.stamp(key, undefined, x, y, {
       scale: (radius * 2) / 128, originX: 0.5, originY: 0.5, blendMode: Phaser.BlendModes.ERASE,
     })
   }
 
-  // texture « puff » : disque à dégradé radial (alpha opaque au centre → transparent au bord). Sert de
-  // masque : estampillé en ERASE, il perce des trous de lumière doux dans le voile (pas de bords nets).
+  // Deux textures « puff » (masques d'effacement à dégradé radial), plein au centre → transparent au
+  // bord pour des contours flous : `fog-clear` (alpha 1 → efface tout, cercle net) et `fog-guess`
+  // (alpha 0.5 → n'efface que la moitié, anneau où l'on devine). Palier presque plat jusqu'à 0.82 du
+  // rayon puis chute → le rayon demandé ≈ le rayon vraiment perçu.
   private ensurePuffTexture() {
-    if (this.textures.exists('fog-puff')) return
+    this.makePuff('fog-clear', 1)
+    this.makePuff('fog-guess', 0.5)
+  }
+
+  private makePuff(key: string, peak: number) {
+    if (this.textures.exists(key)) return
     const size = 128
-    const tex = this.textures.createCanvas('fog-puff', size, size)
+    const tex = this.textures.createCanvas(key, size, size)
     if (!tex) return
     const ctx = tex.getContext()
     const grd = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
-    grd.addColorStop(0, 'rgba(255,255,255,1)')
-    grd.addColorStop(0.6, 'rgba(255,255,255,1)')
-    grd.addColorStop(0.85, 'rgba(255,255,255,0.55)')
+    grd.addColorStop(0, `rgba(255,255,255,${peak})`)
+    grd.addColorStop(0.82, `rgba(255,255,255,${peak})`)
     grd.addColorStop(1, 'rgba(255,255,255,0)')
     ctx.fillStyle = grd
     ctx.fillRect(0, 0, size, size)
