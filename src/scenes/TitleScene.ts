@@ -45,7 +45,7 @@ export class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: logo, scale: 1.03, yoyo: true, repeat: -1, duration: 1800, ease: 'Sine.inOut' })
 
     // repère de version : dis-moi ce numéro pour qu'on sache si tu vois bien la dernière build
-    this.add.text(10, 8, 'build R148', { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
+    this.add.text(10, 8, 'build R149', { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
 
     // accès aux logs sur mobile (pas de console sur iPhone) : « Logs » ouvre l'overlay DOM,
     // « Vider » réinitialise le ring buffer + localStorage.
@@ -95,7 +95,10 @@ export class TitleScene extends Phaser.Scene {
 
     mkButton(existing ? 384 : 400, 'Nouvelle partie', () => {
       setPlayer(newPlayer('Panda'))
-      this.scene.start('WorldMap')
+      // ouvre DIRECTEMENT le 1er terrain (Prairie) plutôt que la carte — plus clean au démarrage.
+      // Même data que la carte pour un niveau (fromNode=targetNode=le nœud de départ) ; LevelIntro
+      // enchaîne sur le niveau, et à la sortie on retombe sur la carte (Prairie faite, voisins ouverts).
+      this.scene.start('LevelIntro', { levelId: 'plaine-1', fromNode: 'plaine-1', targetNode: 'plaine-1', dir: 'forward' })
     })
 
     if (existing) {
