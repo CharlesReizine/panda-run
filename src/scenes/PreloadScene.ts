@@ -3,6 +3,7 @@ import { MONSTERS } from '../data/monsters'
 import { SKILLS } from '../data/skills'
 import { BIOMES } from '../data/biomes'
 import { ITEMS } from '../data/items'
+import { LEVELS } from '../data/levels'
 import type { MonsterDef } from '../core/types'
 import { stripBorderBackground } from '../core/image-strip'
 import { PANDA_TEX, PANDA_HEAD_ANCHORS } from '../entities/player-body'
@@ -109,8 +110,14 @@ export class PreloadScene extends Phaser.Scene {
     // fond illustré de la carte du monde (vue du dessus fantasy), affiché par WorldMapScene
     this.load.image('map-monde', 'art/map-monde.jpg')
     for (const id of ART_MONSTERS) this.load.image(`art-${id}`, `art/art-${id}.png`)
-    // fonds de biome illustrés (public/art/biome-<clé>.jpg), affichés par LevelScene
+    // fonds de biome illustrés (public/art/biome-<clé>.jpg), affichés par LevelScene en FALLBACK
     for (const id of Object.keys(BIOMES)) this.load.image(`biome-${id}`, `art/biome-${id}.jpg`)
+    // fonds PROPRES AU NIVEAU (public/art/bg-<levelId>.jpg) : un décor unique par terrain, affiché
+    // en PRIORITÉ par LevelScene.addBackground. Chargés en best-effort — seuls les niveaux non-boss
+    // en possèdent un ; les niveaux de boss n'ont pas d'image dédiée et retombent sur le fond de biome.
+    for (const lvl of Object.values(LEVELS)) {
+      if (!lvl.boss) this.load.image(`bg-${lvl.id}`, `art/bg-${lvl.id}.jpg`)
+    }
     // illustrations du panda joueur : 4 poses par classe (idle/course/saut/attaque).
     // Chargées ici puis « bakées » (rognées + mises à l'échelle + ancrées pieds au sol) en
     // textures panda-<classe>* par bakePandaClassFromArt ; repli sur le dessin procédural si absentes.
