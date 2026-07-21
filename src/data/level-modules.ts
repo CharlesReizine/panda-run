@@ -51,6 +51,9 @@ export type ModuleKind =
   | 'sortie-humide'
   // passage SOUS-MARIN : plonger par le haut d'un lac, ressortir sur le côté immergé
   | 'passage-immerge'
+  // LAC EN U : plonger d'une corniche à hauteur H, nager sous un PLAFOND DE ROCHE immergé au milieu,
+  // ressortir sur une corniche à la MÊME hauteur H (passage sous-marin symétrique)
+  | 'lac-en-u'
 
 // Tier de difficulté (D1..D5) et tags d'accroche : altitude du bord GAUCHE (entrée) / DROIT (sortie).
 export type Tier = 1 | 2 | 3 | 4 | 5
@@ -372,7 +375,14 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const holeL = wx + Math.floor(ww / 2) - 1
       if (holeL - wx > 0) p.bridges.push({ x: wx, alt: bankAlt, w: holeL - wx })
       if (wx + ww - (holeL + 3) > 0) p.bridges.push({ x: holeL + 3, alt: bankAlt, w: wx + ww - (holeL + 3) })
-      p.platforms.push(...ramp(wx + ww, w - (wx + ww), bankAlt, exitAlt)) // berge droite descendante
+      // BERGE DROITE au MÊME niveau que la gauche (surface d'eau horizontale) : corniche plate flush
+      // à l'eau à bankAlt, PUIS redescente. Sans ce palier plat, la rampe amorçait sa descente dès le
+      // bord de l'eau → rebord droit plus bas que le gauche (retour user « rebord gauche + haut »).
+      const rbx = wx + ww
+      const flatW = Math.min(bank, Math.max(1, w - rbx - 1))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, exitAlt)) // berge droite descendante
       if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) }) // au fond (sol) — jamais dans la lave
       placeBirds(bankAlt + 2)
       break
@@ -521,12 +531,17 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const bankAlt = entryAlt + 2
       const rampW = 4
       p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt))
-      const wx = rampW, ww = Math.max(6, w - 2 * rampW)
+      const wx = rampW, ww = w - 2 * rampW // eau entre les DEUX berges de largeur rampW (surface plane)
       p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt })
       const holeL = wx + Math.floor(ww / 2) - 1 // trou central de 3 tuiles : on plonge par là
       if (holeL - wx > 0) p.bridges.push({ x: wx, alt: bankAlt, w: holeL - wx })
       if (wx + ww - (holeL + 3) > 0) p.bridges.push({ x: holeL + 3, alt: bankAlt, w: wx + ww - (holeL + 3) })
-      p.platforms.push(...ramp(wx + ww, w - (wx + ww), bankAlt, entryAlt))
+      // berge droite AU MÊME niveau que la gauche (rebords à niveau), puis redescente
+      const rbx = wx + ww
+      const flatW = Math.min(bank, Math.max(1, w - rbx - 1))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, entryAlt))
       if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) }) // petit trésor au fond du bassin
       p.exitAlt = entryAlt
       break
@@ -646,12 +661,17 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const bankAlt = entryAlt + 4
       const rampW = 5
       p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt))
-      const wx = rampW, ww = Math.max(6, w - 2 * rampW)
+      const wx = rampW, ww = w - 2 * rampW // eau entre les DEUX berges (surface plane, rebords à niveau)
       p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt })
       const holeL = wx + Math.floor(ww / 2) - 1
       if (holeL - wx > 0) p.bridges.push({ x: wx, alt: bankAlt, w: holeL - wx })
       if (wx + ww - (holeL + 3) > 0) p.bridges.push({ x: holeL + 3, alt: bankAlt, w: wx + ww - (holeL + 3) })
-      p.platforms.push(...ramp(wx + ww, w - (wx + ww), bankAlt, entryAlt))
+      // berge droite AU MÊME niveau que la gauche, puis redescente
+      const rbx = wx + ww
+      const flatW = Math.min(bank, Math.max(1, w - rbx - 1))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, entryAlt))
       if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) })
       placeBirds(bankAlt + 2)
       break
@@ -785,13 +805,62 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.exitAlt = outAlt
       break
     }
+
+    // ─── LAC EN U : plonger, nager SOUS LA ROCHE, ressortir à la MÊME hauteur ─────────────────
+    case 'lac-en-u': {
+      // Corniche d'ENTRÉE à hauteur H (bankAlt) → colonne d'eau qui DESCEND → TUNNEL immergé au fond
+      // sous un PLAFOND DE ROCHE (collision, comme une grotte) : au milieu on NE PEUT PAS remonter à
+      // la surface → on nage sous la roche → colonne qui REMONTE → corniche de SORTIE à la MÊME
+      // hauteur H. En U symétrique. Rebords des deux colonnes AU MÊME niveau (règle rebords).
+      const bankAlt = entryAlt + 3 // berges rehaussées → U assez profond (surface à bankAlt, fond = sol)
+      const rampW = 3
+      const colW = 3 // largeur des colonnes verticales OUVERTES (on y atteint la surface : descente/montée)
+      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt)) // rampe d'accès → corniche gauche à bankAlt
+      const wx = rampW
+      const ww = Math.max(2 * colW + 4, w - 2 * rampW) // eau entre les deux berges (≥ 2 colonnes + tunnel)
+      p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt }) // cuve close (murs posés par le moteur), surface plane
+      // PLAFOND DE ROCHE SUBMERGÉ au MILIEU (entre les 2 colonnes) : de ceilBotAlt à la surface bankAlt,
+      // collision pleine → impossible de faire surface au milieu, on nage dessous. Tunnel = eau sous
+      // ceilBotAlt jusqu'au fond. POCHE(S) D'AIR : si le milieu est large, on ménage des trous dans le
+      // plafond (on y refait surface pour respirer) → traversée toujours tenable dans l'apnée (5 s).
+      // toit du tunnel : eau libre du fond jusqu'à ceilBotAlt (le panda nage dessous). Borné pour
+      // garder À LA FOIS un dégagement de nage (≥ 2 rangées) et une roche assez épaisse (≥ 2 rangées).
+      const ceilBotAlt = Math.min(4, Math.max(2, bankAlt - 2))
+      const midX = wx + colW
+      const midW = ww - 2 * colW
+      const maxRock = 7 // longueur de roche max entre deux poches d'air (borne la nage en apnée)
+      const airGap = 2
+      let rx = midX
+      while (rx < midX + midW) {
+        const seg = Math.min(maxRock, midX + midW - rx)
+        p.rocks.push({ x: rx, altBot: ceilBotAlt, altTop: bankAlt, w: seg, solid: true }) // plafond de roche immergé
+        rx += seg + airGap // saute une POCHE D'AIR (colonnes ouvertes où l'on refait surface)
+      }
+      // berge droite (corniche de SORTIE) AU MÊME niveau H que l'entrée, puis retour à l'altitude de sortie
+      const rbx = wx + ww
+      const flatW = Math.min(bank, Math.max(1, w - rbx - 1))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, exitAlt))
+      // MONSTRES AQUATIQUES proportionnels à la SURFACE d'eau (petit U → 1-2, grand → plus). Placés
+      // SANS y → posés au FOND (immergés) : ils nagent (aquatic, pas de noyade) ; jamais de terrestre.
+      if (groundMobs.length) {
+        const area = ww * bankAlt
+        const nAqua = Math.max(1, Math.min(4, Math.round(area / 70)))
+        spread(ww, nAqua).forEach((ax, i) => p.spawns.push({ monsterId: groundMobs[i % groundMobs.length]!, x: wx + ax }))
+      }
+      placeBirds(bankAlt + 2)
+      p.exitAlt = exitAlt
+      break
+    }
   }
 
   // Placement GÉNÉRIQUE des monstres terrestres : posés SUR les plateformes marchables assez larges
   // (≥4) à leur altitude réelle → jamais en l'air ni dans la roche, toujours de la place pour
-  // patrouiller (validateur monstersOffSurface).
+  // patrouiller (validateur monstersOffSurface). Le LAC EN U place lui-même ses mobs AQUATIQUES dans
+  // l'eau (proportionnels à la surface) → on saute le placement générique pour ce module.
   const walkable = p.platforms.filter((pl) => pl.w >= 4).sort((a, b) => a.x - b.x)
-  groundMobs.forEach((id, i) => {
+  if (m.kind !== 'lac-en-u') groundMobs.forEach((id, i) => {
     if (walkable.length === 0) { p.spawns.push({ monsterId: id, x: Math.round((w * (i + 1)) / (groundMobs.length + 1)) }); return }
     const pl = walkable[i % walkable.length]!
     const cx = Math.min(pl.x + pl.w - 2, Math.max(pl.x + 1, pl.x + Math.floor(pl.w / 2)))
@@ -1002,6 +1071,8 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'sortie-humide': { tier: 3, family: 'risque', entry: 'bas', exit: 'haut', width: [16, 26], below: 'cascade', above: 'air', chest: true, water: true },
   // passage sous-marin (plonger par le haut, ressortir sur le côté)
   'passage-immerge': { tier: 3, family: 'risque', entry: 'milieu', exit: 'bas', width: [16, 26], below: 'marine', above: 'air', water: true },
+  // lac en U (plonger, nager sous la roche, ressortir à la MÊME hauteur — entrée = sortie)
+  'lac-en-u': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [18, 30], below: 'marine', above: 'roche', water: true },
 }
 
 // Construit un Module à partir de son kind (fills + métadonnées du CATALOG) + peuplement/flags.

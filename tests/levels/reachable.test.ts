@@ -12,6 +12,8 @@ import {
   openWaterHazards,
   monstersOffSurface,
   startExitProblems,
+  unlevelWaterBanks,
+  deadEndSurfaces,
 } from '../../src/core/level-validator'
 import { MAX_LADDER_TILES } from '../../src/core/platforming'
 import { MONSTERS } from '../../src/data/monsters'
@@ -103,7 +105,27 @@ describe('kit de modules — jouabilité + cohérence des niveaux modulaires', (
       const waters = (level.hazards ?? []).filter((h) => h.kind === 'water')
       expect(waters.length, `${id}: aucune eau`).toBeGreaterThan(0)
     })
+
+    it(`${id} — rebords de plan d'eau À NIVEAU (surface horizontale, berges de même altitude)`, () => {
+      const bad = unlevelWaterBanks(level)
+      expect(bad, `${id}: rebords désaxés → ${JSON.stringify(bad)}`).toEqual([])
+    })
+
+    it(`${id} — aucun piège sans retour (remonter vers la sortie OU mourir, jamais coincé vivant)`, () => {
+      const bad = deadEndSurfaces(level)
+      expect(bad, `${id}: pièges sans retour → ${JSON.stringify(bad.slice(0, 6))}`).toEqual([])
+    })
   }
+
+  it('un niveau au moins pose un LAC EN U (plafond de roche submergé + colonnes ouvertes)', () => {
+    const u = LEVELS['plage-2']!
+    // le lac en U pose une cuve marine ET un plafond de roche SOLIDE immergé (toit du tunnel)
+    expect((u.hazards ?? []).some((h) => h.kind === 'water' && h.water === 'basin')).toBe(true)
+    expect((u.rockBands ?? []).some((r) => r.solid)).toBe(true)
+    // pas de piège, rebords à niveau (les invariants s'appliquent aussi à ce niveau)
+    expect(deadEndSurfaces(u)).toEqual([])
+    expect(unlevelWaterBanks(u)).toEqual([])
+  })
 
   it('la zone modulaire contient bassin marine ET cascade remontable', () => {
     const allWaters = MODULAR_IDS.flatMap((id) => (LEVELS[id]!.hazards ?? []).filter((h) => h.kind === 'water'))
@@ -179,6 +201,65 @@ describe('kit de modules — cas de rejet synthétiques', () => {
     }
     expect(maxStackedTiers(ok)).toBe(3)
     expect(overStackedColumns(ok, 3)).toEqual([])
+  })
+
+  it('rebords de bassin À NIVEAU (berges de même altitude) → accepté', () => {
+    const ok: LevelDef = {
+      id: 'synth-berges-ok', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],
+      platforms: [{ x: 3, y: 11, w: 4 }, { x: 15, y: 11, w: 4 }], // berges gauche ET droite à row 11
+      hazards: [{ kind: 'water', x: 7, w: 8, top: 11, h: 4, water: 'basin' }],
+    }
+    expect(unlevelWaterBanks(ok)).toEqual([])
+  })
+
+  it('rebord DROIT plus bas que le gauche → rejeté (surface d’eau non horizontale)', () => {
+    const bad: LevelDef = {
+      id: 'synth-berges-ko', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],
+      platforms: [{ x: 3, y: 11, w: 4 }, { x: 15, y: 13, w: 4 }], // berge droite 2 rangées PLUS BAS
+      hazards: [{ kind: 'water', x: 7, w: 8, top: 11, h: 4, water: 'basin' }],
+    }
+    const b = unlevelWaterBanks(bad)
+    expect(b).toHaveLength(1)
+    expect(b[0]!.side).toBe('droite')
+  })
+
+  it('bord OUVERT (passage sous-marin) → berge de ce côté exemptée', () => {
+    const ok: LevelDef = {
+      id: 'synth-berges-open', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],
+      platforms: [{ x: 3, y: 11, w: 4 }, { x: 15, y: 14, w: 4 }], // droite basse mais côté OUVERT
+      hazards: [{ kind: 'water', x: 7, w: 8, top: 11, h: 6, water: 'basin', openSide: 'right' }],
+    }
+    expect(unlevelWaterBanks(ok)).toEqual([])
+  })
+
+  it('piège sans retour : sortie HAUTE injoignable, aucune mort possible → rejeté', () => {
+    const bad: LevelDef = {
+      id: 'synth-softlock', name: 't', biome: 'plaine', widthTiles: 40, heightTiles: 20, spawns: [],
+      start: { x: 4, y: 14 }, exit: { x: 35, y: 5 },
+      // départ sur un palier bas (alt4, joignable du sol) ; sortie alt13 ISOLÉE (aucune échelle/marche) ;
+      // aucun trou/eau → on ne peut pas mourir → coincé vivant sans retour.
+      platforms: [{ x: 2, y: 14, w: 6 }, { x: 33, y: 5, w: 5 }],
+    }
+    expect(deadEndSurfaces(bad).length).toBeGreaterThan(0)
+  })
+
+  it('même sortie haute mais reliée par des paliers ≤3 → accepté (on remonte)', () => {
+    const ok: LevelDef = {
+      id: 'synth-softlock-ok', name: 't', biome: 'plaine', widthTiles: 40, heightTiles: 20, spawns: [],
+      start: { x: 4, y: 14 }, exit: { x: 30, y: 5 },
+      platforms: [{ x: 2, y: 14, w: 8 }, { x: 8, y: 11, w: 8 }, { x: 14, y: 8, w: 8 }, { x: 20, y: 6, w: 8 }, { x: 26, y: 5, w: 8 }],
+    }
+    expect(deadEndSurfaces(ok)).toEqual([])
+  })
+
+  it('cul-de-sac MAIS mortel (trou sous le palier) → toléré (on peut mourir)', () => {
+    const okDie: LevelDef = {
+      id: 'synth-softlock-die', name: 't', biome: 'plaine', widthTiles: 40, heightTiles: 20, spawns: [],
+      start: { x: 4, y: 14 }, exit: { x: 35, y: 5 },
+      gaps: [{ x: 0, w: 40 }], // TOUT le sol est un vide mortel : depuis le palier de départ, tomber = mourir
+      platforms: [{ x: 2, y: 14, w: 6 }, { x: 33, y: 5, w: 5 }],
+    }
+    expect(deadEndSurfaces(okDie)).toEqual([])
   })
 })
 
