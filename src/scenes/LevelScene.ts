@@ -14,6 +14,7 @@ import { physicalDamage, inMeleeReach } from '../core/combat'
 import { grantXp, playerXpGain } from '../core/progression'
 import { emptyControls, mergeControls, type ControlsState } from '../core/controls'
 import { getPlayer } from '../state'
+import { basicAttackCooldownFactor } from '../core/stats'
 import { save } from '../core/save'
 import { CooldownTracker, energyCostOf } from '../core/skill-executor'
 import { ENERGY_ON_BASIC_HIT } from '../entities/Player'
@@ -1427,7 +1428,9 @@ export class LevelScene extends Phaser.Scene {
   basicAttack() {
     if (this.player.hp <= 0) return
     if (this.time.now < this.nextBasicAttackAt) return
-    this.nextBasicAttackAt = this.time.now + 1000 / this.player.stats.attackSpeed
+    // le passif « double attaque » (frappe-doublee / reflexes-felins) raccourcit le cooldown de base
+    // selon son rang (× jusqu'à 0,5 au rang max → cadence doublée).
+    this.nextBasicAttackAt = this.time.now + (1000 / this.player.stats.attackSpeed) * basicAttackCooldownFactor(getPlayer())
     audio.playSfx('attack')
     this.player.playAttack()
     this.player.gainEnergy(ENERGY_ON_BASIC_HIT) // frapper recharge un peu l'énergie

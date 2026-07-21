@@ -50,6 +50,10 @@ export interface SkillDef {
   wall?: { durationMs: number; height: number } // zone : mur de flammes temporaire (brûle + bloque les ennemis)
   // passif : bonus par rang appris (jamais équipé). hpRegenPerSec = régénération de PV/s (sabreur).
   passive?: { atk?: number; def?: number; maxHp?: number; attackSpeed?: number; hpRegenPerSec?: number }
+  // passif « double attaque » (chevalier : frappe-doublee ; archer/chasseur : reflexes-felins) :
+  // réduit le cooldown de l'ATTAQUE DE BASE selon le rang appris — cooldown × (1 / (1 + rang/rangMax)).
+  // Au rang MAX, cooldown /2 → le panda frappe 2× plus souvent (voir basicAttackCooldownFactor).
+  doubleStrike?: boolean
 }
 
 export type Rarity = 'commun' | 'rare' | 'epique' | 'legendaire'

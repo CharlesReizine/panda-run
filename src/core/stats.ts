@@ -1,5 +1,6 @@
 import type { StatBlock } from './types'
 import type { PlayerState } from './player-state'
+import { MAX_SKILL_RANK } from './player-state'
 import { CLASSES } from '../data/classes'
 import { ITEMS } from '../data/items'
 import { SKILLS } from '../data/skills'
@@ -49,6 +50,22 @@ export function computeStats(p: PlayerState): StatBlock {
     s.attackSpeed += (passive.attackSpeed ?? 0) * rank
   }
   return s
+}
+
+// Facteur multiplicatif appliqué au cooldown de l'ATTAQUE DE BASE par le passif « double attaque »
+// (chevalier : frappe-doublee ; archer/chasseur : reflexes-felins). Interpolation linéaire de la
+// CADENCE selon le rang appris : cooldown × (1 / (1 + rang/rangMax)). Rang 1 → ×0,833 … rang max →
+// ×0,5 (frappe 2× plus souvent). 1 (aucun effet) si aucun passif double-attaque appris. On retient
+// le meilleur (facteur le plus bas) si plusieurs sont appris.
+export function basicAttackCooldownFactor(p: PlayerState): number {
+  let best = 1
+  for (const [id, rank] of Object.entries(p.skillLevels)) {
+    if (rank <= 0) continue
+    if (!SKILLS[id]?.doubleStrike) continue
+    const factor = 1 / (1 + rank / MAX_SKILL_RANK)
+    if (factor < best) best = factor
+  }
+  return best
 }
 
 // Régénération de PV par seconde apportée par les passifs appris (rang > 0), cumulée × rang.

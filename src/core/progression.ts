@@ -6,12 +6,13 @@ export const CLASS_CHANGE_LEVEL = 10
 export const CLASS_EVOLVE_LEVEL = 30
 export const STAT_POINTS_PER_LEVEL = 2 // points de stat gagnés à chaque niveau
 
-// Multiplicateur appliqué au GAIN d'XP du joueur (retour user : la progression allait trop vite,
-// −30%). Volontairement appliqué au gain côté joueur et NON à MonsterDef.xp : la valeur `xp` d'un
+// Multiplicateur appliqué au GAIN d'XP du joueur (retours user successifs : la progression allait
+// trop vite). Deux réductions cumulatives de −30% : 0.7 (1er retour) puis ×0.7 (2e retour) = 0.49.
+// Volontairement appliqué au gain côté joueur et NON à MonsterDef.xp : la valeur `xp` d'un
 // monstre reste l'invariant qui pilote computeMonsterLevels (src/core/mob-level.ts). On ne touche
 // donc pas à la courbe de niveaux des monstres ; seule la vitesse de montée du joueur ralentit.
 // Source de vérité unique — importée au point d'attribution d'XP (LevelScene.onEnemyDied).
-export const XP_GAIN_MULTIPLIER = 0.7
+export const XP_GAIN_MULTIPLIER = 0.49
 
 // Convertit la récompense brute d'un monstre (MonsterDef.xp) en XP réellement gagnée par le joueur,
 // après le multiplicateur ci-dessus (arrondi au plus proche pour rester entier).

@@ -54,10 +54,13 @@ describe('données classes/skills', () => {
     }
   })
 
-  it('les 3 nouveaux skills de chaque classe évoluée lui appartiennent en propre', () => {
+  it('chaque classe évoluée porte ses skills propres (3 actifs signature ; +1 passif pour le chevalier)', () => {
+    // chevalier : 3 actifs royaux + le passif « double frappe » (frappe-doublee) qui remplace la
+    // régénération du sabreur dans son arbre. sorcier / chasseur : 3 actifs signature chacun.
+    const ownCount: Record<'chevalier' | 'sorcier' | 'chasseur', number> = { chevalier: 4, sorcier: 3, chasseur: 3 }
     for (const evolved of ['chevalier', 'sorcier', 'chasseur'] as const) {
       const own = CLASSES[evolved].skillIds.filter((sid) => SKILLS[sid]!.classId === evolved)
-      expect(own, evolved).toHaveLength(3)
+      expect(own, evolved).toHaveLength(ownCount[evolved])
     }
   })
 
