@@ -39,6 +39,9 @@ export type ModuleKind =
   | 'gap-grandissant' | 'ilots-reguliers' | 'ilots-irreguliers' | 'trou-filet' | 'pas-japonais' | 'triple-saut'
   // vertical / étages (D2–D4)
   | 'zigzag' | 'cage-echelles' | 'echelle-vs-sauts' | 'descente-controlee' | 'tour-creuse'
+  // PASSERELLES FLOTTANTES EN ZIGZAG ASCENDANT : plateformes suspendues qui montent en alternant
+  // gauche/droite (chaque saut franchissable), au-dessus du vide (rater = chute mortelle, jamais coincé)
+  | 'passerelles-zigzag'
   // risque / récompense (D2–D4)
   | 'chemin-double' | 'detour-balcon' | 'fausse-sortie' | 'tresor-bassin'
   // tension / précision (D3–D5) — PHASE 2b : le moteur rend désormais les pics sur N'IMPORTE QUELLE
@@ -54,6 +57,12 @@ export type ModuleKind =
   // LAC EN U : plonger d'une corniche à hauteur H, nager sous un PLAFOND DE ROCHE immergé au milieu,
   // ressortir sur une corniche à la MÊME hauteur H (passage sous-marin symétrique)
   | 'lac-en-u'
+  // GROTTE-TUNNEL : vrai boyau de roche (roche au-dessus ET en dessous) plus long/varié que 'grotte',
+  // réservé aux biomes ROCHEUX / SOUTERRAINS (cave/montagne/carriere/enfer/jungle) — cavités franches
+  | 'grotte-tunnel'
+  // GROTTE SOUS-MARINE EN U : lac en U NOYÉ SOUS UN TOIT DE ROCHE (grotte inondée) — on plonge, on
+  // traverse le fond immergé sous un plafond de roche, on remonte de l'autre côté ; coffre au fond
+  | 'grotte-noyee'
 
 // Tier de difficulté (D1..D5) et tags d'accroche : altitude du bord GAUCHE (entrée) / DROIT (sortie).
 export type Tier = 1 | 2 | 3 | 4 | 5
@@ -183,19 +192,26 @@ function addPedestals(p: Piece, w: number) {
 // au lieu d'une ligne plate. Le sommet reste commun (masse connectée, épaisse) ; seul le BAS varie.
 // Le dégagement libre reste TOUJOURS > saut (min 5 rangées > maxJump ≈ 4) → on traverse le boyau
 // sans jamais se cogner. Purement RENDU (rockBands sans collision). `variant` ∈ {0,1,2}.
+// Nombre de VARIANTES de plafond disponibles (0..CEILING_VARIANTS-1) — plusieurs profils de bord
+// inférieur pour que deux grottes ne se ressemblent jamais (dents, marches, ondulation, voûtes,
+// stalactites). Le dégagement libre reste TOUJOURS ≥ 5 rangées (> saut ≈ 4).
+const CEILING_VARIANTS = 5
 function pushVariedCeiling(p: Piece, w: number, alt: number, variant: number) {
   const base = alt + CAVE_CLEARANCE // dégagement de base (6 rangées)
-  const topAlt = base + CAVE_CEILING_THICK + 2 // sommet commun → dalle pleine et connectée
+  const topAlt = base + CAVE_CEILING_THICK + 3 // sommet commun → dalle pleine et connectée (assez épaisse pour les voûtes)
+  const v = ((variant % CEILING_VARIANTS) + CEILING_VARIANTS) % CEILING_VARIANTS
   const seg = 4
   let i = 0
   for (let x = 0; x < w; x += seg, i++) {
     const sw = Math.min(seg, w - x)
     // offset du bord inférieur : négatif = DENT qui pend (dégagement plus court, jamais < 5),
-    // positif = RECREUSE (plus de dégagement). Amplitude bornée [-1, +2] → dégagement ∈ [5, 8].
+    // positif = RECREUSE (plus de dégagement). Amplitude bornée [-1, +3] → dégagement ∈ [5, 9].
     let off: number
-    if (variant === 0) off = i % 2 === 0 ? -1 : 2 // DENTS / créneaux
-    else if (variant === 1) off = [0, 1, 2, 1][i % 4]! // MARCHES
-    else off = [2, 1, 0, 1][i % 4]! // ONDULATION douce
+    if (v === 0) off = i % 2 === 0 ? -1 : 2 // DENTS / créneaux
+    else if (v === 1) off = [0, 1, 2, 1][i % 4]! // MARCHES
+    else if (v === 2) off = [2, 1, 0, 1][i % 4]! // ONDULATION douce
+    else if (v === 3) off = [3, 1, 3, 1][i % 4]! // GROSSES VOÛTES (arches profondes)
+    else off = i % 3 === 0 ? -1 : 3 // STALACTITES espacées (pointe basse isolée)
     // PLAFOND SOLIDE : collision pleine → on ne saute pas à travers (le dégagement reste > saut).
     p.rocks.push({ x, altBot: base + off, altTop: topAlt, w: sw, solid: true })
   }
@@ -421,7 +437,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // socle plein sous la surface (jusqu'au niveau du sol du monde ; le reste est fermé par le sol)
       if (alt - 1 >= 1) p.rocks.push({ x: 0, altBot: 1, altTop: alt - 1, w })
       // PLAFOND DE ROCHE VARIÉ (dents/marches/vagues) au lieu d'une dalle plate
-      pushVariedCeiling(p, w, alt, Math.floor(rng() * 3))
+      pushVariedCeiling(p, w, alt, Math.floor(rng() * CEILING_VARIANTS))
       p.exitAlt = alt
       break
     }
@@ -702,7 +718,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // enchaîne des sauts par-dessus les lits, dégagement > saut sous le plafond.
       const alt = Math.max(2, entryAlt)
       p.platforms.push({ x: 0, alt, w })
-      pushVariedCeiling(p, w, alt, Math.floor(rng() * 3)) // plafond de roche varié
+      pushVariedCeiling(p, w, alt, Math.floor(rng() * CEILING_VARIANTS)) // plafond de roche varié
       let x = 3
       while (x < w - 4) { p.spikes.push({ x, w: 2, alt }); x += 6 } // lit de 2 pics + 4 tuiles libres
       p.exitAlt = alt
@@ -851,6 +867,104 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       }
       placeBirds(bankAlt + 2)
       p.exitAlt = exitAlt
+      break
+    }
+
+    // ─── GROTTE-TUNNEL : boyau de roche PLUS LONG et VARIÉ (roche dessus ET dessous) ──────────
+    case 'grotte-tunnel': {
+      // Vrai tunnel fermé, comme 'grotte', mais avec un RELIEF de sol (petit ressaut) et un plafond
+      // ondulant tiré parmi les 5 profils → deux grottes ne se ressemblent jamais. Le dégagement sous
+      // le plafond reste > saut (on ne se cogne pas). Réservé aux biomes rocheux/souterrains.
+      const alt = Math.max(entryAlt, 2)
+      // sol en deux paliers : plat, puis un ressaut d'1 marche à mi-parcours (relief de caverne)
+      const step = 1 + (Math.floor(rng() * 2)) // 1 ou 2 rangées de ressaut
+      const half = Math.floor(w / 2)
+      p.platforms.push({ x: 0, alt, w: half })
+      p.platforms.push({ x: half, alt: alt + step, w: w - half })
+      // socle plein sous les deux paliers (grotte « tout pierre dessous »)
+      if (alt - 1 >= 1) p.rocks.push({ x: 0, altBot: 1, altTop: alt - 1, w })
+      // PLAFOND DE ROCHE VARIÉ calé sur le palier le PLUS HAUT (dégagement garanti partout)
+      pushVariedCeiling(p, w, alt + step, Math.floor(rng() * CEILING_VARIANTS))
+      p.exitAlt = alt + step
+      break
+    }
+
+    // ─── GROTTE SOUS-MARINE EN U : lac en U NOYÉ SOUS UN TOIT DE ROCHE, coffre au fond ────────
+    case 'grotte-noyee': {
+      // Grotte inondée : comme 'lac-en-u' (on plonge, on nage sous un plafond de roche IMMERGÉ au
+      // milieu, on remonte à la MÊME hauteur H de l'autre côté) MAIS coiffée d'un TOIT DE ROCHE au-
+      // dessus de la surface de l'eau (grotte noyée fermée). Coffre AU FOND = récompense de plongée.
+      const bankAlt = entryAlt + 3
+      const rampW = 3
+      const colW = 3
+      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt)) // rampe → corniche gauche à bankAlt
+      const wx = rampW
+      const ww = Math.max(2 * colW + 4, w - 2 * rampW)
+      p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt }) // cuve close, surface plane
+      // PLAFOND IMMERGÉ au MILIEU (force la plongée : impossible de faire surface au centre)
+      const ceilBotAlt = Math.min(4, Math.max(2, bankAlt - 2))
+      const midX = wx + colW
+      const midW = ww - 2 * colW
+      const maxRock = 7
+      const airGap = 2
+      let rx = midX
+      while (rx < midX + midW) {
+        const seg = Math.min(maxRock, midX + midW - rx)
+        p.rocks.push({ x: rx, altBot: ceilBotAlt, altTop: bankAlt, w: seg, solid: true })
+        rx += seg + airGap
+      }
+      // TOIT DE ROCHE au-DESSUS de la surface (grotte noyée) : plafond varié calé sur bankAlt, avec
+      // un dégagement > saut au-dessus de la surface → on entre/ressort sans se cogner au plafond.
+      pushVariedCeiling(p, w, bankAlt, Math.floor(rng() * CEILING_VARIANTS))
+      // berge droite (corniche de SORTIE) à la MÊME hauteur H, puis retour à l'altitude de sortie
+      const rbx = wx + ww
+      const flatW = Math.min(bank, Math.max(1, w - rbx - 1))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, exitAlt))
+      // COFFRE AU FOND (jamais dans la lave) : plongée récompensée
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) })
+      // monstres AQUATIQUES au fond (comme lac-en-u) — jamais de terrestre au-dessus de l'eau
+      if (groundMobs.length) {
+        const nAqua = Math.max(1, Math.min(3, Math.round((ww * bankAlt) / 80)))
+        spread(ww, nAqua).forEach((ax, i) => p.spawns.push({ monsterId: groundMobs[i % groundMobs.length]!, x: wx + ax }))
+      }
+      p.exitAlt = exitAlt
+      break
+    }
+
+    // ─── PASSERELLES FLOTTANTES EN ZIGZAG ASCENDANT ───────────────────────────────────────────
+    case 'passerelles-zigzag': {
+      // Plateformes SUSPENDUES qui montent en alternant GAUCHE / DROITE : on saute en haut à gauche,
+      // puis en haut à droite, puis gauche… pour grimper. Deux colonnes fixes (xL, xR) : chaque saut
+      // monte de STEP_RISE=2 rangées (< saut ≈ 4) avec un écart horizontal de 2 tuiles (≤ portée de
+      // saut confortable) → toujours FRANCHISSABLE. Le tout AU-DESSUS DU VIDE (passerelles flottantes :
+      // rater un saut = chute mortelle, jamais coincé vivant → pas de socle plein sous la travée). La
+      // dernière passerelle est un PALIER LARGE jusqu'au bord droit (raccord au module suivant, au
+      // sommet). ≤ 3 passerelles empilées par colonne (silhouette collines respectée, le vide ne
+      // compte pas comme palier).
+      const base = Math.max(1, entryAlt)
+      const STEP_RISE = 2
+      const pw = 3
+      const gapX = 2 // écart horizontal entre les deux colonnes (≤ portée de saut à +2 rangées)
+      const xL = bank
+      const xR = xL + pw + gapX
+      const steps = 4 + Math.floor(rng() * 2) // 5 à 6 passerelles empilées (≤ 3 par colonne)
+      // berge SOLIDE d'entrée à gauche (raccord au module précédent, à l'altitude d'entrée)
+      p.platforms.push({ x: 0, alt: base, w: bank })
+      let top = base
+      for (let k = 0; k <= steps; k++) {
+        const alt = base + k * STEP_RISE
+        const x = k % 2 === 0 ? xL : xR // alterne gauche / droite
+        const isLast = k === steps
+        const pwk = isLast ? Math.max(pw, w - x) : pw // dernière = palier large → sortie au sommet
+        p.platforms.push({ x, alt, w: pwk })
+        top = alt
+      }
+      // TROUS mortels sous toute la travée des passerelles (tranches ≤ 3 → chacune franchissable, mais
+      // on ne les franchit pas : on grimpe les passerelles). Retire le socle → passerelles FLOTTANTES.
+      for (let gx = bank; gx < w; gx += 3) p.gaps.push({ x: gx, w: Math.min(3, w - gx) })
+      p.exitAlt = top
       break
     }
   }
@@ -1053,6 +1167,8 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'echelle-vs-sauts': { tier: 2, family: 'vertical', entry: 'bas', exit: 'haut', width: [14, 24], below: 'sol', above: 'air', ladder: true },
   'descente-controlee': { tier: 2, family: 'vertical', entry: 'haut', exit: 'bas', width: [14, 24], below: 'sol', above: 'air', birds: true },
   'tour-creuse': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [18, 28], below: 'sol', above: 'air', ladder: true },
+  // passerelles flottantes en zigzag ascendant (montée franchissable, vide dessous) — motif VERTICAL
+  'passerelles-zigzag': { tier: 2, family: 'vertical', entry: 'bas', exit: 'haut', width: [14, 22], below: 'vide', above: 'air' },
   // risque / récompense (D2–D4)
   'chemin-double': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [16, 26], below: 'vide', above: 'air' },
   'detour-balcon': { tier: 2, family: 'risque', entry: 'milieu', exit: 'milieu', width: [14, 24], below: 'sol', above: 'air', ladder: true, chest: true },
@@ -1073,6 +1189,10 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'passage-immerge': { tier: 3, family: 'risque', entry: 'milieu', exit: 'bas', width: [16, 26], below: 'marine', above: 'air', water: true },
   // lac en U (plonger, nager sous la roche, ressortir à la MÊME hauteur — entrée = sortie)
   'lac-en-u': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [18, 30], below: 'marine', above: 'roche', water: true },
+  // GROTTE-TUNNEL : boyau de roche varié (roche dessus ET dessous) — biomes rocheux/souterrains
+  'grotte-tunnel': { tier: 2, family: 'tension', entry: 'milieu', exit: 'haut', width: [14, 24], below: 'roche', above: 'roche' },
+  // GROTTE SOUS-MARINE EN U : lac en U noyé sous un toit de roche, coffre au fond (plongée récompensée)
+  'grotte-noyee': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [18, 30], below: 'marine', above: 'roche', chest: true, water: true },
 }
 
 // Construit un Module à partir de son kind (fills + métadonnées du CATALOG) + peuplement/flags.
@@ -1106,6 +1226,7 @@ export interface ComposeOpts {
   midCount?: number      // nb de modules centraux (défaut 5)
   allowLadders?: boolean // autoriser les motifs à échelle (niveau 1 : false pour rester simple)
   stony?: boolean // biome ROCHEUX : autorise les marches de PIERRE rigides (escalier-pierre)
+  caves?: boolean // biome ROCHEUX / SOUTERRAIN / JUNGLE PROFONDE : autorise les grottes-tunnels
   waterKinds?: ModuleKind[] // plans d'eau imposés (variété entre niveaux)
   lava?: boolean // ENFER : les cuves marine (bassin/tresor-bassin/petit-pont) deviennent de la LAVE mortelle
   seed?: string
@@ -1154,6 +1275,8 @@ export function planModules(o: ComposeOpts): Module[] {
       if (k === 'plateau' || k === 'arene') return false // réservés spawn / climax
       // marches de PIERRE rigides : uniquement en biome ROCHEUX (ailleurs incongru), jamais ailleurs.
       if (k === 'escalier-pierre') return !!o.stony
+      // grottes-tunnels : uniquement en biome ROCHEUX / SOUTERRAIN / JUNGLE (cavités franches)
+      if (k === 'grotte-tunnel') return !!o.caves
       return true
     })
 
@@ -1175,9 +1298,22 @@ export function planModules(o: ComposeOpts): Module[] {
   const modules: Module[] = []
   let chests = 0
   let lastKind: ModuleKind | null = null
+  // PLAFOND DE RÉPÉTITION : un même motif central ne se pose pas plus de MAX_REPEAT fois par niveau
+  // → fini les niveaux « le même motif encore et encore » (retour user sur la redondance).
+  const usage: Partial<Record<ModuleKind, number>> = {}
+  const MAX_REPEAT = 2
+  // Choix STRUCTUREL déterministe (départ / descente / montée de fin) dans un pool, filtré par tier +
+  // échelles autorisées, tiré sur le SEED du niveau → chaque niveau varie ses rôles fixes (départ,
+  // fin) au lieu de reprendre toujours plateau + descente-controlee/arène ou marche + échelle.
+  const structural = (pool: ModuleKind[], salt: string): ModuleKind => {
+    const ok = pool.filter((k) => CATALOG[k].tier <= cap && (!CATALOG[k].ladder || allowLadders))
+    const list = ok.length ? ok : pool
+    return list[hashSeed((o.seed ?? o.id) + ':' + salt) % list.length]!
+  }
 
-  // 1) DÉPART : filler plat à mi-hauteur, AUCUN monstre (R127)
-  modules.push(mk('plateau', { spawnHere: true, tags: ['respiration'] }))
+  // 1) DÉPART : filler PLAT à mi-hauteur (varié d'un niveau à l'autre), AUCUN monstre (R127)
+  const spawnKind = structural(['plateau', 'ligne-droite', 'couloir-large'], 'spawn')
+  modules.push(mk(spawnKind, { spawnHere: true, tags: ['respiration'] }))
 
   // 2) plan(s) d'eau imposé(s) : au moins un (eau + coffre), variété pilotée par waterKinds
   const waters = (o.waterKinds ?? ['bassin']).slice(0, 2)
@@ -1202,14 +1338,26 @@ export function planModules(o: ComposeOpts): Module[] {
     let cands = kindsOf(bucket)
     if (cands.length === 0) cands = kindsOf('traverse')
     if (cands.length === 0) cands = ['colline']
-    // évite la répétition immédiate + respecte le plafond de coffres
-    const fresh = cands.filter((k) => k !== lastKind)
-    let kind = pick(fresh.length ? fresh : cands)
+    // en biome à HAUT tier, la TENSION privilégie les motifs vraiment corsés (tier ≥ 3) → on sort
+    // enfin les motifs de précision jadis inutilisés (échelle exposée, pics en quinconce, atterrissage
+    // étroit) au lieu de retomber sur grotte/volée de bas tier.
+    if (bucket === 'tension' && cap >= 4) {
+      const hi = cands.filter((k) => CATALOG[k].tier >= 3)
+      if (hi.length) cands = hi
+    }
+    // évite la répétition immédiate, PLAFONNE la répétition d'un motif dans le niveau, respecte le
+    // plafond de coffres. Repli progressif (motifs frais → non-répétés immédiats → tous) pour ne
+    // jamais bloquer la sélection.
+    const notLast = cands.filter((k) => k !== lastKind)
+    const fresh = notLast.filter((k) => (usage[k] ?? 0) < MAX_REPEAT)
+    let kind = pick(fresh.length ? fresh : notLast.length ? notLast : cands)
     if (CATALOG[kind].chest && chests >= 3) {
-      const noChest = (fresh.length ? fresh : cands).filter((k) => !CATALOG[k].chest)
+      const src = fresh.length ? fresh : notLast.length ? notLast : cands
+      const noChest = src.filter((k) => !CATALOG[k].chest)
       if (noChest.length) kind = pick(noChest)
     }
     if (CATALOG[kind].chest) chests++
+    usage[kind] = (usage[kind] ?? 0) + 1
     const spec = CATALOG[kind]
     const mvpHere = o.mvp && bucket === 'risque' && idx >= order.length - 2 && !modules.some((m) => m.ground?.includes(o.mvp!))
     modules.push(mk(kind, {
@@ -1233,13 +1381,19 @@ export function planModules(o: ComposeOpts): Module[] {
   //    ending 'bas'  → grande descente jusqu'au sol, arène-climax + PORTE en contrebas ;
   //    ending 'haut' → petite marche puis échelle/escalier, PORTE tout en haut.
   if (o.ending === 'bas') {
-    modules.push(mk('descente-controlee', { rise: -40, ground: nextGround(), tags: ['relief', 'combat'] }))
+    // grande descente jusqu'au sol (motif varié) + arène-climax en contrebas
+    const descKind = structural(['descente-controlee', 'descente'], 'descend')
+    modules.push(mk(descKind, { rise: -40, ground: nextGround(), tags: ['relief', 'combat'] }))
     modules.push(mk('arene', { exitHere: true, ground: [...(o.mvp && !modules.some((m) => m.ground?.includes(o.mvp!)) ? [o.mvp] : []), ...nextGround()], tags: ['combat'] }))
   } else {
-    modules.push(mk('marche', { ground: nextGround() }))
-    const climb: ModuleKind = allowLadders ? 'echelle-tranquille' : 'escalier'
-    if (climb === 'escalier') modules.push(mk('escalier', { rise: 6, exitHere: true, ground: nextGround(), tags: ['montée'] }))
-    else modules.push(mk('echelle-tranquille', { exitHere: true, ground: nextGround(), tags: ['montée'] }))
+    // petite marche variée puis MONTÉE variée (échelle, cage, tour, zigzag, passerelles flottantes…)
+    const stepKind = structural(['marche', 'escalier', 'ligne-droite'], 'step')
+    modules.push(mk(stepKind, { ground: nextGround() }))
+    const climbPool: ModuleKind[] = allowLadders
+      ? ['echelle-tranquille', 'cage-echelles', 'echelle-vs-sauts', 'tour-creuse', 'zigzag', 'passerelles-zigzag']
+      : ['escalier', 'zigzag', 'passerelles-zigzag']
+    const climbKind = structural(climbPool, 'climb')
+    modules.push(mk(climbKind, { exitHere: true, ...(climbKind === 'escalier' ? { rise: 6 } : {}), ground: nextGround(), tags: ['montée'] }))
   }
 
   return modules

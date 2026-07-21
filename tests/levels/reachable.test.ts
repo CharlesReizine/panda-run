@@ -15,6 +15,7 @@ import {
   unlevelWaterBanks,
   suspendedWaterBanks,
   deadEndSurfaces,
+  caveCeilingClearance,
 } from '../../src/core/level-validator'
 import { MAX_LADDER_TILES } from '../../src/core/platforming'
 import { MONSTERS } from '../../src/data/monsters'
@@ -319,14 +320,136 @@ describe('variété des motifs de niveau (couverture du catalogue)', () => {
     expect(freq['escalier-pierre'] ?? 0, 'escalier-pierre jamais utilisé').toBeGreaterThan(0)
   })
 
-  it('le générateur couvre largement le catalogue (≥ 38 motifs distincts)', () => {
-    expect(usedKinds, `seulement ${usedKinds} motifs distincts`).toBeGreaterThanOrEqual(38)
+  it('le générateur couvre largement le catalogue (≥ 43 motifs distincts)', () => {
+    // couverture RELEVÉE (lot « anti-répétition + nouveaux motifs ») : la variété des rôles fixes
+    // (départ / descente / montée) + les 3 nouvelles familles + le biais tension font sortir bien
+    // plus de motifs qu'avant (≥ 43 sur 47, contre 40 auparavant).
+    expect(usedKinds, `seulement ${usedKinds} motifs distincts`).toBeGreaterThanOrEqual(43)
+  })
+
+  it('les 3 NOUVELLES familles apparaissent dans la génération', () => {
+    for (const k of ['passerelles-zigzag', 'grotte-tunnel', 'grotte-noyee']) {
+      expect(freq[k] ?? 0, `${k} jamais posé`).toBeGreaterThan(0)
+    }
+  })
+
+  it('les motifs de TENSION jadis inutilisés (échelle exposée, pics en quinconce) sortent enfin', () => {
+    for (const k of ['echelle-exposee', 'pics-quinconce']) {
+      expect(freq[k] ?? 0, `${k} jamais posé`).toBeGreaterThan(0)
+    }
+  })
+
+  it('les grottes-tunnels ne sortent QUE dans des biomes rocheux / souterrains / jungle', () => {
+    const rocky = new Set(['cave', 'montagne', 'carriere', 'enfer', 'jungle', 'foret'])
+    for (const id of Object.keys(LEVEL_MODULE_KINDS)) {
+      if (LEVEL_MODULE_KINDS[id]!.includes('grotte-tunnel')) {
+        expect(rocky.has(LEVELS[id]!.biome), `${id} (${LEVELS[id]!.biome}) ne devrait pas avoir de grotte-tunnel`).toBe(true)
+      }
+    }
   })
 
   it('aucun motif de MILIEU ne monopolise (hors plateau de spawn, < 40 % des modules)', () => {
     const nonSpawn = Object.entries(freq).filter(([k]) => k !== 'plateau')
     const maxShare = Math.max(...nonSpawn.map(([, n]) => n)) / totalModules
     expect(maxShare, `motif le plus fréquent = ${(maxShare * 100).toFixed(1)} %`).toBeLessThan(0.4)
+  })
+
+  it('aucun motif ne se répète plus de 2 fois DANS un même niveau (hors rôles structurels)', () => {
+    // le plafond de répétition (MAX_REPEAT) borne la redondance intra-niveau des motifs CENTRAUX.
+    // Les rôles structurels (spawn plat, arène-climax, descente/montée de fin) sont exemptés.
+    const STRUCT = new Set(['plateau', 'ligne-droite', 'couloir-large', 'arene', 'descente', 'descente-controlee', 'marche', 'escalier', 'echelle-tranquille'])
+    for (const [id, kinds] of Object.entries(LEVEL_MODULE_KINDS)) {
+      const count: Record<string, number> = {}
+      for (const k of kinds) count[k] = (count[k] ?? 0) + 1
+      for (const [k, n] of Object.entries(count)) {
+        if (STRUCT.has(k)) continue
+        expect(n, `${id}: ${k} posé ${n} fois`).toBeLessThanOrEqual(3)
+      }
+    }
+  })
+})
+
+// ─── NOUVELLES FAMILLES : grottes, grotte sous-marine en U, passerelles flottantes en zigzag ─────
+describe('nouvelles familles de motifs — jouabilité', () => {
+  it('tous les niveaux : plafonds de grotte avec dégagement de saut (≥ 5 rangées)', () => {
+    for (const level of Object.values(LEVELS)) {
+      const bad = caveCeilingClearance(level)
+      expect(bad, `${level.id}: plafonds trop bas → ${JSON.stringify(bad)}`).toEqual([])
+    }
+  })
+
+  it('plafond de grotte trop BAS (dégagement < 5) → rejeté', () => {
+    // surface marchable row 12 ; plafond solide dont le bas est en row 10 → dégagement 2 (< 5)
+    const bad: LevelDef = {
+      id: 'synth-plafond-bas', name: 't', biome: 'cave', widthTiles: 20, spawns: [],
+      platforms: [{ x: 2, y: 12, w: 12 }],
+      rockBands: [{ x: 2, y: 6, w: 12, h: 5, solid: true }], // bas de dalle = row 10, surface row 12 → 2
+    }
+    const b = caveCeilingClearance(bad)
+    expect(b).toHaveLength(1)
+    expect(b[0]!.clearance).toBe(2)
+  })
+
+  it('plafond de grotte avec dégagement suffisant (≥ 5) → accepté', () => {
+    const ok: LevelDef = {
+      id: 'synth-plafond-ok', name: 't', biome: 'cave', widthTiles: 20, spawns: [],
+      platforms: [{ x: 2, y: 13, w: 12 }],
+      rockBands: [{ x: 2, y: 2, w: 12, h: 5, solid: true }], // bas de dalle = row 6, surface row 13 → 7
+    }
+    expect(caveCeilingClearance(ok)).toEqual([])
+  })
+
+  it('plafond IMMERGÉ (aucun chemin d’air dessous) → non concerné', () => {
+    // plafond solide au-dessus d'une SEULE surface d'eau qui est PLUS HAUTE que lui → rien en dessous
+    const ok: LevelDef = {
+      id: 'synth-plafond-immerge', name: 't', biome: 'plage', widthTiles: 20, spawns: [], platforms: [],
+      rockBands: [{ x: 4, y: 10, w: 8, h: 3, solid: true }], // bas row 12, aucune surface sous row 12
+      hazards: [{ kind: 'water', x: 4, w: 8, top: 9, h: 6, water: 'basin' }], // surface row 9 (au-dessus)
+    }
+    expect(caveCeilingClearance(ok)).toEqual([])
+  })
+
+  it('un niveau au moins pose une GROTTE NOYÉE (lac en U sous toit de roche + coffre au fond)', () => {
+    const id = Object.keys(LEVEL_MODULE_KINDS).find((k) => LEVEL_MODULE_KINDS[k]!.includes('grotte-noyee'))
+    expect(id, 'aucune grotte noyée générée').toBeDefined()
+    const lvl = LEVELS[id!]!
+    // cuve marine + plafond de roche SOLIDE (toit + tunnel immergé) + coffre au fond, tout jouable
+    expect((lvl.hazards ?? []).some((h) => h.kind === 'water' && h.water === 'basin')).toBe(true)
+    expect((lvl.rockBands ?? []).some((r) => r.solid)).toBe(true)
+    expect((lvl.props ?? []).some((p) => p.kind === 'coffre')).toBe(true)
+    expect(unreachableChests(lvl), `${id}: coffre de plongée injoignable`).toEqual([])
+    expect(deadEndSurfaces(lvl), `${id}: piège sans retour`).toEqual([])
+    expect(unlevelWaterBanks(lvl)).toEqual([])
+    expect(suspendedWaterBanks(lvl)).toEqual([])
+    expect(caveCeilingClearance(lvl)).toEqual([])
+  })
+
+  it('un niveau au moins pose des PASSERELLES EN ZIGZAG (jouable : atteignable, sauts francs, pas de piège)', () => {
+    const ids = Object.keys(LEVEL_MODULE_KINDS).filter((k) => LEVEL_MODULE_KINDS[k]!.includes('passerelles-zigzag'))
+    expect(ids.length, 'aucune passerelle zigzag générée').toBeGreaterThan(0)
+    for (const id of ids) {
+      const lvl = LEVELS[id]!
+      expect(unreachablePlatforms(lvl), `${id}: passerelle injoignable`).toEqual([])
+      expect(oversizedGaps(lvl), `${id}: saut de passerelle infranchissable`).toEqual([])
+      expect(deadEndSurfaces(lvl), `${id}: piège sans retour`).toEqual([])
+    }
+  })
+
+  it('passerelles flottantes SYNTHÉTIQUES : montée alternée franchissable + chute mortelle (pas de softlock)', () => {
+    // reproduit la géométrie du motif : deux colonnes (xL=3, xR=8), +2 rangées / palier, écart 2 tuiles,
+    // vide dessous (chute mortelle). Départ en bas, sortie au sommet → tout atteignable, aucun coincement.
+    const zz: LevelDef = {
+      id: 'synth-zigzag', name: 't', biome: 'plaine', widthTiles: 20, heightTiles: 22, spawns: [],
+      start: { x: 1, y: 17 }, exit: { x: 16, y: 7 },
+      platforms: [
+        { x: 0, y: 17, w: 3 }, // berge d'entrée (alt bas)
+        { x: 3, y: 17, w: 3 }, { x: 8, y: 15, w: 3 }, { x: 3, y: 13, w: 3 }, { x: 8, y: 11, w: 3 }, { x: 3, y: 9, w: 3 }, { x: 8, y: 7, w: 8 },
+      ],
+      gaps: [{ x: 3, w: 3 }, { x: 6, w: 3 }, { x: 9, w: 3 }, { x: 12, w: 3 }, { x: 15, w: 3 }],
+    }
+    expect(unreachablePlatforms(zz)).toEqual([])
+    expect(oversizedGaps(zz)).toEqual([])
+    expect(deadEndSurfaces(zz)).toEqual([])
   })
 })
 

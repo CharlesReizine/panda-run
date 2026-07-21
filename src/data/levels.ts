@@ -129,13 +129,24 @@ const WATER_ROT: ModuleKind[][] = [
 // posées. Ailleurs (prairie, forêt…) elles resteraient incongrues → réservées à la pierre/roche.
 const STONY_BIOMES = new Set(['cave', 'montagne', 'carriere', 'enfer'])
 
-// LAC EN U (passage sous-marin symétrique) : placé sur 1-2 niveaux à eau. Toujours APPARIÉ à une
-// cuve porteuse de coffre (cascade/bassin) → chaque niveau garde son coffre exigé. Plage = mobs
-// aquatiques (méduse/crabe) dans l'eau ; jungle = variété (eau sans mob aquatique, par cohérence).
-const LAC_EN_U_LEVELS: Record<string, ModuleKind[]> = {
+// PLANS D'EAU SPÉCIAUX (passages sous-marins) placés sur des niveaux thématiquement adaptés :
+//   • LAC EN U : plonger, nager sous un plafond de roche immergé, ressortir à la MÊME hauteur ;
+//   • GROTTE NOYÉE : lac en U coiffé d'un TOIT DE ROCHE (grotte inondée), coffre au fond.
+// Toujours APPARIÉ à une cuve porteuse de coffre (cascade/bassin) → chaque niveau garde son coffre
+// exigé (la grotte noyée pose elle-même un coffre au fond, mais on garde une 2ᵉ cuve pour la variété).
+// Réservés aux biomes rocheux / souterrains / littoraux. Plage = mobs aquatiques (méduse/crabe).
+const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
   'plage-2': ['lac-en-u', 'cascade'],
   'jungle-5': ['lac-en-u', 'bassin'],
+  'cave-1': ['grotte-noyee', 'cascade'],
+  'plage-3': ['grotte-noyee', 'bassin'],
+  'carriere-1': ['grotte-noyee', 'cascade'],
+  'montagne-2': ['lac-en-u', 'cascade'],
 }
+
+// Biomes ROCHEUX / SOUTERRAINS / JUNGLE PROFONDE : on y autorise les GROTTES-TUNNELS (boyaux de
+// roche francs). Ailleurs (prairie, désert ouvert…) une caverne fermée serait incongrue.
+const CAVE_BIOMES = new Set(['cave', 'montagne', 'carriere', 'enfer', 'jungle', 'foret'])
 
 // Fait tourner le pool de monstres pour que deux niveaux d'un même biome ne se ressemblent pas.
 const rotate = <T>(arr: T[], by: number): T[] => (arr.length ? arr.map((_, i) => arr[(i + by) % arr.length]!) : arr)
@@ -160,11 +171,12 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
     midCount,
     allowLadders,
     stony: STONY_BIOMES.has(biome),
+    caves: CAVE_BIOMES.has(biome),
     // En ENFER, les cuves marine deviennent de la LAVE (aucun coffre de plongée) : on garantit alors
     // au moins une CASCADE remontable (seule cuve qui pose un coffre en biome lave) → chaque niveau
     // conserve son coffre exigé par la registry de props.
-    waterKinds: LAC_EN_U_LEVELS[id]
-      ? LAC_EN_U_LEVELS[id]!
+    waterKinds: SPECIAL_WATER_LEVELS[id]
+      ? SPECIAL_WATER_LEVELS[id]!
       : pool.lava && !WATER_ROT[idx % WATER_ROT.length]!.some((w) => w === 'cascade' || w === 'sortie-humide')
         ? (['bassin', 'cascade'] as ModuleKind[])
         : WATER_ROT[idx % WATER_ROT.length]!,

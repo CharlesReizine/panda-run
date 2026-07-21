@@ -262,6 +262,41 @@ export function unreachableChests(level: LevelDef): ChestProblem[] {
   return out
 }
 
+// ─── PLAFOND DE GROTTE : DÉGAGEMENT DE SAUT GARANTI (grottes, grottes-tunnels, grottes noyées) ──
+// Un PLAFOND DE ROCHE solide (tunnel) doit laisser un DÉGAGEMENT ≥ minClear rangées au-dessus de la
+// surface qu'il coiffe (sol marchable OU surface d'eau), sinon le panda se cogne / reste coincé sous
+// la roche. On ne contrôle QUE les plafonds SOLIDES qui coiffent une surface EN DESSOUS d'eux (dans
+// leur portée x) ; un plafond IMMERGÉ (sous la surface de l'eau, sans chemin d'air dessous) n'est
+// pas concerné (on nage dessous). Le dégagement > hauteur de saut (≈ 4 tuiles) → min 5 rangées.
+export interface CeilingProblem { x: number; w: number; clearance: number }
+export function caveCeilingClearance(level: LevelDef, minClear = 5): CeilingProblem[] {
+  const ceilings = (level.rockBands ?? []).filter((r) => r.solid)
+  const surfaces: { x: number; w: number; row: number }[] = [
+    ...level.platforms.map((p) => ({ x: p.x, w: p.w, row: p.y })),
+    ...(level.bridges ?? []).map((b) => ({ x: b.x, w: b.w, row: b.y })),
+    ...(level.hazards ?? []).filter((h) => h.kind === 'water' && h.top !== undefined).map((h) => ({ x: h.x, w: h.w, row: h.top! })),
+  ]
+  // chevauchement SIGNIFICATIF (≥ 3 colonnes) : on mesure le dégagement au-dessus du VRAI sol du
+  // tunnel (qui court sur toute la portée), pas au-dessus d'une berge de module voisin qui affleure
+  // d'une ou deux colonnes à la couture (faux positif de bord, sans risque de cognement réel).
+  const MIN_OVERLAP = 3
+  const overlapW = (ax: number, aw: number, bx: number, bw: number) => Math.min(ax + aw, bx + bw) - Math.max(ax, bx)
+  const out: CeilingProblem[] = []
+  for (const c of ceilings) {
+    const bottomRow = c.y + c.h - 1 // rangée du BAS de la dalle de plafond
+    // surface la plus PROCHE strictement EN DESSOUS (row > bottomRow) chevauchant AMPLEMENT la portée x
+    let closest: number | undefined
+    for (const s of surfaces) {
+      if (overlapW(c.x, c.w, s.x, s.w) < MIN_OVERLAP || s.row <= bottomRow) continue
+      if (closest === undefined || s.row < closest) closest = s.row
+    }
+    if (closest === undefined) continue // aucun chemin d'air sous le plafond (ex. plafond immergé) → hors sujet
+    const clearance = closest - bottomRow
+    if (clearance < minClear) out.push({ x: c.x, w: c.w, clearance })
+  }
+  return out
+}
+
 // ─── REBORDS DE PLAN D'EAU À NIVEAU (retour user : « rebord gauche plus haut que droite ») ───
 // La SURFACE d'un plan d'eau marine (ou d'une cuve de lave) est HORIZONTALE : ses DEUX berges
 // doivent border l'eau à la MÊME altitude (= la rangée de surface). Une berge plus basse que
