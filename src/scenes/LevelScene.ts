@@ -1421,7 +1421,8 @@ export class LevelScene extends Phaser.Scene {
       return
     }
     this.cooldowns.use(slot, this.time.now, skill.cooldownMs)
-    this.game.events.emit('skill-cooldown', slot, this.time.now + skill.cooldownMs)
+    // untilMs + durée totale → l'overlay de cooldown se dégrise horizontalement au fil de la recharge
+    this.game.events.emit('skill-cooldown', slot, this.time.now + skill.cooldownMs, skill.cooldownMs)
     audio.playSfx('skill')
     this.announceSkill(skill.name)
 
@@ -1435,11 +1436,17 @@ export class LevelScene extends Phaser.Scene {
     if (mult >= 2.5 && (skill.kind === 'melee' || skill.kind === 'aoe' || skill.kind === 'projectile')) this.hitStop(75)
     if (skill.kind === 'melee') {
       this.player.playAttack()
-      // gros coup (rang inclus) : double croissant + tremblement de caméra
-      this.slashFx(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, color, mult >= 2)
-      this.meleeHit(skill.range, mult)
-      // Câlin brutal : une volée de cœurs s'envole autour du point d'impact
-      if (skill.id === 'calin-brutal') this.heartsFx(this.player.x + this.player.facing * 30, this.player.y)
+      if (skill.id === 'lame-ultime') {
+        // Ultime refait : lumière aveuglante + DEUX éclairs bleus diagonaux lents qui infligent
+        // les dégâts (remplace l'ancien double-arc). Ne passe pas par meleeHit.
+        this.castSabreurUltimate(mult, color)
+      } else {
+        // gros coup (rang inclus) : double croissant + tremblement de caméra
+        this.slashFx(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, color, mult >= 2)
+        this.meleeHit(skill.range, mult)
+        // Câlin brutal : une volée de cœurs s'envole autour du point d'impact
+        if (skill.id === 'calin-brutal') this.heartsFx(this.player.x + this.player.facing * 30, this.player.y)
+      }
     } else if (skill.kind === 'aoe') {
       for (const obj of this.enemies.getChildren()) {
         const e = obj as Enemy
@@ -1590,15 +1597,7 @@ export class LevelScene extends Phaser.Scene {
         this.lungeFx(48)
         this.thrustFx(px + f * 24, py, color)
         break
-      case 'lame-ultime': // ultime : double arc géant, flash, onde de choc, gros hit-stop
-        this.flashScreen(0xfffae0, 0.35, 130)
-        this.cameras.main.flash(110, 255, 250, 210)
-        this.bladeArcFx(px + f * skill.range * 0.5, py, skill.range * 2.4, color, true)
-        this.time.delayedCall(80, () => { if (this.player.active) this.bladeArcFx(px + f * skill.range * 0.5, py, skill.range * 2.4, 0xffffff, true) })
-        this.shockwaveFx(px + f * 30, py + 22, 160, color)
-        this.explosionFx(px + f * skill.range * 0.7, py, skill.range * 1.2, color)
-        this.hitStop(130)
-        break
+      // 'lame-ultime' : géré par castSabreurUltimate (lumière aveuglante + éclairs bleus diagonaux)
       case 'tourbillon': // le panda TOURNE (flipX alterné) au milieu de lames tournoyantes
         this.player.spinWhirl(640)
         this.whirlwindFx(px, py, skill.range, color)
@@ -1618,18 +1617,105 @@ export class LevelScene extends Phaser.Scene {
     }
   }
 
+  // ULTIME du sabreur (Lame ultime) — refait : LUMIÈRE AVEUGLANTE tout autour du panda (flash plein
+  // écran + halo qui enfle + rayons blancs qui jaillissent) PUIS deux grands ÉCLAIRS BLEUS diagonaux
+  // qui se tracent LENTEMENT et infligent les dégâts aux ennemis proches de leur tracé (croisent un X
+  // sur le panda). Les dégâts sont portés par les éclairs (pas par meleeHit).
+  private castSabreurUltimate(mult: number, color: number) {
+    const px = this.player.x, py = this.player.y
+    // --- 1) lumière aveuglante ---
+    this.flashScreen(0xffffff, 0.55, 220)
+    this.cameras.main.flash(200, 240, 248, 255)
+    const glow = this.add.image(px, py, 'ring').setTint(0xffffff).setBlendMode(Phaser.BlendModes.ADD).setDepth(9).setScale(0.3).setAlpha(0.95)
+    this.tweens.add({ targets: glow, scale: 11, alpha: 0, duration: 640, ease: 'Cubic.out', onUpdate: () => glow.setPosition(this.player.x, this.player.y), onComplete: () => glow.destroy() })
+    const coreFlash = this.add.circle(px, py, 26, 0xffffff, 0.95).setBlendMode(Phaser.BlendModes.ADD).setDepth(9)
+    this.tweens.add({ targets: coreFlash, scale: 3.6, alpha: 0, duration: 300, ease: 'Cubic.out', onComplete: () => coreFlash.destroy() })
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2
+      const ray = this.add.rectangle(px, py, 5, 26, 0xffffff, 0.9).setBlendMode(Phaser.BlendModes.ADD).setDepth(8).setRotation(a).setOrigin(0.5, 0)
+      this.tweens.add({ targets: ray, scaleY: 12, alpha: 0, duration: 420 + (i % 3) * 90, ease: 'Cubic.out', onComplete: () => ray.destroy() })
+    }
+    this.screenShake(0.012, 320)
+    this.hitStop(120)
+    // --- 2) deux éclairs bleus diagonaux, tracés lentement, qui portent les dégâts ---
+    const atk = this.player.stats.atk * this.player.outgoingMult()
+    const dmg = atk * mult
+    const hit = new Set<Enemy>() // un ennemi n'est frappé qu'une fois même s'il est sur les deux traits
+    const reach = 520, band = 130
+    this.spawnUltBolt(px - reach, py - reach, px + reach, py + reach, band, dmg, hit, 40) // « \ »
+    this.spawnUltBolt(px + reach, py - reach, px - reach, py + reach, band, dmg, hit, 200) // « / » (décalé → croisement)
+  }
+
+  // Un grand éclair bleu diagonal qui se TRACE lentement (polyligne jaggée dessinée progressivement),
+  // avec un cœur blanc lumineux. À la fin du tracé, inflige `dmg` aux ennemis/props à moins de `band`
+  // du segment (partagé via `hit` pour ne pas frapper deux fois). Nettoie ses graphics au fondu.
+  private spawnUltBolt(x0: number, y0: number, x1: number, y1: number, band: number, dmg: number, hit: Set<Enemy>, delayMs: number) {
+    this.time.delayedCall(delayMs, () => {
+      if (!this.player.active) return
+      const N = 22
+      const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1
+      const nx = -dy / len, ny = dx / len // perpendiculaire unitaire (jitter de l'éclair)
+      const pts: { x: number; y: number }[] = []
+      for (let i = 0; i <= N; i++) {
+        const t = i / N
+        const j = i === 0 || i === N ? 0 : Phaser.Math.Between(-16, 16)
+        pts.push({ x: x0 + dx * t + nx * j, y: y0 + dy * t + ny * j })
+      }
+      const outer = this.add.graphics().setDepth(9).setBlendMode(Phaser.BlendModes.ADD)
+      const inner = this.add.graphics().setDepth(10).setBlendMode(Phaser.BlendModes.ADD)
+      const prog = { p: 0 }
+      this.tweens.add({
+        targets: prog, p: 1, duration: 620, ease: 'Sine.inOut', // LENT (éclair qui se trace)
+        onUpdate: () => {
+          const upto = Math.max(1, Math.floor(prog.p * N))
+          outer.clear().lineStyle(14, 0x1e88ff, 0.5)
+          inner.clear().lineStyle(5, 0xe3f2fd, 0.95)
+          outer.beginPath(); outer.moveTo(pts[0]!.x, pts[0]!.y)
+          inner.beginPath(); inner.moveTo(pts[0]!.x, pts[0]!.y)
+          for (let i = 1; i <= upto; i++) { outer.lineTo(pts[i]!.x, pts[i]!.y); inner.lineTo(pts[i]!.x, pts[i]!.y) }
+          outer.strokePath(); inner.strokePath()
+        },
+        onComplete: () => {
+          for (const obj of this.enemies.getChildren()) {
+            const e = obj as Enemy
+            if (!e.active || hit.has(e)) continue
+            if (this.distToSegment(e.x, e.y, x0, y0, x1, y1) <= band) { hit.add(e); e.takeDamage(physicalDamage(dmg, e.effectiveDef())) }
+          }
+          for (const obj of this.props.getChildren()) {
+            const pr = obj as Prop
+            if (pr.active && this.distToSegment(pr.x, pr.y, x0, y0, x1, y1) <= band) pr.takeDamage(1)
+          }
+          audio.playSfx('hit')
+          this.tweens.add({ targets: [outer, inner], alpha: 0, duration: 240, onComplete: () => { outer.destroy(); inner.destroy() } })
+        },
+      })
+    })
+  }
+
+  // distance d'un point (px,py) au segment [ (x0,y0) ; (x1,y1) ]
+  private distToSegment(px: number, py: number, x0: number, y0: number, x1: number, y1: number): number {
+    const dx = x1 - x0, dy = y1 - y0
+    const l2 = dx * dx + dy * dy
+    if (l2 === 0) return Math.hypot(px - x0, py - y0)
+    const t = Phaser.Math.Clamp(((px - x0) * dx + (py - y0) * dy) / l2, 0, 1)
+    return Math.hypot(px - (x0 + dx * t), py - (y0 + dy * t))
+  }
+
   // ===== Attaque chargée, Plongeon & Épée enflammée =====
 
   // Attaque chargée : court WINDUP télégraphié (aura grandissante, étincelles convergentes), puis
   // un coup DÉVASTATEUR frontal — arc géant, onde de choc, explosion, flash, secousse, hit-stop.
   private castChargeAttack(skill: SkillDef, color: number, mult: number) {
     const WINDUP = 480
+    // EN L'AIR : on fige le panda en hauteur le temps de la charge (il frappe en haut), puis on
+    // relâche → il retombe (slam). AU SOL : beginAirChargeLock renvoie false → comportement inchangé.
+    const airborne = this.player.beginAirChargeLock()
     this.chargeWindupFx(color, WINDUP)
     this.time.delayedCall(WINDUP, () => {
-      if (!this.player.active || this.player.hp <= 0) return
+      if (!this.player.active || this.player.hp <= 0) { this.player.endChargeLock(); return }
       const px = this.player.x, py = this.player.y, f = this.player.facing
       this.player.playAttack()
-      this.lungeFx(70)
+      if (!airborne) this.lungeFx(70) // le bond en avant n'a de sens qu'au sol (en l'air on frappe sur place)
       this.bladeArcFx(px + f * skill.range * 0.6, py, skill.range * 1.7, color, true)
       this.shockwaveFx(px + f * 40, py + 22, skill.range * 1.2, color)
       this.explosionFx(px + f * skill.range * 0.7, py, skill.range * 0.95, color)
@@ -1637,6 +1723,8 @@ export class LevelScene extends Phaser.Scene {
       this.screenShake(0.012, 220)
       this.hitStop(110)
       this.meleeHit(skill.range * 1.3, mult)
+      // la charge est finie : on rend la gravité → le panda retombe depuis sa hauteur de frappe
+      if (airborne) this.player.endChargeLock()
     })
   }
 
@@ -1883,7 +1971,19 @@ export class LevelScene extends Phaser.Scene {
   private swordThrowProjectile(proj: Projectile, _color: number) {
     proj.pierce = true
     const key = this.textures.exists('weapon-swordsman') ? 'weapon-swordsman' : 'projectile'
-    proj.setTexture(key).clearTint().setScale(1.3).setAngularVelocity(this.player.facing * 900)
+    // la lame TOURNE sur elle-même en continu (angularVelocity ≠ 0 → Projectile n'écrase pas la
+    // rotation par l'orientation de trajectoire)
+    proj.setTexture(key).clearTint().setScale(1.4).setAngularVelocity(this.player.facing * 760)
+    // COLLISION À LA POSITION DU PROJECTILE : la hitbox par défaut, héritée de la petite texture
+    // 'projectile' (18px) et jamais recalée après le changement de texture, était minuscule et
+    // laissait la lame « passer à travers » les mobs. On pose une hitbox GÉNÉREUSE recentrée sur la
+    // lame → le lancer touche vraiment les ennemis qu'il chevauche le long de sa trajectoire.
+    const body = proj.body as Phaser.Physics.Arcade.Body
+    body.setSize(46, 46, true)
+    // un peu MOINS vite qu'un tir standard (420 → 320 px/s)
+    proj.setVelocity(this.player.facing * 320, 0)
+    // effet de VITESSE : traînée d'étincelles acier en plus des échos de lame tournoyante de Projectile
+    this.attachSparkTrail(proj, 0xcfd8dc)
   }
 
   // Sceau du heaume : le projectile devient un sigil héraldique tournoyant (anneau + croix) qui
@@ -2064,7 +2164,8 @@ export class LevelScene extends Phaser.Scene {
     if (!this.cooldowns.canUse(slot, this.time.now)) return
     if (!this.player.spendEnergy(energyCostOf(skill))) { this.announceSkill('Pas assez d\'énergie', 0x4dd0e1); return }
     this.cooldowns.use(slot, this.time.now, skill.cooldownMs)
-    this.game.events.emit('skill-cooldown', slot, this.time.now + skill.cooldownMs)
+    // untilMs + durée totale → l'overlay de cooldown se dégrise horizontalement au fil de la recharge
+    this.game.events.emit('skill-cooldown', slot, this.time.now + skill.cooldownMs, skill.cooldownMs)
     audio.playSfx('skill')
     this.announceSkill(skill.name)
     const p = getPlayer()

@@ -5,6 +5,7 @@ import { computeStats } from '../core/stats'
 import { getPlayer } from '../state'
 import { PANDA_BODY, PANDA_HEAD_ANCHORS } from './player-body'
 import { JUMP_SPEED, RUN_SPEED } from '../core/platforming'
+import { MAX_SKILL_RANK } from '../core/player-state'
 
 const JUMP_VELOCITY = -JUMP_SPEED // source unique (partagée avec le test d'atteignabilité)
 const CLIMB_SPEED = 150 // vitesse verticale sur une échelle (up/down)
@@ -22,8 +23,12 @@ const MAX_ENERGY = 100
 const ENERGY_REGEN_PER_SEC = 8
 const ENERGY_PER_BASIC_HIT = 6
 const DIVE_SPEED = 1400 // vitesse de piqué vertical du Plongeon (px/s)
-// Lignée du sabreur : ces classes disposent du DOUBLE SAUT (2 sauts). Les autres restent à 1.
-const DOUBLE_JUMP_CLASSES = new Set<string>(['swordsman', 'chevalier'])
+// DOUBLE SAUT : n'est plus inné. C'est le SKILL passif 'double-saut' (lignée sabreur) qui l'ouvre.
+// Tant qu'il n'est pas appris → 1 seul saut. Appris → 2e saut possible, qui COÛTE de l'énergie et
+// dont la hauteur monte avec le rang (petit au rang 1, hauteur du 1er saut au rang max).
+const DOUBLE_JUMP_SKILL = 'double-saut'
+const DOUBLE_JUMP_ENERGY_COST = 20 // énergie dépensée à chaque saut aérien
+const DOUBLE_JUMP_MIN_FRAC = 0.45 // hauteur du 2e saut au rang 1 (fraction du 1er saut)
 // Lignée du sabreur : la GROSSE épée n'est PAS affichée au repos ; elle n'apparaît (agrandie) que
 // le temps d'un coup (swingWeapon), puis se rétracte. Les autres classes gardent leur arme visible.
 const BIG_SWORD_CLASSES = new Set<string>(['swordsman', 'chevalier'])
@@ -69,6 +74,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // (x, y, hauteur de chute) → LevelScene fait l'explosion proportionnelle à la hauteur.
   diving = false
   private diveStartY = 0
+  // Attaque chargée EN L'AIR : pendant le windup, le panda est FIGÉ en hauteur (gravité coupée,
+  // vitesse nulle, contrôles ignorés) ; à la fin de la charge on relâche → il retombe (slam).
+  private chargeLocked = false
   // Épée enflammée : buff temporaire ; pendant ce temps la lame flambe et les coups brûlent.
   private flameUntil = 0
   private flameTimer: Phaser.Time.TimerEvent | null = null
@@ -303,6 +311,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // PLONGEON en cours : piqué vertical verrouillé, aucun autre contrôle jusqu'à l'impact.
     if (this.diving) { this.updateDive(body); return }
 
+    // CHARGE AÉRIENNE : figé en hauteur le temps du windup (gravité coupée, immobile), aucun
+    // autre contrôle. Relâché par endChargeLock() → la gravité reprend et le panda retombe.
+    if (this.chargeLocked) { body.setAllowGravity(false); this.setVelocity(0, 0); return }
+
     // ESCALADE : entrer en mode grimpe en poussant up/down sur une échelle ;
     // en sortir en sautant ou en quittant l'échelle.
     const wasClimbing = this.climbing
@@ -326,16 +338,21 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.inWater) { this.updateSwim(c, body); return }
 
     // SAUT + DOUBLE SAUT : compteur remis à 0 dès qu'on touche le sol ; on ne consomme un saut
-    // que sur le FRONT MONTANT de `jump` (input maintenu). La lignée du sabreur peut sauter une
-    // seconde fois en l'air (maxJumps = 2) ; les autres classes restent à un seul saut.
+    // que sur le FRONT MONTANT de `jump` (input maintenu). Le 2e saut (aérien) n'existe que si le
+    // SKILL 'double-saut' est appris ; il COÛTE de l'énergie (échoue sans réserve suffisante) et
+    // part plus bas que le 1er (hauteur qui monte avec le rang).
     if (body.blocked.down) this.jumpsUsed = 0
     const jumpPressed = c.jump && !this.jumpWasDown
     if (jumpPressed && this.jumpsUsed < this.maxJumps()) {
       const airborneJump = this.jumpsUsed >= 1
-      this.setVelocityY(JUMP_VELOCITY)
-      this.jumpsUsed += 1
-      this.scene.events.emit('player-jump')
-      if (airborneJump) this.doubleJumpFx() // souffle bleuté sous les pattes au 2e saut
+      // saut aérien = payant : n'a lieu que si l'énergie suffit (sinon rien, on retente en
+      // relâchant/réappuyant). Le 1er saut reste gratuit.
+      if (!airborneJump || this.spendEnergy(DOUBLE_JUMP_ENERGY_COST)) {
+        this.setVelocityY(airborneJump ? this.secondJumpVelocity() : JUMP_VELOCITY)
+        this.jumpsUsed += 1
+        this.scene.events.emit('player-jump')
+        if (airborneJump) this.doubleJumpFx() // souffle bleuté sous les pattes au 2e saut
+      }
     }
     this.jumpWasDown = c.jump
 
@@ -447,9 +464,22 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
-  // nombre de sauts autorisés selon la classe : 2 pour la lignée du sabreur (double saut), 1 sinon
+  // rang investi dans le skill passif de double saut (0 = pas appris → pas de 2e saut)
+  private doubleJumpRank(): number {
+    return getPlayer().skillLevels[DOUBLE_JUMP_SKILL] ?? 0
+  }
+
+  // nombre de sauts autorisés : 2 uniquement si le skill 'double-saut' est appris, 1 sinon
   private maxJumps(): number {
-    return DOUBLE_JUMP_CLASSES.has(getPlayer().classId) ? 2 : 1
+    return this.doubleJumpRank() > 0 ? 2 : 1
+  }
+
+  // vitesse verticale du 2e saut : modeste au rang 1 (DOUBLE_JUMP_MIN_FRAC du 1er), atteint la
+  // pleine hauteur du 1er saut au rang max (interpolation linéaire sur le rang investi)
+  private secondJumpVelocity(): number {
+    const rank = Phaser.Math.Clamp(this.doubleJumpRank(), 1, MAX_SKILL_RANK)
+    const frac = DOUBLE_JUMP_MIN_FRAC + (1 - DOUBLE_JUMP_MIN_FRAC) * ((rank - 1) / (MAX_SKILL_RANK - 1))
+    return JUMP_VELOCITY * frac
   }
 
   // souffle du 2e saut : anneau bleuté aplati sous le panda + fines traînées vers le bas
@@ -463,6 +493,26 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       const sh = this.scene.add.rectangle(this.x, y, 3, 9, 0xe1f5fe).setDepth(this.depth - 1).setBlendMode(Phaser.BlendModes.ADD)
       this.scene.tweens.add({ targets: sh, x: this.x + Math.cos(a) * 28, y: y - Math.sin(a) * 22, alpha: 0, duration: 260, onComplete: () => sh.destroy() })
     }
+  }
+
+  // Attaque chargée : si le panda est EN L'AIR, on le FIGE en hauteur (gravité coupée, vitesse
+  // nulle) le temps de la charge. Renvoie true si le lock a été posé (en l'air), false au sol
+  // (comportement de charge au sol inchangé). L'anim d'attaque est tenue pendant la charge.
+  beginAirChargeLock(): boolean {
+    const body = this.body as Phaser.Physics.Arcade.Body
+    if (this.diving || body.blocked.down) return false
+    this.chargeLocked = true
+    body.setAllowGravity(false)
+    this.setVelocity(0, 0)
+    this.play(this.anim('attack'), true)
+    return true
+  }
+
+  // Fin de la charge aérienne : la gravité reprend → le panda retombe (slam). No-op si pas verrouillé.
+  endChargeLock() {
+    if (!this.chargeLocked) return
+    this.chargeLocked = false
+    ;(this.body as Phaser.Physics.Arcade.Body).setAllowGravity(true)
   }
 
   // Plongeon : ne s'amorce qu'EN L'AIR. Verrouille les contrôles et impose un piqué vertical

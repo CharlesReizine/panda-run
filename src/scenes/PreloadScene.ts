@@ -20,6 +20,7 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'epee-enflammee': { color: 0xff7043, glyph: 'flamesword' },
   'folie-enragee': { color: 0xd50000, glyph: 'rage' },
   'plongeon': { color: 0xff8a65, glyph: 'slam' },
+  'double-saut': { color: 0x81d4fa, glyph: 'jump' },
   'lame-ultime': { color: 0xffd54f, glyph: 'swordx' },
   'boule-de-feu': { color: 0xff7043, glyph: 'fireball' },
   'eclair': { color: 0x64b5ff, glyph: 'bolt' },
@@ -1344,6 +1345,11 @@ export class PreloadScene extends Phaser.Scene {
       case 'dash':
         g.lineStyle(4, c).beginPath(); g.moveTo(15, 30); g.lineTo(31, 14); g.strokePath()
         g.lineStyle(2, c, 0.6).beginPath(); g.moveTo(8, 20); g.lineTo(16, 20); g.moveTo(8, 26); g.lineTo(14, 26); g.strokePath()
+        break
+      case 'jump': // double saut : deux chevrons montants + petit souffle sous les pieds
+        g.lineStyle(4, c).beginPath(); g.moveTo(12, 20); g.lineTo(22, 10); g.lineTo(32, 20); g.strokePath()
+        g.lineStyle(4, c).beginPath(); g.moveTo(12, 30); g.lineTo(22, 20); g.lineTo(32, 30); g.strokePath()
+        g.lineStyle(2, 0xe1f5fe, 0.7).beginPath(); g.moveTo(15, 37); g.lineTo(19, 37); g.moveTo(25, 37); g.lineTo(29, 37); g.strokePath()
         break
       case 'shout':
         g.fillStyle(c).fillTriangle(12, 16, 12, 28, 22, 22)

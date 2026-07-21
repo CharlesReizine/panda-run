@@ -8,6 +8,9 @@ import type { LevelScene } from './LevelScene'
 const BAR_W = 200
 const SLOT_SIZE = 50
 const SLOT_Y = 38
+// Barre de skills DÉCALÉE VERS LA GAUCHE : les slots empiétaient sur le bouton PAUSE (⏸ à ~908).
+// Le 4e slot (i=3) se termine désormais à ~841px, bien à gauche de PAUSE.
+const SLOT_X0 = 636
 
 export class UIScene extends Phaser.Scene {
   joystick?: VirtualJoystick
@@ -20,6 +23,7 @@ export class UIScene extends Phaser.Scene {
   private slotCooldownOverlays: Phaser.GameObjects.Rectangle[] = []
   private slotIcons: Phaser.GameObjects.Image[] = []
   private cooldownUntil: number[] = [0, 0, 0, 0]
+  private cooldownDur: number[] = [0, 0, 0, 0] // durée totale du dernier cooldown par slot (pour le dégrisé)
   // indicateur de buff ATK (Cri de guerre)
   private buffParts: (Phaser.GameObjects.Rectangle | Phaser.GameObjects.Text)[] = []
   private buffBar!: Phaser.GameObjects.Rectangle
@@ -38,6 +42,7 @@ export class UIScene extends Phaser.Scene {
     this.slotIcons = []
     this.slotCooldownOverlays = []
     this.cooldownUntil = [0, 0, 0, 0]
+    this.cooldownDur = [0, 0, 0, 0]
     this.buffParts = []
     this.buffUntil = 0
     this.buffDuration = 0
@@ -104,15 +109,18 @@ export class UIScene extends Phaser.Scene {
       this.scene.pause('UI')
     })
 
-    // Haut-droite : les 4 slots de skills côte à côte
+    // Haut-droite : les 4 slots de skills côte à côte, décalés à GAUCHE du bouton PAUSE (SLOT_X0)
     for (let i = 0; i < 4; i++) {
-      const x = 706 + i * 60
+      const x = SLOT_X0 + i * 60
       const slot = this.add.rectangle(x, SLOT_Y, SLOT_SIZE, SLOT_SIZE, 0x000000, 0.5)
         .setStrokeStyle(2, 0xffffff, 0.6).setInteractive()
       slot.on('pointerdown', () => { this.pressFx(slot); this.game.events.emit('input-skill', i) })
       this.add.text(x, SLOT_Y - SLOT_SIZE / 2 - 8, `${i + 1}`, { fontSize: '11px', color: '#ffd54f' }).setOrigin(0.5)
       this.slotIcons.push(this.add.image(x, SLOT_Y, '__DEFAULT').setDisplaySize(SLOT_SIZE - 8, SLOT_SIZE - 8).setVisible(false))
-      const ov = this.add.rectangle(x, SLOT_Y, SLOT_SIZE, SLOT_SIZE, 0x000000, 0.7).setVisible(false)
+      // overlay de cooldown ANCRÉ À DROITE (origine 1) : on le rétrécit vers la droite (scaleX) au fil
+      // de la recharge → il « se dégrise » horizontalement de gauche à droite jusqu'à disparaître.
+      const ov = this.add.rectangle(x + SLOT_SIZE / 2, SLOT_Y, SLOT_SIZE, SLOT_SIZE, 0x0d1b2a, 0.72)
+        .setOrigin(1, 0.5).setVisible(false)
       this.slotCooldownOverlays.push(ov)
     }
 
@@ -202,8 +210,9 @@ export class UIScene extends Phaser.Scene {
 
   private onPlayerHp = (hp: number, max: number) => this.hpBar.setDisplaySize(BAR_W * (hp / max), 12)
 
-  private onCooldown(slot: number, untilMs: number) {
+  private onCooldown(slot: number, untilMs: number, durationMs = 0) {
     this.cooldownUntil[slot] = untilMs
+    this.cooldownDur[slot] = durationMs
   }
 
   private onBuff = (untilMs: number, durationMs: number) => {
@@ -246,7 +255,17 @@ export class UIScene extends Phaser.Scene {
     const pl = (this.scene.get('Level') as LevelScene | undefined)?.player
     if (pl && this.energyBar) this.energyBar.setDisplaySize(BAR_W * (pl.energy / pl.maxEnergy), 8)
     for (let i = 0; i < 4; i++) {
-      this.slotCooldownOverlays[i]!.setVisible(time < (this.cooldownUntil[i] ?? 0))
+      const ov = this.slotCooldownOverlays[i]!
+      const until = this.cooldownUntil[i] ?? 0
+      const dur = this.cooldownDur[i] ?? 0
+      if (time < until && dur > 0) {
+        // fraction RESTANTE (1 → 0) : l'overlay grisé couvre la part droite et se rétracte vers la
+        // droite (dégrisé gauche→droite) jusqu'à retrouver la couleur du slot à la fin.
+        const remain = Phaser.Math.Clamp((until - time) / dur, 0, 1)
+        ov.setVisible(true).setScale(remain, 1)
+      } else {
+        ov.setVisible(false)
+      }
     }
     // pastille de buff : visible + barre de compte à rebours tant que le buff court
     const buffActive = time < this.buffUntil
