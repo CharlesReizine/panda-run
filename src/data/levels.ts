@@ -17,7 +17,11 @@ export interface LevelDef {
   // SORTIE de fin de niveau (tuiles ; y = rangée de la corniche sous la porte). Absent → sol, bord
   // droit. Placée à une altitude NETTEMENT différente du départ (plus haut ou plus bas).
   exit?: { x: number; y: number }
-  platforms: { x: number; y: number; w: number }[] // en tuiles ; y depuis le haut
+  // en tuiles ; y depuis le haut. `solid` (défaut absent = false) : marche/plateforme de PIERRE
+  // RIGIDE — collision PLEINE (on ne la traverse pas, ni par le bas ni par les côtés). Absent →
+  // plateforme de TERRE one-way (traversable par le bas, cf. landsFromAbove). Les marches solides
+  // sont posées ISOLÉES (trou d'air entre chaque) pour ne jamais coincer le panda.
+  platforms: { x: number; y: number; w: number; solid?: boolean }[]
   // x en tuiles ; y (tuiles) OPTIONNEL = rangée de la corniche sur laquelle le monstre apparaît POSÉ
   // (pas en l'air, pas dans le sol). Absent → au sol. Sert à peupler la VERTICALE (monstres en hauteur).
   spawns: { monsterId: string; x: number; y?: number }[]
@@ -41,7 +45,10 @@ export interface LevelDef {
   //   • 'lave'      → CUVE DE LAVE (enfer) : même cuve de pierre que 'basin', mais rendue ROUGE/ORANGE
   //                   incandescente (lueur + bulles) et MORTELLE au contact (gros dégâts continus, cf.
   //                   LevelScene.updateLava). Aucun coffre au fond (y plonger = mourir).
-  hazards?: { kind: 'spikes' | 'water'; x: number; w: number; top?: number; h?: number; water?: 'basin' | 'waterfall' | 'cascade' | 'lave' }[]
+  // `openSide` (eau uniquement) : ouvre une PAROI de la cuve (pas de mur rigide de ce côté) → PASSAGE
+  // SOUS-MARIN. On plonge par le HAUT du lac et on ressort sur le CÔTÉ ouvert (nage immergée), vers
+  // une corniche basse de la zone suivante. 'left' | 'right' | 'both'. Absent → cuve close (2 murs).
+  hazards?: { kind: 'spikes' | 'water'; x: number; w: number; top?: number; h?: number; water?: 'basin' | 'waterfall' | 'cascade' | 'lave'; openSide?: 'left' | 'right' | 'both' }[]
   bridges?: { x: number; y: number; w: number }[] // ponts de planches (plateformes fines)
   // trous MORTELS dans le sol : à ces emplacements (x en tuiles, largeur w en tuiles) on ne
   // dessine PAS les rangées de sol pleines (groundRow/+1) → c'est le vide. Tomber dedans = mort.
@@ -53,7 +60,10 @@ export interface LevelDef {
   // marchable + remplissage sous le sol de la grotte) et à donner un socle plein au départ (mesa).
   // Purement visuelles : la hauteur libre sous un plafond reste toujours >= un saut confortable (le
   // joueur ne se cogne jamais). NE PAS confondre avec le plafond du MONDE (traversable).
-  rockBands?: { x: number; y: number; w: number; h: number }[] // x,y,w,h en tuiles ; y = rangée du haut de la dalle
+  // x,y,w,h en tuiles ; y = rangée du haut de la dalle. `solid` (défaut absent = false) : dalle de
+  // PLAFOND DE ROCHE avec COLLISION PLEINE — on ne peut PAS la traverser au saut (le boyau garde un
+  // dégagement > saut sous le plafond). Absent → dalle purement décorative (socle/mesa sous le sol).
+  rockBands?: { x: number; y: number; w: number; h: number; solid?: boolean }[]
   ladders?: { x: number; y: number; h: number }[] // échelles (x tuile, y tuile du haut, hauteur en tuiles)
   checkpoints?: { x: number }[] // drapeaux de réapparition (x en tuiles)
   boss?: string
@@ -241,7 +251,7 @@ function mkZone32(): LevelDef {
     id: 'zone3-2', name: 'Marécages suspendus', biome: 'jungle',
     tierCap: 3, ending: 'bas', allowLadders: true, midCount: 7,
     ground: ['frelon-geant', 'flora-vorace', 'ronce-cracheuse', 'singe-grimpeur', 'ours-brun', 'willow'], birds: ['ara'],
-    waterKinds: ['tresor-bassin', 'cascade'], seed: 'zone3-2c',
+    waterKinds: ['passage-immerge', 'cascade'], seed: 'zone3-2c', // passage SOUS-MARIN (marécages) + cascade remontable
   })
 }
 
@@ -266,7 +276,7 @@ function mkPlage2(): LevelDef {
     id: 'plage-2', name: 'Récif immergé', biome: 'plage',
     tierCap: 4, ending: 'haut', allowLadders: true, midCount: 7,
     ground: ['meduse', 'harpie', 'crabe-geant'], birds: ['ara'],
-    waterKinds: ['bassin', 'tresor-bassin'], seed: 'plage-2b',
+    waterKinds: ['passage-immerge', 'bassin'], seed: 'plage-2b', // passage SOUS-MARIN (plonger par le haut, ressortir sur le côté)
   })
 }
 
@@ -338,6 +348,7 @@ function mkCarriere2(): LevelDef {
     { kind: 'grotte', widthRange: [16, 22], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gargouille'] }, // BOYAU DE PIERRE #2
     { kind: 'couloir-pics', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'roche', tags: ['tension', 'danger'], ground: ['golem-de-pierre'] }, // galerie basse à lits de pics
     { kind: 'pics-quinconce', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['tension', 'danger'], ground: ['gargouille'] }, // slalom de pics en hauteur (tier 4)
+    { kind: 'escalier-pierre', widthRange: [16, 22], fillBelow: 'sol', fillAbove: 'air', tags: ['montée'] }, // MARCHES DE PIERRE rigides (blocs solides isolés, on ne les traverse pas)
     { kind: 'grotte', widthRange: [16, 22], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gobelin-mineur'] }, // BOYAU DE PIERRE #3
     { kind: 'cascade', widthRange: [18, 24], rise: 2, fillBelow: 'cascade', fillAbove: 'air', tags: ['eau', 'montée', 'secret'], ground: ['golem-de-pierre'], birds: ['faucon'] }, // source claire remontable, coffre secret
     { kind: 'grotte', widthRange: [14, 20], fillBelow: 'roche', fillAbove: 'roche', tags: ['relief', 'danger'], ground: ['gargouille'] }, // BOYAU DE PIERRE #4

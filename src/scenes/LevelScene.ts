@@ -38,10 +38,10 @@ const BOSS_BAR_W = 440
 // Plongée sous l'eau : le panda peut s'enfoncer sous la surface (traversée verticale), mais tant
 // que sa TÊTE reste immergée il retient son souffle un court instant (apnée) puis se noie
 // PROGRESSIVEMENT — jamais de mort instantanée. Le souffle se recharge dès qu'il ressort la tête.
-const BREATH_MAX_MS = 1800 // délai de grâce d'apnée avant que la noyade douce ne commence
+const BREATH_MAX_MS = 5000 // délai de grâce d'apnée AVANT la noyade — nettement rallongé (eau moins punitive, traversées sous-marines survivables)
 const BREATH_RECHARGE_MULT = 3 // le souffle se recharge 3× plus vite qu'il ne se vide (retour surface = répit rapide)
-const DROWN_DPS = 7 // PV perdus par seconde une fois le souffle épuisé (traversée courte = sûre)
-const DROWN_TICK_MS = 250 // cadence des ticks de noyade : perte régulière, jamais d'un coup
+const DROWN_DPS = 4 // PV perdus par seconde une fois le souffle épuisé — adouci (rythme de noyade plus doux)
+const DROWN_TICK_MS = 300 // cadence des ticks de noyade : perte régulière, jamais d'un coup
 const BUBBLE_INTERVAL_MS = 170 // intervalle d'émission des bulles tant que la tête est sous l'eau
 // LAVE (enfer) : cuve de pierre incandescente, MORTELLE au contact. On ne nage pas dedans — le contact
 // inflige de gros dégâts continus (chemin de dégâts standard, cf. drownTick) → y tomber tue vite.
@@ -238,8 +238,17 @@ export class LevelScene extends Phaser.Scene {
     // landsFromAbove). Rendu en UN TileSprite par plateforme ; collision en UN corps statique par
     // plateforme (dessus à p.y*TILE, hauteur 1 tuile) — équivalent exact des anciennes tuiles.
     for (const p of this.levelDef.platforms) {
-      this.add.tileSprite(p.x * TILE, p.y * TILE, p.w * TILE, TILE, platformKey).setOrigin(0, 0).setDepth(-4)
-      this.addStaticBand(oneWay, p.x * TILE, p.y * TILE, p.w * TILE, TILE, true)
+      if (p.solid) {
+        // MARCHE DE PIERRE RIGIDE : texture rocheuse + collision PLEINE (groupe `platforms`, toutes
+        // faces) → on ne la traverse PAS, ni par le bas ni par les côtés. Posée isolée (trou d'air
+        // entre chaque, cf. escalier-pierre) → aucune arête interne, donc jamais de coincement.
+        this.add.tileSprite(p.x * TILE, p.y * TILE, p.w * TILE, TILE, 'basin-wall').setOrigin(0, 0).setDepth(-4)
+        this.addStaticBand(platforms, p.x * TILE, p.y * TILE, p.w * TILE, TILE)
+      } else {
+        // MARCHE DE TERRE : plateforme one-way (traversable par le bas, on se pose dessus en retombant).
+        this.add.tileSprite(p.x * TILE, p.y * TILE, p.w * TILE, TILE, platformKey).setOrigin(0, 0).setDepth(-4)
+        this.addStaticBand(oneWay, p.x * TILE, p.y * TILE, p.w * TILE, TILE, true)
+      }
     }
     // ponts de planches : plateformes fines, elles aussi traversables par le bas. Rendu en UN
     // TileSprite ; collision en UN corps statique par pont. Le visuel ne fait que 12px de haut mais
@@ -259,7 +268,11 @@ export class LevelScene extends Phaser.Scene {
     // socle des falaises/mesas sous la coiffe de biome, plafonds de grotte, support des cascades.
     // Fini le gazon empilé — le corps est de la pierre, seule la coiffe (plateforme) garde le biome.
     for (const rb of this.levelDef.rockBands ?? []) {
+      // PLAFOND SOLIDE (rb.solid) : COLLISION pleine → on ne saute PAS à travers. Le dégagement sous le
+      // plafond reste > saut confortable (garanti côté assembleur), donc le boyau reste traversable.
+      // Socle décoratif (mesa, sous le sol) : aucune collision. Rendu derrière le joueur dans les deux cas.
       this.add.tileSprite(rb.x * TILE, rb.y * TILE, rb.w * TILE, rb.h * TILE, 'basin-wall').setOrigin(0, 0).setDepth(-5)
+      if (rb.solid) this.addStaticBand(platforms, rb.x * TILE, rb.y * TILE, rb.w * TILE, rb.h * TILE)
     }
 
     // départ : sur la corniche `start` (mi-hauteur) si le niveau en définit une, sinon au sol,
@@ -437,8 +450,14 @@ export class LevelScene extends Phaser.Scene {
         // SOUS la surface → on ne traverse jamais la paroi en marchant (blocage latéral au sol),
         // mais on entre/sort librement par le HAUT (plonger, puis remonter à la nage et sortir sur
         // le rebord). Le FOND est le sol du monde (les colonnes d'eau ne sont pas des trous).
+        // PASSAGE SOUS-MARIN (hz.openSide) : la paroi ouverte n'est PAS posée → on nage sous la
+        // surface et on RESSORT par ce côté (vers la corniche basse voisine). Apnée rallongée (§1).
+        const openLeft = hz.openSide === 'left' || hz.openSide === 'both'
+        const openRight = hz.openSide === 'right' || hz.openSide === 'both'
         for (const wx of [hz.x - 1, hz.x + hz.w]) {
           if (wx < 0 || wx >= this.levelDef.widthTiles) continue
+          if (openLeft && wx === hz.x - 1) continue
+          if (openRight && wx === hz.x + hz.w) continue
           this.add.tileSprite(wx * TILE, topPx, TILE, heightPx, 'basin-wall').setOrigin(0, 0).setDepth(-2)
           const collideTopPx = (waterTop + 1) * TILE
           const collideH = (waterBottom + 1) * TILE - collideTopPx
@@ -446,6 +465,9 @@ export class LevelScene extends Phaser.Scene {
         }
         // déco posée sur la SURFACE du sol (fond du lac) — l'eau recouvre désormais le sol plein
         this.addBasinBottomDeco(hz.x, hz.x + hz.w - 1, this.groundRow - 1)
+        // POISSONS : de gros cercles ROUGES qui dérivent dans le bassin (placeholder décoratif, sans
+        // visuel dédié ni dégâts — au plus simple : ils vont et viennent dans l'eau).
+        this.addFish(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))
       }
     }
     this.physics.add.overlap(this.player, spikes, () => this.hitSpikes())
@@ -797,6 +819,28 @@ export class LevelScene extends Phaser.Scene {
     }
   }
 
+  // POISSONS (placeholder, sans visuel dédié) : de GROS CERCLES ROUGES qui nagent (dérivent en va-et-
+  // vient) dans un bassin. DÉCORATIFS — aucune collision, aucun dégât : au plus simple. Nombre et
+  // trajectoires pseudo-aléatoires déterministes sur le rectangle d'eau. Restent sous la surface.
+  private addFish(rect: Phaser.Geom.Rectangle) {
+    const rnd = (seed: number) => { const s = Math.sin(seed * 91.7) * 43758.5453; return s - Math.floor(s) }
+    const n = Math.max(2, Math.round(rect.width / 120))
+    for (let i = 0; i < n; i++) {
+      const r = rnd(rect.x + i * 7 + 1)
+      const radius = 9 + r * 6 // gros cercles
+      const y = rect.top + 24 + rnd(rect.x + i * 13 + 3) * Math.max(20, rect.height - 48)
+      const margin = radius + 6
+      const xL = rect.left + margin
+      const xR = Math.max(xL + 20, rect.right - margin)
+      const fish = this.add.circle(xL + rnd(rect.x + i * 5) * (xR - xL), y, radius, 0xe53935, 0.9).setDepth(-1)
+      // va-et-vient horizontal lent (dérive), en boucle — le poisson « nage » d'un bord à l'autre
+      this.tweens.add({
+        targets: fish, x: xR, duration: 2600 + r * 2200, yoyo: true, repeat: -1,
+        ease: 'Sine.inOut', delay: i * 300,
+      })
+    }
+  }
+
   private keyboardControls(): ControlsState {
     // clavier PC : gauche/droite (+ A/Q, D) = déplacement ; FLÈCHE HAUT (+ W/Z) = saut HORS
     // échelle, grimpe SUR échelle ; BAS (+ S) = descendre l'échelle / nager. Le saut est donc
@@ -1106,7 +1150,7 @@ export class LevelScene extends Phaser.Scene {
       this.bubbleAccumMs += delta
       while (this.bubbleAccumMs >= BUBBLE_INTERVAL_MS) {
         this.bubbleAccumMs -= BUBBLE_INTERVAL_MS
-        this.emitBubble(body.top)
+        this.emitBubble(body.top, rect!.top) // bulles émises à la tête, remontent jusqu'à la SURFACE
       }
       // souffle épuisé : noyade douce par ticks réguliers (jamais de mort d'un seul coup)
       if (this.breathMs <= 0) {
@@ -1198,21 +1242,26 @@ export class LevelScene extends Phaser.Scene {
     this.showGameOver()
   }
 
-  // une bulle qui monte depuis la tête du panda et s'estompe (réutilise la texture fx-bubble,
-  // mise à petite échelle). Effet léger : quelques bulles translucides qui remontent.
-  private emitBubble(headY: number) {
-    const bx = this.player.x + Phaser.Math.Between(-8, 8)
+  // une GROSSE bulle qui monte depuis la tête du panda jusqu'à la SURFACE de l'eau (surfaceY) puis y
+  // crève. Elle enfle en montant, ondule légèrement en x, et s'estompe en arrivant à la surface. Plus
+  // grosses et plus visibles qu'avant (retour joueur : bulles plus grosses, jusqu'à la surface).
+  private emitBubble(headY: number, surfaceY: number) {
+    const bx = this.player.x + Phaser.Math.Between(-10, 10)
+    const startScale = Phaser.Math.FloatBetween(0.5, 0.9) // grosses bulles
     const b = this.add.image(bx, headY + 2, 'fx-bubble')
       .setDepth(this.player.depth + 1)
-      .setScale(Phaser.Math.FloatBetween(0.2, 0.45))
-      .setAlpha(0.8)
+      .setScale(startScale)
+      .setAlpha(0.85)
+    // cible = juste sous la surface (remontée complète). Distance de montée bornée pour rester fluide.
+    const topY = Math.min(headY - 20, surfaceY + 2)
+    const rise = Math.max(24, headY - topY)
     this.tweens.add({
       targets: b,
-      y: headY - Phaser.Math.Between(28, 48),
-      x: bx + Phaser.Math.Between(-7, 7),
-      scale: b.scale * 1.5,
+      y: topY,
+      x: bx + Phaser.Math.Between(-9, 9),
+      scale: startScale * 1.6, // enfle en remontant
       alpha: 0,
-      duration: Phaser.Math.Between(560, 860),
+      duration: Phaser.Math.Between(700, 1000) + rise * 3,
       ease: 'Sine.out',
       onComplete: () => b.destroy(),
     })
