@@ -10,7 +10,7 @@ import { PROPS } from '../data/props'
 import { MATERIALS } from '../data/materials'
 import { ITEMS, rarityColor } from '../data/items'
 import { physicalDamage, inMeleeReach } from '../core/combat'
-import { grantXp } from '../core/progression'
+import { grantXp, playerXpGain } from '../core/progression'
 import { emptyControls, mergeControls, type ControlsState } from '../core/controls'
 import { getPlayer } from '../state'
 import { save } from '../core/save'
@@ -626,12 +626,18 @@ export class LevelScene extends Phaser.Scene {
     // il remplace intégralement le décor procédural (ciel dégradé + nuages + collines) qui
     // ferait doublon et jurerait avec l'illustration. Fallback (biome sans image) : on garde
     // l'ancien décor procédural (dégradé + nuages + collines).
+    // fond PROPRE AU NIVEAU (public/art/bg-<levelId>.jpg) en PRIORITÉ : chaque terrain a ainsi son
+    // décor unique, collé à son id, plutôt qu'un seul fond partagé par biome. FALLBACK sur le fond
+    // de biome (biome-<clé>) quand le niveau n'a pas d'image dédiée (ex. niveaux de boss), puis sur
+    // le décor procédural. Même mise à l'échelle « cover » dans les deux cas.
+    const levelKey = `bg-${this.levelDef.id}`
     const biomeKey = `biome-${this.levelDef.biome}`
-    const hasBiomeArt = this.textures.exists(biomeKey)
-    if (hasBiomeArt) {
-      const src = this.textures.get(biomeKey).getSourceImage()
+    const bgKey = this.textures.exists(levelKey) ? levelKey : biomeKey
+    const hasBgArt = this.textures.exists(bgKey)
+    if (hasBgArt) {
+      const src = this.textures.get(bgKey).getSourceImage()
       const cover = Math.max(960 / src.width, 540 / src.height)
-      this.add.image(480, 270, biomeKey).setScale(cover).setScrollFactor(0).setDepth(-28)
+      this.add.image(480, 270, bgKey).setScale(cover).setScrollFactor(0).setDepth(-28)
     } else {
       const sky = this.add.graphics().setScrollFactor(0).setDepth(-30)
       sky.fillGradientStyle(b.skyTop, b.skyTop, b.skyBot, b.skyBot, 1).fillRect(0, 0, 960, 540)
@@ -2539,7 +2545,7 @@ export class LevelScene extends Phaser.Scene {
     const p = getPlayer()
     audio.playSfx('enemy-death')
     p.monstersKilled += 1
-    const { levelsGained } = grantXp(p, e.monster.xp)
+    const { levelsGained } = grantXp(p, playerXpGain(e.monster.xp))
     this.events.emit('enemy-loot', e) // consommé en Task 13
     if (levelsGained > 0) {
       this.player.refreshStats()
