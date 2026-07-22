@@ -501,6 +501,59 @@ function ensureRosterCoverage(levels: LevelDef[]): void {
     }
   }
 }
+
+// PLACEMENTS CIBLÉS (audit lot 3 — combler les TROUS DE GRANULARITÉ de niveau). Les mobs ci-dessous
+// ne sont PAS versés dans les POOLS de biome : un mob de pool apparaît dès le RANG 1 de son biome (la
+// couverture le force sur le 1er terrain), si bien que tous les mobs d'un biome se calent sur le même
+// niveau calibré (tout le désert à 27, toute la montagne à 47…) → aucune granularité intermédiaire.
+// On les ÉPINGLE donc au TERRAIN dont le niveau calibré vise la bande à combler : mob-level dérive le
+// niveau de la 1RE apparition dans l'ordre de `list`, donc le premier terrain listé fixe le niveau.
+// Espacement ≥10 tuiles et marge de départ respectés (même logique que ensureRosterCoverage).
+// Déterministe (aucun Math.random).
+const PINNED_SPAWNS: Record<string, string[]> = {
+  'serpent-des-sables': ['desert-3', 'desert-4'],   // désert (bande ~30, transition plaine→désert)
+  'elementaire-de-sable': ['desert-6', 'desert-7'], // milieu de désert (bande ~35)
+  'djinn-mineur': ['desert-8'],                     // fin de désert (bande ~38)
+  'loup-des-neiges': ['montagne-2', 'montagne-3'],  // montagne (bande ~48)
+  'liche-mineure': ['cimetiere-2'],                 // cimetière tardif (bande ~53)
+  'kraken-juvenile': ['plage-4'],                   // plage tardive, plan d'eau profond (bande ~59)
+  'cerbere': ['enfer-4', 'enfer-5'],                // enfer profond (bande ~66)
+}
+
+// Injecte les placements ciblés dans leurs terrains dédiés, à un emplacement libre (≥10 tuiles des
+// autres spawns, ≥8 de la position de départ), sur une surface (aérien → en l'air). Appelé AVANT la
+// couverture de roster : ces mobs n'étant pas dans les POOLS, la couverture les ignore.
+function injectPinnedSpawns(levels: LevelDef[]): void {
+  for (const [id, levelIds] of Object.entries(PINNED_SPAWNS)) {
+    for (const lid of levelIds) {
+      const home = levels.find((l) => l.id === lid)
+      if (!home || home.boss) continue
+      const startX = home.start?.x ?? 0
+      const xs = home.spawns.map((s) => s.x)
+      const aerial = !!MONSTERS[id]?.aerial
+      let placed = false
+      for (let cand = 12; cand < home.widthTiles - 4 && !placed; cand++) {
+        if (Math.abs(cand - startX) < 8) continue
+        if (!xs.every((sx) => Math.abs(sx - cand) >= 10)) continue
+        if (aerial) {
+          home.spawns.push({ monsterId: id, x: cand, y: Math.max(2, Math.floor((home.heightTiles ?? 16) / 3)) })
+          placed = true
+          break
+        }
+        // surface d'accueil : le monstre est posé À LA MÊME rangée que sa plateforme (monstersOffSurface
+        // impose p.y === s.y). Le validateur retient la PREMIÈRE plateforme couvrant (cand, y) dans la
+        // plage [p.x-1, p.x+p.w] : on choisit donc une rangée où CETTE plateforme est LARGE (≥3 tuiles,
+        // marge de patrouille), en émulant exactement sa sélection pour ne jamais tomber sur un rebord étroit.
+        const rows = [...new Set(home.platforms.filter((p) => p.w >= 3 && cand >= p.x && cand < p.x + p.w).map((p) => p.y))]
+        for (const y of rows) {
+          const found = home.platforms.find((p) => cand >= p.x - 1 && cand <= p.x + p.w && p.y === y)
+          if (found && found.w >= 3) { home.spawns.push({ monsterId: id, x: cand, y }); placed = true; break }
+        }
+      }
+    }
+  }
+}
+injectPinnedSpawns(list)
 ensureRosterCoverage(list)
 
 export const LEVELS: Record<string, LevelDef> = Object.fromEntries(list.map((l) => [l.id, l]))

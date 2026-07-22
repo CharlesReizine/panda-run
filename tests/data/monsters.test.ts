@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { MONSTERS } from '../../src/data/monsters'
 import { ITEMS } from '../../src/data/items'
 import { MATERIALS } from '../../src/data/materials'
+import { LEVELS } from '../../src/data/levels'
 
 describe('données monstres/items', () => {
   it('les drops item pointent des items existants', () => {
@@ -33,6 +34,40 @@ describe('données monstres/items', () => {
         (d) => d.kind === 'item' && ['epique', 'legendaire'].includes(ITEMS[d.itemId!]?.rarity ?? 'commun'),
       )
       expect(hasRare, `${m.id} doit droper un item épique/légendaire`).toBe(true)
+    }
+  })
+})
+
+describe('mobs de granularité (audit lot 3)', () => {
+  // 7 mobs ajoutés pour combler les trous de niveau, épinglés à un terrain dont le niveau calibré
+  // vise la bande à combler (cf. PINNED_SPAWNS dans levels.ts). niveau attendu = niveau calibré.
+  const NEW_MOBS: { id: string; level: number; biome: string }[] = [
+    { id: 'serpent-des-sables', level: 32, biome: 'desert' },
+    { id: 'elementaire-de-sable', level: 35, biome: 'desert' },
+    { id: 'djinn-mineur', level: 38, biome: 'desert' },
+    { id: 'loup-des-neiges', level: 48, biome: 'montagne' },
+    { id: 'liche-mineure', level: 53, biome: 'cimetiere' },
+    { id: 'kraken-juvenile', level: 59, biome: 'plage' },
+    { id: 'cerbere', level: 66, biome: 'enfer' },
+  ]
+
+  it('les 7 nouveaux mobs existent avec le niveau calibré attendu', () => {
+    for (const { id, level } of NEW_MOBS) {
+      const m = MONSTERS[id]
+      expect(m, `${id} doit exister`).toBeDefined()
+      expect(m!.level, `${id} niveau`).toBe(level)
+    }
+  })
+
+  it('le kraken juvénile est aquatique', () => {
+    expect(MONSTERS['kraken-juvenile']!.aquatic).toBe(true)
+  })
+
+  it('chaque nouveau mob apparaît dans au moins un niveau de son biome', () => {
+    for (const { id, biome } of NEW_MOBS) {
+      const hosts = Object.values(LEVELS).filter((l) => l.spawns.some((s) => s.monsterId === id))
+      expect(hosts.length, `${id} doit spawner quelque part`).toBeGreaterThan(0)
+      expect(hosts.every((l) => l.biome === biome), `${id} doit spawner dans le biome ${biome}`).toBe(true)
     }
   })
 })
