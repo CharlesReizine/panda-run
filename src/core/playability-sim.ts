@@ -16,6 +16,7 @@ import { MONSTERS } from '../data/monsters'
 import { WORLD_NODES } from '../data/worldmap'
 import { physicalDamage } from './combat'
 import { cumXpBelow, LEVEL_ORDER, playerLevelForXp } from './mob-level'
+import { playerXpForMobLevel } from './progression'
 import { computeStats } from './stats'
 import { newPlayer, type PlayerState } from './player-state'
 import type { ClassId, MonsterDef } from './types'
@@ -55,6 +56,57 @@ export function expectedLevel(nodeId: string): number {
   for (let i = idx - 1; i >= 0; i--) {
     const lid = WORLD_NODES[i]!.levelId
     if (lid && LEVEL_INDEX[lid] !== undefined) return expectedLevelForIndex(LEVEL_INDEX[lid])
+  }
+  return 1
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// 1 bis) NIVEAU APRÈS FARM — la FONCTION DE RÉFÉRENCE du modèle d'équilibrage maître ⭐
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//
+// RÈGLE MAÎTRE : à l'entrée d'un terrain T, un joueur qui a « clear ~1,5× » TOUS les terrains
+// précédents doit être à peu près AU NIVEAU du mob le plus fort de T (le boss d'une map est « à ton
+// niveau » quand tu y arrives après avoir farmé la map). `playerLevelAfterClear` mesure ce niveau.
+//
+// À la DIFFÉRENCE d'`expectedLevel` (qui mesure le niveau « juste à l'heure », dérivé du champ de
+// CALIBRATION `MonsterDef.xp`), on cumule ici la vraie RÉCOMPENSE JOUEUR (playerXpForMobLevel, courbe
+// de progression.ts), chaque terrain compté `mult` fois (1,5 par défaut = « a farmé un peu »), puis on
+// convertit via la MÊME courbe de paliers (playerLevelForXp / xpToNext). C'est l'invariant verrouillé
+// par tests/core/balance-invariant.test.ts.
+
+// Récompense JOUEUR distribuée par un terrain = somme de playerXpForMobLevel sur ses spawns (hors
+// gardiens, obstacles contournables) + le boss s'il y en a un.
+function levelReward(level: LevelDef): number {
+  let sum = 0
+  for (const s of level.spawns) {
+    if (s.monsterId.startsWith('gardien-')) continue
+    const m = MONSTERS[s.monsterId]
+    if (m) sum += playerXpForMobLevel(m.level)
+  }
+  if (level.boss) { const b = MONSTERS[level.boss]; if (b) sum += playerXpForMobLevel(b.level) }
+  return sum
+}
+
+// Récompense JOUEUR cumulée sur les terrains STRICTEMENT avant l'index donné (ordre de progression).
+function cumRewardBelow(index: number): number {
+  let sum = 0
+  for (let i = 0; i < index && i < LEVEL_ORDER.length; i++) sum += levelReward(LEVEL_ORDER[i]!)
+  return sum
+}
+
+// Niveau atteint en ayant clear `mult`× tous les terrains AVANT `nodeId` (id de nœud carte OU id de
+// niveau). Terrain/boss → on cumule les terrains qui le précèdent (on ENTRE dedans, il n'est pas
+// encore fait). Ville → on a fait tout jusqu'au terrain qui la précède INCLUS (on y est ARRIVÉ).
+export function playerLevelAfterClear(nodeId: string, mult = 1.5): number {
+  const levelId = levelIdOfNode(nodeId)
+  if (levelId && LEVEL_INDEX[levelId] !== undefined) {
+    return playerLevelForXp(mult * cumRewardBelow(LEVEL_INDEX[levelId]))
+  }
+  // ville : on cumule jusqu'au terrain précédent INCLUS (index précédent + 1)
+  const idx = WORLD_NODES.findIndex((w) => w.id === nodeId)
+  for (let i = idx - 1; i >= 0; i--) {
+    const lid = WORLD_NODES[i]!.levelId
+    if (lid && LEVEL_INDEX[lid] !== undefined) return playerLevelForXp(mult * cumRewardBelow(LEVEL_INDEX[lid] + 1))
   }
   return 1
 }
@@ -182,6 +234,9 @@ export interface PlayabilityResult {
   levelId: string
   biome: string
   expectedLevel: number
+  farmedLevel: number      // niveau en ayant clear 1,5× les terrains précédents (playerLevelAfterClear)
+  maxMobLevel: number      // niveau du mob le plus fort du terrain (hors boss/gardiens)
+  apexGap: number          // maxMobLevel - farmedLevel : > 0 sur-niveau (dur), < 0 sous-niveau (trivial)
   survivable: boolean
   difficulty: number       // 0..1
   flags: string[]
@@ -218,6 +273,12 @@ export function simulateLevel(
     .filter((e): e is { x: number; m: MonsterDef } => !!e.m && !e.m.boss && !e.m.id.startsWith('gardien-'))
 
   const threats = mobs.map((e) => ({ x: e.x, t: mobThreat(e.m, pl) }))
+
+  // ÉCART DE NIVEAU (base de la difficulté, lisible sur TOUT le jeu) : niveau du mob le plus fort du
+  // terrain vs niveau du joueur ayant clear 1,5× les précédents (playerLevelAfterClear, modèle maître).
+  const maxMobLevel = mobs.reduce((mx, e) => Math.max(mx, e.m.level), 0)
+  const farmedLevel = playerLevelAfterClear(nodeOrLevelId)
+  const apexGap = maxMobLevel - farmedLevel
 
   let totalHpLost = 0
   let worstOneHit = 0
@@ -256,13 +317,24 @@ export function simulateLevel(
   const BURST_TOLERANCE = 1.35
   const survivable = worstOneHit < pl.maxHp && peakBurst < pl.maxHp * BURST_TOLERANCE
 
-  // DIFFICULTÉ 0..1 : mélange du pic (ce qui tue) et de l'attrition (usure sur toute la traversée).
-  // Le budget d'usure est GÉNÉREUX (4× maxHp) car un joueur récupère ENTRE les combats (potions,
-  // régen, soins, retour en ville) — sans ça, un niveau LONG saturerait à tort. Le pic pèse le plus
-  // (0,65) : c'est lui qui décide de la survie, l'attrition ne fait que colorer la pénibilité.
+  // DIFFICULTÉ 0..1 — mesure basée sur l'ÉCART DE NIVEAU + burst/attrition.
+  //
+  // POURQUOI l'écart de niveau : la difficulté normalisée-PV seule était FAUSSÉE en late-game — dès
+  // que les mobs passent SOUS le niveau du joueur, leurs dégâts sont plafonnés à 1 → burst ~0,03-0,11
+  // partout, tout se ressemblait (~0,05). L'écart de niveau (apexGap) rend la lecture cohérente sur
+  // TOUT le jeu : « à ton niveau » (gap≈0) = difficulté MOYENNE, sur-niveau (gap>0) = DIFFICILE,
+  // sous-niveau (gap<0) = TRIVIAL.
+  //
+  // On COMBINE avec le burst/attrition (la réalité combat) : en EARLY game un écart de niveau est
+  // trompeur (à Nv2 un gap de +6 reste peu létal car les stats absolues sont petites), c'est le burst
+  // qui doit primer ; en LATE game (burst plafonné) c'est l'écart qui porte la lecture. Le mélange
+  // 0,40·gap + 0,45·burst + 0,30·attrition satisfait ce double régime (cf. balance/playability tests).
+  //
+  // gapTerm : rampe centrée pour que gap 0 ≈ 0,40 (moyen), gap +12 → 1 (dur), gap -8 → 0 (trivial).
+  const gapTerm = Math.max(0, Math.min(1, (apexGap + 8) / 20))
   const burstRatio = peakBurst / pl.maxHp
   const attritionRatio = totalHpLost / (pl.maxHp * 4)
-  let difficulty = 0.65 * burstRatio + 0.35 * attritionRatio
+  let difficulty = 0.40 * gapTerm + 0.45 * burstRatio + 0.30 * Math.min(attritionRatio, 1.5)
   difficulty = Math.max(0, Math.min(1, difficulty))
 
   // ── FLAGS ────────────────────────────────────────────────────────────────────────────────────
@@ -286,6 +358,9 @@ export function simulateLevel(
     levelId,
     biome: level.biome,
     expectedLevel: exp,
+    farmedLevel,
+    maxMobLevel,
+    apexGap,
     survivable,
     difficulty: Math.round(difficulty * 1000) / 1000,
     flags,

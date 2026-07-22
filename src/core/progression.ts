@@ -6,15 +6,21 @@ export const CLASS_CHANGE_LEVEL = 10
 export const CLASS_EVOLVE_LEVEL = 30
 export const STAT_POINTS_PER_LEVEL = 2 // points de stat gagnés à chaque niveau
 
-// XP GAGNÉE PAR LE JOUEUR = fonction du NIVEAU du monstre (retours playtest : caler la courbe de
-// progression sur des repères — Prontera ~niv 7-8 en fin de plaine, Morocc ~niv 25-30 en fin de désert).
-// On DÉCOUPLE volontairement la récompense de `MonsterDef.xp` : le champ `xp` reste l'invariant qui
-// pilote la CALIBRATION des niveaux (src/core/mob-level.ts, inchangée), tandis que la récompense suit
-// une courbe puissance du niveau. Comme les mobs de plaine sont niv ~1 et ceux du désert niv ~31, la
-// courbe rend la plaine peu rémunératrice et le désert riche → gros SAUT de niveau (mur voulu) au
-// passage plaine→désert, qui force à farmer. Réglé par MOB_XP_BASE / MOB_XP_EXP (cf. mob-level.test).
-export const MOB_XP_BASE = 16   // XP d'un mob de niveau 1
-export const MOB_XP_EXP = 1.3   // exposant de la courbe puissance (niveau^exp)
+// XP GAGNÉE PAR LE JOUEUR = fonction du NIVEAU du monstre. C'est la RÉCOMPENSE joueur — à ne pas
+// confondre avec `MonsterDef.xp`, l'invariant qui pilote la CALIBRATION des niveaux (mob-level.ts,
+// inchangée). La récompense suit une courbe puissance du niveau.
+//
+// COURBE calée sur le MODÈLE D'ÉQUILIBRAGE MAÎTRE (cf. tests/core/balance-invariant.test.ts) : en
+// ayant clear ~1,5× les terrains précédents, le joueur arrive sur chaque terrain à un niveau PROCHE
+// du mob le plus fort qui l'attend (playerLevelAfterClear, playability-sim.ts). Repères 1,5× :
+// Prontera ~niv 8, Morocc ~niv 27-29, endgame ~niv 70 (le boss final est niv 75, « à ton niveau »
+// quand tu arrives après avoir farmé la map). La plaine (mobs niv ~1-15) reste peu rémunératrice et
+// le désert (niv ~27-35) riche → le passage plaine→désert garde son MUR de niveau (galère voulue,
+// cf. xp-curve.test). Réglé par MOB_XP_BASE / MOB_XP_EXP (exposant baissé 1,3→1,25 + base relevée
+// 16→20 : relève l'early/mid pour rapprocher le joueur du niveau des mobs sans faire déborder le
+// late-game au-delà de ~75).
+export const MOB_XP_BASE = 20     // XP d'un mob de niveau 1
+export const MOB_XP_EXP = 1.25    // exposant de la courbe puissance (niveau^exp)
 
 // XP accordée au joueur pour un monstre de niveau `level` (arrondi entier, ≥ 1).
 export function playerXpForMobLevel(level: number): number {
