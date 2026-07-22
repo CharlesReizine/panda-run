@@ -29,14 +29,12 @@ export class FlameWall extends Phaser.Physics.Arcade.Image {
     const body = this.body as Phaser.Physics.Arcade.StaticBody | null
     if (body) { body.setSize(this.wallWidth, this.wallHeight); body.updateFromGameObject() }
 
-    // socle de braises OPAQUE au sol (lisible même sur ciel clair) + halo ADD par-dessus
+    // halo doux au sol (ADD) — plus de « ligne orange » pleine qui faisait cheap.
     const scene = this.scene
-    const base = scene.add.rectangle(this.x, this.groundY, this.wallWidth, 22, 0xd84315).setDepth(4).setAlpha(0.85).setOrigin(0.5, 1)
-    scene.tweens.add({ targets: base, alpha: 0.55, duration: 400, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
     const glow = scene.add.image(this.x, this.groundY, 'ring').setTint(0xff7043).setBlendMode(Phaser.BlendModes.ADD)
-      .setDepth(5).setAlpha(0.5).setDisplaySize(this.wallWidth * 1.15, 44)
-    scene.tweens.add({ targets: glow, alpha: 0.22, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
-    this.embers.push(base, glow)
+      .setDepth(5).setAlpha(0.4).setDisplaySize(this.wallWidth * 1.15, 40)
+    scene.tweens.add({ targets: glow, alpha: 0.18, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+    this.embers.push(glow)
 
     // REFONTE FLAMMES : nappe illustrée fx-mur-de-flamme qui ondule sur toute la largeur (si dispo).
     const hasSprite = scene.textures.exists('fx-mur-de-flamme')
@@ -59,7 +57,7 @@ export class FlameWall extends Phaser.Physics.Arcade.Image {
         const bodyCol = Phaser.Math.RND.pick([0xff7043, 0xff5252, 0xf4511e, 0xe64a19])
         const baseY = this.groundY - Phaser.Math.Between(0, 8)
         const w = Phaser.Math.Between(8, 14), h = Phaser.Math.Between(22, 38)
-        const rise = Phaser.Math.Between(this.wallHeight * 0.38, this.wallHeight * 0.66) // vole moins haut
+        const rise = Phaser.Math.Between(this.wallHeight * 0.22, this.wallHeight * 0.45) // flammes basses, collées au sol
         const dur = Phaser.Math.Between(360, 580)
         const flame = scene.add.rectangle(fx, baseY, w, h, bodyCol).setDepth(5).setAlpha(0.95).setOrigin(0.5, 1)
         scene.tweens.add({ targets: flame, y: baseY - rise, scaleX: 0.3, scaleY: 0.4, alpha: 0, duration: dur, ease: 'Cubic.out', onComplete: () => flame.destroy() })

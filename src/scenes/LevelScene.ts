@@ -2989,14 +2989,14 @@ export class LevelScene extends Phaser.Scene {
     if (this.textures.exists('fx-lance-flammes')) {
       // blend NORMAL + teinte orange (pas ADD blanc) ; déformation par tick (hauteur/angle/longueur variés)
       const jet = this.add.image(px + f * (reach * 0.5 + 10), py, 'fx-lance-flammes')
-        .setDepth(7).setFlipX(f === -1).setAlpha(0.9).setTint(0xff7a33)
+        .setDepth(7).setFlipX(f === -1).setAlpha(0.78).setTint(0xe2481a)
       jet.setDisplaySize(reach * Phaser.Math.FloatBetween(0.9, 1.12), 150 * Phaser.Math.FloatBetween(0.7, 1.25))
       jet.setAngle(f * Phaser.Math.FloatBetween(-7, 7))
       this.tweens.add({ targets: jet, scaleY: jet.scaleY * Phaser.Math.FloatBetween(1.1, 1.3), alpha: 0, duration: 150, ease: 'Sine.out', onComplete: () => jet.destroy() })
     }
     for (let i = 0; i < 3; i++) {
       const ex = px + f * Phaser.Math.Between(30, reach)
-      const col = Phaser.Math.RND.pick([0xffca28, 0xff7043, 0xff5252])
+      const col = Phaser.Math.RND.pick([0xff7043, 0xff5252, 0xe64a19])
       const em = this.add.rectangle(ex, py + Phaser.Math.Between(-70, 70), 5, 9, col).setBlendMode(Phaser.BlendModes.ADD).setDepth(6).setAlpha(0.9)
       this.tweens.add({ targets: em, y: em.y - Phaser.Math.Between(14, 28), alpha: 0, duration: 260, onComplete: () => em.destroy() })
     }
