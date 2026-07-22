@@ -91,6 +91,19 @@ describe('jouabilité de tous les terrains (état R188)', () => {
     expect(desert1.difficulty).toBeGreaterThan(0.4) // c'est bien un pic…
     expect(desert1.difficulty).toBeLessThan(0.95)   // …mais pas un mur infranchissable
   })
+
+  it('le DÉSERT TARDIF (Col sec / Fourche / Braise) n\'est plus TRIVIAL', () => {
+    // desert-9/10/11 sont réinsérés très loin (joueur ~Nv40-52) : avec l'ancien pool désert (~Nv27)
+    // les dégâts étaient plafonnés à 1 → difficulté ~0,00 (aucun enjeu). Le pool haute-bande désert
+    // (scorpion géant, harpie, djinn, serpent) rend l'enjeu SIGNIFICATIF tout en restant survivable.
+    for (const id of ['desert-9', 'desert-10', 'desert-11']) {
+      const r = results.find((x) => x.levelId === id)!
+      expect(r.difficulty, `${id} difficulté ${r.difficulty} (attendu > 0,02, était ~0,001)`).toBeGreaterThan(0.02)
+      expect(r.survivable, `${id} doit rester survivable`).toBe(true)
+      expect(r.flags).not.toContain('one-shot')
+      expect(r.flags).not.toContain('level-gap-injuste')
+    }
+  })
 })
 
 describe('le moteur ATTRAPE une vraie horreur (régression ancien plaine-1)', () => {

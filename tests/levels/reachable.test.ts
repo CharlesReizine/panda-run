@@ -17,6 +17,7 @@ import {
   deadEndSurfaces,
   caveCeilingClearance,
   shortCascades,
+  longEmptyFlats,
 } from '../../src/core/level-validator'
 import { MAX_LADDER_TILES, groundRowFor } from '../../src/core/platforming'
 import { MIN_CASCADE_TILES } from '../../src/data/level-modules'
@@ -300,6 +301,73 @@ describe('kit de modules — cas de rejet synthétiques', () => {
       platforms: [{ x: 2, y: 14, w: 6 }, { x: 33, y: 5, w: 5 }],
     }
     expect(deadEndSurfaces(okDie)).toEqual([])
+  })
+})
+
+// ─── ANTI-ENNUI : aucune LONGUE BANDE DE PLAT VIDE (retour user « une immense bande de plat sans
+// rien, je me fais chier ») ────────────────────────────────────────────────────────────────────
+// La génération n'accepte QUE les seeds sans bande de sol plat vide > seuil (16, assoupli à 18-20 au
+// pire, cf. clean() dans levels.ts). On vérifie ici (1) que TOUS les niveaux générés respectent le
+// plafond DUR (20 tuiles) — le garde-fou est toujours actif ; (2) que la détection accepte/rejette
+// correctement des cas synthétiques ; (3) que les décorations pures (herbe) ne « meublent » pas.
+describe('anti-ennui — pas de longue bande de plat vide', () => {
+  const HARD_CEIL = 20 // plafond DUR (le seuil visé est 16, assoupli au pire à 20)
+
+  for (const id of MODULAR_IDS) {
+    const level = LEVELS[id]!
+    it(`${id} : aucune bande de plat vide au-delà du plafond (${HARD_CEIL})`, () => {
+      const bad = longEmptyFlats(level, HARD_CEIL)
+      expect(bad, `${id} bandes vides : ${bad.map((b) => `x${b.x} w${b.w}`).join(' · ')}`).toEqual([])
+    })
+  }
+
+  it('tous les terrains respectent AUSSI le seuil visé de 16 (état R190)', () => {
+    const over = MODULAR_IDS
+      .map((id) => ({ id, runs: longEmptyFlats(LEVELS[id]!, 16) }))
+      .filter((e) => e.runs.length > 0)
+      .map((e) => `${e.id} (${e.runs.map((r) => `w${r.w}`).join(',')})`)
+    expect(over, `bandes > 16 : ${over.join(' · ')}`).toEqual([])
+  })
+
+  it('une longue bande de sol plat SANS rien → détectée', () => {
+    const bad: LevelDef = {
+      id: 'synth-plat-vide', name: 't', biome: 'plaine', widthTiles: 40, heightTiles: 16, spawns: [],
+      start: { x: 2, y: 14 }, exit: { x: 38, y: 14 }, platforms: [],
+    }
+    // sol plein (row14) sur 40 tuiles, aucun monstre / relief / obstacle → une bande vide géante
+    const runs = longEmptyFlats(bad, 16)
+    expect(runs.length).toBeGreaterThan(0)
+    expect(runs[0]!.w).toBeGreaterThan(16)
+  })
+
+  it('la MÊME bande MEUBLÉE (monstre + plateforme en surplomb + coffre) → acceptée', () => {
+    const ok: LevelDef = {
+      id: 'synth-plat-meuble', name: 't', biome: 'plaine', widthTiles: 40, heightTiles: 16,
+      start: { x: 2, y: 14 }, exit: { x: 38, y: 14 },
+      platforms: [{ x: 18, y: 10, w: 5 }], // relief en surplomb au milieu → coupe la bande en deux
+      spawns: [{ monsterId: 'gloopy', x: 10 }, { monsterId: 'gloopy', x: 30 }],
+      props: [{ kind: 'coffre', x: 26, y: 9 }],
+    }
+    expect(longEmptyFlats(ok, 16)).toEqual([])
+  })
+
+  it('les décorations PURES (herbe) ne meublent PAS une bande vide', () => {
+    const bad: LevelDef = {
+      id: 'synth-plat-herbe', name: 't', biome: 'plaine', widthTiles: 40, heightTiles: 16, spawns: [],
+      start: { x: 2, y: 14 }, exit: { x: 38, y: 14 }, platforms: [],
+      props: [{ kind: 'herbe', x: 10 }, { kind: 'herbe', x: 20 }, { kind: 'herbe', x: 30 }],
+    }
+    expect(longEmptyFlats(bad, 16).length).toBeGreaterThan(0)
+  })
+
+  it('un trou / une cuve d’eau BORNE la bande (rupture de platitude)', () => {
+    const ok: LevelDef = {
+      id: 'synth-plat-coupe', name: 't', biome: 'plaine', widthTiles: 40, heightTiles: 16, spawns: [],
+      start: { x: 2, y: 14 }, exit: { x: 38, y: 14 }, platforms: [],
+      gaps: [{ x: 19, w: 2 }], // le vide coupe la bande de 40 en deux tronçons ≤ 18
+    }
+    // deux tronçons de ~18/19 : le trou coupe, mais chaque tronçon reste sous le plafond assoupli
+    expect(longEmptyFlats(ok, 20)).toEqual([])
   })
 })
 

@@ -45,10 +45,10 @@ describe('mobs de granularité (audit lot 3)', () => {
     { id: 'serpent-des-sables', level: 32, biome: 'desert' },
     { id: 'elementaire-de-sable', level: 35, biome: 'desert' },
     { id: 'djinn-mineur', level: 38, biome: 'desert' },
-    { id: 'loup-des-neiges', level: 48, biome: 'montagne' },
+    { id: 'loup-des-neiges', level: 49, biome: 'montagne' },
     { id: 'liche-mineure', level: 53, biome: 'cimetiere' },
     { id: 'kraken-juvenile', level: 59, biome: 'plage' },
-    { id: 'cerbere', level: 66, biome: 'enfer' },
+    { id: 'cerbere', level: 67, biome: 'enfer' },
   ]
 
   it('les 7 nouveaux mobs existent avec le niveau calibré attendu', () => {

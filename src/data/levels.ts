@@ -81,6 +81,7 @@ import {
   overStackedColumns, unlevelWaterBanks, deadEndSurfaces, suspendedWaterBanks,
   unreachablePlatforms, laddersToNowhere, unreachableLadders, unreachableChests,
   oversizedGaps, oversizedLadders, monstersOffSurface, startExitProblems, caveCeilingClearance,
+  longEmptyFlats,
 } from '../core/level-validator'
 import { MONSTERS } from './monsters'
 
@@ -195,6 +196,30 @@ const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
 // roche francs). Ailleurs (prairie, désert ouvert…) une caverne fermée serait incongrue.
 const CAVE_BIOMES = new Set(['cave', 'montagne', 'carriere', 'enfer', 'jungle', 'foret'])
 
+// DÉSERT TARDIF (Col sec / Fourche / Braise) : ces trois terrains désertiques sont RÉINSÉRÉS très loin
+// dans la progression (avant montagne / plage / enfer), où le joueur ATTENDU est ~Nv40-52. Le pool
+// désert standard (mobs ~Nv27, calibrés sur l'ENTRÉE du désert) y devenait TRIVIAL : dégâts plafonnés
+// à 1, difficulté mesurée ~0,00 (moteur de jouabilité). On leur donne donc un pool de la BANDE HAUTE
+// du désert — serpent des sables (Nv32), élémentaire de sable (Nv35), djinn mineur (Nv38), scorpion
+// géant (Nv41, variante géante désert). Tous ces mobs apparaissent DÉJÀ plus tôt (PINNED_SPAWNS désert
+// pour les trois premiers, pool jungle pour le scorpion géant), donc leur niveau calibré est INCHANGÉ
+// (mob-level dérive de la 1RE apparition dans l'ordre de `list`) → aucun recalibrage. Le 1ER mob du
+// pool est le plus RÉPÉTÉ par le remplissage (nextGround retombe dessus une fois la file vidée) : on y
+// met le plus menaçant (scorpion géant) pour porter l'essentiel de la difficulté.
+// Le 1ER mob (le plus RÉPÉTÉ) porte l'essentiel de la difficulté : à ces niveaux de joueur (Nv40-52),
+// seuls des fonceurs/costauds AU NIVEAU du joueur infligent un vrai grignotage (les mobs sous le niveau
+// voient leurs dégâts plafonnés à 1). Les mobs choisis restent CALIBRÉS À L'IDENTIQUE car ils
+// apparaissent déjà plus tôt dans l'ordre de `list` : scorpion géant/frelon géant (pool jungle, ~idx 26-30
+// < desert-9 idx 32) et harpie (pool montagne, idx 33 < desert-10 idx 40 < desert-11 idx 48). On garde
+// l'ADN désert (scorpion géant, djinn de feu, serpent des sables) et on laisse la faune du biome SUIVANT
+// déborder sur ces terrains-passerelles (jungle→montagne pour Col sec, montagne pour Fourche/Braise),
+// comme le fait déjà TRANSITION_MIX aux entrées de biome.
+const LATE_DESERT_GROUND: Record<string, string[]> = {
+  'desert-9': ['scorpion-geant', 'frelon-geant', 'djinn-mineur', 'serpent-des-sables'],
+  'desert-10': ['harpie', 'scorpion-geant', 'djinn-mineur', 'serpent-des-sables'],
+  'desert-11': ['harpie', 'scorpion-geant', 'djinn-mineur', 'serpent-des-sables'],
+}
+
 // Fait tourner le pool de monstres pour que deux niveaux d'un même biome ne se ressemblent pas.
 const rotate = <T>(arr: T[], by: number): T[] => (arr.length ? arr.map((_, i) => arr[(i + by) % arr.length]!) : arr)
 
@@ -242,7 +267,8 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   }
   const distinctCap = biome === 'plaine' ? Math.min(pool.ground.length, 1 + rank)
     : (biome === 'foret' && rank <= 2) ? 4 + rank : pool.ground.length
-  let groundPool = (biome === 'plaine' ? pool.ground.slice(0, distinctCap) : rotate(pool.ground, idx).slice(0, distinctCap))
+  let groundPool = LATE_DESERT_GROUND[id]
+    ?? (biome === 'plaine' ? pool.ground.slice(0, distinctCap) : rotate(pool.ground, idx).slice(0, distinctCap))
   const mix = TRANSITION_MIX[biome]
   if (rank === 1 && mix && !groundPool.includes(mix)) groundPool = [mix, ...groundPool]
   // RAMPE AÉRIENNE (retour joueur : « des corbeaux Nv4 qui plongent en GRAPPES dès le 1er niveau, ça
@@ -298,7 +324,14 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   // sans cette batterie complète, une graine pouvait produire un niveau injouable non rejeté
   // (plateforme injoignable). Déterministe (aucun Math.random) : même silhouette d'un build à l'autre.
   const isAerial = (mid: string) => !!MONSTERS[mid]?.aerial
-  const clean = (l: LevelDef) =>
+  // ANTI-ENNUI (retour user : « parfois une immense bande de plat sans rien, je me fais chier ») : on
+  // AJOUTE longEmptyFlats à la batterie → une graine qui produit une longue bande de sol plat SANS
+  // AUCUN élément d'intérêt (monstre, coffre, relief, obstacle, échelle…) est REJETÉE. Le générateur
+  // MEUBLE donc toute portion plate longue en changeant de graine (les 80+ salées font varier motifs,
+  // reliefs et placements). SEUIL ADAPTATIF : on vise 16 tuiles de plat vide max ; si AUCUNE graine
+  // propre ne passe sur ce terrain (contrainte trop dure), on assouplit à 18 puis 20 — le garde-fou
+  // reste TOUJOURS actif, on tolère juste une bande un peu plus longue plutôt qu'une génération cassée.
+  const cleanAt = (l: LevelDef, maxFlat: number): boolean =>
     overStackedColumns(l, 3).length === 0 && unlevelWaterBanks(l).length === 0
     && suspendedWaterBanks(l).length === 0 && deadEndSurfaces(l).length === 0
     && unreachablePlatforms(l).length === 0 && laddersToNowhere(l).length === 0
@@ -306,19 +339,25 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
     && oversizedGaps(l).length === 0 && oversizedLadders(l).length === 0
     && monstersOffSurface(l, isAerial).length === 0
     && startExitProblems(l).length === 0 && caveCeilingClearance(l).length === 0
+    && longEmptyFlats(l, maxFlat).length === 0
   const salts = [`${id}-${ending}`, ...Array.from({ length: 80 }, (_, i) => `${id}-${ending}-${i}`)]
   let chosen = salts[0]!
   let level = composeLevel({ ...base, seed: chosen })
   // On garde la PREMIÈRE graine conforme à TOUS les invariants (clean) ET portant assez de GROS MOTIFS
   // (featureFloor, 0 hors early → premier clean, comportement historique). Repli sur le premier clean
   // si aucune graine n'atteint le plancher de motifs (jamais observé, mais garantit un niveau valide).
-  let firstClean: string | null = null
-  for (const seed of salts) {
-    const l = composeLevel({ ...base, seed })
-    if (!clean(l)) continue
-    if (firstClean === null) { firstClean = seed; level = l; chosen = seed }
-    const feats = countFeatureModules(planModules({ ...(base as ComposeOpts), seed }).map((m) => m.kind))
-    if (feats >= featureFloor) { level = l; chosen = seed; break }
+  for (const maxFlat of [16, 18, 20]) {
+    let firstClean: string | null = null
+    let found = false
+    for (const seed of salts) {
+      const l = composeLevel({ ...base, seed })
+      if (!cleanAt(l, maxFlat)) continue
+      found = true
+      if (firstClean === null) { firstClean = seed; level = l; chosen = seed }
+      const feats = countFeatureModules(planModules({ ...(base as ComposeOpts), seed }).map((m) => m.kind))
+      if (feats >= featureFloor) { level = l; chosen = seed; break }
+    }
+    if (found) break // seuil satisfait → on ne relâche pas davantage
   }
   LEVEL_MODULE_KINDS[id] = planModules({ ...(base as ComposeOpts), seed: chosen }).map((m) => m.kind)
   return level

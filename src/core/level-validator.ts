@@ -319,6 +319,75 @@ export function caveCeilingClearance(level: LevelDef, minClear = 5): CeilingProb
   return out
 }
 
+// ─── ANTI-ENNUI : LONGUE BANDE DE PLAT VIDE (retour user : « parfois une immense bande de plat sans
+// rien, je me fais chier ») ──────────────────────────────────────────────────────────────────────
+// Détecte une SUITE de tuiles de surface marchable à la MÊME altitude (sol plat, aucun changement de
+// relief) SANS AUCUN élément d'intérêt sur toute sa longueur : 0 monstre, 0 coffre, 0 pic, 0 trou,
+// 0 plan d'eau, 0 échelle/cascade, 0 rockBand, 0 panneau, ET aucune plateforme AU-DESSUS (relief en
+// surplomb). Les décorations pures (touffe d'herbe / champignon, posées à intervalle fixe sur CHAQUE
+// niveau par l'assembleur) NE comptent PAS : elles ne « meublent » rien pour le joueur. Un tel désert
+// plat qui DÉPASSE `maxRun` tuiles est un problème d'ennui → la génération ne retient que les seeds
+// sans une telle bande (cf. clean() dans levels.ts), et le test tests/levels le vérifie sur tous les
+// niveaux. Fonction PURE et déterministe.
+//
+// Modèle : la surface marchable d'une colonne = la plateforme/pont la PLUS HAUTE qui la couvre, sinon
+// le SOL du monde (groundRow) si la colonne n'est ni un trou ni un plan d'eau (sinon `null` = rupture,
+// qui BORNE la bande — un trou/une cuve est lui-même un point d'intérêt). Une « bande plate » = des
+// colonnes consécutives à surface marchable de MÊME rangée ; elle est « vide » si aucune de ses
+// colonnes ne porte d'intérêt.
+export interface EmptyFlatProblem { x: number; w: number; row: number }
+export function longEmptyFlats(level: LevelDef, maxRun = 16): EmptyFlatProblem[] {
+  const W = level.widthTiles
+  const groundRow = groundRowFor(level.heightTiles)
+  const gaps = level.gaps ?? []
+  const waters = (level.hazards ?? []).filter((h) => h.kind === 'water')
+  const spikes = (level.hazards ?? []).filter((h) => h.kind === 'spikes')
+  const surfaces: Plat[] = [...level.platforms, ...(level.bridges ?? [])]
+  const isGap = (x: number) => gaps.some((g) => x >= g.x && x < g.x + g.w)
+  const inWater = (x: number) => waters.some((h) => x >= h.x && x < h.x + h.w)
+  // surface marchable la plus HAUTE couvrant la colonne ; sinon le sol, sauf trou/eau (rupture = null)
+  const surfaceRow = (x: number): number | null => {
+    let best: number | null = null
+    for (const p of surfaces) if (x >= p.x && x < p.x + p.w) best = best === null ? p.y : Math.min(best, p.y)
+    if (best !== null) return best
+    if (isGap(x) || inWater(x)) return null
+    return groundRow
+  }
+  const hasSpike = (x: number) => spikes.some((s) => x >= s.x && x < s.x + s.w)
+  const hasLadder = (x: number) => (level.ladders ?? []).some((l) => x >= l.x - 1 && x <= l.x + 1)
+  const hasRock = (x: number) => (level.rockBands ?? []).some((r) => x >= r.x && x < r.x + r.w)
+  const hasSign = (x: number) => (level.signs ?? []).some((s) => x >= s.x - 1 && x <= s.x + 1)
+  // seuls les COFFRES meublent (l'herbe/le champignon décoratifs, eux, ne comptent pas)
+  const hasChest = (x: number) => (level.props ?? []).some((p) => p.kind === 'coffre' && x >= p.x - 1 && x <= p.x + 1)
+  const hasSpawn = (x: number) => level.spawns.some((s) => x >= s.x - 1 && x <= s.x + 1)
+  // une plateforme/un pont AU-DESSUS de la surface marchable de la colonne (relief en surplomb)
+  const overhead = (x: number, row: number) => surfaces.some((p) => x >= p.x && x < p.x + p.w && p.y < row)
+  const interest = (x: number, row: number) =>
+    hasSpawn(x) || hasChest(x) || hasSpike(x) || hasLadder(x) || hasRock(x) || hasSign(x) || overhead(x, row)
+
+  const out: EmptyFlatProblem[] = []
+  let runRow: number | null = null
+  let runStart = 0
+  let runLen = 0
+  let empty = true
+  const flush = () => { if (runRow !== null && empty && runLen > maxRun) out.push({ x: runStart, w: runLen, row: runRow }) }
+  for (let x = 0; x < W; x++) {
+    const r = surfaceRow(x)
+    if (r === runRow && r !== null) {
+      runLen++
+      if (interest(x, r)) empty = false
+    } else {
+      flush()
+      runRow = r
+      runStart = x
+      runLen = r === null ? 0 : 1
+      empty = r === null ? true : !interest(x, r)
+    }
+  }
+  flush()
+  return out
+}
+
 // ─── REBORDS DE PLAN D'EAU À NIVEAU (retour user : « rebord gauche plus haut que droite ») ───
 // La SURFACE d'un plan d'eau marine (ou d'une cuve de lave) est HORIZONTALE : ses DEUX berges
 // doivent border l'eau à la MÊME altitude (= la rangée de surface). Une berge plus basse que
