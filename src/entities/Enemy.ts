@@ -4,6 +4,7 @@ import { Projectile } from './Projectile'
 import type { LevelScene } from '../scenes/LevelScene'
 import { getPlayer } from '../state'
 import { diesOnFall, hasFallenOutOfWorld } from '../core/mob-fall'
+import { GRAVITY } from '../core/platforming'
 
 // Texture de projectile thématique par monstre à distance (fireProjectile). La mandragore tire
 // en cloche (fx-lob, géré à part) ; tout id absent retombe sur l'orbe générique fx-shot.
@@ -141,6 +142,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   // flottant (barre, plaque, télégraphes) et la physique (gravité/collisions/bornes). Piège/terreur
   // n'ont de toute façon aucune prise sur un boss.
   aiDisabled = false
+  // MORT HUMILIANTE (one-shot depuis la VIE PLEINE) : le mob est propulsé en cloche à l'opposé de
+  // l'attaquant, tournoie, retombe (peut rebondir), puis disparaît (poof) au contact du sol ou au
+  // timer max. Tant que c'est vrai, l'IA est court-circuitée (physique libre). Faux = mort normale.
+  ragdolling = false
+  private ragdollEndAt = 0
+  private ragdollAirborne = false
 
   constructor(scene: LevelScene, x: number, y: number, def: MonsterDef) {
     // TEXTURE : soit une clé explicite réutilisée (def.tex, ex. piranha → fish-piranha), soit la texture
@@ -194,7 +201,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   takeDamage(amount: number) {
-    if (!this.active) return
+    if (!this.active || this.ragdolling) return
     // Dummy d'entraînement : PV infinis → on montre le coup (flash + chiffre) sans jamais entamer la
     // vie ni mourir. La barre reste pleine → « insubmersible ».
     if (this.invincible) {
@@ -203,6 +210,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.levelScene.showDamageNumber(this.x, this.y - 30, amount, false)
       return
     }
+    const hpBefore = this.hp
     this.hp -= amount
     // Phaser 4 : le flash blanc se fait via setTint + mode FILL (setTintFill est un no-op déprécié)
     this.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL)
@@ -210,7 +218,67 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // chiffre de dégâts INFLIGÉS (taille ∝ ampleur, jaune→orange→rouge selon la force) — style et
     // regroupement gérés par LevelScene, distinct du ROUGE des dégâts subis par le joueur
     this.levelScene.showDamageNumber(this.x, this.y - 30, amount, false)
-    if (this.hp <= 0) this.die(true)
+    if (this.hp <= 0) {
+      // MORT HUMILIANTE : uniquement si le coup fatal tue depuis la VIE PLEINE (hp plein avant le
+      // coup) OU écrase d'un coup (dégât ≥ PV max). Sinon mort NORMALE. Boss/élite exemptés (mort
+      // dédiée / trop lourds à ragdoller).
+      const maxHp = this.monster.hp
+      const oneShot = hpBefore >= maxHp || amount >= maxHp
+      if (oneShot && !this.monster.boss && !this.monster.mvp) this.dieRagdoll(amount / maxHp)
+      else this.die(true)
+    }
+  }
+
+  // MORT HUMILIANTE (one-shot depuis la vie pleine) : récompense + nettoyage des FX flottants MAINTENANT
+  // (loot/XP au point de mort), puis le sprite est propulsé en cloche à l'OPPOSÉ du joueur (attaquant),
+  // tournoie et retombe sous gravité réelle (peut rebondir), et disparaît (poof) au contact du sol après
+  // retombée OU au timer max (~1,5 s). `overkill` = dégât / PV max → apogée ∝ overkill (plafond 5×).
+  private dieRagdoll(overkill: number) {
+    if (!this.active || this.ragdolling) return
+    this.scene.events.emit('enemy-died', this) // XP/loot au point de mort
+    this.bar.destroy()
+    this.lvlText.destroy()
+    this.tierText?.destroy()
+    this.eliteAura?.destroy()
+    this.zzz?.destroy(); this.zzz = null
+    this.burnTimer?.remove(); this.burnTimer = null
+    this.snareFx?.destroy(); this.snareFx = null
+    this.fearFx?.destroy(); this.fearFx = null
+    this.slowFx?.destroy(); this.slowFx = null
+    this.meleeFx?.destroy(); this.meleeFx = null
+    this.ragdolling = true
+    this.aiDisabled = true
+    this.ragdollEndAt = this.scene.time.now + 1500
+    const dirX = (Math.sign(this.x - this.levelScene.player.x) || 1) as 1 | -1
+    const body = this.body as Phaser.Physics.Arcade.Body
+    body.setAllowGravity(true)
+    // apogée = ratio d'overkill × la HAUTEUR de la victime, plafonné à 5× ; v = sqrt(2·g·h)
+    const h = Phaser.Math.Clamp(overkill, 1, 5) * this.displayHeight
+    const v = Math.sqrt(2 * GRAVITY * Math.max(1, h))
+    body.setVelocity(dirX * Phaser.Math.Between(160, 240), -v)
+    body.setBounceY(0.4)
+    this.setAngularVelocity(dirX * 540)
+  }
+
+  // Un tick de vol de la MORT HUMILIANTE : détecte l'atterrissage (après avoir décollé) ou le timer
+  // max, puis fait disparaître le mob (poof de poussière + destruction).
+  private updateRagdoll() {
+    const body = this.body as Phaser.Physics.Arcade.Body
+    if (!body.blocked.down) this.ragdollAirborne = true
+    const landed = this.ragdollAirborne && body.blocked.down
+    if (landed || this.scene.time.now >= this.ragdollEndAt) {
+      this.poof()
+      this.destroy()
+    }
+  }
+
+  // petit nuage de poussière à la disparition du corps
+  private poof() {
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2
+      const puff = this.scene.add.circle(this.x, this.y, Phaser.Math.Between(3, 6), 0xcfd8dc).setDepth(6).setAlpha(0.8)
+      this.scene.tweens.add({ targets: puff, x: this.x + Math.cos(a) * 26, y: this.y + Math.sin(a) * 26 - 6, alpha: 0, scale: 0.3, duration: 260, onComplete: () => puff.destroy() })
+    }
   }
 
   // MORT du monstre : nettoie tous les FX flottants et détruit le sprite. `grantReward` (vrai en combat
@@ -481,6 +549,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   preUpdate(t: number, d: number) {
     super.preUpdate(t, d)
+    // MORT HUMILIANTE en cours : physique LIBRE (vol en cloche + spin), aucune IA/recalage — on
+    // attend l'atterrissage (ou le timer) pour faire disparaître le corps.
+    if (this.ragdolling) { this.updateRagdoll(); return }
     // FILET DE SÉCURITÉ ANTI-CHUTE HORS MAP : un monstre terrestre ne doit JAMAIS passer sous le sol ni
     // disparaître sous la carte. La collision au sol peut lâcher pour un GROS corps (boss/élite 'grand')
     // dont la scale — donc la hauteur du corps Arcade — oscille à chaque frame (respiration/dandinement) :

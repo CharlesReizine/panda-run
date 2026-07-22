@@ -548,11 +548,15 @@ export class LevelScene extends Phaser.Scene {
       ))
     }
 
-    // contact ennemi → joueur
-    this.physics.add.overlap(this.player, this.enemies, (_p, e) => this.hitPlayer((e as Enemy).monster.atk))
+    // contact ennemi → joueur (un CORPS en train de valser — mort humiliante — ne frappe plus)
+    this.physics.add.overlap(this.player, this.enemies, (_p, e) => {
+      const en = e as Enemy
+      if (en.ragdolling) return
+      this.hitPlayer(en.monster.atk, en.x)
+    })
     this.physics.add.overlap(this.player, this.enemyProjectiles, (_p, proj) => {
       this.impactFx((proj as Projectile).x, (proj as Projectile).y, 0xff5252)
-      this.hitPlayer((proj as Projectile).damage)
+      this.hitPlayer((proj as Projectile).damage, (proj as Projectile).x)
       ;(proj as Projectile).destroy()
     })
     this.physics.add.overlap(this.playerProjectiles, this.enemies, (projObj, eObj) => {
@@ -1184,7 +1188,7 @@ export class LevelScene extends Phaser.Scene {
     })
   }
 
-  hitPlayer(rawAtk: number) {
+  hitPlayer(rawAtk: number, attackerX?: number) {
     // ENTRAÎNEMENT : le joueur ne subit AUCUN dégât (dummy + corbeaux frappent pour 0) → imperdable.
     if (this.training) return
     // God mode DEV (émulateur/tests physiques) : le joueur ne perd jamais de PV. Inoffensif
@@ -1193,15 +1197,32 @@ export class LevelScene extends Phaser.Scene {
     if (this.time.now < this.invulnUntil || this.player.hp <= 0) return
     this.invulnUntil = this.time.now + 800
     const dmg = physicalDamage(rawAtk, this.player.stats.def)
+    const maxHp = this.player.stats.maxHp
+    const hpBefore = this.player.hp
     this.showDamageNumber(this.player.x, this.player.y - 44, dmg, true) // chiffre ROUGE au-dessus de la tête
     this.player.takeDamage(dmg)
-    this.player.setVelocity(-this.player.facing * 200, -200)
-    audio.playSfx(this.player.hp <= 0 ? 'player-death' : 'player-hit')
     if (this.player.hp <= 0) {
-      // toute mort → écran de game over ; « Réessayer » recommence le niveau AU DÉBUT
-      save(getPlayer())
-      this.showGameOver()
+      audio.playSfx('player-death')
+      save(getPlayer()) // « Réessayer » recommence le niveau AU DÉBUT
+      // MORT HUMILIANTE : coup fatal depuis la VIE PLEINE (ou dégât ≥ PV max) → le joueur vole à
+      // l'opposé du monstre puis l'écran de game-over s'affiche. Sinon game-over immédiat classique.
+      const oneShot = hpBefore >= maxHp || dmg >= maxHp
+      if (oneShot) this.playerRagdollThenGameOver(attackerX)
+      else { this.player.setVelocity(-this.player.facing * 200, -200); this.showGameOver() }
+      return
     }
+    this.player.setVelocity(-this.player.facing * 200, -200)
+    audio.playSfx('player-hit')
+  }
+
+  // MORT HUMILIANTE du joueur : propulsion en cloche à l'OPPOSÉ de l'attaquant + spin (physique
+  // réelle, cf. Player.beginRagdoll), puis l'écran de game-over s'affiche à la retombée.
+  private playerRagdollThenGameOver(attackerX?: number) {
+    const ax = attackerX ?? this.player.x + this.player.facing * 100
+    const dirX = (Math.sign(this.player.x - ax) || (-this.player.facing as 1 | -1) || 1) as 1 | -1
+    this.player.beginRagdoll(dirX, this.player.displayHeight * 2.2)
+    this.cameras.main.stopFollow()
+    this.time.delayedCall(1100, () => { this.player.ragdolling = false; this.showGameOver() })
   }
 
   // Pics MORTELS : contact = MORT IMMÉDIATE (one-shot), même chemin que la chute mortelle → écran
@@ -1528,10 +1549,11 @@ export class LevelScene extends Phaser.Scene {
       const proj = this.spawnPlayerProjectile(atk, 440)
       if (isMageType) { proj.setTexture('fx-fireball').clearTint().setScale(1.3); this.fireballShimmer(proj, 1.3) }
       else if (this.player.isFlaming()) {
-        // Flèche enflammée (buff chasseur) : toutes les flèches s'embrasent et brûlent la cible.
-        proj.setTexture(this.textures.exists('fx-fleche-enflammee') ? 'fx-fleche-enflammee' : 'fx-arrow').clearTint().setScale(1.3)
+        // Flèche enflammée (buff chasseur) : flèche NORMALE + flammèche MINUSCULE à la pointe (plus de
+        // gros sprite fx-fleche-enflammee), et brûlure (DoT) sur la cible.
+        proj.setTexture('fx-arrow').clearTint().setScale(1.2)
         proj.burn = { dmgPerTick: atk * 0.18, durationMs: 2400 }
-        this.attachFlameTrail(proj)
+        this.attachTipFlame(proj)
       }
       else proj.setTexture('fx-arrow').clearTint().setScale(1.2)
     } else {
@@ -1595,8 +1617,11 @@ export class LevelScene extends Phaser.Scene {
       if (!arrow.active || seg >= points.length - 1) { arrow.destroy(); return }
       const b = points[seg + 1]!
       arrow.setRotation(Math.atan2(b.y - arrow.y, b.x - arrow.x))
+      // vitesse MODÉRÉE (~0,7 px/ms) au lieu d'un saut instantané de 90 ms : on VOIT la flèche
+      // traquer d'un ennemi à l'autre. Durée ∝ distance, bornée pour rester lisible.
+      const dur = Phaser.Math.Clamp(Phaser.Math.Distance.Between(arrow.x, arrow.y, b.x, b.y) / 0.7, 240, 620)
       this.tweens.add({
-        targets: arrow, x: b.x, y: b.y, duration: 90,
+        targets: arrow, x: b.x, y: b.y, duration: dur, ease: 'Sine.inOut',
         onComplete: () => { this.impactFx(b.x, b.y, color); seg++; hop() },
       })
     }
@@ -1861,6 +1886,12 @@ export class LevelScene extends Phaser.Scene {
     } else if (skill.kind === 'projectile' && skill.homing) {
       // Flèche AUTOGUIDÉE : chaîne homing à travers murs/terrain (nombre de cibles = rang).
       this.castHomingArrow(skill, atk * mult, rank, color)
+    } else if (skill.kind === 'projectile' && skill.lance) {
+      // CHARGE LANCIÈRE : RUÉE qui POUSSE et larde les ennemis sur la route (rang ↑ puissance + durée).
+      this.castLanceCharge(skill, atk * mult, rank, color)
+    } else if (skill.kind === 'projectile' && skill.id === 'tir-du-faucon') {
+      // TIR DU FAUCON : faucon en PIQUÉ lisible depuis le coin de l'écran → explosion à l'impact.
+      this.castFalconStrike(skill, atk * mult, color)
     } else if (skill.kind === 'projectile' && skill.falconBlitz) {
       // ASSAUT DU FAUCON : le faucon fond sur la cible et la frappe en coups multiples.
       this.castFalconBlitz(skill, atk * mult, color)
@@ -1904,13 +1935,7 @@ export class LevelScene extends Phaser.Scene {
         // lumineuse (archer/chasseur) ou faisceau laser (mage/sorcier).
         proj.pierce = true
         const isArrow = archerType || skill.id.includes('fleche') || skill.id.includes('tir')
-        if (skill.lance) {
-          // Charge lancière (chevalier) : long fer de lance doré + traînée d'acier ; secousse au départ.
-          proj.setTexture('fx-laser').setTint(0xffd54f).setScale(1.5)
-          this.attachSparkTrail(proj, 0xfff3c4)
-          this.lungeFx(46)
-          this.screenShake(0.006, 140)
-        } else if (isArrow) {
+        if (isArrow) {
           proj.setTexture('fx-arrow-pierce').setTint(0x40c4ff).setScale(1.3)
           this.attachSparkTrail(proj, 0x81d4fa)
         } else {
@@ -1972,7 +1997,13 @@ export class LevelScene extends Phaser.Scene {
     if (skill.buff) {
       // Un seul buff par classe, chacun VISUELLEMENT DISTINCT : aura recolorée + FX propre à la classe.
       this.player.applyAtkBuff(skill.buff.atkMult, skill.buff.durationMs, color)
-      if (skill.flame) { this.player.applyFlameBuff(skill.buff.durationMs); this.flameEnchantFx(color) }
+      if (skill.flame) {
+        // Flèche enflammée (chasseur) = EMBRASEMENT DU PERSO (aura de feu sur le corps) ; l'épée
+        // enflammée (sabreur) embrase la LAME. bodyAura pilote lequel des deux (cf. Player.emitFlame).
+        const bodyAura = skill.classId === 'archer' || skill.classId === 'chasseur'
+        this.player.applyFlameBuff(skill.buff.durationMs, bodyAura)
+        this.flameEnchantFx(color)
+      }
       else if (skill.classId === 'mage' || skill.classId === 'sorcier') this.arcaneBuffFx(color)
       else if (skill.classId === 'archer' || skill.classId === 'chasseur') this.agilityBuffFx(color)
       else this.warCryFx()
@@ -2498,6 +2529,23 @@ export class LevelScene extends Phaser.Scene {
     })
   }
 
+  // Flammèche MINUSCULE à la POINTE d'une flèche (buff flèche enflammée du chasseur) : mini-mini
+  // version des langues de feu du mur de flamme, discrète — pas de gros sprite. Suit la pointe selon
+  // l'orientation courante du tir. Nettoyée à la mort du projectile.
+  private attachTipFlame(proj: Projectile) {
+    const ev = this.time.addEvent({
+      delay: 26, loop: true, callback: () => {
+        if (!proj.active) { ev.remove(); return }
+        const len = proj.displayWidth * 0.45 // du centre vers la pointe (sens de la vélocité)
+        const tx = proj.x + Math.cos(proj.rotation) * len
+        const ty = proj.y + Math.sin(proj.rotation) * len
+        const col = Phaser.Math.RND.pick([0xffca28, 0xff7043])
+        const fl = this.add.rectangle(tx, ty, 3, 6, col).setDepth((proj.depth ?? 0) + 1).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.9)
+        this.tweens.add({ targets: fl, scaleX: 0.3, scaleY: 0.4, alpha: 0, duration: 160, ease: 'Sine.out', onComplete: () => fl.destroy() })
+      },
+    })
+  }
+
   // Flèche explosive : lancée en cloche, elle porte une charge qui détone au sol (ou à l'impact).
   private setupExplosiveArrow(proj: Projectile, skill: SkillDef, damage: number, color: number) {
     proj.explosive = { radius: skill.explodeRadius ?? 110, damage, color }
@@ -2965,7 +3013,9 @@ export class LevelScene extends Phaser.Scene {
     if (skill.id === 'mitraillette') {
       const off = Phaser.Math.Between(-7, 7)
       const proj = this.spawnPlayerProjectile(dmg, skill.range, off)
-      proj.setTexture(this.player.isFlaming() ? 'fx-fleche-enflammee' : 'fx-arrow').clearTint().setScale(1.1)
+      proj.setTexture('fx-arrow').clearTint().setScale(1.1)
+      // buff flèche enflammée : flammèche minuscule à la POINTE (pas de gros sprite fx-fleche-enflammee)
+      if (this.player.isFlaming()) this.attachTipFlame(proj)
       this.mitrailletteFx(px + f * 26, py + 10, f)
       return
     }
@@ -3090,16 +3140,79 @@ export class LevelScene extends Phaser.Scene {
       const prop = obj as Prop
       if (prop.active && Math.abs(prop.y - cy) <= thick && Math.abs(prop.x - cx) <= hReach) prop.takeDamage(1)
     }
+    // ── CROIX DIVINE : bras de lumière ÉNORMES (dimensionnés sur la portée) + cœur blanc éclatant,
+    //    god-rays radiaux, halo additif et gros flash. Doit crier « sacré ».
+    const hBar = this.add.rectangle(cx, cy, hReach * 2, thick, 0xfff3c0).setDepth(8).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0)
+    const vBar = this.add.rectangle(cx, cy, thick, vReach * 2, 0xfff3c0).setDepth(8).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0)
+    const hCore = this.add.rectangle(cx, cy, hReach * 2, thick * 0.4, 0xffffff).setDepth(9).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0)
+    const vCore = this.add.rectangle(cx, cy, thick * 0.4, vReach * 2, 0xffffff).setDepth(9).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0)
+    for (const bar of [hBar, vBar]) this.tweens.add({ targets: bar, alpha: 0.92, duration: 90, yoyo: true, hold: 150, onComplete: () => bar.destroy() })
+    for (const core of [hCore, vCore]) this.tweens.add({ targets: core, alpha: 1, duration: 70, yoyo: true, hold: 110, onComplete: () => core.destroy() })
+    // god-rays : faisceaux radiaux qui jaillissent du cœur de la croix
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2
+      const ray = this.add.rectangle(cx, cy, 8, 230, 0xfff59d).setOrigin(0.5, 0).setRotation(a).setDepth(7).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.85)
+      this.tweens.add({ targets: ray, scaleY: 1.7, alpha: 0, duration: 440, delay: 60, ease: 'Cubic.out', onComplete: () => ray.destroy() })
+    }
+    // halo éclatant qui enfle
+    for (let i = 0; i < 3; i++) {
+      const halo = this.add.image(cx, cy, 'ring').setTint(0xfff3c0).setDepth(8).setBlendMode(Phaser.BlendModes.ADD).setScale(0.3).setAlpha(0.9)
+      this.tweens.add({ targets: halo, scale: 5 + i * 2, alpha: 0, duration: 520 + i * 120, delay: i * 70, ease: 'Cubic.out', onComplete: () => halo.destroy() })
+    }
     if (this.textures.exists('fx-grand-croix')) {
-      const cross = this.add.image(cx, cy, 'fx-grand-croix').setDepth(8).setBlendMode(Phaser.BlendModes.ADD).setScale(0.4).setAlpha(0.95)
-      this.tweens.add({ targets: cross, scale: 1.5, alpha: 0, duration: 460, ease: 'Cubic.out', onComplete: () => cross.destroy() })
+      const cross = this.add.image(cx, cy, 'fx-grand-croix').setDepth(9).setBlendMode(Phaser.BlendModes.ADD).setScale(0.5).setAlpha(0.98)
+      this.tweens.add({ targets: cross, scale: 3.0, alpha: 0, duration: 560, ease: 'Cubic.out', onComplete: () => cross.destroy() })
     }
     this.beamStrikeFx(cx, cy, color)
-    this.flashScreen(0xfff3c0, 0.3, 150)
-    this.cameras.main.flash(130, 255, 245, 190)
-    this.screenShake(0.012, 260)
-    this.hitStop(110)
+    this.flashScreen(0xfff3c0, 0.42, 200)
+    this.cameras.main.flash(180, 255, 248, 210)
+    this.screenShake(0.016, 320)
+    this.hitStop(130)
     audio.playSfx('hit')
+  }
+
+  // ═════════════ CHEVALIER : Charge lancière (RUÉE qui pousse + larde) ═════════════
+  // Le chevalier FONCE droit devant, lance abaissée : tout ennemi sur sa route est POUSSÉ (knockback
+  // CONTINU, jamais traversé) et lardé de coups PAR TICK tant qu'il est poussé. Le RANG augmente la
+  // PUISSANCE (`damage` déjà multiplié par le rang) ET la DURÉE/distance de la ruée.
+  private castLanceCharge(skill: SkillDef, damage: number, rank: number, color: number) {
+    const cfg = skill.lanceCharge!
+    const f = this.player.facing
+    // durée allongée avec le rang (+18 %/rang au-delà du 1er) → distance = vitesse × durée qui grandit
+    const durationMs = cfg.durationMs * (1 + 0.18 * (rank - 1))
+    this.player.beginLanceCharge(f, cfg.speedPx)
+    this.lungeFx(24)
+    this.screenShake(0.006, 140)
+    const reach = 84 // portée frontale de la lance (px au-delà du corps)
+    const endAt = this.time.now + durationMs
+    const tick = this.time.addEvent({ delay: cfg.tickMs, loop: true, callback: () => {
+      if (!this.player.active || !this.player.isLancing()) { tick.remove(); return }
+      const px = this.player.x, py = this.player.y
+      for (const obj of this.enemies.getChildren()) {
+        const e = obj as Enemy
+        if (!e.active || e.ragdolling) continue
+        const dx = (e.x - px) * f // devant le panda
+        const dy = Math.abs(e.y - py)
+        if (dx < -20 || dx > reach || dy > 90) continue
+        // POUSSE l'ennemi devant (knockback continu, pas de traversée) + dégâts par tick
+        ;(e.body as Phaser.Physics.Arcade.Body).setVelocity(f * cfg.knockbackPx, -120)
+        e.takeDamage(physicalDamage(damage, e.effectiveDef()))
+        this.impactFx(e.x, e.y, color)
+      }
+      // fer de lance doré devant le panda
+      const lanceFx = this.add.rectangle(px + f * reach * 0.6, py + 6, reach, 6, 0xffd54f)
+        .setOrigin(0.5).setDepth(7).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.85)
+      this.tweens.add({ targets: lanceFx, alpha: 0, scaleX: 1.2, duration: cfg.tickMs, onComplete: () => lanceFx.destroy() })
+    } })
+    this.time.delayedCall(durationMs, () => { tick.remove(); this.player.endLanceCharge() })
+    // sillage doré pendant la ruée
+    const trail = this.time.addEvent({ delay: 20, loop: true, callback: () => {
+      if (this.time.now >= endAt || !this.player.active) { trail.remove(); return }
+      const echo = this.add.image(this.player.x, this.player.y, this.player.texture.key, this.player.frame.name)
+        .setFlipX(this.player.flipX).setAlpha(0.35).setTint(0xfff3c4).setDepth(this.player.depth - 1)
+        .setDisplaySize(this.player.displayWidth, this.player.displayHeight)
+      this.tweens.add({ targets: echo, alpha: 0, duration: 220, onComplete: () => echo.destroy() })
+    } })
   }
 
   // ═════════════ MAGE : Aura d'épines (aura offensive d'éclairs) ═════════════
@@ -3114,14 +3227,18 @@ export class LevelScene extends Phaser.Scene {
     else aura.setScale((cfg.radius / 28))
     this.tweens.add({ targets: aura, angle: 360, duration: 2600, repeat: -1 })
     this.tweens.add({ targets: aura, alpha: 0.45, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+    // RECALAGE À CHAQUE FRAME (POST_UPDATE, comme syncOverlays) : l'aura colle au panda sans latence.
+    // Le timer ne sert QU'AUX ticks de dégâts, plus au suivi de position (qui traînait d'un tick).
+    const follow = () => { if (aura.active) aura.setPosition(this.player.x, this.player.y) }
+    this.events.on(Phaser.Scenes.Events.POST_UPDATE, follow, this)
     const tick = this.time.addEvent({ delay: cfg.tickMs, loop: true, callback: () => {
       if (!this.player.active || this.time.now >= endAt) {
         tick.remove()
+        this.events.off(Phaser.Scenes.Events.POST_UPDATE, follow, this)
         this.tweens.killTweensOf(aura)
         this.tweens.add({ targets: aura, alpha: 0, scale: aura.scale * 1.2, duration: 240, onComplete: () => aura.destroy() })
         return
       }
-      aura.setPosition(this.player.x, this.player.y)
       let hit = false
       for (const obj of this.enemies.getChildren()) {
         const e = obj as Enemy
@@ -3204,6 +3321,60 @@ export class LevelScene extends Phaser.Scene {
     this.announceSkill(`${n} ennemi(s) ralenti(s)`, color)
   }
 
+  // FAUCON LISIBLE (tir-du-faucon & assaut-du-faucon) : le faucon SPAWNE au COIN de l'écran le PLUS
+  // ÉLOIGNÉ de la cible et traverse en PIQUÉ à vitesse MODÉRÉE (~500 ms), sprite orienté vers le vol,
+  // jusqu'à frapper. `onImpact` est appelé à l'arrivée (dégâts / explosion). Longue trajectoire lisible.
+  private falconDive(targetX: number, targetY: number, durationMs: number, onImpact: () => void) {
+    const key = this.textures.exists('fx-tir-faucon') ? 'fx-tir-faucon'
+      : (this.textures.exists('fx-blitz-faucon') ? 'fx-blitz-faucon' : 'fx-arrow')
+    const cam = this.cameras.main
+    const left = cam.scrollX, right = cam.scrollX + cam.width
+    const top = cam.scrollY, bottom = cam.scrollY + cam.height
+    // coin de l'écran (monde) le plus ÉLOIGNÉ de la cible → longue diagonale de piqué
+    const cornerX = Math.abs(targetX - left) > Math.abs(targetX - right) ? left : right
+    const cornerY = Math.abs(targetY - top) > Math.abs(targetY - bottom) ? top : bottom
+    const falcon = this.add.image(cornerX, cornerY, key).setDepth(9).setScale(1.3)
+    falcon.setRotation(Math.atan2(targetY - cornerY, targetX - cornerX)) // orienté vers le vol
+    if (targetX < cornerX) falcon.setFlipY(true) // vol vers la gauche : garde le faucon à l'endroit
+    this.tweens.add({
+      targets: falcon, x: targetX, y: targetY, duration: durationMs, ease: 'Quad.in',
+      onComplete: () => { onImpact(); falcon.destroy() },
+    })
+  }
+
+  // ═════════════ CHASSEUR : Tir du faucon (piqué explosif lisible) ═════════════
+  private castFalconStrike(skill: SkillDef, damage: number, color: number) {
+    const px = this.player.x, py = this.player.y, f = this.player.facing
+    let target: Enemy | null = null
+    let bestD = Infinity
+    for (const obj of this.enemies.getChildren()) {
+      const e = obj as Enemy
+      if (!e.active || e.ragdolling) continue
+      const dx = (e.x - px) * f
+      if (dx < -10 || dx > skill.range) continue
+      const d = Phaser.Math.Distance.Between(px, py, e.x, e.y)
+      if (d < bestD) { bestD = d; target = e }
+    }
+    const tx = target ? target.x : px + f * Math.min(skill.range, 320)
+    const ty = target ? target.y : this.groundRow * TILE - 20
+    const radius = skill.explodeRadius ?? 120
+    this.falconDive(tx, ty, 520, () => {
+      const ex = target && target.active ? target.x : tx
+      const ey = target && target.active ? target.y : ty
+      this.explosionFx(ex, ey, radius, color)
+      this.screenShake(Math.min(0.02, radius * 0.0001), 200)
+      audio.playSfx('hit')
+      for (const obj of this.enemies.getChildren()) {
+        const e = obj as Enemy
+        if (e.active && !e.ragdolling && Phaser.Math.Distance.Between(ex, ey, e.x, e.y) <= radius) e.takeDamage(physicalDamage(damage, e.effectiveDef()))
+      }
+      for (const obj of this.props.getChildren()) {
+        const prop = obj as Prop
+        if (prop.active && Phaser.Math.Distance.Between(ex, ey, prop.x, prop.y) <= radius) prop.takeDamage(1)
+      }
+    })
+  }
+
   // ═════════════ CHASSEUR : Assaut du faucon (piqué en coups multiples) ═════════════
   private castFalconBlitz(skill: SkillDef, dmg: number, color: number) {
     const px = this.player.x, py = this.player.y, f = this.player.facing
@@ -3211,29 +3382,28 @@ export class LevelScene extends Phaser.Scene {
     let bestD = Infinity
     for (const obj of this.enemies.getChildren()) {
       const e = obj as Enemy
-      if (!e.active) continue
+      if (!e.active || e.ragdolling) continue
       const dx = (e.x - px) * f
       if (dx < -10 || dx > skill.range) continue
       const d = Phaser.Math.Distance.Between(px, py, e.x, e.y)
       if (d < bestD) { bestD = d; target = e }
     }
-    const key = this.textures.exists('fx-blitz-faucon') ? 'fx-blitz-faucon' : 'fx-tir-faucon'
     if (!target) {
-      // aucune cible : le faucon fonce en ligne droite (projectile lobé explosif de repli)
-      const proj = this.spawnPlayerProjectile(dmg, skill.range)
-      proj.setTexture(this.textures.exists('fx-tir-faucon') ? 'fx-tir-faucon' : 'fx-arrow').clearTint().setScale(1.4)
+      // aucune cible : un unique piqué lisible vers un point devant (aucun dégât, pur spectacle)
+      this.falconDive(px + f * Math.min(skill.range, 320), this.groundRow * TILE - 20, 520, () => {})
       return
     }
     const hits = 3
     for (let i = 0; i < hits; i++) {
-      this.time.delayedCall(i * 110, () => {
-        if (!target!.active) return
-        const from = i % 2 === 0 ? -1 : 1
-        const falcon = this.add.image(target!.x + from * 90, target!.y - 70, key).setDepth(8).setScale(1.2).setFlipX(from > 0)
-        this.tweens.add({ targets: falcon, x: target!.x, y: target!.y, duration: 90, ease: 'Cubic.in', onComplete: () => {
-          if (target!.active) { target!.takeDamage(physicalDamage(dmg / hits, target!.effectiveDef())); this.impactFx(target!.x, target!.y, color) }
-          this.tweens.add({ targets: falcon, x: target!.x + from * 60, y: target!.y - 50, alpha: 0, duration: 110, onComplete: () => falcon.destroy() })
-        } })
+      // piqués successifs et LISIBLES depuis le coin de l'écran (staggered), chacun ~460 ms
+      this.time.delayedCall(i * 220, () => {
+        if (!target!.active || target!.ragdolling) return
+        this.falconDive(target!.x, target!.y, 460, () => {
+          if (target!.active && !target!.ragdolling) {
+            target!.takeDamage(physicalDamage(dmg / hits, target!.effectiveDef()))
+            this.impactFx(target!.x, target!.y, color)
+          }
+        })
       })
     }
     audio.playSfx('hit')

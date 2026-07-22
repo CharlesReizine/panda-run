@@ -7,7 +7,7 @@ import { SKILLS } from '../data/skills'
 import { ITEMS, rarityColor } from '../data/items'
 import { displayedWeaponType, isBigWeapon, weaponTextureKeys } from '../core/equip'
 import { PANDA_BODY, PANDA_HEAD_ANCHORS } from './player-body'
-import { JUMP_SPEED, RUN_SPEED } from '../core/platforming'
+import { JUMP_SPEED, RUN_SPEED, GRAVITY } from '../core/platforming'
 import { MAX_SKILL_RANK } from '../core/player-state'
 
 const JUMP_VELOCITY = -JUMP_SPEED // source unique (partagée avec le test d'atteignabilité)
@@ -141,6 +141,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // Épée enflammée : buff temporaire ; pendant ce temps la lame flambe et les coups brûlent.
   private flameUntil = 0
   private flameTimer: Phaser.Time.TimerEvent | null = null
+  // Flèche enflammée (chasseur) : le buff embrase le CORPS du panda (aura de feu) au lieu de la lame.
+  private flameBodyAura = false
+  // Charge lancière (chevalier) : RUÉE verrouillée — le panda fonce en avant à vitesse imposée le
+  // temps de la charge (contrôles ignorés, comme diving/chargeLocked). LevelScene pousse et blesse
+  // les ennemis sur la route. Terminée par un timer (endLanceCharge).
+  private lancing = false
+  private lanceDir: 1 | -1 = 1
+  private lanceSpeed = 0
+  // MORT HUMILIANTE (one-shot depuis la vie pleine) : le panda est propulsé en cloche à l'opposé de
+  // l'attaquant, tournoie, retombe — puis LevelScene affiche le game-over. Contrôles ignorés (physique
+  // libre) tant que ça dure.
+  ragdolling = false
   private attacking = false
   // Tourbillon : pendant le skill, le panda TOURNE — flipX alterné gauche/droite plusieurs fois sur
   // la durée → illusion de rotation. spinFlip = orientation courante du cycle ; remis au facing réel
@@ -153,6 +165,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // true quand l'arme AFFICHÉE est une grosse épée (lame portée par un épéiste) : masquée au repos,
   // révélée le temps d'un coup / tourbillon. Calculé à chaque refreshWeapon selon l'arme équipée.
   private weaponIsBig = false
+  // true quand l'arme AFFICHÉE est un ARC : l'arc reste DROIT/horizontal (aucune inclinaison de repos
+  // ni swing d'attaque, contrairement aux épées/bâtons). Calculé à chaque refreshWeapon.
+  private weaponIsBow = false
   // Halo de classe derrière l'arme (montée en gamme) : même texture que l'arme, teintée de la couleur
   // de classe, en fondu additif, échelle un peu plus grande → lueur qui suit rigidement l'arme.
   private weaponGlow: Phaser.GameObjects.Image | null = null
@@ -230,6 +245,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const type = displayedWeaponType(cls, weaponId)
     const big = isBigWeapon(cls, type)
     this.weaponIsBig = big
+    this.weaponIsBow = type === 'bow'
     const style = WEAPON_STYLE[cls] ?? { scale: 1, glow: 0xffffff }
     const tier = this.weaponTier()
     // échelle : base de classe (les grosses épées partent de BIG_SWORD_SCALE) et AGRANDIE par palier
@@ -298,8 +314,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       // le flip pour rester penchée vers l'avant quel que soit le sens du regard
       const tilt = WEAPON_TILT_DEG[getPlayer().classId] ?? 0
       // angle de repos (tilt) + offset de swing d'attaque, le tout mirroré par le flip pour que
-      // l'arme fende toujours vers l'avant quel que soit le sens du regard
-      const rot = (Phaser.Math.DegToRad(tilt) + this.attackSwing) * flip
+      // l'arme fende toujours vers l'avant quel que soit le sens du regard. L'ARC fait EXCEPTION : il
+      // reste DROIT/horizontal (rot 0) — pas d'inclinaison de repos ni de swing d'épée au tir.
+      const rot = this.weaponIsBow ? 0 : (Phaser.Math.DegToRad(tilt) + this.attackSwing) * flip
       this.weaponImage.setRotation(rot)
       // le halo colle rigidement à l'arme (même position/flip/rotation)
       if (this.weaponGlow) {
@@ -478,6 +495,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   updateFromControls(c: ControlsState) {
     const body = this.body as Phaser.Physics.Arcade.Body
+
+    // MORT HUMILIANTE : physique LIBRE (vol en cloche + spin posés par beginRagdoll), aucun contrôle.
+    if (this.ragdolling) return
+
+    // CHARGE LANCIÈRE : ruée verrouillée — vitesse horizontale imposée, gravité active, pas d'input.
+    if (this.lancing) { body.setAllowGravity(true); this.setVelocityX(this.lanceDir * this.lanceSpeed); return }
 
     // PLONGEON en cours : piqué vertical verrouillé, aucun autre contrôle jusqu'à l'impact.
     if (this.diving) { this.updateDive(body); return }
@@ -859,9 +882,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   // Épée enflammée : embrase la lame pour un temps donné → flammes visibles sur l'arme et
   // brûlure appliquée par les coups (test isFlaming côté LevelScene).
-  applyFlameBuff(durationMs: number) {
+  // `bodyAura` (chasseur — flèche enflammée) : le buff embrase le CORPS du panda (aura de feu) au lieu
+  // de la lame ; les flèches tirées portent une flammèche à leur pointe (côté LevelScene).
+  applyFlameBuff(durationMs: number, bodyAura = false) {
     this.flameUntil = this.scene.time.now + durationMs
-    this.weaponImage?.setTint(0xff7043)
+    this.flameBodyAura = bodyAura
+    if (!bodyAura) this.weaponImage?.setTint(0xff7043)
     if (!this.flameTimer) {
       this.flameTimer = this.scene.time.addEvent({ delay: 55, loop: true, callback: () => this.emitFlame() })
     }
@@ -881,6 +907,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.weaponImage?.clearTint()
       return
     }
+    // buff chasseur : embrasement du CORPS (aura de feu autour du panda), pas de flamme d'arme
+    if (this.flameBodyAura) { this.emitBodyFlame(); return }
     const w = this.weaponImage
     if (!w || !w.visible) return
     // direction « vers la pointe » = (0,-1) local pivoté par la rotation courante de l'arme
@@ -892,6 +920,51 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const col = Phaser.Math.RND.pick([0xffca28, 0xff7043, 0xff5252])
     const fl = this.scene.add.rectangle(fx, fy, 5, 11, col).setDepth(this.depth + 2).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.95)
     this.scene.tweens.add({ targets: fl, y: fy - Phaser.Math.Between(14, 24), scaleX: 0.3, scaleY: 0.4, alpha: 0, duration: 280, ease: 'Sine.out', onComplete: () => fl.destroy() })
+  }
+
+  // Embrasement du CORPS (buff flèche enflammée du chasseur) : langues de feu minuscules qui montent
+  // tout autour du panda — aura de feu (pas une flamme d'arme).
+  private emitBodyFlame() {
+    const bx = this.x + Phaser.Math.Between(-14, 14)
+    const by = this.y + Phaser.Math.Between(-6, Math.round(PANDA_BODY.h / 2))
+    const col = Phaser.Math.RND.pick([0xffca28, 0xff7043, 0xff5252])
+    const fl = this.scene.add.rectangle(bx, by, Phaser.Math.Between(4, 7), Phaser.Math.Between(9, 15), col)
+      .setDepth(this.depth + 2).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.9).setOrigin(0.5, 1)
+    this.scene.tweens.add({ targets: fl, y: by - Phaser.Math.Between(16, 26), scaleX: 0.3, scaleY: 0.4, alpha: 0, duration: 300, ease: 'Sine.out', onComplete: () => fl.destroy() })
+  }
+
+  // CHARGE LANCIÈRE (chevalier) : verrouille les contrôles et impose une RUÉE horizontale à `speed`
+  // px/s dans `dir` le temps de la charge (gravité active → le panda longe le sol). Fin par endLanceCharge.
+  beginLanceCharge(dir: 1 | -1, speed: number) {
+    this.lancing = true
+    this.lanceDir = dir
+    this.lanceSpeed = speed
+    this.facing = dir
+    this.setFlipX(dir === -1)
+    this.play(this.anim('attack'), true)
+  }
+
+  endLanceCharge() {
+    if (!this.lancing) return
+    this.lancing = false
+    this.setVelocityX(0)
+  }
+
+  isLancing(): boolean {
+    return this.lancing
+  }
+
+  // MORT HUMILIANTE : propulse le panda en cloche à l'OPPOSÉ de l'attaquant (dirX) + spin, gravité
+  // active (il retombe et peut rebondir sur le sol). Les contrôles sont ignorés (physique libre)
+  // jusqu'à ce que LevelScene affiche le game-over. `apogeeH` = hauteur d'apogée voulue (px) →
+  // v = sqrt(2·g·h).
+  beginRagdoll(dirX: 1 | -1, apogeeH: number) {
+    this.ragdolling = true
+    const body = this.body as Phaser.Physics.Arcade.Body
+    body.setAllowGravity(true)
+    const v = Math.sqrt(2 * GRAVITY * Math.max(1, apogeeH))
+    this.setVelocity(dirX * Phaser.Math.Between(220, 300), -v)
+    body.setAngularVelocity(dirX * 520)
   }
 
   takeDamage(amount: number) {

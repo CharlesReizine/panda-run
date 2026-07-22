@@ -61,7 +61,10 @@ export interface SkillDef {
   // FAILLE DU NÉANT (sorcier) : zone courte portée qui ASPIRE puis TUE INSTANTANÉMENT les ennemis
   // « faibles » (tout sauf boss/élite, et de niveau < joueur). Boss/élites/mobs ≥ niveau = poussés.
   voidRift?: boolean
-  lance?: boolean // CHARGE LANCIÈRE (chevalier) : trait perçant en ligne
+  lance?: boolean // CHARGE LANCIÈRE (chevalier) : RUÉE lance en avant qui POUSSE les ennemis (knockback continu, pas de traversée) et les blesse par tick
+  // Paramètres de la RUÉE de la charge lancière : vitesse de la ruée (px/s), durée de BASE au rang 1
+  // (ms — allongée avec le rang), cadence des ticks de dégâts/poussée (ms), force de poussée (px/s).
+  lanceCharge?: { speedPx: number; durationMs: number; tickMs: number; knockbackPx: number }
   storm?: boolean // TEMPÊTE FOUDROYANTE (sorcier) : nuke d'orage sur zone
   blizzard?: boolean // BLIZZARD (sorcier) : nuke de glace sur zone
   // FLÈCHES ENTRAVANTES (chasseur) : ralentit TOUS les ennemis à l'écran un court instant — leur
