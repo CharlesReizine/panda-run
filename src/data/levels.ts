@@ -76,7 +76,7 @@ export interface LevelDef {
   boss?: string
 }
 
-import { composeLevel, planModules, type ComposeOpts, type ModuleKind, type Tier } from './level-modules'
+import { composeLevel, planModules, countFeatureModules, type ComposeOpts, type ModuleKind, type Tier } from './level-modules'
 import {
   overStackedColumns, unlevelWaterBanks, deadEndSurfaces, suspendedWaterBanks,
   unreachablePlatforms, laddersToNowhere, unreachableLadders, unreachableChests,
@@ -203,6 +203,15 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   const midBase = pool.tier <= 1 ? 8 : pool.tier === 2 ? 9 : pool.tier === 5 ? 12 : pool.tier + 7
   const midCount = midBase + Math.floor((rank - 1) / 2) + (idx % 2)
   const allowLadders = !(biome === 'plaine' && rank === 1) // le tout premier niveau reste le plus simple
+  // NIVEAUX EARLY (retour playtest : « les 6 premiers sont TRÈS répétitifs, aucun gros motif ») : les
+  // premiers terrains (toute la plaine + l'orée de forêt) DÉBRIDENT la variété — composeCap relève le
+  // plafond de sélection à tier 2-3 (motifs de tier 2-3 accessibles TÔT, plus seulement en fin de jeu),
+  // earlyBoost comprime le filler plat, et featureFloor GARANTIT ≥ N gros motifs par niveau. La TENSION
+  // (pics) reste bornée par tierCap → pas de piège punitif imprévisible. plaine-1 reste le plus doux
+  // (composeCap 2, sans échelle), la variété/exigence monte ensuite.
+  const early = biome === 'plaine' || (biome === 'foret' && rank <= 2)
+  const composeCap: Tier = early ? ((biome === 'plaine' && rank === 1 ? 2 : 3) as Tier) : pool.tier
+  const featureFloor = early ? (biome === 'plaine' && rank === 1 ? 3 : 4) : 0
   // MVP posé seulement sur un niveau tardif du biome (dernier ou avant-dernier terrain)
   const useMvp = pool.mvp && rank >= 2
   // ITEM 1 — GROTTE DE DÉPART souterraine : sur le 1er terrain des biomes rocheux (hors enfer, où l'eau
@@ -225,6 +234,7 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
     ...(useMvp ? { mvp: pool.mvp } : {}),
     midCount,
     allowLadders,
+    ...(early ? { composeCap, earlyBoost: true, featureFloor } : {}),
     stony: STONY_BIOMES.has(biome),
     caves: CAVE_BIOMES.has(biome),
     ...(caveStart ? { caveStart: true } : {}),
@@ -268,9 +278,16 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   const salts = [`${id}-${ending}`, ...Array.from({ length: 80 }, (_, i) => `${id}-${ending}-${i}`)]
   let chosen = salts[0]!
   let level = composeLevel({ ...base, seed: chosen })
+  // On garde la PREMIÈRE graine conforme à TOUS les invariants (clean) ET portant assez de GROS MOTIFS
+  // (featureFloor, 0 hors early → premier clean, comportement historique). Repli sur le premier clean
+  // si aucune graine n'atteint le plancher de motifs (jamais observé, mais garantit un niveau valide).
+  let firstClean: string | null = null
   for (const seed of salts) {
     const l = composeLevel({ ...base, seed })
-    if (clean(l)) { level = l; chosen = seed; break }
+    if (!clean(l)) continue
+    if (firstClean === null) { firstClean = seed; level = l; chosen = seed }
+    const feats = countFeatureModules(planModules({ ...(base as ComposeOpts), seed }).map((m) => m.kind))
+    if (feats >= featureFloor) { level = l; chosen = seed; break }
   }
   LEVEL_MODULE_KINDS[id] = planModules({ ...(base as ComposeOpts), seed: chosen }).map((m) => m.kind)
   return level

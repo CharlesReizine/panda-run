@@ -15,11 +15,11 @@ const list: MonsterDef[] = [
   { id: 'lapin-bondissant', name: 'Lapin bondissant', lore: 'Boule de poils survoltée qui zigzague dans les herbes et bondit sur l\'intrus dès qu\'il approche.', color: 0xf5deb3, hp: 46, atk: 12, def: 1, xp: 290, level: 1, speed: 118, behavior: 'charge', drops: [goldSmall, potion, { kind: 'material', materialId: 'trefle-chance', chance: 0.03, min: 1, max: 1 }] },
   { id: 'poporing', name: 'Poporing', lore: 'Un slime vert farceur, coiffé de son antenne, qui gigote avec une insouciance contagieuse.', color: 0x2e7d32, hp: 60, atk: 18, def: 4, xp: 560, level: 1, speed: 20, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'spore-lumineuse', chance: 0.05, min: 1, max: 1 }] },
   { id: 'louveteau', name: 'Louveteau', lore: 'Jeune loup fougueux et joueur, il mord d\'abord et réfléchit ensuite, tout en crocs.', color: 0x9a9a9a, hp: 55, atk: 15, def: 2, xp: 520, level: 1, speed: 90, behavior: 'charge', drops: [goldMid, potion, { kind: 'material', materialId: 'croc-de-loup', chance: 0.05, min: 1, max: 1 }] },
-  { id: 'rocker', name: 'Rocker', lore: 'Une créature de mousse et de cailloux, planquée dans les fourrés, qui bombarde les passants de loin.', color: 0x558b2f, hp: 112, atk: 21, def: 5, xp: 640, level: 19, speed: 40, behavior: 'projectile', drops: [goldMid, potion] },
+  { id: 'rocker', name: 'Rocker', lore: 'Une créature de mousse et de cailloux, planquée dans les fourrés, qui bombarde les passants de loin.', color: 0x558b2f, hp: 112, atk: 21, def: 5, xp: 640, level: 20, speed: 40, behavior: 'projectile', drops: [goldMid, potion] },
   { id: 'willow', name: 'Willow', lore: 'Vieille souche endormie et débonnaire, elle avance à peine mais encaisse comme du bon bois.', color: 0x6d4c41, hp: 95, atk: 19, def: 10, xp: 620, level: 4, speed: 8, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'chapeau-champi', chance: 0.05, min: 1, max: 1 }] },
   // IMMOBILE-DISTANCE — ronce enracinée (forêt/jungle). Ne bouge pas, CRACHE ses épines dès que le
   // joueur est à portée (même modèle que mandragore/rocker, mais épines vertes).
-  { id: 'ronce-cracheuse', name: 'Ronce cracheuse', lore: 'Buisson d\'épines enraciné et hargneux : incapable de bouger, il crache des dards acérés sur qui passe à portée.', color: 0x497a3a, hp: 74, atk: 22, def: 6, xp: 640, level: 7, speed: 0, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'spore-lumineuse', chance: 0.05, min: 1, max: 1 }] },
+  { id: 'ronce-cracheuse', name: 'Ronce cracheuse', lore: 'Buisson d\'épines enraciné et hargneux : incapable de bouger, il crache des dards acérés sur qui passe à portée.', color: 0x497a3a, hp: 74, atk: 22, def: 6, xp: 640, level: 9, speed: 0, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'spore-lumineuse', chance: 0.05, min: 1, max: 1 }] },
   // Oiseau — monstre VOLANT de plein air (corniches & vide, crêtes, volées). Plane en sinus, pique
   // sur le joueur puis remonte ; gravité coupée (aerial). Tuable. Placeholder dessiné en code.
   { id: 'corbeau', name: 'Corbeau', lore: 'Rapace noir des grands airs : il plane en cercles puis fond en piqué sur l\'imprudent avant de reprendre de la hauteur.', color: 0x37474f, hp: 34, atk: 10, def: 1, xp: 300, level: 1, speed: 90, behavior: 'charge', aerial: true, drops: [goldSmall, potion] },
@@ -43,14 +43,14 @@ const list: MonsterDef[] = [
     drops: [{ kind: 'gold', chance: 1, min: 20, max: 40 }, { kind: 'potion', chance: 0.4, min: 1, max: 1 }, { kind: 'material', materialId: 'gemme-brute', chance: 0.15, min: 1, max: 1 }],
   },
   // Route alternative — cave
-  { id: 'squelette', name: 'Squelette', lore: 'Os blanchis animés par un vieux sortilège, il cliquette dans le noir sans jamais se lasser.', color: 0xe8e8e8, hp: 200, atk: 81, def: 16, xp: 900, level: 41, speed: 50, behavior: 'contact', drops: [goldMid, potion] },
-  { id: 'chauve-souris', name: 'Chauve-souris', lore: 'Bestiole nerveuse et imprévisible, elle zigzague dans l\'ombre et pique dès qu\'on baisse la garde.', color: 0x6b4f9e, hp: 120, atk: 106, def: 8, xp: 600, level: 41, speed: 120, behavior: 'charge', drops: [goldMid, potion] },
-  { id: 'fantome', name: 'Fantôme', lore: 'Âme errante et mélancolique qui hante les cavernes et souffle des projectiles glacés.', color: 0xb2ebf2, hp: 130, atk: 75, def: 22, xp: 700, level: 41, speed: 35, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.04, min: 1, max: 1 }] },
-  { id: 'mage-noir', name: 'Mage noir', lore: 'Sorcier félon tapi dans l\'obscurité, il tisse ses maléfices à distance, sournois et calculateur.', color: 0x7e57c2, hp: 160, atk: 88, def: 12, xp: 850, level: 41, speed: 45, behavior: 'caster', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] },
+  { id: 'squelette', name: 'Squelette', lore: 'Os blanchis animés par un vieux sortilège, il cliquette dans le noir sans jamais se lasser.', color: 0xe8e8e8, hp: 200, atk: 81, def: 16, xp: 900, level: 42, speed: 50, behavior: 'contact', drops: [goldMid, potion] },
+  { id: 'chauve-souris', name: 'Chauve-souris', lore: 'Bestiole nerveuse et imprévisible, elle zigzague dans l\'ombre et pique dès qu\'on baisse la garde.', color: 0x6b4f9e, hp: 120, atk: 106, def: 8, xp: 600, level: 42, speed: 120, behavior: 'charge', drops: [goldMid, potion] },
+  { id: 'fantome', name: 'Fantôme', lore: 'Âme errante et mélancolique qui hante les cavernes et souffle des projectiles glacés.', color: 0xb2ebf2, hp: 130, atk: 75, def: 22, xp: 700, level: 42, speed: 35, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.04, min: 1, max: 1 }] },
+  { id: 'mage-noir', name: 'Mage noir', lore: 'Sorcier félon tapi dans l\'obscurité, il tisse ses maléfices à distance, sournois et calculateur.', color: 0x7e57c2, hp: 160, atk: 88, def: 12, xp: 850, level: 42, speed: 45, behavior: 'caster', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] },
   // MVP — élites rares (mvp: true) : versions surpuissantes d'un biome, stats bien au-dessus des
   // mobs mais loin d'un boss ; xp élevé ; drops rares (objets épiques/légendaires à faible %)
   {
-    id: 'poring-dore', name: 'Poring doré', lore: 'Slime légendaire tout d\'or vêtu : rare, insaisissable et convoité de tous les aventuriers.', color: 0xffd700, hp: 220, atk: 32, def: 14, xp: 2200, level: 10, speed: 30, behavior: 'contact', mvp: true,
+    id: 'poring-dore', name: 'Poring doré', lore: 'Slime légendaire tout d\'or vêtu : rare, insaisissable et convoité de tous les aventuriers.', color: 0xffd700, hp: 220, atk: 32, def: 14, xp: 2200, level: 12, speed: 30, behavior: 'contact', mvp: true,
     drops: [
       { kind: 'gold', chance: 1, min: 40, max: 80 },
       { kind: 'potion', chance: 0.5, min: 1, max: 1 },
@@ -110,7 +110,7 @@ const list: MonsterDef[] = [
     ],
   },
   {
-    id: 'pharaon-scarabee', name: 'Pharaon Scarabée', lore: 'Souverain des sables réveillé de son sarcophage, il fend l\'air de sa lame d\'or et fond sur l\'intrus d\'un bond fulgurant.', color: 0x3fb7b0, hp: 3200, atk: 100, def: 26, xp: 6000, level: 37, speed: 120, behavior: 'charge', boss: true, bossClass: 'swordsman', bossSummon: 'scarabee-cornu',
+    id: 'pharaon-scarabee', name: 'Pharaon Scarabée', lore: 'Souverain des sables réveillé de son sarcophage, il fend l\'air de sa lame d\'or et fond sur l\'intrus d\'un bond fulgurant.', color: 0x3fb7b0, hp: 3200, atk: 100, def: 26, xp: 6000, level: 38, speed: 120, behavior: 'charge', boss: true, bossClass: 'swordsman', bossSummon: 'scarabee-cornu',
     drops: [
       { kind: 'gold', chance: 1, min: 150, max: 250 },
       { kind: 'item', itemId: 'carapace-scarabee', chance: 1, min: 1, max: 1 },
@@ -119,22 +119,22 @@ const list: MonsterDef[] = [
     ],
   },
   // Zone 3 — jungle
-  { id: 'flora-vorace', name: 'Flora vorace', lore: 'Plante carnivore enracinée et affamée, elle crache ses graines acides sur tout ce qui passe à portée.', color: 0xb0245e, hp: 190, atk: 119, def: 20, xp: 1450, level: 42, speed: 0, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'spore-lumineuse', chance: 0.05, min: 1, max: 1 }] },
-  { id: 'frelon-geant', name: 'Frelon géant', lore: 'Bourdon furieux et territorial, il fond en vrombissant sur quiconque frôle son nid.', color: 0xf9a825, hp: 250, atk: 138, def: 12, xp: 1400, level: 42, speed: 130, behavior: 'charge', drops: [goldMid, potion, { kind: 'material', materialId: 'spore-lumineuse', chance: 0.05, min: 1, max: 1 }] },
-  { id: 'singe-grimpeur', name: 'Singe grimpeur', lore: 'Chapardeur agile et chahuteur, il saute de branche en branche pour mieux vous tomber dessus.', color: 0x795548, hp: 210, atk: 125, def: 18, xp: 1500, level: 19, speed: 90, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'herbe-tendre', chance: 0.06, min: 1, max: 1 }] },
+  { id: 'flora-vorace', name: 'Flora vorace', lore: 'Plante carnivore enracinée et affamée, elle crache ses graines acides sur tout ce qui passe à portée.', color: 0xb0245e, hp: 190, atk: 119, def: 20, xp: 1450, level: 43, speed: 0, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'spore-lumineuse', chance: 0.05, min: 1, max: 1 }] },
+  { id: 'frelon-geant', name: 'Frelon géant', lore: 'Bourdon furieux et territorial, il fond en vrombissant sur quiconque frôle son nid.', color: 0xf9a825, hp: 250, atk: 138, def: 12, xp: 1400, level: 43, speed: 130, behavior: 'charge', drops: [goldMid, potion, { kind: 'material', materialId: 'spore-lumineuse', chance: 0.05, min: 1, max: 1 }] },
+  { id: 'singe-grimpeur', name: 'Singe grimpeur', lore: 'Chapardeur agile et chahuteur, il saute de branche en branche pour mieux vous tomber dessus.', color: 0x795548, hp: 210, atk: 125, def: 18, xp: 1500, level: 20, speed: 90, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'herbe-tendre', chance: 0.06, min: 1, max: 1 }] },
   // MOBILE-MÊLÉE, GRAND & TANKY (contact) — forêt/jungle & montagne. Colosse à fourrure : il avance,
   // se plante à portée et ASSÈNE un coup lourd télégraphié (gabarit 'grand' → rendu + hitbox agrandis).
-  { id: 'ours-brun', name: 'Ours brun', lore: 'Masse de muscles et de fourrure : lent mais redoutable, il se dresse de toute sa hauteur avant d\'abattre ses pattes.', color: 0x6d4325, hp: 470, atk: 132, def: 35, xp: 1620, level: 22, speed: 55, behavior: 'contact', size: 'grand', drops: [goldMid, potion, { kind: 'material', materialId: 'croc-de-loup', chance: 0.08, min: 1, max: 1 }] },
+  { id: 'ours-brun', name: 'Ours brun', lore: 'Masse de muscles et de fourrure : lent mais redoutable, il se dresse de toute sa hauteur avant d\'abattre ses pattes.', color: 0x6d4325, hp: 470, atk: 132, def: 35, xp: 1620, level: 23, speed: 55, behavior: 'contact', size: 'grand', drops: [goldMid, potion, { kind: 'material', materialId: 'croc-de-loup', chance: 0.08, min: 1, max: 1 }] },
   // Route alternative — plage
   // AQUATIQUES (aquatic:true) : crabe et méduse nagent dans l'eau marine sans se noyer (§ noyade mob).
   { id: 'crabe-geant', name: 'Crabe géant', lore: 'Sentinelle bardée de carapace sur la plage, lente mais coriace, elle ne cède pas un pouce de sable.', color: 0xe64a19, hp: 230, atk: 112, def: 30, xp: 1400, level: 57, speed: 40, behavior: 'contact', aquatic: true, drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] },
   { id: 'meduse', name: 'Méduse', lore: 'Beauté translucide et trompeuse, elle dérive au gré des flots et décharge ses filaments urticants.', color: 0xba68c8, hp: 240, atk: 125, def: 10, xp: 1350, level: 57, speed: 25, behavior: 'projectile', aquatic: true, drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] },
   // Zone 4 — montagne
-  { id: 'harpie', name: 'Harpie', lore: 'Furie ailée au cri strident, elle fond des cimes en piqué, serres en avant et sans pitié.', color: 0x8d6e63, hp: 260, atk: 162, def: 20, xp: 2200, level: 48, speed: 140, behavior: 'charge', drops: [goldMid, potion, { kind: 'material', materialId: 'croc-de-loup', chance: 0.05, min: 1, max: 1 }] },
-  { id: 'yeti', name: 'Yéti', lore: 'Colosse des neiges au grand cœur bourru, paisible tant qu\'on ne trouble pas sa montagne.', color: 0xeceff1, hp: 380, atk: 175, def: 35, xp: 2600, level: 51, speed: 45, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.06, min: 1, max: 1 }, { kind: 'item', itemId: 'plastron-feuilles', chance: 0.04, min: 1, max: 1 }] },
+  { id: 'harpie', name: 'Harpie', lore: 'Furie ailée au cri strident, elle fond des cimes en piqué, serres en avant et sans pitié.', color: 0x8d6e63, hp: 260, atk: 162, def: 20, xp: 2200, level: 49, speed: 140, behavior: 'charge', drops: [goldMid, potion, { kind: 'material', materialId: 'croc-de-loup', chance: 0.05, min: 1, max: 1 }] },
+  { id: 'yeti', name: 'Yéti', lore: 'Colosse des neiges au grand cœur bourru, paisible tant qu\'on ne trouble pas sa montagne.', color: 0xeceff1, hp: 380, atk: 175, def: 35, xp: 2600, level: 52, speed: 45, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.06, min: 1, max: 1 }, { kind: 'item', itemId: 'plastron-feuilles', chance: 0.04, min: 1, max: 1 }] },
   // Route alternative — carrière
-  { id: 'golem-de-pierre', name: 'Golem de pierre', lore: 'Monolithe animé, impassible et lent, il broie tout sur son passage sans jamais s\'énerver.', color: 0x8a8078, hp: 340, atk: 150, def: 40, xp: 2400, level: 44, speed: 25, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.08, min: 1, max: 1 }, { kind: 'item', itemId: 'carapace-scarabee', chance: 0.03, min: 1, max: 1 }] },
-  { id: 'gobelin-mineur', name: 'Gobelin mineur', lore: 'Petit fouineur cupide de la carrière, il balance ses cailloux avant de détaler en ricanant.', color: 0x6d8a3f, hp: 220, atk: 138, def: 18, xp: 2000, level: 41, speed: 60, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.06, min: 1, max: 1 }] },
+  { id: 'golem-de-pierre', name: 'Golem de pierre', lore: 'Monolithe animé, impassible et lent, il broie tout sur son passage sans jamais s\'énerver.', color: 0x8a8078, hp: 340, atk: 150, def: 40, xp: 2400, level: 45, speed: 25, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.08, min: 1, max: 1 }, { kind: 'item', itemId: 'carapace-scarabee', chance: 0.03, min: 1, max: 1 }] },
+  { id: 'gobelin-mineur', name: 'Gobelin mineur', lore: 'Petit fouineur cupide de la carrière, il balance ses cailloux avant de détaler en ricanant.', color: 0x6d8a3f, hp: 220, atk: 138, def: 18, xp: 2000, level: 42, speed: 60, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.06, min: 1, max: 1 }] },
   // Zone 5 — cimetière
   { id: 'goule', name: 'Goule', lore: 'Charognarde des tombes, vorace et griffue, elle traque la chair fraîche au fond du cimetière.', color: 0x556b2f, hp: 420, atk: 200, def: 30, xp: 3200, level: 55, speed: 70, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }, { kind: 'item', itemId: 'baton-feuillu', chance: 0.03, min: 1, max: 1 }] },
   { id: 'banshee', name: 'Banshee', lore: 'Spectre plaintif au hurlement funeste, son chant déchirant transperce l\'âme à distance.', color: 0x9575cd, hp: 320, atk: 225, def: 20, xp: 3000, level: 52, speed: 50, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] },
@@ -177,7 +177,7 @@ const list: MonsterDef[] = [
   },
   // Boss — zone 5 (cimetière)
   {
-    id: 'roi-liche', name: 'Roi Liche', lore: 'Seigneur mort-vivant au sceptre glacé, sorcier suprême : il déchaîne des novae nécrotiques et des salves d\'os hurlantes depuis son trône.', color: 0x4527a0, hp: 10500, atk: 176, def: 46, xp: 18000, level: 58, speed: 50, behavior: 'projectile', boss: true, bossClass: 'sorcier', bossSummon: 'squelette',
+    id: 'roi-liche', name: 'Roi Liche', lore: 'Seigneur mort-vivant au sceptre glacé, sorcier suprême : il déchaîne des novae nécrotiques et des salves d\'os hurlantes depuis son trône.', color: 0x4527a0, hp: 10500, atk: 176, def: 46, xp: 18000, level: 59, speed: 50, behavior: 'projectile', boss: true, bossClass: 'sorcier', bossSummon: 'squelette',
     drops: [
       { kind: 'gold', chance: 1, min: 350, max: 520 },
       { kind: 'item', itemId: 'griffe-royale', chance: 1, min: 1, max: 1 },
@@ -187,7 +187,7 @@ const list: MonsterDef[] = [
   },
   // Boss final — zone 6 (enfer)
   {
-    id: 'seigneur-dechu', name: 'Seigneur Déchu', lore: 'Maître ultime des enfers, ange tombé rongé de haine : il manie les meilleures armes de chaque classe — lame, feu, flèches et néant.', color: 0x8a1414, hp: 16500, atk: 205, def: 60, xp: 30000, level: 75, speed: 90, behavior: 'charge', boss: true, bossClass: 'chevalier', bossSummon: 'diablotin',
+    id: 'seigneur-dechu', name: 'Seigneur Déchu', lore: 'Maître ultime des enfers, ange tombé rongé de haine : il manie les meilleures armes de chaque classe — lame, feu, flèches et néant.', color: 0x8a1414, hp: 16500, atk: 205, def: 60, xp: 30000, level: 76, speed: 90, behavior: 'charge', boss: true, bossClass: 'chevalier', bossSummon: 'diablotin',
     drops: [
       { kind: 'gold', chance: 1, min: 500, max: 800 },
       { kind: 'item', itemId: 'griffe-royale', chance: 1, min: 1, max: 1 },
@@ -222,7 +222,7 @@ const list: MonsterDef[] = [
   // Boss-05 — Yéti Géant (montagne) : colosse des neiges INCARNANT le Sabreur (taillade bondissante,
   // charge). Art placeholder = art-yeti.png.
   {
-    id: 'boss-yeti', name: 'Yéti Géant', lore: 'Seigneur des cimes gelées, montagne de fourrure et de fureur : il fond sur sa proie d\'un bond qui fait trembler la neige et abat ses griffes comme des lames.', color: 0xdfe9ef, hp: 6600, atk: 152, def: 42, xp: 11500, level: 54, speed: 118, behavior: 'charge', boss: true, bossClass: 'swordsman', bossSummon: 'louveteau', size: 'grand',
+    id: 'boss-yeti', name: 'Yéti Géant', lore: 'Seigneur des cimes gelées, montagne de fourrure et de fureur : il fond sur sa proie d\'un bond qui fait trembler la neige et abat ses griffes comme des lames.', color: 0xdfe9ef, hp: 6600, atk: 152, def: 42, xp: 11500, level: 55, speed: 118, behavior: 'charge', boss: true, bossClass: 'swordsman', bossSummon: 'louveteau', size: 'grand',
     drops: [
       { kind: 'gold', chance: 1, min: 240, max: 360 },
       { kind: 'item', itemId: 'carapace-scarabee', chance: 1, min: 1, max: 1 },

@@ -1807,6 +1807,21 @@ export interface ComposeOpts {
   ending: 'bas' | 'haut' // sortie franchement plus BASSE ou plus HAUTE que le départ (mi-hauteur)
   ground: string[]       // pool de monstres terrestres (ordre = difficulté croissante)
   birds: string[]        // pool d'oiseaux du biome
+  // PLAFOND DE SÉLECTION DES MOTIFS (variété), DISTINCT de tierCap (difficulté/tension). Sert à
+  // DÉBRIDER la variété des premiers niveaux : à tierCap=1 (plaine), les pools centraux s'effondraient
+  // sur escalier + descente (seuls motifs tier 1 non-eau) → terrains PLATS et répétitifs. En relevant
+  // composeCap (2-3) SANS toucher tierCap, on rend les motifs tier 2-3 (colline, gué, corniche, zigzag,
+  // passerelles, escalier à grands pas, détours…) accessibles TÔT, tout en gardant la TENSION (pics)
+  // gouvernée par tierCap → jamais de pics/précision punitifs en plaine. Absent → composeCap = tierCap.
+  composeCap?: Tier
+  // NIVEAU « EARLY » : réduit fortement la part de FILLER PLAT (~30 % → ~15 %) au profit de la
+  // traversée/verticalité → les premiers terrains cessent d'être du remplissage plat et gagnent du
+  // caractère dès le début (retour playtest). N'affecte QUE le dosage des familles, pas la longueur.
+  earlyBoost?: boolean
+  // PLANCHER DE GROS MOTIFS : nombre minimal de motifs « intéressants » (non plats) exigé dans le plan
+  // d'un niveau — vérifié à la sélection de graine (cf. terrain) pour GARANTIR ≥ N gros motifs dès le
+  // début. Absent → aucune garantie (comportement historique).
+  featureFloor?: number
   // pool de monstres AQUATIQUES posés sur/au-dessus des cuves d'eau (bassin, passage immergé…). Seuls
   // des mobs aquatiques (méduse, crabe) y sont cohérents ; par défaut VIDE → l'eau reste sans monstre
   // plutôt que d'y placer un terrestre (règle de cohérence : jamais de mob terrestre au-dessus de l'eau).
@@ -1834,6 +1849,18 @@ const FAMILY_BUCKET: Record<Family, 'filler' | 'traverse' | 'risque' | 'tension'
   filler: 'filler', traverse: 'traverse', vertical: 'traverse', risque: 'risque', tension: 'tension',
 }
 
+// Motifs PLATS / de remplissage (rampes douces + fillers) : NE COMPTENT PAS comme « gros motif
+// intéressant ». Tout le reste (eau-passage, verticalité franche, grottes, relief, précision) est un
+// GROS MOTIF. Sert au plancher featureFloor (garantie de motifs intéressants dès les premiers niveaux).
+export const FLAT_KINDS = new Set<ModuleKind>([
+  'plateau', 'ligne-droite', 'couloir-large', 'marche', 'descente-douce', 'balcon', 'arene',
+  'double-sol', 'echelle-tranquille', 'escalier', 'descente',
+])
+// Nombre de GROS MOTIFS (non plats) dans une liste de kinds — le module de spawn (plat) est ignoré.
+export function countFeatureModules(kinds: ModuleKind[]): number {
+  return kinds.filter((k) => !FLAT_KINDS.has(k)).length
+}
+
 export function composeLevel(o: ComposeOpts): LevelDef {
   return buildLevelFromModules(planModules(o), { id: o.id, name: o.name, biome: o.biome, seed: o.seed })
 }
@@ -1858,6 +1885,9 @@ export function planModules(o: ComposeOpts): Module[] {
     return [first, ...extra]
   }
   const cap = o.tierCap
+  // PLAFOND DE SÉLECTION (variété) ≥ tierCap : débride les motifs tier 2-3 dès les premiers niveaux
+  // sans toucher à la TENSION (pics), qui reste gouvernée par tierCap (cf. nTension / biais tension).
+  const selCap = Math.max(cap, o.composeCap ?? cap) as Tier
   const allowLadders = o.allowLadders ?? true
   const mid = o.midCount ?? 5
 
@@ -1867,7 +1897,7 @@ export function planModules(o: ComposeOpts): Module[] {
     (Object.keys(CATALOG) as ModuleKind[]).filter((k) => {
       const s = CATALOG[k]
       if (FAMILY_BUCKET[s.family] !== bucket) return false
-      if (s.tier > cap) return false
+      if (s.tier > selCap) return false
       if (s.ladder && !allowLadders) return false
       if (s.water) return false // eau imposée séparément
       if (k === 'plateau' || k === 'arene') return false // réservés spawn / climax
@@ -1878,8 +1908,12 @@ export function planModules(o: ComposeOpts): Module[] {
       return true
     })
 
-  // séquence de familles pour les modules centraux (dosage 30/40/20/10, arrondi).
-  const nFiller = Math.max(1, Math.round(mid * 0.3))
+  // séquence de familles pour les modules centraux (dosage 30/40/20/10, arrondi). En mode EARLY, on
+  // COMPRIME le filler plat (~30 % → ~15 %) : les slots libérés vont à la TRAVERSÉE (colline, gué,
+  // corniche, zigzag, passerelles, escalier à grands pas…), désormais débridée par selCap → premiers
+  // terrains bien moins plats, sans changer leur longueur (mid) ni le nombre de monstres au sol.
+  const fillerShare = o.earlyBoost ? 0.15 : 0.3
+  const nFiller = Math.max(1, Math.round(mid * fillerShare))
   const nRisque = Math.max(1, Math.round(mid * 0.2))
   const nTension = cap >= 2 ? Math.round(mid * 0.1) : 0
   const nTraverse = Math.max(1, mid - nFiller - nRisque - nTension)
@@ -1907,7 +1941,7 @@ export function planModules(o: ComposeOpts): Module[] {
   // échelles autorisées, tiré sur le SEED du niveau → chaque niveau varie ses rôles fixes (départ,
   // fin) au lieu de reprendre toujours plateau + descente-controlee/arène ou marche + échelle.
   const structural = (pool: ModuleKind[], salt: string): ModuleKind => {
-    const ok = pool.filter((k) => CATALOG[k].tier <= cap && (!CATALOG[k].ladder || allowLadders))
+    const ok = pool.filter((k) => CATALOG[k].tier <= selCap && (!CATALOG[k].ladder || allowLadders))
     const list = ok.length ? ok : pool
     return list[hashSeed((o.seed ?? o.id) + ':' + salt) % list.length]!
   }
