@@ -114,6 +114,18 @@ export type ModuleKind =
   // CASCADE → LAC-TRÉSOR EN CUL-DE-SAC : la cascade descend dans un lac SANS SORTIE PAR LE BAS, trésor
   // au fond ; il faut faire DEMI-TOUR, remonter (cascade remontable) et repasser par le HAUT (sortie haute).
   | 'cascade-cul-de-sac'
+  // ─── R171 — VARIÉTÉ + NOUVEAUX MOTIFS (retours playtest) ───────────────────────────────────────
+  // LAC → CASCADE → PLATEAU : un bout de LAC marine horizontal, puis à sa FIN une CASCADE remontable
+  // qu'on remonte sur ~3-4 sauts de hauteur pour arriver sur un PLATEAU en HAUT (sortie haute). Une
+  // rampe de paliers parallèle garantit l'accès au plateau (reachable) ; la cascade est le raccourci fun.
+  | 'lac-cascade-plateau'
+  // ESCALIER À GRANDS PAS : marches de TERRE espacées montant de SIMPLE_JUMP_ROWS (près du max de saut)
+  // avec un écart horizontal → chaque marche force un VRAI saut (haut ET loin). SOL PLEIN dessous
+  // (rater = retomber au sol, jamais mortel). Distinct des escaliers doux (rise 1-2).
+  | 'escalier-saut'
+  // ÉCHELLES SUCCESSIVES : on grimpe une échelle, on débouche sur un COURT palier, et on enchaîne
+  // IMMÉDIATEMENT sur une 2ᵉ échelle (échelle puis échelle, sans marche intermédiaire large).
+  | 'echelles-successives'
 
 // Tier de difficulté (D1..D5) et tags d'accroche : altitude du bord GAUCHE (entrée) / DROIT (sortie).
 export type Tier = 1 | 2 | 3 | 4 | 5
@@ -142,6 +154,10 @@ export interface Module {
   exit?: EdgeTag
   // RELIEF VALLONNÉ : colline aux sommets RELEVÉS (silhouette plus haute) — cf. ComposeOpts.hilly.
   tall?: boolean
+  // ALTITUDE DE DÉPART (module de spawn uniquement) : altitude du sol de départ. 0 = départ AU SOL,
+  // ≥3 = départ sur une corniche SURÉLEVÉE. Varié par seed dans planModules (retour joueur : « les
+  // niveaux commencent toujours en hauteur »). Absent → fallback surélevé dans l'assembleur.
+  startAlt?: number
 }
 
 // ─── RNG déterministe (mulberry32) : pas de Math.random (interdit) ──────────────────────────
@@ -1056,23 +1072,38 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
 
     // ─── PLONGEOIR « SAUT DE LA FOI » : perchoir TRÈS HAUT + panneau, on plonge à l'aveugle dans le lac ──
     case 'plongeoir': {
-      // On grimpe une échelle jusqu'à un perchoir TRÈS HAUT en surplomb du lac, un petit PANNEAU (flèche
-      // vers le bas) invite au saut ; on plonge sans voir l'atterrissage et on tombe dans le LAC en
-      // contrebas ALIGNÉ pile sous le point de saut (atterrissage dans l'EAU garanti, jamais sol/pics).
+      // On grimpe jusqu'à un perchoir TRÈS HAUT en surplomb du lac (montée VARIÉE : échelle OU escalier
+      // de plateformes selon la graine → « pas toujours échelle puis saut »), un PANNEAU (flèche vers le
+      // bas) invite au saut, le BASSIN est VISIBLE en contrebas (télégraphie) ; on plonge à l'aveugle et
+      // on tombe dans le LAC ALIGNÉ pile sous le point de saut (atterrissage dans l'EAU garanti). Le
+      // plongeoir est PLUS HAUT qu'avant (bankAlt+9..11 en mode échelle) → vrai saut de la foi.
       const bankAlt = Math.max(2, entryAlt)
       const rampW = 3
-      p.platforms.push({ x: 0, alt: bankAlt, w: rampW + 1 }) // berge gauche (colonne wx-1 pile à bankAlt)
-      const wx = rampW + 1
-      const ww = Math.max(9, w - 2 * rampW)
+      const ladderMode = Math.floor(rng() * 2) === 0 // 0 = ÉCHELLE (perchoir très haut) · 1 = PLATEFORMES
+      const approachW = ladderMode ? rampW + 1 : Math.max(9, Math.floor(w * 0.4))
+      const wx = approachW
+      const ww = Math.max(8, w - approachW - rampW)
+      // hauteur du perchoir : très haut par l'échelle ; par les plateformes, dérivée de la place dispo
+      // (paliers ≤ 3, chacun +3) → toujours plusieurs sauts au-dessus de l'eau, jamais de débordement.
+      const paliers = Math.max(1, Math.min(3, Math.floor((approachW - 3) / 3)))
+      const boardAlt = bankAlt + (ladderMode ? 9 + Math.floor(rng() * 3) : 3 * paliers)
+      if (ladderMode) {
+        // MONTÉE PAR ÉCHELLE : berge plate → jetée au ras de l'eau → longue échelle → plongeoir en surplomb.
+        p.platforms.push({ x: 0, alt: bankAlt, w: wx }) // berge gauche (colonne wx-1 = bankAlt : banc à niveau)
+        const h = Math.min(MAX_LADDER_TILES, boardAlt - bankAlt + 2) // pied bankAlt, palier (top-2) = boardAlt
+        p.platforms.push({ x: wx, alt: bankAlt, w: 2 }) // jetée (pied de l'échelle)
+        p.ladders.push({ x: wx, topAlt: bankAlt + h, h })
+        p.platforms.push({ x: wx, alt: boardAlt, w: 4 }) // PLONGEOIR en surplomb
+      } else {
+        // MONTÉE PAR PLATEFORMES : escalier de paliers (≤3) sur le SOL PLEIN à gauche jusqu'à une
+        // plateforme de lancement à boardAlt ; puis SAUT (hgap 1) sur le PLONGEOIR qui déborde le lac.
+        p.platforms.push({ x: 0, alt: bankAlt, w: 2 }) // berge d'entrée
+        p.platforms.push(...ramp(2, 3 * paliers, bankAlt, boardAlt)) // escalier jusqu'à la plateforme de lancement
+        p.platforms.push({ x: wx - 1, alt: bankAlt, w: 1 }) // berge du lac EN CREUX (banc gauche à niveau)
+        p.platforms.push({ x: wx, alt: boardAlt, w: 4 }) // PLONGEOIR en surplomb (atteint au saut depuis le lancement)
+      }
       p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt })
-      // JETÉE au ras de l'eau (pied de l'échelle) + ÉCHELLE vers le perchoir TRÈS HAUT (boardAlt = topAlt-2)
-      const h = LADDER_H
-      const topAlt = bankAlt + h
-      const boardAlt = topAlt - 2 // ~7 rangées au-dessus de la surface : vraiment haut, saut à l'aveugle
-      p.platforms.push({ x: wx, alt: bankAlt, w: 2 }) // jetée (surface d'accès à l'échelle)
-      p.ladders.push({ x: wx, topAlt, h })
-      p.platforms.push({ x: wx, alt: boardAlt, w: 4 }) // PLONGEOIR en surplomb (déborde la jetée à droite)
-      // PANNEAU (poteau + flèche vers le bas) posé au BOUT du plongeoir, au-dessus de l'eau libre → « saute ici »
+      // PANNEAU (poteau + flèche vers le bas) au BOUT du plongeoir, au-dessus de l'eau libre → « saute ici »
       p.signs.push({ x: wx + 3, alt: boardAlt + 1 })
       // berge droite AU MÊME niveau (surface horizontale), puis redescente vers la sortie
       const rbx = wx + ww
@@ -1419,6 +1450,71 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.exitAlt = exitAlt
       break
     }
+
+    // ─── LAC → CASCADE → PLATEAU : lac horizontal, puis cascade remontable vers un plateau EN HAUT ──
+    case 'lac-cascade-plateau': {
+      // Un bout de LAC marine HORIZONTAL (coffre au fond), puis à sa FIN une CASCADE remontable qu'on
+      // remonte (~3-4 sauts de hauteur) vers un PLATEAU en HAUT (sortie haute). Une RAMPE de paliers
+      // parallèle garantit l'accès au plateau au saut simple (reachable) ; la cascade = le raccourci fun.
+      const bankAlt = Math.max(2, entryAlt)
+      const rampW = 3
+      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt)) // berge d'accès à la surface du lac
+      const wx = rampW
+      const lakeW = Math.max(6, Math.floor((w - rampW) * 0.42)) // LAC horizontal (large-ish)
+      p.waters.push({ x: wx, w: lakeW, kind: basinKind, bankAlt })
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(lakeW / 2) }) // au fond du lac
+      const rbx = wx + lakeW
+      p.platforms.push({ x: rbx, alt: bankAlt, w: 2 }) // berge droite du lac (à niveau)
+      // CASCADE remontable à la FIN du lac : ~3-4 sauts de hauteur vers le plateau
+      const top = bankAlt + Math.max(6, 7 + Math.floor(rng() * 2)) // 7-8 rangées ≈ 3-4 sauts
+      const colX = rbx + 2
+      p.waters.push({ x: colX, w: 2, kind: 'cascade', bankAlt: top }) // colonne remontable (chute mortelle au fond)
+      // RAMPE de paliers parallèle (accès garanti au plateau, sautée par-dessus la colonne)
+      const upX = colX + 2
+      const cornW = 5
+      const upW = Math.max(4, Math.min(Math.floor(w * 0.3), w - upX - cornW - 1))
+      p.platforms.push(...ramp(upX, upW, bankAlt, top))
+      // PLATEAU EN HAUT (large, sortie du module) jusqu'au bord droit
+      const platX = upX + upW
+      p.platforms.push({ x: platX, alt: top, w: Math.max(cornW, w - platX) })
+      placeBirds(top + 2)
+      p.exitAlt = top
+      break
+    }
+
+    // ─── ESCALIER À GRANDS PAS : marches espacées montant de ~SIMPLE_JUMP_ROWS (saut franc exigé) ────
+    case 'escalier-saut': {
+      // Marches de TERRE espacées montant de SIMPLE_JUMP_ROWS (près du max de saut) avec un écart
+      // horizontal → chaque marche force un VRAI saut (haut ET loin). SOL PLEIN continu dessous
+      // (rater = retomber au sol, jamais mortel). ≤ 2 marches surélevées (sol + 2 = 3 paliers max).
+      const base = Math.max(1, entryAlt)
+      p.platforms.push({ x: 0, alt: base, w }) // sol plein continu (retombée sûre)
+      const rise = SIMPLE_JUMP_ROWS // +3 par marche (saut franc)
+      const stepW = 3
+      const gap = 2 // écart horizontal (≤ portée à +3 rangées → franchissable, cf. canReach)
+      const pitch = stepW + gap
+      let x = bank
+      let a = base
+      while (x + stepW <= w - bank && a - base < 2 * rise) {
+        a += rise
+        p.platforms.push({ x, alt: a, w: stepW })
+        x += pitch
+      }
+      p.exitAlt = a
+      break
+    }
+
+    // ─── ÉCHELLES SUCCESSIVES : échelle → court palier → 2ᵉ échelle (enchaînées, sans marche large) ──
+    case 'echelles-successives': {
+      const base = Math.max(1, entryAlt)
+      const x1 = 2
+      const palRight = Math.min(w - 3, x1 + 7) // court palier de sortie de l'échelle 1
+      const land1 = poseLadder(p, x1, base, 0, x1 + 3, palRight) // échelle 1 → petit palier
+      const x2 = Math.min(w - 3, palRight - 2) // 2ᵉ échelle DÈS la fin du palier (successive)
+      const top = poseLadderOn(p, x2, land1, w) // pied = le palier de l'échelle 1 (déjà posé)
+      p.exitAlt = top
+      break
+    }
   }
 
   // Placement GÉNÉRIQUE des monstres terrestres : posés SUR les plateformes marchables assez larges
@@ -1462,7 +1558,10 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   // dessous → une seule bande plate visible au départ. Ensuite la variété reprend (rester, grimper,
   // ou sauter dans l'eau/la cascade). Plage {3,4} : varie d'un niveau à l'autre, reste joignable du
   // sol (≤ 4) ET laisse ≥ 3 rangées d'écart avec une sortie tout en bas (validateur départ/sortie).
-  const startAlt = 3 + (hashSeed(opts.id + ':startalt') % 2)
+  // ALTITUDE DE DÉPART : décidée dans planModules (variée par graine, cf. Module.startAlt sur le module
+  // de spawn) — 0 = départ au SOL, 3-4 = surélevé. Fallback surélevé si un appelant direct l'omet.
+  const spawnModule = modules.find((m) => m.spawnHere)
+  const startAlt = spawnModule?.startAlt ?? (3 + (hashSeed(opts.id + ':startalt') % 2))
   let runningAlt = startAlt
   modules.forEach((m, i) => {
     const rng = mulberry32(seed + i * 2654435761)
@@ -1677,6 +1776,12 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'cascade-large': { tier: 2, family: 'risque', entry: 'bas', exit: 'milieu', width: [20, 30], below: 'marine', above: 'air', chest: true, water: true },
   'cascade-trouee': { tier: 4, family: 'tension', entry: 'milieu', exit: 'milieu', width: [18, 28], below: 'vide', above: 'air', water: true },
   'cascade-cul-de-sac': { tier: 3, family: 'risque', entry: 'bas', exit: 'haut', width: [20, 30], below: 'marine', above: 'air', chest: true, water: true },
+  // R171 — LAC → CASCADE → PLATEAU (lac horizontal + cascade remontable vers un plateau haut)
+  'lac-cascade-plateau': { tier: 2, family: 'risque', entry: 'bas', exit: 'haut', width: [22, 32], below: 'marine', above: 'air', chest: true, water: true },
+  // R171 — ESCALIER À GRANDS PAS (marches espacées, saut franc) — motif VERTICAL/traversée sec
+  'escalier-saut': { tier: 2, family: 'vertical', entry: 'bas', exit: 'haut', width: [14, 24], below: 'sol', above: 'air' },
+  // R171 — ÉCHELLES SUCCESSIVES (échelle puis échelle, court palier) — motif VERTICAL
+  'echelles-successives': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [16, 26], below: 'sol', above: 'air', ladder: true },
 }
 
 // Construit un Module à partir de son kind (fills + métadonnées du CATALOG) + peuplement/flags.
@@ -1812,7 +1917,19 @@ export function planModules(o: ComposeOpts): Module[] {
   // caveStart FORCE la grotte de départ souterraine (bassin immergé à franchir à la nage) ; sinon
   // départ plat varié. On force (plutôt que tirer) pour GARANTIR l'apparition du motif là où il est voulu.
   const spawnKind: ModuleKind = o.caveStart ? 'grotte-depart' : structural(['plateau', 'ligne-droite', 'couloir-large'], 'spawn')
-  modules.push(mk(spawnKind, { spawnHere: true, tags: ['respiration'] }))
+  // DÉPART VARIÉ (retour joueur : « les niveaux commencent TOUJOURS surélevés »). On tire l'altitude
+  // de départ par la graine : parfois AU SOL (alt 0), parfois sur une corniche SURÉLEVÉE (3-4). La zone
+  // de spawn reste DÉGAGÉE (module de spawn sec, sans monstre — spawnHere vide ground/birds — et marge
+  // SAFE_SPAWN_TILES globale) → jamais SUR un monstre ni DANS l'eau. CONTRAINTE : la sortie doit rester
+  // à ≥3 rangées du départ (validateur startExit). Une sortie 'bas' (au sol) impose donc un départ
+  // SURÉLEVÉ ; une grotte de départ (plancher haut) idem. Une sortie 'haut' (montée finale) autorise le
+  // départ au SOL (l'écart est garanti par la montée). On lie donc le départ au sol aux fins 'haut'.
+  const startElevated = 3 + (hashSeed((o.seed ?? o.id) + ':startalt') % 2) // 3 ou 4 (surélevé)
+  const groundAllowed = o.ending === 'haut' && !o.caveStart
+  const startAlt = groundAllowed
+    ? (hashSeed((o.seed ?? o.id) + ':startmode') % 3 === 0 ? 0 : hashSeed((o.seed ?? o.id) + ':startmode') % 3 === 1 ? 1 : startElevated)
+    : startElevated
+  modules.push(mk(spawnKind, { spawnHere: true, startAlt, tags: ['respiration'] }))
   // ZIGZAG D'OUVERTURE (tout premiers niveaux) : dents de scie gauche-droite dès la sortie du spawn.
   if (o.openZigzag) modules.push(mk('zigzag', { ground: [], tags: ['ouverture'] }))
 
@@ -1900,8 +2017,8 @@ export function planModules(o: ComposeOpts): Module[] {
     const mvpTail = o.mvp && !modules.some((m) => m.ground?.includes(o.mvp!)) ? [o.mvp] : []
     modules.push(mk(stepKind, { ground: [...mvpTail, ...nextGround()] }))
     const climbPool: ModuleKind[] = allowLadders
-      ? ['echelle-tranquille', 'cage-echelles', 'echelle-vs-sauts', 'tour-creuse', 'zigzag', 'passerelles-zigzag', 'passerelles-plein', 'echelle-trou-echelle', 'echelle-zigzag', 'echelles-decalees', 'echelle-descente-piegee']
-      : ['escalier', 'zigzag', 'passerelles-zigzag', 'passerelles-plein']
+      ? ['echelle-tranquille', 'cage-echelles', 'echelle-vs-sauts', 'tour-creuse', 'zigzag', 'passerelles-zigzag', 'passerelles-plein', 'echelle-trou-echelle', 'echelle-zigzag', 'echelles-decalees', 'echelle-descente-piegee', 'escalier-saut', 'echelles-successives']
+      : ['escalier', 'zigzag', 'passerelles-zigzag', 'passerelles-plein', 'escalier-saut']
     const climbKind = structural(climbPool, 'climb')
     modules.push(mk(climbKind, { exitHere: true, ...(climbKind === 'escalier' ? { rise: 6 } : {}), ground: nextGround(), tags: ['montée'] }))
   }

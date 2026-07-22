@@ -205,15 +205,16 @@ export function monstersOffSurface(level: LevelDef, isAerial: (id: string) => bo
   return out
 }
 
-// Problèmes de DÉPART / SORTIE : le départ doit exister à MI-HAUTEUR (ni collé au sol, ni au
-// plafond) et la sortie doit exister à une altitude NETTEMENT différente du départ (≥ 3 rangées).
+// Problèmes de DÉPART / SORTIE : le départ peut être AU SOL ou surélevé (varié par graine, R171),
+// mais jamais collé au plafond ni sous le sol du monde, et la sortie doit exister à une altitude
+// NETTEMENT différente du départ (≥ 3 rangées) → un vrai trajet vertical entre départ et sortie.
 export function startExitProblems(level: LevelDef, minAltGap = 3): string[] {
   const groundRow = groundRowFor(level.heightTiles)
   const out: string[] = []
   if (!level.start) { out.push('départ absent'); return out }
   if (!level.exit) { out.push('sortie absente'); return out }
-  if (level.start.y >= groundRow) out.push('départ collé au sol (pas mi-hauteur)')
-  if (level.start.y <= 2) out.push('départ collé au plafond (pas mi-hauteur)')
+  if (level.start.y > groundRow) out.push('départ sous le sol du monde')
+  if (level.start.y <= 2) out.push('départ collé au plafond')
   if (Math.abs(level.start.y - level.exit.y) < minAltGap) out.push('sortie à la même altitude que le départ')
   return out
 }

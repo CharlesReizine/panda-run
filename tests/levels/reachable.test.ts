@@ -17,7 +17,7 @@ import {
   deadEndSurfaces,
   caveCeilingClearance,
 } from '../../src/core/level-validator'
-import { MAX_LADDER_TILES } from '../../src/core/platforming'
+import { MAX_LADDER_TILES, groundRowFor } from '../../src/core/platforming'
 import { MONSTERS } from '../../src/data/monsters'
 
 // Niveaux construits par le KIT DE MODULES (docs/level-module-kit.md) : ils doivent respecter les
@@ -623,6 +623,93 @@ describe('R168 — niveaux plus longs, échelle-descente piégée, cascades vari
   it('les maps montent PLUS HAUT (les nouveaux perchoirs/tours de cascade créent des mondes hauts)', () => {
     const maxH = Math.max(...Object.values(LEVELS).map((l) => l.heightTiles ?? 16))
     expect(maxH, 'aucune map vraiment haute').toBeGreaterThanOrEqual(30)
+  })
+})
+
+// ─── R171 — VARIÉTÉ DES DÉPARTS + NOUVEAUX MOTIFS (lac→cascade→plateau, verticaux, grotte tôt) ────
+describe('R171 — départs variés, lac→cascade→plateau, motifs verticaux, grotte sous-marine tôt', () => {
+  const kindsOfLevel = (id: string): string[] => LEVEL_MODULE_KINDS[id] ?? []
+  const levelsWith = (kind: string) => Object.keys(LEVEL_MODULE_KINDS).filter((id) => kindsOfLevel(id).includes(kind))
+  const playable = (id: string) => {
+    const lvl = LEVELS[id]!
+    expect(unreachablePlatforms(lvl), `${id}: plateforme injoignable`).toEqual([])
+    expect(unreachableChests(lvl), `${id}: coffre injoignable`).toEqual([])
+    expect(oversizedGaps(lvl), `${id}: saut infranchissable`).toEqual([])
+    expect(deadEndSurfaces(lvl), `${id}: piège sans retour`).toEqual([])
+    expect(unlevelWaterBanks(lvl), `${id}: rebords désaxés`).toEqual([])
+    expect(suspendedWaterBanks(lvl), `${id}: eau suspendue`).toEqual([])
+    expect(caveCeilingClearance(lvl), `${id}: plafond de grotte trop bas`).toEqual([])
+    expect(startExitProblems(lvl), `${id}: départ/sortie`).toEqual([])
+  }
+  const terrains = Object.values(LEVELS).filter((l) => !l.boss && l.id !== 'epave-1' && l.start)
+
+  it('DÉPARTS VARIÉS : certains niveaux démarrent AU SOL, d’autres SURÉLEVÉS (plus de départ uniforme)', () => {
+    let ground = 0, high = 0
+    for (const l of terrains) {
+      const alt = groundRowFor(l.heightTiles) - l.start!.y
+      if (alt <= 0) ground++
+      else if (alt >= 3) high++
+    }
+    expect(ground, 'aucun départ au sol').toBeGreaterThan(0)
+    expect(high, 'aucun départ surélevé').toBeGreaterThan(0)
+  })
+
+  it('ZONE DE SPAWN DÉGAGÉE : jamais de monstre collé au départ ni de départ DANS l’eau', () => {
+    for (const l of terrains) {
+      const sx = l.start!.x
+      // aucun spawn (terrestre ou aérien) à moins de 6 tuiles du point d’apparition
+      for (const s of l.spawns) {
+        expect(Math.abs(s.x - sx), `${l.id}: monstre ${s.monsterId} collé au départ`).toBeGreaterThanOrEqual(6)
+      }
+      // la colonne de départ n’est jamais dans une cuve marine / lave (surface d’eau)
+      const inWater = (l.hazards ?? []).some((h) => h.kind === 'water' && (h.water === 'basin' || h.water === 'lave') && sx >= h.x && sx < h.x + h.w)
+      expect(inWater, `${l.id}: départ dans l’eau`).toBe(false)
+    }
+  })
+
+  it('LAC → CASCADE → PLATEAU : lac marine + cascade remontable + plateau haut, jouable', () => {
+    const ids = levelsWith('lac-cascade-plateau')
+    expect(ids.length, 'lac-cascade-plateau jamais généré').toBeGreaterThan(0)
+    for (const id of ids) {
+      const lvl = LEVELS[id]!
+      expect((lvl.hazards ?? []).some((h) => h.kind === 'water' && h.water === 'basin'), `${id}: pas de lac`).toBe(true)
+      expect((lvl.hazards ?? []).some((h) => h.kind === 'water' && h.water === 'cascade'), `${id}: pas de cascade`).toBe(true)
+      playable(id)
+    }
+  })
+
+  it('MOTIFS VERTICAUX : escalier à grands pas ET échelles successives générés et jouables', () => {
+    for (const k of ['escalier-saut', 'echelles-successives']) {
+      const ids = levelsWith(k)
+      expect(ids.length, `${k} jamais généré`).toBeGreaterThan(0)
+      for (const id of ids) playable(id)
+    }
+  })
+
+  it('GROTTE SOUS-MARINE TÔT : une grotte noyée / lac en U apparaît dès les premiers terrains (plaine/forêt)', () => {
+    const early = ['plaine-1', 'plaine-2', 'plaine-3', 'plaine-4', 'plaine-5', 'plaine-6', 'foret-1', 'foret-2', 'foret-3', 'foret-4']
+    const hits = early.filter((id) => kindsOfLevel(id).some((k) => k === 'grotte-noyee' || k === 'lac-en-u'))
+    expect(hits.length, 'aucune grotte sous-marine dans les premiers niveaux').toBeGreaterThan(0)
+    for (const id of hits) playable(id)
+  })
+
+  it('PLONGEOIR : panneau + lac dessous, jouable ; et un perchoir TRÈS HAUT (≥ 9 rangées) existe bien', () => {
+    const ids = levelsWith('plongeoir')
+    expect(ids.length, 'plongeoir jamais généré').toBeGreaterThan(0)
+    // hauteur max du perchoir au-dessus de son lac, sur l’ensemble des plongeoirs (montée échelle → très haut)
+    let maxPerch = 0
+    for (const id of ids) {
+      const lvl = LEVELS[id]!
+      expect((lvl.signs ?? []).length, `${id}: pas de panneau télégraphe`).toBeGreaterThan(0)
+      expect((lvl.hazards ?? []).some((h) => h.kind === 'water' && h.water === 'basin'), `${id}: pas de lac sous le plongeoir`).toBe(true)
+      const basins = (lvl.hazards ?? []).filter((h) => h.kind === 'water' && h.water === 'basin')
+      for (const sg of lvl.signs ?? []) for (const b of basins) {
+        if (sg.x >= b.x - 1 && sg.x <= b.x + b.w) maxPerch = Math.max(maxPerch, (b.top ?? 0) - sg.y)
+      }
+      playable(id)
+    }
+    // au moins un plongeoir « saut de la foi » culmine bien plus haut que l’ancien perchoir (+7)
+    expect(maxPerch, `perchoir max = ${maxPerch}`).toBeGreaterThanOrEqual(9)
   })
 })
 

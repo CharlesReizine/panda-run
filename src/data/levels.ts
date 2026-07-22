@@ -143,6 +143,9 @@ const WATER_ROT: ModuleKind[][] = [
   ['cascade-trou', 'bassin'],
   ['cascade-cul-de-sac', 'cascade'],
   ['cascade-trouee', 'bassin'],
+  // R171 — LAC → CASCADE → PLATEAU (lac horizontal + cascade remontable vers un plateau haut ; porte
+  // son propre coffre au fond du lac, apparié à un bassin pour la variété).
+  ['lac-cascade-plateau', 'bassin'],
 ]
 
 // Biomes ROCHEUX : on y autorise les MARCHES DE PIERRE rigides (escalier-pierre), jusque-là jamais
@@ -162,6 +165,15 @@ const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
   'plage-3': ['grotte-noyee', 'bassin'],
   'carriere-1': ['grotte-noyee', 'cascade'],
   'montagne-2': ['lac-en-u', 'cascade'],
+  // R171 — GROTTE SOUS-MARINE garantie TÔT (retour joueur : « 7-8 niveaux sans en voir »). On en pose
+  // une dans les tout premiers terrains de plaine ET de forêt (biomes early), plus un lac-en-u forêt →
+  // on en croise une dès les premiers niveaux, et elles deviennent nettement plus fréquentes.
+  'plaine-4': ['grotte-noyee', 'cascade'],
+  'foret-1': ['grotte-noyee', 'bassin'],
+  'foret-4': ['lac-en-u', 'cascade'],
+  // R171 — LAC → CASCADE → PLATEAU épinglé à un terrain early pour le sortir tôt et souvent.
+  'plaine-6': ['lac-cascade-plateau', 'cascade'],
+  'foret-6': ['lac-cascade-plateau', 'bassin'],
   // R168 — VARIANTES DE CASCADES épinglées à des terrains thématiques (elles n'apparaîtraient sinon que
   // très rarement, car appendues en fin de WATER_ROT que peu de biomes atteignent par `idx % len`).
   // cascade-trou / cascade-trouee ne portent pas de coffre → appariées à une cuve à coffre (bassin).
