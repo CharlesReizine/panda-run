@@ -64,7 +64,9 @@ export interface SkillDef {
   lance?: boolean // CHARGE LANCIÈRE (chevalier) : trait perçant en ligne
   storm?: boolean // TEMPÊTE FOUDROYANTE (sorcier) : nuke d'orage sur zone
   blizzard?: boolean // BLIZZARD (sorcier) : nuke de glace sur zone
-  grapple?: boolean // FLÈCHE-GRAPPIN (archer) : s'accroche à une plateforme devant/au-dessus et TRACTE le joueur
+  // FLÈCHES ENTRAVANTES (chasseur) : ralentit TOUS les ennemis à l'écran un court instant — leur
+  // vitesse ET leur cadence d'attaque sont réduites du facteur `factor` (< 1) pendant `durationMs`.
+  slow?: { factor: number; durationMs: number }
   falconBlitz?: boolean // ASSAUT DU FAUCON (chasseur) : le faucon fond en coups multiples
   // ── Archer / Chasseur ──────────────────────────────────────────────────────
   arrows?: number // projectile : nombre de flèches tirées ensemble (double flèche = 2)
@@ -79,8 +81,11 @@ export interface SkillDef {
   blast?: number // projectile : rayon de la petite explosion déclenchée à l'impact (grosse boule de feu)
   meteors?: number // zone : nombre de météores qui tombent et explosent sur la zone visée
   wall?: { durationMs: number; height: number } // zone : mur de flammes temporaire (brûle + bloque les ennemis)
-  // passif : bonus par rang appris (jamais équipé). hpRegenPerSec = régénération de PV/s (sabreur).
-  passive?: { atk?: number; def?: number; maxHp?: number; attackSpeed?: number; hpRegenPerSec?: number }
+  // passif : bonus par rang appris (jamais équipé). hpRegenPerSec = régénération de PV/s (sabreur) ;
+  // energyRegenPerSec = régénération d'énergie/mana en plus par seconde (mage) ; moveSpeedPct =
+  // bonus de vitesse de course (fraction, archer) ; jumpBoostPct = bonus de hauteur de saut (fraction,
+  // chasseur). Ces trois-là sont lus et appliqués par Player (mécaniques de mouvement).
+  passive?: { atk?: number; def?: number; maxHp?: number; attackSpeed?: number; hpRegenPerSec?: number; energyRegenPerSec?: number; moveSpeedPct?: number; jumpBoostPct?: number }
   // passif « double attaque » (chevalier : frappe-doublee ; archer/chasseur : reflexes-felins) :
   // réduit le cooldown de l'ATTAQUE DE BASE selon le rang appris — cooldown × (1 / (1 + rang/rangMax)).
   // Au rang MAX, cooldown /2 → le panda frappe 2× plus souvent (voir basicAttackCooldownFactor).

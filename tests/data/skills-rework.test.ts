@@ -72,8 +72,13 @@ describe('mécaniques nouvelles : présence des flags', () => {
     expect(s.guard!.dmgTakenMult).toBeLessThan(1)
   })
 
-  it('flèche-grappin (déplacement) et assaut du faucon (blitz) portent leurs flags', () => {
-    expect(SKILLS['fleche-grappin']!.grapple).toBe(true)
+  it('flèches entravantes (ralenti de zone) et assaut du faucon (blitz) portent leurs flags', () => {
+    // La flèche-grappin a été retirée (redistribution des compétences) ; le chasseur gagne le ralenti.
+    expect(SKILLS['fleche-grappin']).toBeUndefined()
+    const slow = SKILLS['fleches-entravantes']!
+    expect(slow.kind).toBe('aoe')
+    expect(slow.slow!.factor).toBeLessThan(1)
+    expect(slow.slow!.durationMs).toBeGreaterThan(0)
     expect(SKILLS['blitz-faucon']!.falconBlitz).toBe(true)
   })
 })

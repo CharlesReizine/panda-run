@@ -16,8 +16,8 @@ describe('données classes/skills', () => {
     // Tailles d'arbre après refonte : le premier palier garde ses branches + passifs ; l'évolué
     // porte un kit PROPRE (aucun skill partagé avec sa base) plus resserré autour de sa signature.
     const expected: Record<string, number> = {
-      swordsman: 9, mage: 9, archer: 9,
-      chevalier: 7, sorcier: 7, chasseur: 7,
+      swordsman: 8, mage: 9, archer: 9,
+      chevalier: 8, sorcier: 8, chasseur: 9,
     }
     for (const [id, n] of Object.entries(expected)) {
       expect(CLASSES[id as ClassId].skillIds, id).toHaveLength(n)
@@ -68,7 +68,7 @@ describe('données classes/skills', () => {
     // chevalier : kit royal 100% propre. sorcier : signatures propres (la pluie de météores reste
     // classée « mage » car déplacée depuis lui). chasseur : signatures propres (flèche enflammée/
     // explosive restent classées « archer », déplacées depuis la base).
-    const ownCount: Record<'chevalier' | 'sorcier' | 'chasseur', number> = { chevalier: 7, sorcier: 6, chasseur: 5 }
+    const ownCount: Record<'chevalier' | 'sorcier' | 'chasseur', number> = { chevalier: 8, sorcier: 7, chasseur: 7 }
     for (const evolved of ['chevalier', 'sorcier', 'chasseur'] as const) {
       const own = CLASSES[evolved].skillIds.filter((sid) => SKILLS[sid]!.classId === evolved)
       expect(own, evolved).toHaveLength(ownCount[evolved])

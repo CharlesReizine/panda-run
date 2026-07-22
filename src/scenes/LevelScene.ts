@@ -1837,6 +1837,10 @@ export class LevelScene extends Phaser.Scene {
     } else if (skill.kind === 'aura') {
       // AURA D'ÉPINES (mage) : aura offensive d'éclairs qui blesse en continu les ennemis proches.
       this.castThornAura(skill, mult, color)
+    } else if (skill.kind === 'aoe' && skill.slow) {
+      // FLÈCHES ENTRAVANTES (chasseur) : ralentit TOUS les ennemis à l'écran (vitesse + cadence),
+      // sans dégâts.
+      this.castSlow(skill, color)
     } else if (skill.kind === 'aoe' && skill.voidRift) {
       // FAILLE DU NÉANT (sorcier) : aspire puis annihile les faibles, repousse les autres.
       this.castVoidRift(skill, mult, color)
@@ -1857,9 +1861,6 @@ export class LevelScene extends Phaser.Scene {
     } else if (skill.kind === 'projectile' && skill.homing) {
       // Flèche AUTOGUIDÉE : chaîne homing à travers murs/terrain (nombre de cibles = rang).
       this.castHomingArrow(skill, atk * mult, rank, color)
-    } else if (skill.kind === 'projectile' && skill.grapple) {
-      // FLÈCHE-GRAPPIN (déplacement) : accroche une plateforme devant/au-dessus et tracte le panda.
-      this.castGrapple(skill, color)
     } else if (skill.kind === 'projectile' && skill.falconBlitz) {
       // ASSAUT DU FAUCON : le faucon fond sur la cible et la frappe en coups multiples.
       this.castFalconBlitz(skill, atk * mult, color)
@@ -3180,31 +3181,27 @@ export class LevelScene extends Phaser.Scene {
   }
 
   // ═════════════ ARCHER : Flèche-grappin (tracte le panda sur une plateforme devant/au-dessus) ═════
-  private castGrapple(skill: SkillDef, color: number) {
-    const px = this.player.x, py = this.player.y, f = this.player.facing
-    let best: { x: number; y: number } | null = null
-    let bestScore = Infinity
-    for (const grp of [this.oneWayPlatforms, this.platforms]) {
-      for (const obj of grp.getChildren()) {
-        const t = obj as Phaser.GameObjects.Image
-        const dx = (t.x - px) * f
-        if (dx < 24 || dx > skill.range) continue // devant, à portée
-        if (t.y > py + 24) continue // pas nettement en-dessous
-        const score = dx + Math.abs(t.y - py) * 0.6
-        if (score < bestScore) { bestScore = score; best = { x: t.x, y: t.y - TILE / 2 } }
-      }
+  // ═════════════ CHASSEUR : Flèches entravantes (ralenti de zone) ═════════════
+  // Ralentit TOUS les ennemis actifs à l'écran (vitesse ET cadence, cf. Enemy.applySlow) pendant
+  // skill.slow.durationMs, sans leur infliger de dégâts. Volée de flèches bleutées + halo de zone.
+  private castSlow(skill: SkillDef, color: number) {
+    const { factor, durationMs } = skill.slow!
+    let n = 0
+    for (const obj of this.enemies.getChildren()) {
+      const e = obj as Enemy
+      if (!e.active) continue
+      e.applySlow(factor, durationMs)
+      n++
     }
-    const target = best ?? { x: px + f * 90, y: py - 90 } // sans prise : petit bond de secours
-    // câble de grappin (fx-fleche-grappin le long de la ligne) + tract du joueur
-    const key = this.textures.exists('fx-fleche-grappin') ? 'fx-fleche-grappin' : 'fx-arrow'
-    const hook = this.add.image(px, py, key).setDepth(7).setTint(color).setRotation(Math.atan2(target.y - py, target.x - px))
-    this.tweens.add({ targets: hook, x: target.x, y: target.y, duration: 140, onComplete: () => {
-      const line = this.add.line(0, 0, px, py, target.x, target.y, 0xcfd8dc, 0.8).setOrigin(0, 0).setLineWidth(2).setDepth(6)
-      this.tweens.add({ targets: line, alpha: 0, duration: 300, onComplete: () => line.destroy() })
-      hook.destroy()
-      this.player.startGrapple(target.x, target.y)
-    } })
-    audio.playSfx('skill')
+    // halo de zone glacé autour du joueur + fines flèches entravantes qui filent vers l'extérieur
+    this.aoeRing(this.player.x, this.player.y, 220, color, true)
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2
+      const dart = this.add.rectangle(this.player.x, this.player.y, 12, 3, color).setRotation(a).setDepth(7).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.9)
+      this.tweens.add({ targets: dart, x: this.player.x + Math.cos(a) * 230, y: this.player.y + Math.sin(a) * 230, alpha: 0, duration: 360, ease: 'Cubic.out', onComplete: () => dart.destroy() })
+    }
+    this.flashScreen(color, 0.1, 140)
+    this.announceSkill(`${n} ennemi(s) ralenti(s)`, color)
   }
 
   // ═════════════ CHASSEUR : Assaut du faucon (piqué en coups multiples) ═════════════

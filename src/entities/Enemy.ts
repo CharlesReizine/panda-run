@@ -103,6 +103,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   // (défense effective halvée) jusqu'à cette échéance. Les boss en sont toujours immunisés.
   private fearedUntil = 0
   private fearFx: Phaser.GameObjects.Text | null = null
+  // Ralenti (Flèches entravantes du chasseur) : tant que l'effet dure, la VÉLOCITÉ et la CADENCE
+  // d'attaque du monstre sont multipliées par slowFactor (< 1). Les boss en sont exemptés.
+  private slowedUntil = 0
+  private slowFactor = 1
+  private slowFx: Phaser.GameObjects.Graphics | null = null
   // patrouille sûre (monstres terrestres au repos) : sens courant + demi-tour au bord/mur.
   private patrolDir: 1 | -1 = 1
   // oiseau : point d'attache du vol de croisière + cadence de piqué.
@@ -206,6 +211,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.burnTimer?.remove()
       this.snareFx?.destroy()
       this.fearFx?.destroy()
+      this.slowFx?.destroy()
       this.meleeFx?.destroy()
       this.destroy()
     }
@@ -263,6 +269,41 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     return this.isFeared() ? this.monster.def * 0.5 : this.monster.def
   }
 
+  // Ralentit l'ennemi pour une durée donnée (Flèches entravantes) : sa vélocité et sa cadence
+  // d'attaque sont réduites du facteur `factor` (< 1) tant que l'effet dure. Les boss y sont
+  // immunisés (comme pour la terreur). On retient le ralenti le plus FORT (facteur le plus bas) actif.
+  applySlow(factor: number, durationMs: number) {
+    if (!this.active || this.monster.boss) return
+    const until = this.scene.time.now + durationMs
+    if (until >= this.slowedUntil) { this.slowedUntil = until; this.slowFactor = factor }
+    else this.slowFactor = Math.min(this.slowFactor, factor)
+    if (!this.slowFx) this.slowFx = this.scene.add.graphics().setDepth(this.depth - 1)
+  }
+
+  isSlowed(): boolean {
+    return this.scene.time.now < this.slowedUntil
+  }
+
+  // Facteur courant de ralenti (< 1 tant qu'actif, 1 sinon) appliqué à la vélocité.
+  private slowMul(): number {
+    return this.isSlowed() ? this.slowFactor : 1
+  }
+
+  // Facteur d'ÉTIREMENT des temps de recharge (cadence) : 1/slowMul → cooldowns allongés tant que
+  // l'ennemi est ralenti (il attaque moins souvent). 1 (aucun effet) hors ralenti.
+  private cadenceMul(): number {
+    return 1 / this.slowMul()
+  }
+
+  // Applique le ralenti à la vélocité EFFECTIVE de la frame (après l'IA) : réduit le déplacement
+  // horizontal (tous) et vertical (aériens : leur vol/piqué est piloté, pas la gravité). No-op hors ralenti.
+  private applySlowToVelocity() {
+    if (!this.isSlowed()) return
+    const b = this.body as Phaser.Physics.Arcade.Body
+    b.velocity.x *= this.slowFactor
+    if (this.monster.aerial) b.velocity.y *= this.slowFactor
+  }
+
   // tir d'un projectile vers le joueur, propre et cohérent selon le monstre :
   //  - mandragore : boule verte EN CLOCHE (gravité, retombe et s'arrête au sol)
   //  - mage noir : bolt magique violet HORIZONTAL ; rocker : petite pierre HORIZONTALE
@@ -304,7 +345,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       this.windUpUntil = t + MELEE_WINDUP_MS
       this.strikeUntil = t + MELEE_WINDUP_MS + MELEE_STRIKE_MS
       this.struckThisSwing = false
-      this.nextMeleeAt = this.strikeUntil + MELEE_COOLDOWN
+      this.nextMeleeAt = this.strikeUntil + MELEE_COOLDOWN * this.cadenceMul()
       this.setVelocityX(0)
       return
     }
@@ -371,7 +412,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const horiz = Math.abs(player.x - this.x)
     if (horiz < AGGRO_RANGE && t > this.nextDiveAt && t > this.diveUntil) {
       this.diveUntil = t + BIRD_DIVE_MS
-      this.nextDiveAt = t + BIRD_DIVE_COOLDOWN
+      this.nextDiveAt = t + BIRD_DIVE_COOLDOWN * this.cadenceMul()
     }
     if (t < this.diveUntil) {
       // PIQUÉ : l'oiseau fond sur le joueur ET DESCEND jusqu'à SA HAUTEUR — là où passent les tirs
@@ -475,6 +516,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       if (rooted) this.setVelocity(0, 0)
       else if (feared) { this.setVelocity(-dir * this.monster.speed * FEAR_SPEED_MULT, 0) }
       else this.flyUpdate(t, dist, dir, player)
+      this.applySlowToVelocity()
       this.updateVisuals(t)
       return
     }
@@ -486,7 +528,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       // télégraphiée (mêlée) ou salve en éventail (distance). Cadencé à part du reste de l'IA.
       if (this.monster.mvp && t > this.nextEliteSkillAt) {
         this.useEliteSkill()
-        this.nextEliteSkillAt = t + ELITE_SKILL_COOLDOWN
+        this.nextEliteSkillAt = t + ELITE_SKILL_COOLDOWN * this.cadenceMul()
       }
       if (this.monster.behavior === 'charge') {
         // CHARGE LISIBLE : bref télégraphe (planté, on voit le monstre s'armer) → RUÉE rapide.
@@ -495,7 +537,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         } else if (t > this.nextActionAt && !this.isCharging) {
           this.attackDir = dir < 0 ? -1 : 1
           this.windUpUntil = t + CHARGE_WINDUP_MS
-          this.nextActionAt = t + CHARGE_COOLDOWN
+          this.nextActionAt = t + CHARGE_COOLDOWN * this.cadenceMul()
           this.setVelocityX(0)
           // la ruée part à la fin du télégraphe (annulée si entre-temps piégé/apeuré/mort)
           this.scene.time.delayedCall(CHARGE_WINDUP_MS, () => {
@@ -515,7 +557,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         }
       } else if (this.monster.behavior === 'projectile' && t > this.nextActionAt) {
         this.fireProjectile()
-        this.nextActionAt = t + SHOOT_COOLDOWN
+        this.nextActionAt = t + SHOOT_COOLDOWN * this.cadenceMul()
       } else if (this.monster.behavior === 'caster') {
         // garde ses distances : recule si le joueur s'approche, avance s'il fuit
         if (dist < CASTER_KEEP_DIST - 30) this.setVelocityX(-dir * this.monster.speed)
@@ -524,12 +566,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         // sort de zone télégraphié sous le joueur
         if (t > this.nextActionAt) {
           this.levelScene.enemyGroundSpell(player.x, this.monster.atk)
-          this.nextActionAt = t + CAST_COOLDOWN
+          this.nextActionAt = t + CAST_COOLDOWN * this.cadenceMul()
         }
         // + projectile occasionnel pour harceler pendant le rechargement du sort
         if (t > this.nextShootAt) {
           this.fireProjectile()
-          this.nextShootAt = t + SHOOT_COOLDOWN * 1.5
+          this.nextShootAt = t + SHOOT_COOLDOWN * 1.5 * this.cadenceMul()
         }
       } else if (this.monster.behavior !== 'projectile') {
         // 'contact' = MÊLÉE (mobile si speed>0, immobile si speed=0) : avance jusqu'à portée puis
@@ -565,6 +607,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       const vx = body.velocity.x
       if (body.blocked.down && Math.abs(vx) > 5 && !this.floorAhead(Math.sign(vx))) this.setVelocityX(0)
     }
+
+    // RALENTI (Flèches entravantes) : réduit la vélocité effective de la frame, en tout dernier ressort.
+    this.applySlowToVelocity()
 
     this.updateVisuals(t)
   }
@@ -650,6 +695,20 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     } else if (this.fearFx) {
       this.fearFx.destroy()
       this.fearFx = null
+    }
+
+    // liseré de RALENTI (Flèches entravantes) : anneau bleu givré qui pulse lentement aux pieds
+    // tant que l'ennemi est ralenti, puis s'éteint.
+    if (this.slowFx) {
+      if (this.isSlowed()) {
+        this.slowFx.clear()
+        const yFeet = this.y + hh / 2 - 4
+        const pulse = 0.35 + 0.25 * Math.sin(t / 200)
+        this.slowFx.lineStyle(3, 0x4dd0e1, pulse).strokeEllipse(this.x, yFeet, hw * 0.95, 15)
+      } else {
+        this.slowFx.destroy()
+        this.slowFx = null
+      }
     }
 
     // halo d'élite pulsant autour des MVP

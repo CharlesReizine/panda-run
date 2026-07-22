@@ -3,6 +3,7 @@ import type { StatBlock } from '../core/types'
 import type { ControlsState } from '../core/controls'
 import { computeStats } from '../core/stats'
 import { getPlayer } from '../state'
+import { SKILLS } from '../data/skills'
 import { ITEMS, rarityColor } from '../data/items'
 import { displayedWeaponType, isBigWeapon, weaponTextureKeys } from '../core/equip'
 import { PANDA_BODY, PANDA_HEAD_ANCHORS } from './player-body'
@@ -32,10 +33,10 @@ const DIVE_SPEED = 1400 // vitesse de piqué vertical du Plongeon (px/s)
 const DOUBLE_JUMP_SKILL = 'double-saut'
 const DOUBLE_JUMP_ENERGY_COST = 20 // énergie dépensée à chaque saut aérien
 const DOUBLE_JUMP_MIN_FRAC = 0.45 // hauteur du 2e saut au rang 1 (fraction du 1er saut)
-// VOL DU MAGE : skill passif 'vol-arcanique' (lignée mage/sorcier). Tant qu'il est appris, MAINTENIR
-// le saut en l'air fait VOLER le mage (gravité coupée, mouvement libre). Le vol dévore le mana très
-// vite : une jauge PLEINE tient exactement (rang) secondes → drain net = maxEnergy / rang par
-// seconde (rang 1 = 1 s, rang 2 = 2 s…). À court d'énergie, le vol s'arrête et le mage retombe.
+// VOL ARCANIQUE : skill passif 'vol-arcanique' (désormais lignée SORCIER). Tant qu'il est appris,
+// MAINTENIR le saut en l'air fait VOLER le panda (gravité coupée, mouvement libre). Le vol dévore le
+// mana très vite : une jauge PLEINE tient exactement (rang) secondes → drain net = maxEnergy / rang
+// par seconde (rang 1 = 1 s, rang 2 = 2 s…). À court d'énergie, le vol s'arrête et le panda retombe.
 const FLIGHT_SKILL = 'vol-arcanique'
 const FLIGHT_VSPEED = 300 // vitesse verticale du vol (montée quand saut tenu, descente sur bas), px/s
 // Lignée du sabreur : la GROSSE épée n'est PAS affichée au repos ; elle n'apparaît (agrandie) que
@@ -115,12 +116,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // (x, y, hauteur de chute) → LevelScene fait l'explosion proportionnelle à la hauteur.
   diving = false
   private diveStartY = 0
-  // FLÈCHE-GRAPPIN (archer) : traction verrouillée vers une plateforme accrochée. Pendant la
-  // traction, gravité coupée et contrôles ignorés (comme le plongeon) ; s'arrête à l'arrivée.
-  private grappling = false
-  private grappleTX = 0
-  private grappleTY = 0
-  private grappleUntil = 0
   // VOL DU MAGE : actif tant qu'on maintient le saut en l'air (skill appris + énergie > 0). Gravité
   // coupée pendant le vol ; l'énergie chute vite (voir updateFlight). flightFxAt limite le débit des
   // étincelles arcaniques sous le panda pendant le vol.
@@ -474,9 +469,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // PLONGEON en cours : piqué vertical verrouillé, aucun autre contrôle jusqu'à l'impact.
     if (this.diving) { this.updateDive(body); return }
 
-    // GRAPPIN en cours : traction verrouillée vers la plateforme accrochée, contrôles ignorés.
-    if (this.grappling) { this.updateGrapple(body); return }
-
     // CHARGE AÉRIENNE : figé en hauteur le temps du windup (gravité coupée, immobile), aucun
     // autre contrôle. Relâché par endChargeLock() → la gravité reprend et le panda retombe.
     if (this.chargeLocked) { body.setAllowGravity(false); this.setVelocity(0, 0); return }
@@ -495,8 +487,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     body.setAllowGravity(true)
     this.setAngle(0) // hors échelle : plus d'inclinaison de grimpe
 
-    // horizontale (ralentie dans l'eau)
-    const runSpeed = this.inWater ? RUN_SPEED * SWIM_RUN_MULT : RUN_SPEED
+    // horizontale (ralentie dans l'eau) — le passif « course rapide » (archer) l'accélère durablement
+    const runSpeed = (this.inWater ? RUN_SPEED * SWIM_RUN_MULT : RUN_SPEED) * this.moveSpeedMult()
     if (c.left) { this.setVelocityX(-runSpeed); this.facing = -1; this.setFlipX(true) }
     else if (c.right) { this.setVelocityX(runSpeed); this.facing = 1; this.setFlipX(false) }
     else { this.setVelocityX(0); this.setFlipX(this.facing === -1) } // aligne le flip sur l'orientation (corrige le miroir de grimpe résiduel)
@@ -519,7 +511,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       // saut aérien = payant : n'a lieu que si l'énergie suffit (sinon rien, on retente en
       // relâchant/réappuyant). Le 1er saut reste gratuit.
       if (!airborneJump || this.spendEnergy(DOUBLE_JUMP_ENERGY_COST)) {
-        this.setVelocityY(airborneJump ? this.secondJumpVelocity() : JUMP_VELOCITY)
+        // 1er saut : hauteur boostée par le passif « saut plus haut » (chasseur) ; 2e saut = double-saut
+        this.setVelocityY(airborneJump ? this.secondJumpVelocity() : JUMP_VELOCITY * this.jumpMult())
         this.jumpsUsed += 1
         this.scene.events.emit('player-jump')
         if (airborneJump) this.doubleJumpFx() // souffle bleuté sous les pattes au 2e saut
@@ -665,6 +658,36 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return JUMP_VELOCITY * frac
   }
 
+  // Somme d'un champ de passif APPRIS (rang > 0), cumulé × rang — même logique que computeStats mais
+  // pour les passifs de MOUVEMENT lus côté Player (vitesse de course, hauteur de saut, régén d'énergie).
+  private passiveSum(sel: (p: NonNullable<(typeof SKILLS)[string]['passive']>) => number | undefined): number {
+    let total = 0
+    const levels = getPlayer().skillLevels
+    for (const id in levels) {
+      const rank = levels[id] ?? 0
+      if (rank <= 0) continue
+      const pas = SKILLS[id]?.passive
+      if (pas) total += (sel(pas) ?? 0) * rank
+    }
+    return total
+  }
+
+  // Multiplicateur de vitesse de course : 1 + bonus des passifs « course rapide » (archer). 1 sans passif.
+  private moveSpeedMult(): number {
+    return 1 + this.passiveSum((p) => p.moveSpeedPct)
+  }
+
+  // Multiplicateur de hauteur (vitesse) de saut : 1 + bonus des passifs « saut plus haut » (chasseur).
+  private jumpMult(): number {
+    return 1 + this.passiveSum((p) => p.jumpBoostPct)
+  }
+
+  // Régénération d'énergie par seconde : base + bonus des passifs « régén mana » (mage). Utilisée par
+  // regenEnergy ET par la compensation de drain du vol (le vol reste indexé sur le rang, cf. updateFlight).
+  private energyRegenPerSec(): number {
+    return ENERGY_REGEN_PER_SEC + this.passiveSum((p) => p.energyRegenPerSec)
+  }
+
   // souffle du 2e saut : anneau bleuté aplati sous le panda + fines traînées vers le bas
   private doubleJumpFx() {
     const y = this.y + PANDA_BODY.h / 2
@@ -700,7 +723,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const rank = Phaser.Math.Clamp(this.flightRank(), 1, MAX_SKILL_RANK)
     const dt = Phaser.Math.Clamp((now - this.flightLastT) / 1000, 0, 0.1) // clamp anti-spike (lag/pause)
     this.flightLastT = now
-    const drainPerSec = this.maxEnergy / rank + ENERGY_REGEN_PER_SEC
+    const drainPerSec = this.maxEnergy / rank + this.energyRegenPerSec()
     this.energy = Math.max(0, this.energy - drainPerSec * dt)
     // vertical : monte tant que le saut est tenu, descend sur bas ; horizontal déjà posé (bloc course)
     this.setVelocityY(c.down ? FLIGHT_VSPEED : -FLIGHT_VSPEED)
@@ -772,34 +795,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.jumpsUsed = 0
       this.scene.events.emit('player-dive-land', this.x, this.y, fall)
     }
-  }
-
-  // Flèche-grappin : accroche une plateforme (tx, ty) et TRACTE le panda dessus. Gravité coupée,
-  // contrôles suspendus jusqu'à l'arrivée (ou expiration de sécurité).
-  startGrapple(tx: number, ty: number) {
-    this.grappling = true
-    this.grappleTX = tx
-    this.grappleTY = ty
-    this.grappleUntil = this.scene.time.now + 700
-    this.facing = tx >= this.x ? 1 : -1
-    this.setFlipX(this.facing === -1)
-    ;(this.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
-  }
-
-  private updateGrapple(body: Phaser.Physics.Arcade.Body) {
-    body.setAllowGravity(false)
-    const dx = this.grappleTX - this.x, dy = this.grappleTY - this.y
-    const d = Math.hypot(dx, dy)
-    if (d < 18 || this.scene.time.now >= this.grappleUntil) {
-      this.grappling = false
-      body.setAllowGravity(true)
-      this.setVelocity(0, 0)
-      this.jumpsUsed = 0
-      return
-    }
-    const SP = 900
-    this.setVelocity((dx / d) * SP, (dy / d) * SP)
-    if (!this.attacking) this.play(this.anim('jump'), true)
   }
 
   // Épée enflammée : embrase la lame pour un temps donné → flammes visibles sur l'arme et
@@ -885,7 +880,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   regenEnergy(deltaMs: number) {
-    this.gainEnergy((ENERGY_REGEN_PER_SEC * deltaMs) / 1000)
+    // base + passif « régén mana » (mage) : la régénération d'énergie s'accélère tant qu'il est appris
+    this.gainEnergy((this.energyRegenPerSec() * deltaMs) / 1000)
   }
 
   private emitHp() {

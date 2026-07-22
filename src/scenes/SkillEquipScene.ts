@@ -208,7 +208,7 @@ export class SkillEquipScene extends Phaser.Scene {
     if (s.explode) tags.push('explosif')
     if (s.chargeable) tags.push('chargeable')
     if (s.channel) tags.push('maintien')
-    if (s.grapple) tags.push('grappin')
+    if (s.slow) tags.push('ralenti')
     if (s.arrows && s.arrows > 1) tags.push(`${s.arrows} flèches`)
     return tags.length ? `${base} (${tags.join(', ')})` : base
   }
@@ -251,6 +251,9 @@ export class SkillEquipScene extends Phaser.Scene {
       if (s.passive?.def) parts.push(`+${s.passive.def} DÉF`)
       if (s.passive?.attackSpeed) parts.push(`+${s.passive.attackSpeed} vit. att.`)
       if (s.passive?.hpRegenPerSec) parts.push(`+${s.passive.hpRegenPerSec} PV/s régén`)
+      if (s.passive?.energyRegenPerSec) parts.push(`+${s.passive.energyRegenPerSec} énergie/s`)
+      if (s.passive?.moveSpeedPct) parts.push(`+${Math.round(s.passive.moveSpeedPct * 100)}% vitesse`)
+      if (s.passive?.jumpBoostPct) parts.push(`+${Math.round(s.passive.jumpBoostPct * 100)}% saut`)
       panel.add(this.add.text(left, y, 'Passif — toujours actif une fois appris (hors slots)', { fontSize: '13px', color: '#ce93d8' }).setOrigin(0, 0))
       y += 20
       panel.add(this.add.text(left, y, `Bonus par rang : ${parts.join('   ') || '—'}${rank > 0 ? `   (rang ${rank})` : ''}`, { fontSize: '13px', color: '#e1bee7', fontStyle: 'bold' }).setOrigin(0, 0))
