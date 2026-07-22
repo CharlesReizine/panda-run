@@ -439,6 +439,11 @@ export class LevelScene extends Phaser.Scene {
         const col = this.add.tileSprite(xPx, topPx, wPx, heightPx, 'waterfall').setOrigin(0, 0).setDepth(-2).setTint(0xa9e8ff).setAlpha(0.82)
         this.cascadeSprites.push(col)
         this.cascadeRects.push(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))
+        // BARREAUX D'ÉCHELLE superposés à la colonne : on réutilise le rendu des échelles normales
+        // (barreaux + montants, texture 'ladder') tuilé sur toute la largeur, pour signifier clairement
+        // « ON PEUT REMONTER ICI ». STATIQUES (une échelle ne coule pas), posés PAR-DESSUS l'eau claire
+        // qui, elle, défile (cascadeSprites) → la chute reste lisible, la grimpe est explicite.
+        this.add.tileSprite(xPx, topPx, wPx, heightPx, 'ladder').setOrigin(0, 0).setDepth(-1).setAlpha(0.9)
         // HAUT ONDULÉ : au lieu d'une ligne droite, un chapelet de bulbes d'écume qui montent et
         // descendent en décalé → vagues + remous animés en tête de cascade (là où l'eau jaillit et
         // où l'on émerge). Chaque bulbe oscille en boucle autour du bord supérieur.
@@ -532,12 +537,14 @@ export class LevelScene extends Phaser.Scene {
 
     // échelles : texture répétée (UN TileSprite par échelle) + zone d'escalade (via ladderRects)
     for (const l of this.levelDef.ladders ?? []) {
-      this.add.tileSprite(l.x * TILE, l.y * TILE, TILE, l.h * TILE, 'ladder').setOrigin(0, 0).setDepth(-1)
+      // VISUEL élargi de +50 % (1,5 tuile, centré sur l'échelle) pour rester cohérent avec la zone
+      // d'accroche élargie ci-dessous — le montant ne paraît plus étriqué sous une fenêtre plus large.
+      this.add.tileSprite(l.x * TILE - TILE / 4, l.y * TILE, TILE * 1.5, l.h * TILE, 'ladder').setOrigin(0, 0).setDepth(-1)
       // on descend d'une tuile sous le bas de l'échelle pour pouvoir l'attraper depuis le sol
-      // zone d'accroche large de 2 tuiles (centrée sur l'échelle) : plus de décrochage au moindre
-      // décalage (avant : 1 tuile, testée sur le centre du panda → « casse-gueule »)
+      // zone d'accroche ÉLARGIE de +50 % : demi-largeur 1,5 tuile (avant : 1 tuile), soit 3 tuiles
+      // centrées sur l'échelle → on ne décroche plus involontairement en montant (retour joueur R180).
       this.ladderRects.push(new Phaser.Geom.Rectangle(
-        l.x * TILE - TILE / 2, l.y * TILE, TILE * 2, (l.h + 1) * TILE,
+        l.x * TILE - TILE, l.y * TILE, TILE * 3, (l.h + 1) * TILE,
       ))
     }
 

@@ -16,8 +16,10 @@ import {
   suspendedWaterBanks,
   deadEndSurfaces,
   caveCeilingClearance,
+  shortCascades,
 } from '../../src/core/level-validator'
 import { MAX_LADDER_TILES, groundRowFor } from '../../src/core/platforming'
+import { MIN_CASCADE_TILES } from '../../src/data/level-modules'
 import { MONSTERS } from '../../src/data/monsters'
 
 // Niveaux construits par le KIT DE MODULES (docs/level-module-kit.md) : ils doivent respecter les
@@ -710,6 +712,42 @@ describe('R171 — départs variés, lac→cascade→plateau, motifs verticaux, 
     }
     // au moins un plongeoir « saut de la foi » culmine bien plus haut que l’ancien perchoir (+7)
     expect(maxPerch, `perchoir max = ${maxPerch}`).toBeGreaterThanOrEqual(9)
+  })
+})
+
+// ─── R180 — CASCADES REMONTABLES ≥ 4× LA TAILLE DU PANDA (retour joueur : trop courtes = chiantes) ─
+// Une cascade doit se GRIMPER, pas se franchir d'un saut : sa dénivelée jouable doit atteindre AU
+// MOINS MIN_CASCADE_TILES rangées (= 4× le panda, ≈ 2 tuiles → 8). Verrouillé sur tous les niveaux.
+describe('R180 — cascades remontables assez hautes (≥ 4× le panda)', () => {
+  it(`MIN_CASCADE_TILES ≥ 8 rangées (4× la taille du panda ≈ 2 tuiles)`, () => {
+    expect(MIN_CASCADE_TILES).toBeGreaterThanOrEqual(8)
+  })
+
+  for (const id of MODULAR_IDS) {
+    it(`${id} — aucune cascade plus courte que ${MIN_CASCADE_TILES} rangées`, () => {
+      const bad = shortCascades(LEVELS[id]!, MIN_CASCADE_TILES)
+      expect(bad, `${id}: cascades trop courtes → ${JSON.stringify(bad)}`).toEqual([])
+    })
+  }
+
+  it('cascade synthétique TROP COURTE (berge à 3 rangées sous le sommet) → rejetée', () => {
+    const bad: LevelDef = {
+      id: 'synth-cascade-courte', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],
+      platforms: [{ x: 0, y: 10, w: 5 }], // berge bordant la colonne (x+w=5=cascade.x), 3 rangées SOUS le sommet
+      hazards: [{ kind: 'water', x: 5, w: 2, top: 7, h: 20, water: 'cascade' }],
+    }
+    const b = shortCascades(bad, MIN_CASCADE_TILES)
+    expect(b).toHaveLength(1)
+    expect(b[0]!.climb).toBe(3)
+  })
+
+  it('cascade synthétique assez HAUTE (berge à 9 rangées sous le sommet) → acceptée', () => {
+    const ok: LevelDef = {
+      id: 'synth-cascade-haute', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],
+      platforms: [{ x: 0, y: 16, w: 5 }], // berge 9 rangées sous le sommet → climb 9 ≥ 8
+      hazards: [{ kind: 'water', x: 5, w: 2, top: 7, h: 20, water: 'cascade' }],
+    }
+    expect(shortCascades(ok, MIN_CASCADE_TILES)).toEqual([])
   })
 })
 

@@ -191,6 +191,27 @@ export function openWaterHazards(level: LevelDef): WaterProblem[] {
     .map((h) => ({ x: h.x, w: h.w, water: h.water }))
 }
 
+// Cascades REMONTABLES trop COURTES : une cascade doit se GRIMPER, pas se franchir d'un saut. On
+// exige que sa dénivelée jouable atteigne AU MOINS `minTiles` rangées (= 4× la taille du panda, cf.
+// MIN_CASCADE_TILES). La dénivelée = distance verticale entre le SOMMET de la colonne (top) et la
+// berge/pierre marchable qui la BORDE en contrebas (bord gauche x-1 ou bord droit x+w). Une cascade
+// entièrement cernée d'eau (rideau qui plonge dans un bassin) n'a pas de berge latérale → on retombe
+// sur la hauteur de sa colonne d'eau (h). Une cascade plus courte est signalée (montée « chiante »).
+export interface ShortCascadeProblem { x: number; w: number; top: number; climb: number }
+export function shortCascades(level: LevelDef, minTiles: number): ShortCascadeProblem[] {
+  const surfaces: Plat[] = [...level.platforms, ...(level.bridges ?? [])]
+  const out: ShortCascadeProblem[] = []
+  for (const h of level.hazards ?? []) {
+    if (h.kind !== 'water' || h.water !== 'cascade') continue
+    const top = h.top ?? 0
+    // footings marchables qui BORDENT la colonne (jointifs au bord gauche/droit) et sont EN CONTREBAS
+    const borders = surfaces.filter((p) => (p.x + p.w === h.x || p.x === h.x + h.w) && p.y > top)
+    const climb = borders.length ? Math.max(...borders.map((p) => p.y)) - top : (h.h ?? 0)
+    if (climb < minTiles) out.push({ x: h.x, w: h.w, top, climb })
+  }
+  return out
+}
+
 // Monstres TERRESTRES (non aériens) mal posés : un spawn avec y doit reposer sur une surface
 // (plateforme) présente à cette rangée, assez large pour patrouiller (≥ minWidth tuiles). Les
 // oiseaux (aerial) volent → exclus. Les spawns sans y sont au sol (toujours valides).
