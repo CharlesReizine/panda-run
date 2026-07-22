@@ -21,7 +21,7 @@ export interface ClassDef {
   skillIds: string[]
 }
 
-export type SkillKind = 'melee' | 'projectile' | 'aoe' | 'heal' | 'charge' | 'dive' | 'buff' | 'zone' | 'trap' | 'lightning' | 'passive'
+export type SkillKind = 'melee' | 'projectile' | 'aoe' | 'heal' | 'charge' | 'dive' | 'buff' | 'zone' | 'trap' | 'lightning' | 'passive' | 'channel' | 'aura'
 
 export interface SkillDef {
   id: string
@@ -39,6 +39,33 @@ export interface SkillDef {
   fear?: { durationMs: number } // folie enragée : aura rouge sang + terreur sur les mobs de niveau ≤ joueur (fuite lente + -50% DÉF), hors boss
   minLevel?: number // niveau joueur minimum pour débloquer/monter ce skill (défaut : aucun)
   requires?: string // id d'un skill prérequis à débloquer avant celui-ci (défaut : aucun)
+  // Rang MAXIMAL de ce skill (défaut MAX_SKILL_RANK = 5). Les gros sorts SIGNATURE (nukes / ultimes)
+  // montent jusqu'à 10 : le gain par rang est alors plus DOUX (interpolation sur 9 paliers, voir
+  // skillDamageMult). Les petits sorts restent à 5.
+  maxRank?: number
+  // ── Mécaniques d'entrée (maintien) ───────────────────────────────────────────
+  // ESTOC RAPIDE (sabreur) : pas de cooldown réel (cooldownMs ~1), mais coût mana ÉLEVÉ par coup —
+  // spam à la ressource. `manaCost` force le coût d'énergie (sinon dérivé du multiplicateur).
+  spam?: boolean
+  manaCost?: number
+  // CHARGE (mage) : maintenir CHARGE l'attaque ; relâchée chargée = très puissante, relâchée tôt =
+  // plus faible. La puissance interpole entre CHARGE_MIN_MULT et 1 selon la fraction de charge.
+  chargeable?: boolean
+  // CANALISÉ (maintien) : tant que le bouton est tenu, l'effet se répète (ticks) et draine le mana ;
+  // le joueur peut se DÉPLACER. `tall` = le jet couvre HAUT + BAS (lance-flammes du sorcier).
+  channel?: { tickMs: number; manaPerTick: number; tall?: boolean }
+  // AURA OFFENSIVE (mage — aura d'épines) : blesse en continu tout ennemi proche tant qu'elle dure.
+  aura?: { tickMs: number; durationMs: number; radius: number }
+  // DÉVOTION (chevalier) : buff défensif — réduit les dégâts SUBIS pendant la durée (dmgTakenMult<1).
+  guard?: { dmgTakenMult: number; durationMs: number }
+  // FAILLE DU NÉANT (sorcier) : zone courte portée qui ASPIRE puis TUE INSTANTANÉMENT les ennemis
+  // « faibles » (tout sauf boss/élite, et de niveau < joueur). Boss/élites/mobs ≥ niveau = poussés.
+  voidRift?: boolean
+  lance?: boolean // CHARGE LANCIÈRE (chevalier) : trait perçant en ligne
+  storm?: boolean // TEMPÊTE FOUDROYANTE (sorcier) : nuke d'orage sur zone
+  blizzard?: boolean // BLIZZARD (sorcier) : nuke de glace sur zone
+  grapple?: boolean // FLÈCHE-GRAPPIN (archer) : s'accroche à une plateforme devant/au-dessus et TRACTE le joueur
+  falconBlitz?: boolean // ASSAUT DU FAUCON (chasseur) : le faucon fond en coups multiples
   // ── Archer / Chasseur ──────────────────────────────────────────────────────
   arrows?: number // projectile : nombre de flèches tirées ensemble (double flèche = 2)
   homing?: boolean // projectile : flèche AUTOGUIDÉE — traverse murs/terrain et enchaîne l'ennemi le plus proche non encore touché (nombre de cibles = rang du skill), dans une portée max ~largeur d'écran

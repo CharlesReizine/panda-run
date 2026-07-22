@@ -38,21 +38,33 @@ export class FlameWall extends Phaser.Physics.Arcade.Image {
     scene.tweens.add({ targets: glow, alpha: 0.22, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
     this.embers.push(base, glow)
 
-    // colonnes de flammes montantes : corps OPAQUE (orange/rouge, blend normal → reste vif sur
-    // fond clair) + cœur ADD jaune vif par-dessus. Dense sur toute la largeur du mur.
+    // REFONTE FLAMMES : nappe illustrée fx-mur-de-flamme qui ondule sur toute la largeur (si dispo).
+    const hasSprite = scene.textures.exists('fx-mur-de-flamme')
+    if (hasSprite) {
+      const sheet = scene.add.image(this.x, this.groundY, 'fx-mur-de-flamme').setOrigin(0.5, 1).setDepth(5)
+        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.92).setDisplaySize(this.wallWidth, this.wallHeight)
+      scene.tweens.add({ targets: sheet, scaleY: sheet.scaleY * 1.08, alpha: 0.72, duration: 260, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+      this.embers.push(sheet)
+    }
+
+    // colonnes de flammes montantes (rangée de colonnes de feu + braises) par-dessus la nappe :
+    // corps OPAQUE orange/rouge + cœur ADD jaune vif + braise fugace. Dense sur toute la largeur.
     this.flameTimer = scene.time.addEvent({
-      delay: 26, loop: true, callback: () => {
+      delay: 24, loop: true, callback: () => {
         if (!this.active) return
         const fx = this.x + Phaser.Math.FloatBetween(-this.wallWidth / 2, this.wallWidth / 2)
         const bodyCol = Phaser.Math.RND.pick([0xff7043, 0xff5252, 0xf4511e, 0xe64a19])
         const baseY = this.groundY - Phaser.Math.Between(0, 8)
-        const w = Phaser.Math.Between(8, 14), h = Phaser.Math.Between(20, 34)
+        const w = Phaser.Math.Between(8, 14), h = Phaser.Math.Between(22, 38)
         const rise = Phaser.Math.Between(this.wallHeight * 0.55, this.wallHeight)
         const dur = Phaser.Math.Between(360, 580)
         const flame = scene.add.rectangle(fx, baseY, w, h, bodyCol).setDepth(5).setAlpha(0.95).setOrigin(0.5, 1)
         scene.tweens.add({ targets: flame, y: baseY - rise, scaleX: 0.3, scaleY: 0.4, alpha: 0, duration: dur, ease: 'Cubic.out', onComplete: () => flame.destroy() })
         const core = scene.add.rectangle(fx, baseY, w * 0.5, h * 0.7, 0xffee58).setBlendMode(Phaser.BlendModes.ADD).setDepth(6).setAlpha(0.95).setOrigin(0.5, 1)
         scene.tweens.add({ targets: core, y: baseY - rise * 0.9, scaleX: 0.3, scaleY: 0.4, alpha: 0, duration: dur, ease: 'Cubic.out', onComplete: () => core.destroy() })
+        // braise qui monte et scintille
+        const ember = scene.add.circle(fx, baseY - Phaser.Math.Between(0, 20), Phaser.Math.Between(1, 3), 0xffcc80).setBlendMode(Phaser.BlendModes.ADD).setDepth(6).setAlpha(0.9)
+        scene.tweens.add({ targets: ember, y: ember.y - Phaser.Math.Between(30, 70), x: fx + Phaser.Math.Between(-10, 10), alpha: 0, duration: Phaser.Math.Between(500, 800), ease: 'Sine.out', onComplete: () => ember.destroy() })
       },
     })
 

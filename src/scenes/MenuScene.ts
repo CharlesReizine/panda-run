@@ -1,10 +1,9 @@
 import Phaser from 'phaser'
 import { getPlayer } from '../state'
 import { save } from '../core/save'
-import { skillsOf } from '../data/skills'
+import { skillsOf, maxRankOf } from '../data/skills'
 import { MATERIALS } from '../data/materials'
 import { computeStats } from '../core/stats'
-import { MAX_SKILL_RANK } from '../core/player-state'
 
 export class MenuScene extends Phaser.Scene {
   constructor() { super('Menu') }
@@ -34,12 +33,12 @@ export class MenuScene extends Phaser.Scene {
       const equippedAt = p.equippedSkills.indexOf(s.id)
       const icon = this.add.image(40, y + 10, `skill-${s.id}`).setDisplaySize(34, 34)
       if (!unlocked) icon.setAlpha(0.35)
-      const rankTxt = unlocked ? `  Nv ${rank}/${MAX_SKILL_RANK}` : ''
+      const rankTxt = unlocked ? `  Nv ${rank}/${maxRankOf(s)}` : ''
       this.add.text(64, y, `${s.name}${rankTxt}`, { fontSize: '15px', color: unlocked ? '#ffffff' : '#78909c' })
       if (equippedAt >= 0) this.add.text(64, y + 20, `équipé — slot ${equippedAt + 1}`, { fontSize: '11px', color: '#80cbc4' })
 
       // bouton investir un point (débloque au rang 1, puis monte le rang)
-      if (p.skillPoints > 0 && rank < MAX_SKILL_RANK) {
+      if (p.skillPoints > 0 && rank < maxRankOf(s)) {
         btn(300, y, unlocked ? '+1 pt' : 'Débloquer', 0x8d6e00, () => {
           p.skillPoints--; p.skillLevels[s.id] = rank + 1; save(p); this.render()
         })

@@ -2,10 +2,10 @@ import Phaser from 'phaser'
 import { LevelScene, TILE } from './LevelScene'
 import type { LevelDef } from '../data/levels'
 import { CLASSES } from '../data/classes'
-import { SKILLS } from '../data/skills'
+import { SKILLS, maxRankOf } from '../data/skills'
 import { MONSTERS } from '../data/monsters'
 import { Enemy } from '../entities/Enemy'
-import { newPlayer, MAX_SKILL_RANK, type PlayerState } from '../core/player-state'
+import { newPlayer, type PlayerState } from '../core/player-state'
 import { getPlayer, setPlayer } from '../state'
 import type { ClassId } from '../core/types'
 import { audio } from '../audio/audio-engine'
@@ -74,7 +74,7 @@ export class TrainingScene extends LevelScene {
     p.potions = 99
     const ids = CLASSES[classId].skillIds
     p.skillLevels = {}
-    for (const id of ids) p.skillLevels[id] = MAX_SKILL_RANK
+    for (const id of ids) p.skillLevels[id] = maxRankOf(SKILLS[id]!)
     // On équipe les 4 premiers skills ACTIFS (castables) de la classe : les passifs (double-saut,
     // régén, vol arcanique, réflexes…) ne sont JAMAIS équipés — sur les slots ils donneraient des
     // slots morts. Filtrer garantit 4 skills utilisables quel que soit l'ordre de l'arbre.

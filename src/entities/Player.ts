@@ -115,6 +115,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // (x, y, hauteur de chute) → LevelScene fait l'explosion proportionnelle à la hauteur.
   diving = false
   private diveStartY = 0
+  // FLÈCHE-GRAPPIN (archer) : traction verrouillée vers une plateforme accrochée. Pendant la
+  // traction, gravité coupée et contrôles ignorés (comme le plongeon) ; s'arrête à l'arrivée.
+  private grappling = false
+  private grappleTX = 0
+  private grappleTY = 0
+  private grappleUntil = 0
   // VOL DU MAGE : actif tant qu'on maintient le saut en l'air (skill appris + énergie > 0). Gravité
   // coupée pendant le vol ; l'énergie chute vite (voir updateFlight). flightFxAt limite le débit des
   // étincelles arcaniques sous le panda pendant le vol.
@@ -162,6 +168,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // fractionnaires. La régén ne coule que hors combat (quelques secondes après le dernier coup).
   private lastDamagedAt = -99999
   private regenAccum = 0
+  // Dévotion (chevalier) : garde sacrée temporaire qui RÉDUIT les dégâts subis (guardMult < 1)
+  // + aura bleue de bouclier suivie. Purement défensif.
+  private guardUntil = 0
+  private guardMult = 1
+  private guardAura: Phaser.GameObjects.Image | null = null
+  private guardTween: Phaser.Tweens.Tween | null = null
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, `panda-${getPlayer().classId}`)
@@ -298,6 +310,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.auraImage.setPosition(this.x, this.y)
       }
     }
+    // aura de Dévotion (bouclier bleu) : suit le panda tant que la garde tient, puis s'éteint.
+    if (this.guardAura) {
+      if (this.scene.time.now >= this.guardUntil) {
+        this.guardTween?.remove(); this.guardTween = null
+        this.guardAura.destroy(); this.guardAura = null
+        this.guardMult = 1
+      } else {
+        this.guardAura.setPosition(this.x, this.y)
+      }
+    }
     // aura de rage (Folie enragée) : suit le panda tant que la furie dure, puis s'éteint et rend
     // sa teinte normale au panda.
     if (this.rageAura) {
@@ -359,6 +381,27 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     return this.scene.time.now < this.buffUntil ? this.buffMult : 1
   }
 
+  // Dévotion (chevalier) : réduit les dégâts SUBIS pendant durationMs (mult < 1) + aura de bouclier.
+  applyGuard(mult: number, durationMs: number, color = 0x64b5f6) {
+    this.guardMult = mult
+    this.guardUntil = this.scene.time.now + durationMs
+    if (!this.guardAura) {
+      this.guardAura = this.scene.add.image(this.x, this.y, 'ring')
+        .setTint(color).setDepth(this.depth - 1).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.5).setScale(1.9)
+      this.guardTween = this.scene.tweens.add({
+        targets: this.guardAura, scale: 2.4, alpha: 0.8,
+        duration: 520, yoyo: true, repeat: -1, ease: 'Sine.inOut',
+      })
+    } else {
+      this.guardAura.setTint(color)
+    }
+  }
+
+  // multiplicateur appliqué aux dégâts REÇUS (Dévotion) ; 1 hors garde
+  private incomingMult(): number {
+    return this.scene.time.now < this.guardUntil ? this.guardMult : 1
+  }
+
   destroy(fromScene?: boolean) {
     this.scene?.events?.off(Phaser.Scenes.Events.POST_UPDATE, this.syncOverlays, this)
     this.swingTween?.remove()
@@ -372,6 +415,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.rageTween?.remove()
     this.rageBlink?.remove()
     this.rageAura?.destroy()
+    this.guardTween?.remove()
+    this.guardAura?.destroy()
     super.destroy(fromScene)
   }
 
@@ -428,6 +473,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // PLONGEON en cours : piqué vertical verrouillé, aucun autre contrôle jusqu'à l'impact.
     if (this.diving) { this.updateDive(body); return }
+
+    // GRAPPIN en cours : traction verrouillée vers la plateforme accrochée, contrôles ignorés.
+    if (this.grappling) { this.updateGrapple(body); return }
 
     // CHARGE AÉRIENNE : figé en hauteur le temps du windup (gravité coupée, immobile), aucun
     // autre contrôle. Relâché par endChargeLock() → la gravité reprend et le panda retombe.
@@ -726,6 +774,34 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
   }
 
+  // Flèche-grappin : accroche une plateforme (tx, ty) et TRACTE le panda dessus. Gravité coupée,
+  // contrôles suspendus jusqu'à l'arrivée (ou expiration de sécurité).
+  startGrapple(tx: number, ty: number) {
+    this.grappling = true
+    this.grappleTX = tx
+    this.grappleTY = ty
+    this.grappleUntil = this.scene.time.now + 700
+    this.facing = tx >= this.x ? 1 : -1
+    this.setFlipX(this.facing === -1)
+    ;(this.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
+  }
+
+  private updateGrapple(body: Phaser.Physics.Arcade.Body) {
+    body.setAllowGravity(false)
+    const dx = this.grappleTX - this.x, dy = this.grappleTY - this.y
+    const d = Math.hypot(dx, dy)
+    if (d < 18 || this.scene.time.now >= this.grappleUntil) {
+      this.grappling = false
+      body.setAllowGravity(true)
+      this.setVelocity(0, 0)
+      this.jumpsUsed = 0
+      return
+    }
+    const SP = 900
+    this.setVelocity((dx / d) * SP, (dy / d) * SP)
+    if (!this.attacking) this.play(this.anim('jump'), true)
+  }
+
   // Épée enflammée : embrase la lame pour un temps donné → flammes visibles sur l'arme et
   // brûlure appliquée par les coups (test isFlaming côté LevelScene).
   applyFlameBuff(durationMs: number) {
@@ -764,6 +840,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   takeDamage(amount: number) {
+    amount = Math.max(0, Math.round(amount * this.incomingMult())) // Dévotion : dégâts subis réduits
     this.hp = Math.max(0, this.hp - amount)
     this.lastDamagedAt = this.scene.time.now // suspend la régén passive un court instant (hors combat)
     this.setTint(0xff5555)

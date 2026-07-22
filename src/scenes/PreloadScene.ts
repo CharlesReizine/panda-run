@@ -52,18 +52,29 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'rayon-arcanique': { color: 0xba68c8, glyph: 'ray' },
   'tir-instinctif': { color: 0xd7a86e, glyph: 'quickshot' },
   'tir-en-cloche': { color: 0x9ccc65, glyph: 'lob' },
+  'aura-epines': { color: 0xb388ff, glyph: 'aura' },
   // Chevalier
   'jugement-royal': { color: 0xffd700, glyph: 'sword' },
   'garde-imperiale': { color: 0xffe082, glyph: 'target' },
   'sceau-du-heaume': { color: 0xffca28, glyph: 'wave' },
+  'charge-lanciere': { color: 0xffd54f, glyph: 'thrust' },
+  'grand-croix': { color: 0xfff3c0, glyph: 'cross' },
+  'epee-fantome': { color: 0xd0bcff, glyph: 'swordx' },
+  'devotion': { color: 0x64b5f6, glyph: 'target' },
   // Sorcier
   'cataclysme': { color: 0xff5252, glyph: 'meteors' },
   'faille-du-neant': { color: 0x7e57c2, glyph: 'ray' },
   'benediction-du-panda': { color: 0x81c784, glyph: 'heart' },
+  'lance-flammes': { color: 0xff7043, glyph: 'fireball' },
+  'tempete-foudroyante': { color: 0x82b1ff, glyph: 'bolt' },
+  'blizzard': { color: 0x4dd0e1, glyph: 'snow' },
   // Chasseur
   'fleche-mortelle': { color: 0x448aff, glyph: 'arrow' },
   'nuee-de-fleches': { color: 0xa5d6a7, glyph: 'rain' },
   'tir-du-faucon': { color: 0xffb74d, glyph: 'boomarrow' },
+  'mitraillette': { color: 0xffca28, glyph: 'quickshot' },
+  'blitz-faucon': { color: 0xffb74d, glyph: 'arrow2' },
+  'fleche-grappin': { color: 0x80cbc4, glyph: 'arrow2' },
 }
 
 type ClassId = 'novice' | 'swordsman' | 'mage' | 'archer' | 'chevalier' | 'sorcier' | 'chasseur'
@@ -117,6 +128,14 @@ const BG_PNG = new Set<string>(['epave-1'])
 // sans crash (aucune texture créée) et LevelScene.addFish retombe sur le cercle rouge de repli.
 const FISH_IDS = ['poisson', 'poisson-tropical', 'piranha'] as const
 
+// Sprites d'effet de sort (public/art/fx-<id>.png) câblés sur les sorts de la refonte. Chargés en
+// PRELOAD sous la clé fx-<id> ; consommés par LevelScene / FlameWall (test d'existence à l'usage).
+const FX_SPRITES = [
+  'faille-neant', 'tempete', 'blizzard', 'lance-flammes', 'mur-de-flamme', 'aura-epines',
+  'grand-croix', 'tir-faucon', 'blitz-faucon', 'meteore', 'fleche-grappin', 'fleche-enflammee',
+  'mitraillette',
+] as const
+
 // gabarit d'illustration : les boss, MVP et gardiens sont dessinés plus grands (≈76×82) que
 // les monstres normaux (≈40×46), comme le faisait drawMonster.
 const isBigArt = (m: MonsterDef): boolean => !!m.boss || !!m.mvp || m.id.startsWith('gardien-')
@@ -160,6 +179,10 @@ export class PreloadScene extends Phaser.Scene {
     // icônes d'objet (public/art/item-<id>.png, fond transparent) : une par entrée d'ITEMS,
     // rognées à leur boîte englobante en create() → textures item-<id> (boutiques, forge, inventaire).
     for (const id of Object.keys(ITEMS)) this.load.image(`itemart-${id}`, `art/item-${id}.png`)
+    // Effets de sorts illustrés (public/art/fx-<id>.png) : utilisés directement comme visuel des sorts
+    // correspondants (composés/animés en scène). Best-effort : si un fichier manque, le sort retombe
+    // sur son visuel procédural (test d'existence de texture à l'usage).
+    for (const id of FX_SPRITES) this.load.image(`fx-${id}`, `art/fx-${id}.png`)
   }
 
   // Détoure (fond uni des bords → transparent, flood-fill) puis rogne une illustration chargée

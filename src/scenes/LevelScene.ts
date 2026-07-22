@@ -18,7 +18,7 @@ import { basicAttackCooldownFactor } from '../core/stats'
 import { save } from '../core/save'
 import { CooldownTracker, energyCostOf } from '../core/skill-executor'
 import { ENERGY_ON_BASIC_HIT } from '../entities/Player'
-import { SKILLS } from '../data/skills'
+import { SKILLS, skillDamageMult, CHARGE_MIN_MULT } from '../data/skills'
 import { hpRegenPerSec } from '../core/stats'
 import { rollDrops, rollChestRareItem } from '../core/loot'
 import { recordKill } from '../core/player-state'
@@ -37,6 +37,9 @@ const BIOME_TRACKS: Record<string, MusicTrack> = {
 
 // largeur de la barre de vie du boss (centrée sous son nom)
 const BOSS_BAR_W = 440
+
+// Durée (ms) pour charger une attaque chargeable à FOND (relâchée avant = plus faible).
+const CHARGE_FULL_MS = 850
 
 // Plongée sous l'eau : le panda peut s'enfoncer sous la surface (traversée verticale), mais tant
 // que sa TÊTE reste immergée il retient son souffle un court instant (apnée) puis se noie
@@ -132,6 +135,16 @@ export class LevelScene extends Phaser.Scene {
     ui: Phaser.GameObjects.GameObject[]
     cancelAt: { x: number; y: number }
   } | null = null
+
+  // MAINTIEN (canalisé / chargé) : un seul sort tenu à la fois. La source d'entrée (touche 1-4 ou
+  // pointeur du bouton de slot) est capturée au lancement pour savoir quand le bouton est RELÂCHÉ.
+  private held: {
+    slot: number; skill: SkillDef; mode: 'channel' | 'charge'
+    key?: Phaser.Input.Keyboard.Key; pointer?: Phaser.Input.Pointer
+    startedAt: number; nextTickAt: number
+    fx?: Phaser.GameObjects.GameObject[]
+  } | null = null
+  private slotKeys: (Phaser.Input.Keyboard.Key | undefined)[] = []
 
   // MODE ENTRAÎNEMENT (TrainingScene) : quand vrai, le joueur ne subit aucun dégât (hitPlayer no-op),
   // aucune porte de sortie n'est posée, et le HUD est lancé en mode entraînement. Faux en jeu normal.
@@ -585,6 +598,11 @@ export class LevelScene extends Phaser.Scene {
     for (const [key, slot] of [['ONE', 0], ['TWO', 1], ['THREE', 2], ['FOUR', 3]] as const) {
       this.input.keyboard!.on(`keydown-${key}`, () => this.castSkill(slot))
     }
+    // objets Key persistants pour tester si une touche de slot est TENUE (canalisé / chargé)
+    this.slotKeys = [
+      this.input.keyboard!.addKey('ONE'), this.input.keyboard!.addKey('TWO'),
+      this.input.keyboard!.addKey('THREE'), this.input.keyboard!.addKey('FOUR'),
+    ]
     // ÉCHAP annule une visée de zone en cours (sans rien consommer)
     this.input.keyboard!.on('keydown-ESC', () => { if (this.aim) this.cancelAim() })
 
@@ -637,6 +655,7 @@ export class LevelScene extends Phaser.Scene {
       this.events.off('prop-broken', this.onPropBroken, this)
       this.events.off(Phaser.Scenes.Events.RESUME, this.resumeWorld, this)
       this.endAim() // sort proprement d'une éventuelle visée de zone en cours
+      this.endHold() // coupe un sort maintenu (canalisé / chargé) en cours
       this.hitStopTimer?.remove()
       this.hitStopTimer = null
       this.bossCtrl?.destroy()
@@ -1498,8 +1517,15 @@ export class LevelScene extends Phaser.Scene {
     if (isMageType || isArcherType) {
       // attaque de base à distance, HORIZONTALE (sens du regard), sans gravité : petite boule
       // de feu bleue (mage/sorcier) ou flèche (archer/chasseur). S'arrête au 1er ennemi ou à ~440px.
-      const proj = this.spawnPlayerProjectile(this.player.stats.atk * this.player.outgoingMult(), 440)
+      const atk = this.player.stats.atk * this.player.outgoingMult()
+      const proj = this.spawnPlayerProjectile(atk, 440)
       if (isMageType) { proj.setTexture('fx-fireball').clearTint().setScale(1.3); this.fireballShimmer(proj, 1.3) }
+      else if (this.player.isFlaming()) {
+        // Flèche enflammée (buff chasseur) : toutes les flèches s'embrasent et brûlent la cible.
+        proj.setTexture(this.textures.exists('fx-fleche-enflammee') ? 'fx-fleche-enflammee' : 'fx-arrow').clearTint().setScale(1.3)
+        proj.burn = { dmgPerTick: atk * 0.18, durationMs: 2400 }
+        this.attachFlameTrail(proj)
+      }
       else proj.setTexture('fx-arrow').clearTint().setScale(1.2)
     } else {
       this.slashFx(this.player.x + this.player.facing * 30, this.player.y, 60, 0xffffff)
@@ -1651,6 +1677,14 @@ export class LevelScene extends Phaser.Scene {
 
   // couleur d'effet selon l'élément du skill
   private skillColor(id: string): number {
+    if (id === 'lance-flammes') return 0xff7043
+    if (id === 'blizzard') return 0x4dd0e1
+    if (id === 'tempete-foudroyante') return 0x82b1ff
+    if (id === 'faille-du-neant') return 0x7e57c2
+    if (id === 'aura-epines') return 0xb388ff
+    if (id === 'grand-croix') return 0xfff3c0
+    if (id === 'epee-fantome') return 0xd0bcff
+    if (id === 'devotion') return 0x64b5f6
     if (id.includes('feu') || id.includes('meteore')) return 0xff7043
     if (id.includes('givre')) return 0x4dd0e1
     if (id.includes('eclair')) return 0xfff176
@@ -1747,6 +1781,7 @@ export class LevelScene extends Phaser.Scene {
 
   castSkill(slot: number) {
     if (this.player.hp <= 0) return
+    if (this.held) return // un seul sort maintenu (canalisé / chargé) à la fois
     const p = getPlayer()
     const skillId = p.equippedSkills[slot]
     if (!skillId || !this.cooldowns.canUse(slot, this.time.now)) return
@@ -1755,7 +1790,10 @@ export class LevelScene extends Phaser.Scene {
     // Visée de zone : on n'engage rien tout de suite — on entre en mode ciblage, l'énergie et
     // le cooldown ne sont consommés qu'à la confirmation de la zone.
     if (skill.kind === 'zone') { this.beginZoneTargeting(slot, skill); return }
-    if (!this.player.spendEnergy(energyCostOf(skill))) {
+    // CANALISÉ (maintien) / CHARGE (maintien→relâche) : on entre en mode maintenu, la consommation
+    // (mana par tick / cooldown à la fin) est gérée par le système de maintien.
+    if (skill.kind === 'channel' || skill.chargeable) { this.beginHold(slot, skill); return }
+    if (!this.player.spendEnergy(skill.manaCost ?? energyCostOf(skill))) {
       this.announceSkill('Pas assez d\'énergie', 0x4dd0e1)
       return
     }
@@ -1768,17 +1806,20 @@ export class LevelScene extends Phaser.Scene {
     const { maxHp } = this.player.stats
     const atk = this.player.stats.atk * this.player.outgoingMult()
     const color = this.skillColor(skill.id)
-    // rang investi : +25% de puissance par point au-delà du 1er
+    // rang investi : interpolation douce (skillDamageMult) — signatures jusqu'au rang 10
     const rank = p.skillLevels[skill.id] ?? 1
-    const mult = skill.multiplier * (1 + 0.25 * (rank - 1))
+    const mult = skillDamageMult(skill, rank)
     // gros coup instantané : bref gel d'impact pour le punch (charge/dive/buff gèrent le leur)
     if (mult >= 2.5 && (skill.kind === 'melee' || skill.kind === 'aoe' || skill.kind === 'projectile')) this.hitStop(75)
     if (skill.kind === 'melee') {
       this.player.playAttack()
-      if (skill.id === 'lame-ultime') {
-        // Ultime refait : lumière aveuglante + DEUX éclairs bleus diagonaux lents qui infligent
-        // les dégâts (remplace l'ancien double-arc). Ne passe pas par meleeHit.
+      if (skill.id === 'lame-ultime' || skill.id === 'epee-fantome') {
+        // Ultime (Épée fantôme du chevalier) : lumière aveuglante + DEUX éclairs bleus diagonaux
+        // lents qui infligent les dégâts. Ne passe pas par meleeHit.
         this.castSabreurUltimate(mult, color)
+      } else if (skill.id === 'grand-croix') {
+        // Grand-croix : immense croix de lumière (bras H+V) qui frappe tout sur ses axes.
+        this.castGrandCross(skill, mult, color)
       } else {
         // gros coup (rang inclus) : double croissant + tremblement de caméra
         this.slashFx(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, color, mult >= 2)
@@ -1786,6 +1827,12 @@ export class LevelScene extends Phaser.Scene {
         // Câlin brutal : une volée de cœurs s'envole autour du point d'impact
         if (skill.id === 'calin-brutal') this.heartsFx(this.player.x + this.player.facing * 30, this.player.y)
       }
+    } else if (skill.kind === 'aura') {
+      // AURA D'ÉPINES (mage) : aura offensive d'éclairs qui blesse en continu les ennemis proches.
+      this.castThornAura(skill, mult, color)
+    } else if (skill.kind === 'aoe' && skill.voidRift) {
+      // FAILLE DU NÉANT (sorcier) : aspire puis annihile les faibles, repousse les autres.
+      this.castVoidRift(skill, mult, color)
     } else if (skill.kind === 'aoe') {
       for (const obj of this.enemies.getChildren()) {
         const e = obj as Enemy
@@ -1803,6 +1850,12 @@ export class LevelScene extends Phaser.Scene {
     } else if (skill.kind === 'projectile' && skill.homing) {
       // Flèche AUTOGUIDÉE : chaîne homing à travers murs/terrain (nombre de cibles = rang).
       this.castHomingArrow(skill, atk * mult, rank, color)
+    } else if (skill.kind === 'projectile' && skill.grapple) {
+      // FLÈCHE-GRAPPIN (déplacement) : accroche une plateforme devant/au-dessus et tracte le panda.
+      this.castGrapple(skill, color)
+    } else if (skill.kind === 'projectile' && skill.falconBlitz) {
+      // ASSAUT DU FAUCON : le faucon fond sur la cible et la frappe en coups multiples.
+      this.castFalconBlitz(skill, atk * mult, color)
     } else if (skill.kind === 'projectile') {
       // skills perçants (flèche perçante / laser) : traversent TOUT sur toute la largeur visible
       // → portée forcée à au moins la largeur caméra (~960px)
@@ -1843,7 +1896,13 @@ export class LevelScene extends Phaser.Scene {
         // lumineuse (archer/chasseur) ou faisceau laser (mage/sorcier).
         proj.pierce = true
         const isArrow = archerType || skill.id.includes('fleche') || skill.id.includes('tir')
-        if (isArrow) {
+        if (skill.lance) {
+          // Charge lancière (chevalier) : long fer de lance doré + traînée d'acier ; secousse au départ.
+          proj.setTexture('fx-laser').setTint(0xffd54f).setScale(1.5)
+          this.attachSparkTrail(proj, 0xfff3c4)
+          this.lungeFx(46)
+          this.screenShake(0.006, 140)
+        } else if (isArrow) {
           proj.setTexture('fx-arrow-pierce').setTint(0x40c4ff).setScale(1.3)
           this.attachSparkTrail(proj, 0x81d4fa)
         } else {
@@ -2406,15 +2465,27 @@ export class LevelScene extends Phaser.Scene {
     })
   }
 
-  // Traînée de flammes d'une flèche embrasée : flammèches qui montent et s'éteignent dans son sillage.
+  // Traînée de flammes d'une flèche embrasée (REFONTE) : langues de feu vives qui montent + braises
+  // scintillantes dans le sillage — dégradé jaune→orange→rouge, cœur clair, effet de vraie flamme.
   private attachFlameTrail(proj: Projectile) {
+    const f = this.player.facing
     const ev = this.time.addEvent({
-      delay: 22, loop: true, callback: () => {
+      delay: 16, loop: true, callback: () => {
         if (!proj.active) { ev.remove(); return }
-        const col = Phaser.Math.RND.pick([0xffca28, 0xff7043, 0xff5252])
-        const fl = this.add.rectangle(proj.x - this.player.facing * Phaser.Math.Between(4, 14), proj.y + Phaser.Math.Between(-4, 4), 5, 9, col)
-          .setBlendMode(Phaser.BlendModes.ADD).setDepth((proj.depth ?? 0) - 1).setAlpha(0.95)
-        this.tweens.add({ targets: fl, y: fl.y - Phaser.Math.Between(10, 20), scaleY: 0.4, alpha: 0, duration: 300, onComplete: () => fl.destroy() })
+        const bx = proj.x - f * Phaser.Math.Between(2, 12)
+        const by = proj.y + Phaser.Math.Between(-3, 3)
+        // langue de feu (corps orange opaque + cœur jaune ADD) qui s'étire vers le haut en s'éteignant
+        const col = Phaser.Math.RND.pick([0xffca28, 0xff7043, 0xf4511e])
+        const flame = this.add.rectangle(bx, by, Phaser.Math.Between(5, 8), Phaser.Math.Between(10, 16), col)
+          .setDepth((proj.depth ?? 0) - 1).setAlpha(0.95).setOrigin(0.5, 1)
+        this.tweens.add({ targets: flame, y: by - Phaser.Math.Between(16, 26), scaleX: 0.3, scaleY: 0.35, alpha: 0, duration: 300, ease: 'Cubic.out', onComplete: () => flame.destroy() })
+        const core = this.add.rectangle(bx, by, 3, 8, 0xfff59d).setBlendMode(Phaser.BlendModes.ADD).setDepth((proj.depth ?? 0) + 1).setAlpha(0.95).setOrigin(0.5, 1)
+        this.tweens.add({ targets: core, y: by - Phaser.Math.Between(12, 20), scaleY: 0.3, alpha: 0, duration: 260, ease: 'Cubic.out', onComplete: () => core.destroy() })
+        // braise qui vole
+        if (Math.random() < 0.6) {
+          const ember = this.add.circle(bx, by, Phaser.Math.Between(1, 3), 0xffab40).setBlendMode(Phaser.BlendModes.ADD).setDepth((proj.depth ?? 0) - 1).setAlpha(0.9)
+          this.tweens.add({ targets: ember, x: bx - f * Phaser.Math.Between(8, 20), y: by - Phaser.Math.Between(8, 22), alpha: 0, duration: 360, onComplete: () => ember.destroy() })
+        }
       },
     })
   }
@@ -2425,7 +2496,8 @@ export class LevelScene extends Phaser.Scene {
     const b = proj.body as Phaser.Physics.Arcade.Body
     b.setAllowGravity(true)
     b.setVelocity(this.player.facing * 360, -430)
-    proj.setTexture('fx-arrow').setTint(color).setScale(1.35).setAngularVelocity(this.player.facing * 240)
+    const falconTex = skill.id === 'tir-du-faucon' && this.textures.exists('fx-tir-faucon') ? 'fx-tir-faucon' : 'fx-arrow'
+    proj.setTexture(falconTex).setTint(falconTex === 'fx-tir-faucon' ? 0xffffff : color).setScale(1.35).setAngularVelocity(this.player.facing * 240)
     this.attachFlameTrail(proj) // petite mèche fumante pendant le vol
     const boom: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (projObj) => this.doArrowExplosion(projObj as Projectile)
     this.physics.add.collider(proj, this.platforms, boom)
@@ -2558,13 +2630,15 @@ export class LevelScene extends Phaser.Scene {
     this.announceSkill(skill.name)
     const p = getPlayer()
     const rank = p.skillLevels[skill.id] ?? 1
-    const mult = skill.multiplier * (1 + 0.25 * (rank - 1))
+    const mult = skillDamageMult(skill, rank)
     const color = this.skillColor(skill.id)
     // clamp de la cible dans les bornes du monde pour rester jouable
     const cx = Phaser.Math.Clamp(x, 40, this.levelDef.widthTiles * TILE - 40)
     const cy = Phaser.Math.Clamp(y, 80, this.groundRow * TILE - 4)
     // dispatch selon la nature du sort de zone : cataclysme (ultime) > météores > mur de flamme > pluie de flèches
     if (skill.id === 'cataclysme') this.executeCataclysm(skill, cx, cy, mult, color)
+    else if (skill.storm) this.executeStorm(skill, cx, cy, mult)
+    else if (skill.blizzard) this.executeBlizzard(skill, cx, cy, mult)
     else if (skill.meteors) this.executeMeteorRain(skill, cx, cy, mult, color)
     else if (skill.wall) this.executeFlameWall(skill, cx, mult)
     else this.executeArrowRain(skill, cx, cy, mult, color)
@@ -2735,13 +2809,15 @@ export class LevelScene extends Phaser.Scene {
         const landY = cy + Phaser.Math.Between(-8, 12)
         const startY = landY - 400
         const startX = mx - f * 130 // chute en biais
-        // météore ARDENT : halo ADD + corps OPAQUE rouge/orange + cœur jaune vif (lisible sur ciel clair)
-        const meteor = this.add.container(startX, startY, [
-          this.add.circle(0, 0, 22, 0xff7043).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.55),
-          this.add.circle(0, 0, 15, 0xe64a19).setAlpha(0.98),
-          this.add.circle(0, 0, 9, 0xff7043).setAlpha(0.98),
-          this.add.circle(0, 0, 4.5, 0xffee58).setAlpha(1),
-        ]).setDepth(8)
+        // météore ARDENT : sprite fx-meteore si dispo, sinon composé procédural (halo + cœur jaune vif)
+        const meteor = this.textures.exists('fx-meteore')
+          ? this.add.image(startX, startY, 'fx-meteore').setDepth(8).setScale(1.2).setRotation(Math.atan2(landY - startY, mx - startX))
+          : this.add.container(startX, startY, [
+            this.add.circle(0, 0, 22, 0xff7043).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.55),
+            this.add.circle(0, 0, 15, 0xe64a19).setAlpha(0.98),
+            this.add.circle(0, 0, 9, 0xff7043).setAlpha(0.98),
+            this.add.circle(0, 0, 4.5, 0xffee58).setAlpha(1),
+          ]).setDepth(8)
         const trail = this.time.addEvent({
           delay: 18, loop: true, callback: () => {
             if (!meteor.active) { trail.remove(); return }
@@ -2816,6 +2892,418 @@ export class LevelScene extends Phaser.Scene {
       onComplete: () => this.tweens.add({ targets: [pillar, core], alpha: 0, scaleY: 1.15, duration: 260, onComplete: () => { pillar.destroy(); core.destroy() } }),
     })
     this.burstParticles(x, groundY - h * 0.4, 12, 0xffca28, { speed: 80, size: 6, durationMs: 400, spreadUp: true })
+  }
+
+  // ═════════════ MAINTIEN : sorts CANALISÉS (ticks + drain mana) & CHARGE (relâche) ═════════════
+
+  private isHeldDown(h: NonNullable<typeof this.held>): boolean {
+    if (h.key) return h.key.isDown
+    if (h.pointer) return h.pointer.isDown
+    return false
+  }
+
+  // Entre en mode maintenu. La source (touche de slot tenue, sinon pointeur du bouton) est capturée
+  // pour détecter le RELÂCHEMENT. Canalisé : ticks immédiats. Charge : télégraphe d'orbe.
+  private beginHold(slot: number, skill: SkillDef) {
+    const now = this.time.now
+    const key = this.slotKeys[slot]
+    const byKey = key?.isDown ?? false
+    const pointer = !byKey && this.input.activePointer.isDown ? this.input.activePointer : undefined
+    const mode: 'channel' | 'charge' = skill.kind === 'channel' ? 'channel' : 'charge'
+    this.held = { slot, skill, mode, key: byKey ? key : undefined, pointer, startedAt: now, nextTickAt: now, fx: [] }
+    audio.playSfx('skill')
+    this.announceSkill(skill.name)
+    if (mode === 'channel') this.updateHeld(now) // 1er tick immédiat (un tap = au moins une décharge)
+    else this.beginChargeFx(skill)
+  }
+
+  private updateHeld(now: number) {
+    const h = this.held
+    if (!h) return
+    if (h.mode === 'channel') {
+      if (now >= h.nextTickAt) {
+        const cfg = h.skill.channel!
+        if (!this.player.spendEnergy(cfg.manaPerTick)) { this.announceSkill('Plus d\'énergie', 0x4dd0e1); this.endHold(); return }
+        h.nextTickAt = now + cfg.tickMs
+        this.channelTick(h.skill)
+      }
+      if (!this.isHeldDown(h)) this.endHold() // bouton relâché → fin du canal
+    } else {
+      // charge : le télégraphe grandit ; on relâche à la levée du bouton
+      if (!this.isHeldDown(h)) this.releaseCharge()
+    }
+  }
+
+  // coupe proprement un maintien (canalisé) sans déclencher de relâche chargée
+  private endHold() {
+    const h = this.held
+    if (!h) return
+    this.held = null
+    h.fx?.forEach((o) => o.destroy())
+    if (h.mode === 'channel') {
+      this.cooldowns.use(h.slot, this.time.now, h.skill.cooldownMs)
+      this.game.events.emit('skill-cooldown', h.slot, this.time.now + h.skill.cooldownMs, h.skill.cooldownMs)
+    }
+  }
+
+  // Un tick de sort canalisé : mitraillette (rafale de flèches), lance-flammes (jet couvrant haut+bas),
+  // éclair (foudre frontale au contact). Le joueur peut se déplacer pendant le canal (pas de lock).
+  private channelTick(skill: SkillDef) {
+    const p = getPlayer()
+    const rank = p.skillLevels[skill.id] ?? 1
+    const atk = this.player.stats.atk * this.player.outgoingMult()
+    const dmg = atk * skillDamageMult(skill, rank)
+    const px = this.player.x, py = this.player.y, f = this.player.facing
+    if (skill.id === 'mitraillette') {
+      const off = Phaser.Math.Between(-7, 7)
+      const proj = this.spawnPlayerProjectile(dmg, skill.range, off)
+      proj.setTexture(this.player.isFlaming() ? 'fx-fleche-enflammee' : 'fx-arrow').clearTint().setScale(1.1)
+      this.mitrailletteFx(px + f * 26, py + 10, f)
+      return
+    }
+    const tall = skill.channel?.tall
+    const band = tall ? 155 : 74
+    let touched = false
+    for (const obj of this.enemies.getChildren()) {
+      const e = obj as Enemy
+      if (!e.active) continue
+      const dx = (e.x - px) * f
+      if (dx >= -22 && dx <= skill.range && Math.abs(e.y - py) <= band) {
+        e.takeDamage(physicalDamage(dmg, e.effectiveDef()))
+        if (skill.id === 'lance-flammes') e.applyBurn(atk * 0.1, 1100)
+        touched = true
+      }
+    }
+    for (const obj of this.props.getChildren()) {
+      const prop = obj as Prop
+      const dx = (prop.x - px) * f
+      if (prop.active && dx >= -22 && dx <= skill.range && Math.abs(prop.y - py) <= band) prop.takeDamage(1)
+    }
+    if (skill.id === 'lance-flammes') this.flamethrowerFx(px, py, f, skill.range)
+    else this.lightningChannelFx(px, py, f, Math.min(skill.range, 160))
+    if (touched) audio.playSfx('hit')
+  }
+
+  // Lance-flammes : jet de feu monté sur le sprite fx-lance-flammes (haut+bas), + braises fugaces.
+  private flamethrowerFx(px: number, py: number, f: 1 | -1, reach: number) {
+    if (this.textures.exists('fx-lance-flammes')) {
+      const jet = this.add.image(px + f * (reach * 0.5 + 10), py, 'fx-lance-flammes')
+        .setDepth(7).setBlendMode(Phaser.BlendModes.ADD).setFlipX(f === -1).setAlpha(0.92)
+      jet.setDisplaySize(reach, 150).setScale(jet.scaleX, jet.scaleY * Phaser.Math.FloatBetween(0.85, 1.1))
+      this.tweens.add({ targets: jet, alpha: 0, duration: 130, onComplete: () => jet.destroy() })
+    }
+    for (let i = 0; i < 3; i++) {
+      const ex = px + f * Phaser.Math.Between(30, reach)
+      const col = Phaser.Math.RND.pick([0xffca28, 0xff7043, 0xff5252])
+      const em = this.add.rectangle(ex, py + Phaser.Math.Between(-70, 70), 5, 9, col).setBlendMode(Phaser.BlendModes.ADD).setDepth(6).setAlpha(0.9)
+      this.tweens.add({ targets: em, y: em.y - Phaser.Math.Between(14, 28), alpha: 0, duration: 260, onComplete: () => em.destroy() })
+    }
+  }
+
+  // Éclair canalisé : petits arcs bleus crépitant au contact devant le mage.
+  private lightningChannelFx(px: number, py: number, f: 1 | -1, reach: number) {
+    const g = this.add.graphics().setDepth(7).setBlendMode(Phaser.BlendModes.ADD)
+    g.lineStyle(3, 0x64b5ff, 0.95).beginPath()
+    let cx = px + f * 10, cy = py
+    g.moveTo(cx, cy)
+    for (let i = 1; i <= 5; i++) { cx = px + f * (reach * i) / 5; cy = py + Phaser.Math.Between(-30, 30); g.lineTo(cx, cy) }
+    g.strokePath()
+    this.tweens.add({ targets: g, alpha: 0, duration: 120, onComplete: () => g.destroy() })
+  }
+
+  // Muzzle-flash de la mitraillette (fx-mitraillette) : éclair de bouche bref à la main.
+  private mitrailletteFx(x: number, y: number, f: 1 | -1) {
+    if (this.textures.exists('fx-mitraillette')) {
+      const m = this.add.image(x, y, 'fx-mitraillette').setDepth(7).setBlendMode(Phaser.BlendModes.ADD).setFlipX(f === -1).setScale(0.9).setAlpha(0.95)
+      this.tweens.add({ targets: m, scaleX: 1.1 * f, alpha: 0, duration: 90, onComplete: () => m.destroy() })
+    }
+    audio.playSfx('attack')
+  }
+
+  // Télégraphe de charge (boule de feu) : orbe qui enfle à la main tant qu'on maintient.
+  private beginChargeFx(skill: SkillDef) {
+    const color = this.skillColor(skill.id)
+    const orb = this.add.image(this.player.x, this.player.y, 'ring').setTint(color).setBlendMode(Phaser.BlendModes.ADD).setDepth(this.player.depth + 1).setScale(0.15).setAlpha(0.85)
+    this.tweens.add({ targets: orb, scale: 1.4, duration: CHARGE_FULL_MS, ease: 'Cubic.in' })
+    const ev = this.time.addEvent({ delay: 30, loop: true, callback: () => {
+      if (!this.held || this.held.mode !== 'charge') { ev.remove(); return }
+      orb.setPosition(this.player.x + this.player.facing * 20, this.player.y + 14)
+    } })
+    this.held!.fx = [orb, { destroy: () => ev.remove() } as unknown as Phaser.GameObjects.GameObject]
+  }
+
+  // Relâche une attaque chargée : puissance interpolée selon la fraction de charge (tôt = faible).
+  private releaseCharge() {
+    const h = this.held
+    if (!h) return
+    this.held = null
+    h.fx?.forEach((o) => o.destroy())
+    const skill = h.skill
+    const now = this.time.now
+    if (!this.player.spendEnergy(skill.manaCost ?? energyCostOf(skill))) { this.announceSkill('Pas assez d\'énergie', 0x4dd0e1); return }
+    this.cooldowns.use(h.slot, now, skill.cooldownMs)
+    this.game.events.emit('skill-cooldown', h.slot, now + skill.cooldownMs, skill.cooldownMs)
+    audio.playSfx('skill')
+    const p = getPlayer()
+    const rank = p.skillLevels[skill.id] ?? 1
+    const frac = Phaser.Math.Clamp((now - h.startedAt) / CHARGE_FULL_MS, 0, 1)
+    const chargeMul = CHARGE_MIN_MULT + (1 - CHARGE_MIN_MULT) * frac
+    const atk = this.player.stats.atk * this.player.outgoingMult()
+    const dmg = atk * skillDamageMult(skill, rank) * chargeMul
+    const color = this.skillColor(skill.id)
+    this.player.playAttack()
+    const proj = this.spawnPlayerProjectile(dmg, skill.range)
+    const scale = (skill.blast ? 2.0 : 1.4) * (0.7 + 0.9 * frac)
+    proj.setTexture('fx-fireball-orange').clearTint()
+    this.fireballShimmer(proj, scale)
+    if (skill.blast) proj.blast = { radius: skill.blast * (0.8 + 0.9 * frac), color }
+    if (frac > 0.8) { this.flashScreen(0xff7043, 0.14, 130); this.screenShake(0.006, 120); this.hitStop(50) }
+  }
+
+  // ═════════════ CHEVALIER : Grand-croix (croix de lumière) ═════════════
+  private castGrandCross(skill: SkillDef, mult: number, color: number) {
+    const f = this.player.facing
+    const cx = this.player.x + f * 30, cy = this.player.y
+    const atk = this.player.stats.atk * this.player.outgoingMult()
+    const hReach = skill.range * 2.4, vReach = 210, thick = 92
+    for (const obj of this.enemies.getChildren()) {
+      const e = obj as Enemy
+      if (!e.active) continue
+      const onH = Math.abs(e.y - cy) <= thick && Math.abs(e.x - cx) <= hReach
+      const onV = Math.abs(e.x - cx) <= thick && Math.abs(e.y - cy) <= vReach
+      if (onH || onV) e.takeDamage(physicalDamage(atk, e.effectiveDef(), mult))
+    }
+    for (const obj of this.props.getChildren()) {
+      const prop = obj as Prop
+      if (prop.active && Math.abs(prop.y - cy) <= thick && Math.abs(prop.x - cx) <= hReach) prop.takeDamage(1)
+    }
+    if (this.textures.exists('fx-grand-croix')) {
+      const cross = this.add.image(cx, cy, 'fx-grand-croix').setDepth(8).setBlendMode(Phaser.BlendModes.ADD).setScale(0.4).setAlpha(0.95)
+      this.tweens.add({ targets: cross, scale: 1.5, alpha: 0, duration: 460, ease: 'Cubic.out', onComplete: () => cross.destroy() })
+    }
+    this.beamStrikeFx(cx, cy, color)
+    this.flashScreen(0xfff3c0, 0.3, 150)
+    this.cameras.main.flash(130, 255, 245, 190)
+    this.screenShake(0.012, 260)
+    this.hitStop(110)
+    audio.playSfx('hit')
+  }
+
+  // ═════════════ MAGE : Aura d'épines (aura offensive d'éclairs) ═════════════
+  private castThornAura(skill: SkillDef, mult: number, color: number) {
+    const cfg = skill.aura!
+    const atk = this.player.stats.atk * this.player.outgoingMult()
+    const endAt = this.time.now + cfg.durationMs
+    const useSprite = this.textures.exists('fx-aura-epines')
+    const aura = this.add.image(this.player.x, this.player.y, useSprite ? 'fx-aura-epines' : 'ring')
+      .setDepth(this.player.depth - 1).setBlendMode(Phaser.BlendModes.ADD).setTint(useSprite ? 0xffffff : color).setAlpha(0.7)
+    if (useSprite) aura.setDisplaySize(cfg.radius * 2, cfg.radius * 2)
+    else aura.setScale((cfg.radius / 28))
+    this.tweens.add({ targets: aura, angle: 360, duration: 2600, repeat: -1 })
+    this.tweens.add({ targets: aura, alpha: 0.45, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+    const tick = this.time.addEvent({ delay: cfg.tickMs, loop: true, callback: () => {
+      if (!this.player.active || this.time.now >= endAt) {
+        tick.remove()
+        this.tweens.killTweensOf(aura)
+        this.tweens.add({ targets: aura, alpha: 0, scale: aura.scale * 1.2, duration: 240, onComplete: () => aura.destroy() })
+        return
+      }
+      aura.setPosition(this.player.x, this.player.y)
+      let hit = false
+      for (const obj of this.enemies.getChildren()) {
+        const e = obj as Enemy
+        if (e.active && Phaser.Math.Distance.Between(this.player.x, this.player.y, e.x, e.y) <= cfg.radius) {
+          e.takeDamage(physicalDamage(atk, e.effectiveDef(), mult))
+          hit = true
+        }
+      }
+      // éclats d'épines radiaux
+      for (let i = 0; i < 3; i++) {
+        const a = Phaser.Math.FloatBetween(0, Math.PI * 2)
+        const sp = this.add.rectangle(this.player.x, this.player.y, 3, 12, 0xb388ff).setDepth(this.player.depth + 1).setBlendMode(Phaser.BlendModes.ADD).setRotation(a)
+        this.tweens.add({ targets: sp, x: this.player.x + Math.cos(a) * cfg.radius, y: this.player.y + Math.sin(a) * cfg.radius, alpha: 0, duration: cfg.tickMs, onComplete: () => sp.destroy() })
+      }
+      if (hit) audio.playSfx('hit')
+    } })
+    this.aoeRing(this.player.x, this.player.y, cfg.radius, color, true)
+  }
+
+  // ═════════════ SORCIER : Faille du néant (aspire + annihile les faibles, repousse les autres) ═══
+  private castVoidRift(skill: SkillDef, mult: number, color: number) {
+    const f = this.player.facing
+    const cx = this.player.x + f * 70, cy = this.player.y
+    const radius = skill.range
+    const atk = this.player.stats.atk * this.player.outgoingMult()
+    const lvl = getPlayer().level
+    // déchirure : sprite fx-faille-neant qui s'ouvre + flash + secousse
+    if (this.textures.exists('fx-faille-neant')) {
+      const rift = this.add.image(cx, cy, 'fx-faille-neant').setDepth(7).setBlendMode(Phaser.BlendModes.ADD).setScale(0.2).setAlpha(0.95)
+      this.tweens.add({ targets: rift, scale: (radius * 2) / Math.max(1, rift.height), duration: 300, ease: 'Cubic.out',
+        onComplete: () => this.tweens.add({ targets: rift, alpha: 0, angle: 40, duration: 320, onComplete: () => rift.destroy() }) })
+    }
+    this.aoeRing(cx, cy, radius, color, true)
+    this.flashScreen(0x7e57c2, 0.2, 200)
+    this.screenShake(0.012, 260)
+    this.hitStop(70)
+    for (const obj of this.enemies.getChildren()) {
+      const e = obj as Enemy
+      if (!e.active) continue
+      if (Phaser.Math.Distance.Between(cx, cy, e.x, e.y) > radius) continue
+      const weak = !e.monster.boss && !e.monster.mvp && e.monster.level < lvl
+      if (weak) {
+        // aspiration (particules convergentes vers la faille) puis ANNIHILATION
+        for (let i = 0; i < 6; i++) {
+          const sp = this.add.rectangle(e.x + Phaser.Math.Between(-20, 20), e.y + Phaser.Math.Between(-20, 20), 4, 4, 0xce93d8).setDepth(8).setBlendMode(Phaser.BlendModes.ADD)
+          this.tweens.add({ targets: sp, x: cx, y: cy, alpha: 0, duration: 200, ease: 'Cubic.in', onComplete: () => sp.destroy() })
+        }
+        this.time.delayedCall(190, () => { if (e.active) { this.impactFx(e.x, e.y, 0x7e57c2); e.takeDamage(e.hp + 100000) } })
+      } else {
+        // boss / élite / mob de niveau ≥ joueur : IMMUNISÉ à l'annihilation, juste violemment repoussé
+        const dir = (Math.sign(e.x - cx) || 1) as 1 | -1
+        ;(e.body as Phaser.Physics.Arcade.Body).setVelocity(dir * 400, -180)
+        e.takeDamage(physicalDamage(atk, e.effectiveDef(), mult * 0.5))
+      }
+    }
+    audio.playSfx('hit')
+  }
+
+  // ═════════════ ARCHER : Flèche-grappin (tracte le panda sur une plateforme devant/au-dessus) ═════
+  private castGrapple(skill: SkillDef, color: number) {
+    const px = this.player.x, py = this.player.y, f = this.player.facing
+    let best: { x: number; y: number } | null = null
+    let bestScore = Infinity
+    for (const grp of [this.oneWayPlatforms, this.platforms]) {
+      for (const obj of grp.getChildren()) {
+        const t = obj as Phaser.GameObjects.Image
+        const dx = (t.x - px) * f
+        if (dx < 24 || dx > skill.range) continue // devant, à portée
+        if (t.y > py + 24) continue // pas nettement en-dessous
+        const score = dx + Math.abs(t.y - py) * 0.6
+        if (score < bestScore) { bestScore = score; best = { x: t.x, y: t.y - TILE / 2 } }
+      }
+    }
+    const target = best ?? { x: px + f * 90, y: py - 90 } // sans prise : petit bond de secours
+    // câble de grappin (fx-fleche-grappin le long de la ligne) + tract du joueur
+    const key = this.textures.exists('fx-fleche-grappin') ? 'fx-fleche-grappin' : 'fx-arrow'
+    const hook = this.add.image(px, py, key).setDepth(7).setTint(color).setRotation(Math.atan2(target.y - py, target.x - px))
+    this.tweens.add({ targets: hook, x: target.x, y: target.y, duration: 140, onComplete: () => {
+      const line = this.add.line(0, 0, px, py, target.x, target.y, 0xcfd8dc, 0.8).setOrigin(0, 0).setLineWidth(2).setDepth(6)
+      this.tweens.add({ targets: line, alpha: 0, duration: 300, onComplete: () => line.destroy() })
+      hook.destroy()
+      this.player.startGrapple(target.x, target.y)
+    } })
+    audio.playSfx('skill')
+  }
+
+  // ═════════════ CHASSEUR : Assaut du faucon (piqué en coups multiples) ═════════════
+  private castFalconBlitz(skill: SkillDef, dmg: number, color: number) {
+    const px = this.player.x, py = this.player.y, f = this.player.facing
+    let target: Enemy | null = null
+    let bestD = Infinity
+    for (const obj of this.enemies.getChildren()) {
+      const e = obj as Enemy
+      if (!e.active) continue
+      const dx = (e.x - px) * f
+      if (dx < -10 || dx > skill.range) continue
+      const d = Phaser.Math.Distance.Between(px, py, e.x, e.y)
+      if (d < bestD) { bestD = d; target = e }
+    }
+    const key = this.textures.exists('fx-blitz-faucon') ? 'fx-blitz-faucon' : 'fx-tir-faucon'
+    if (!target) {
+      // aucune cible : le faucon fonce en ligne droite (projectile lobé explosif de repli)
+      const proj = this.spawnPlayerProjectile(dmg, skill.range)
+      proj.setTexture(this.textures.exists('fx-tir-faucon') ? 'fx-tir-faucon' : 'fx-arrow').clearTint().setScale(1.4)
+      return
+    }
+    const hits = 3
+    for (let i = 0; i < hits; i++) {
+      this.time.delayedCall(i * 110, () => {
+        if (!target!.active) return
+        const from = i % 2 === 0 ? -1 : 1
+        const falcon = this.add.image(target!.x + from * 90, target!.y - 70, key).setDepth(8).setScale(1.2).setFlipX(from > 0)
+        this.tweens.add({ targets: falcon, x: target!.x, y: target!.y, duration: 90, ease: 'Cubic.in', onComplete: () => {
+          if (target!.active) { target!.takeDamage(physicalDamage(dmg / hits, target!.effectiveDef())); this.impactFx(target!.x, target!.y, color) }
+          this.tweens.add({ targets: falcon, x: target!.x + from * 60, y: target!.y - 50, alpha: 0, duration: 110, onComplete: () => falcon.destroy() })
+        } })
+      })
+    }
+    audio.playSfx('hit')
+  }
+
+  // ═════════════ SORCIER : Tempête foudroyante (nuke orage sur zone) ═════════════
+  private executeStorm(skill: SkillDef, cx: number, cy: number, mult: number) {
+    const radius = skill.range
+    const atk = this.player.stats.atk * this.player.outgoingMult()
+    const marker = this.add.graphics().setDepth(3)
+    marker.fillStyle(0x5c6bc0, 0.14).fillCircle(cx, cy, radius).lineStyle(3, 0x9fa8da, 0.7).strokeCircle(cx, cy, radius)
+    this.tweens.add({ targets: marker, alpha: 0, duration: 1400, onComplete: () => marker.destroy() })
+    if (this.textures.exists('fx-tempete')) {
+      const storm = this.add.image(cx, cy - radius * 0.4, 'fx-tempete').setDepth(7).setBlendMode(Phaser.BlendModes.ADD).setScale(0.3).setAlpha(0.95)
+      storm.setDisplaySize(radius * 2.4, radius * 2.2)
+      this.tweens.add({ targets: storm, alpha: 0, duration: 1200, onComplete: () => storm.destroy() })
+    }
+    const strikes = 7
+    for (let i = 0; i < strikes; i++) {
+      this.time.delayedCall(i * 150, () => {
+        const sx = cx + Phaser.Math.FloatBetween(-radius, radius)
+        this.lightningStrikeFx(sx, cy)
+        for (const obj of this.enemies.getChildren()) {
+          const e = obj as Enemy
+          if (e.active && Phaser.Math.Distance.Between(sx, cy, e.x, e.y) <= radius * 0.5) e.takeDamage(physicalDamage(atk, e.effectiveDef(), mult * 0.5))
+        }
+      })
+    }
+    this.flashScreen(0xcfe8ff, 0.28, 200)
+    this.screenShake(0.014, 400)
+    audio.playSfx('hit')
+  }
+
+  // colonne de foudre verticale qui s'abat (Tempête)
+  private lightningStrikeFx(x: number, groundY: number) {
+    const g = this.add.graphics().setDepth(8).setBlendMode(Phaser.BlendModes.ADD)
+    g.lineStyle(4, 0x82b1ff, 0.95).beginPath()
+    let y = groundY - 300
+    g.moveTo(x, y)
+    while (y < groundY) { y += 30; g.lineTo(x + Phaser.Math.Between(-18, 18), y) }
+    g.strokePath()
+    const core = this.add.graphics().setDepth(9).setBlendMode(Phaser.BlendModes.ADD)
+    core.lineStyle(2, 0xffffff, 1).lineBetween(x, groundY - 300, x, groundY)
+    this.tweens.add({ targets: [g, core], alpha: 0, duration: 180, onComplete: () => { g.destroy(); core.destroy() } })
+    this.impactFx(x, groundY, 0x82b1ff)
+  }
+
+  // ═════════════ SORCIER : Blizzard (nuke de glace sur zone) ═════════════
+  private executeBlizzard(skill: SkillDef, cx: number, cy: number, mult: number) {
+    const radius = skill.range
+    const atk = this.player.stats.atk * this.player.outgoingMult()
+    const marker = this.add.graphics().setDepth(3)
+    marker.fillStyle(0x4dd0e1, 0.14).fillCircle(cx, cy, radius).lineStyle(3, 0xb2ebf2, 0.7).strokeCircle(cx, cy, radius)
+    this.tweens.add({ targets: marker, alpha: 0, duration: 1500, onComplete: () => marker.destroy() })
+    if (this.textures.exists('fx-blizzard')) {
+      const bz = this.add.image(cx, cy, 'fx-blizzard').setDepth(7).setBlendMode(Phaser.BlendModes.ADD).setScale(0.3).setAlpha(0.95)
+      bz.setDisplaySize(radius * 2.3, radius * 2.3)
+      this.tweens.add({ targets: bz, angle: 90, alpha: 0, duration: 1400, onComplete: () => bz.destroy() })
+    }
+    // éclats de glace qui tombent en biais
+    for (let i = 0; i < 40; i++) {
+      this.time.delayedCall(Phaser.Math.Between(0, 1000), () => {
+        const ix = cx + Phaser.Math.FloatBetween(-radius, radius)
+        const shard = this.add.rectangle(ix - 40, cy - 200, 3, 12, 0xe1f5fe).setDepth(7).setBlendMode(Phaser.BlendModes.ADD).setRotation(0.7)
+        this.tweens.add({ targets: shard, x: ix, y: cy + Phaser.Math.Between(-10, 12), alpha: 0, duration: 320, onComplete: () => shard.destroy() })
+      })
+    }
+    const ticks = 5
+    for (let t = 0; t < ticks; t++) {
+      this.time.delayedCall(150 + t * 200, () => {
+        for (const obj of this.enemies.getChildren()) {
+          const e = obj as Enemy
+          if (e.active && Phaser.Math.Distance.Between(cx, cy, e.x, e.y) <= radius) e.takeDamage(physicalDamage(atk, e.effectiveDef(), mult * 0.4))
+        }
+      })
+    }
+    this.flashScreen(0xb2ebf2, 0.2, 220)
+    this.screenShake(0.01, 360)
+    audio.playSfx('hit')
   }
 
   // Touche les ennemis/props devant le panda (ou pile sur lui), avec grande tolérance
@@ -3130,7 +3618,8 @@ export class LevelScene extends Phaser.Scene {
     // coule, et qu'on le REMONTE à contre-courant)
     for (const cs of this.cascadeSprites) cs.tilePositionY += delta * 0.45
     if (this.aim) this.updateAimReticle()
-    if (this.player.hp <= 0) return
+    if (this.held) this.updateHeld(this.time.now)
+    if (this.player.hp <= 0) { if (this.held) this.endHold(); return }
     // chute mortelle : uniquement quand le panda a plongé jusqu'au fond du monde dans un vrai trou
     this.checkPitDeath()
     if (this.player.hp <= 0) return

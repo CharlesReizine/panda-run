@@ -10,24 +10,34 @@ const BASE_OF: Partial<Record<ClassId, ClassId>> = Object.fromEntries(
 )
 
 describe('données classes/skills', () => {
-  it('7 classes ; novice 3 ; arbres combattants : 10 compétences (11 archer/chasseur avec la flèche autoguidée)', () => {
+  it('7 classes ; novice 3 ; arbres combattants refondus (dédoublonnage base ↔ évolué)', () => {
     expect(Object.keys(CLASSES)).toHaveLength(7)
     expect(CLASSES.novice.skillIds).toHaveLength(3)
-    // arbres à branches offensives + buff unique + passifs (dont régén sabreur, réflexes archer,
-    // et le vol arcanique côté mage/sorcier)
-    for (const id of ['swordsman', 'chevalier', 'mage', 'sorcier'] as const) {
-      expect(CLASSES[id].skillIds).toHaveLength(10)
+    // Tailles d'arbre après refonte : le premier palier garde ses branches + passifs ; l'évolué
+    // porte un kit PROPRE (aucun skill partagé avec sa base) plus resserré autour de sa signature.
+    const expected: Record<string, number> = {
+      swordsman: 9, mage: 9, archer: 9,
+      chevalier: 7, sorcier: 7, chasseur: 7,
     }
-    // archer + chasseur (évolution) portent en plus la Flèche autoguidée
-    for (const id of ['archer', 'chasseur'] as const) {
-      expect(CLASSES[id].skillIds).toHaveLength(11)
+    for (const [id, n] of Object.entries(expected)) {
+      expect(CLASSES[id as ClassId].skillIds, id).toHaveLength(n)
     }
   })
 
-  it('un seul skill de buff (kind buff, non-passif) par classe combattante', () => {
+  it('au plus un skill actif de buff/aura (kind buff ou aura) par classe combattante', () => {
     for (const id of ['swordsman', 'mage', 'archer', 'chevalier', 'sorcier', 'chasseur'] as const) {
-      const buffs = CLASSES[id].skillIds.filter((sid) => SKILLS[sid]!.kind === 'buff')
-      expect(buffs, `${id}: ${buffs.join(',')}`).toHaveLength(1)
+      const buffs = CLASSES[id].skillIds.filter((sid) => SKILLS[sid]!.kind === 'buff' || SKILLS[sid]!.kind === 'aura')
+      expect(buffs.length, `${id}: ${buffs.join(',')}`).toBeLessThanOrEqual(1)
+    }
+  })
+
+  it('dédoublonnage : une classe évoluée ne partage AUCUN skill de sa classe de base', () => {
+    // Sabreur→Chevalier, Archer→Chasseur : zéro skill commun (les skills stylés migrent, ils ne
+    // sont pas dupliqués). Mage→Sorcier peut relayer la pluie de météores (déplacée du mage).
+    for (const evolved of ['chevalier', 'chasseur'] as const) {
+      const base = BASE_OF[evolved]!
+      const shared = CLASSES[evolved].skillIds.filter((sid) => CLASSES[base].skillIds.includes(sid))
+      expect(shared, `${evolved} partage avec ${base}: ${shared.join(',')}`).toHaveLength(0)
     }
   })
 
@@ -54,10 +64,11 @@ describe('données classes/skills', () => {
     }
   })
 
-  it('chaque classe évoluée porte ses skills propres (3 actifs signature ; +1 passif pour le chevalier)', () => {
-    // chevalier : 3 actifs royaux + le passif « double frappe » (frappe-doublee) qui remplace la
-    // régénération du sabreur dans son arbre. sorcier / chasseur : 3 actifs signature chacun.
-    const ownCount: Record<'chevalier' | 'sorcier' | 'chasseur', number> = { chevalier: 4, sorcier: 3, chasseur: 3 }
+  it('chaque classe évoluée porte ses skills propres (kit signature exclusif)', () => {
+    // chevalier : kit royal 100% propre. sorcier : signatures propres (la pluie de météores reste
+    // classée « mage » car déplacée depuis lui). chasseur : signatures propres (flèche enflammée/
+    // explosive restent classées « archer », déplacées depuis la base).
+    const ownCount: Record<'chevalier' | 'sorcier' | 'chasseur', number> = { chevalier: 7, sorcier: 6, chasseur: 5 }
     for (const evolved of ['chevalier', 'sorcier', 'chasseur'] as const) {
       const own = CLASSES[evolved].skillIds.filter((sid) => SKILLS[sid]!.classId === evolved)
       expect(own, evolved).toHaveLength(ownCount[evolved])

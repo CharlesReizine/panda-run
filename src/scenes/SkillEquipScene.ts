@@ -1,8 +1,7 @@
 import Phaser from 'phaser'
 import { getPlayer } from '../state'
 import { save } from '../core/save'
-import { skillsOf, SKILLS } from '../data/skills'
-import { MAX_SKILL_RANK } from '../core/player-state'
+import { skillsOf, SKILLS, maxRankOf, skillDamageMult } from '../data/skills'
 import { computeStats } from '../core/stats'
 import { energyCostOf } from '../core/skill-executor'
 import { EVOLUTIONS } from '../core/progression'
@@ -158,7 +157,7 @@ export class SkillEquipScene extends Phaser.Scene {
         const reqMet = !this.lockReason(p, s)
         this.add.text(x + 62, y + 29, `requiert : ${treeBits.join(' · ')}${reqMet ? ' ✓' : ''}`, { fontSize: '10px', color: reqMet ? '#81c784' : '#ef9a9a', wordWrap: { width: colW - 96 } })
       }
-      const stateTxt = unlocked ? `Nv ${rank}/${MAX_SKILL_RANK}` : locked ? `🔒 ${lock!}` : 'À débloquer'
+      const stateTxt = unlocked ? `Nv ${rank}/${maxRankOf(s)}` : locked ? `🔒 ${lock!}` : 'À débloquer'
       const stateColor = unlocked ? '#ffd54f' : locked ? '#ef9a9a' : '#90caf9'
       this.add.text(x + 62, y + 46, stateTxt, { fontSize: '11px', color: stateColor })
 
@@ -167,7 +166,7 @@ export class SkillEquipScene extends Phaser.Scene {
         .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showDetail(s))
 
       // Débloquer / +1 : masqué si verrouillé par l'arbre.
-      if (!locked && p.skillPoints > 0 && rank < MAX_SKILL_RANK) {
+      if (!locked && p.skillPoints > 0 && rank < maxRankOf(s)) {
         btn(x + colW - 54, y + 16, unlocked ? '+1 pt' : 'Débloquer', 0x8d6e00, () => {
           p.skillPoints--; p.skillLevels[s.id] = rank + 1; this.persist(p); this.render()
         })
@@ -198,6 +197,8 @@ export class SkillEquipScene extends Phaser.Scene {
       : s.kind === 'zone' ? 'Zone visée'
       : s.kind === 'trap' ? 'Piège'
       : s.kind === 'lightning' ? 'Foudre'
+      : s.kind === 'channel' ? 'Canalisé'
+      : s.kind === 'aura' ? 'Aura'
       : s.kind === 'passive' ? 'Passif'
       : 'Soin'
     const tags: string[] = []
@@ -205,6 +206,9 @@ export class SkillEquipScene extends Phaser.Scene {
     if (s.arc) tags.push('en cloche')
     if (s.burn) tags.push('brûlure')
     if (s.explode) tags.push('explosif')
+    if (s.chargeable) tags.push('chargeable')
+    if (s.channel) tags.push('maintien')
+    if (s.grapple) tags.push('grappin')
     if (s.arrows && s.arrows > 1) tags.push(`${s.arrows} flèches`)
     return tags.length ? `${base} (${tags.join(', ')})` : base
   }
@@ -213,7 +217,7 @@ export class SkillEquipScene extends Phaser.Scene {
     const p = getPlayer()
     const rank = p.skillLevels[s.id] ?? 0
     const effRank = Math.max(1, rank)
-    const rankMult = 1 + 0.25 * (effRank - 1)
+    const rankMult = skillDamageMult(s, effRank) / s.multiplier
     const stats = computeStats(p)
 
     const panel = this.add.container(0, 0).setDepth(1000)
@@ -236,7 +240,7 @@ export class SkillEquipScene extends Phaser.Scene {
     panel.add(this.add.text(left, y, s.description, { fontSize: '13px', color: '#cfd8dc', wordWrap: { width: 500 } }).setOrigin(0, 0))
     y += 46
 
-    const rankTxt = rank > 0 ? `Nv ${rank}/${MAX_SKILL_RANK}` : 'Non débloquée (aperçu au Nv 1)'
+    const rankTxt = rank > 0 ? `Nv ${rank}/${maxRankOf(s)}` : 'Non débloquée (aperçu au Nv 1)'
     panel.add(this.add.text(left, y, rankTxt, { fontSize: '13px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0, 0))
     y += 24
 
