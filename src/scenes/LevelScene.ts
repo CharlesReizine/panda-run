@@ -2989,23 +2989,14 @@ export class LevelScene extends Phaser.Scene {
     // cône de flammes PROCÉDURAL (orange/rouge, AUCUN blanc, blend NORMAL), collé au joueur et évasé
     // (couvre haut ET bas). Fini le sprite fx-lance-flammes trop clair + l'écart avec le panda.
     const y0 = py - this.player.displayHeight * 0.25 // remonté d'~1/4 de la taille du perso
-    const n = 11
-    for (let i = 0; i < n; i++) {
-      const t = i / n
-      const fx = px + f * (6 + t * reach) // part quasiment du panda → collé, pas d'écart
-      const spread = 10 + t * 62 // s'évase avec la distance → couvre haut et bas
-      const fy = y0 + Phaser.Math.FloatBetween(-spread, spread)
-      const size = Phaser.Math.Between(11, 20) * (0.7 + t)
-      const col = Phaser.Math.RND.pick([0xff5722, 0xff7043, 0xf4511e, 0xe64a19, 0xff8f00])
-      const flame = this.add.ellipse(fx, fy, size * 1.5, size, col).setDepth(6).setAlpha(0.85)
-      this.tweens.add({ targets: flame, scaleX: 0.4, scaleY: 0.4, alpha: 0, duration: Phaser.Math.Between(120, 210), ease: 'Cubic.out', onComplete: () => flame.destroy() })
-    }
-    // un peu de BLANC chaud au cœur (près du panda) — reste minoritaire, pas de cramage global
-    for (let i = 0; i < 4; i++) {
-      const t = i / 4
-      const cx = px + f * (6 + t * reach * 0.55)
-      const core = this.add.ellipse(cx, y0 + Phaser.Math.FloatBetween(-8, 8), 11 - t * 5, 8 - t * 3, 0xfff3c4).setBlendMode(Phaser.BlendModes.ADD).setDepth(7).setAlpha(0.6)
-      this.tweens.add({ targets: core, alpha: 0, duration: Phaser.Math.Between(90, 150), onComplete: () => core.destroy() })
+    // IMAGE fx-lance-flammes RÉTABLIE (le cône procédural était moche), teintée orange, COLLÉE au panda
+    // (centre à ~0.42·reach → bord gauche quasi sur le panda) et remontée d'~1/4 de sa taille (y0).
+    if (this.textures.exists('fx-lance-flammes')) {
+      const jet = this.add.image(px + f * (reach * 0.42), y0, 'fx-lance-flammes')
+        .setDepth(7).setFlipX(f === -1).setAlpha(0.85).setTint(0xf4611e)
+      jet.setDisplaySize(reach, 150 * Phaser.Math.FloatBetween(0.8, 1.15))
+      jet.setAngle(f * Phaser.Math.FloatBetween(-6, 6))
+      this.tweens.add({ targets: jet, alpha: 0, duration: 150, ease: 'Sine.out', onComplete: () => jet.destroy() })
     }
     for (let i = 0; i < 3; i++) {
       const ex = px + f * Phaser.Math.Between(20, reach)

@@ -37,15 +37,13 @@ export class FlameWall extends Phaser.Physics.Arcade.Image {
     this.embers.push(glow)
 
     // REFONTE FLAMMES : nappe illustrée fx-mur-de-flamme qui ondule sur toute la largeur (si dispo).
-    const hasSprite = scene.textures.exists('fx-mur-de-flamme')
-    if (hasSprite) {
-      // blend NORMAL (pas ADD) → garde les oranges du sprite au lieu de cramer en blanc.
-      // image de flamme BASSE, ancrée au sol (origine bas) : bande basse ~0.5·hauteur → elle ne
-      // flotte plus centrée en hauteur ; les colonnes procédurales portent le reste de la hauteur.
-      const sheet = scene.add.image(this.x, this.groundY, 'fx-mur-de-flamme').setOrigin(0.5, 1).setDepth(5)
-        .setAlpha(0.95).setDisplaySize(this.wallWidth, this.wallHeight * 0.5)
+    // NAPPE illustrée fx-mur-de-flamme (conservée) — RABAISSÉE au sol : avant elle flottait centrée en
+    // hauteur. On descend l'image (ancrage bas placé SOUS le sol de 0.3·hauteur) → ses flammes, centrées
+    // dans l'image, retombent au niveau du sol. « Respiration » (grossit/rétrécit) conservée.
+    if (scene.textures.exists('fx-mur-de-flamme')) {
+      const sheet = scene.add.image(this.x, this.groundY + this.wallHeight * 0.3, 'fx-mur-de-flamme').setOrigin(0.5, 1).setDepth(5)
+        .setAlpha(0.95).setDisplaySize(this.wallWidth, this.wallHeight)
       const sx = sheet.scaleX, sy = sheet.scaleY
-      // « respiration » : grossit/rétrécit symétriquement (largeur ET hauteur) en continu.
       scene.tweens.add({ targets: sheet, scaleX: sx * 1.06, scaleY: sy * 1.1, duration: 300, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
       this.embers.push(sheet)
     }
@@ -59,7 +57,7 @@ export class FlameWall extends Phaser.Physics.Arcade.Image {
         const bodyCol = Phaser.Math.RND.pick([0xff7043, 0xff5252, 0xf4511e, 0xe64a19])
         const baseY = this.groundY - Phaser.Math.Between(0, 8)
         const w = Phaser.Math.Between(8, 14), h = Phaser.Math.Between(22, 38)
-        const rise = Phaser.Math.Between(this.wallHeight * 0.22, this.wallHeight * 0.45) // flammes basses, collées au sol
+        const rise = Phaser.Math.Between(this.wallHeight * 0.4, this.wallHeight * 0.72) // colonnes du sol vers le haut
         const dur = Phaser.Math.Between(360, 580)
         const flame = scene.add.rectangle(fx, baseY, w, h, bodyCol).setDepth(5).setAlpha(0.95).setOrigin(0.5, 1)
         scene.tweens.add({ targets: flame, y: baseY - rise, scaleX: 0.3, scaleY: 0.4, alpha: 0, duration: dur, ease: 'Cubic.out', onComplete: () => flame.destroy() })
