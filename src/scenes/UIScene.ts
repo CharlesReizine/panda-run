@@ -171,7 +171,9 @@ export class UIScene extends Phaser.Scene {
     atk.on('pointerdown', () => { this.pressFx(atk); this.game.events.emit('input-attack') })
 
     // Bas-gauche : potion. Zone tactile élargie via un rectangle invisible plus grand que l'icône.
-    const potion = this.add.image(52, 500, 'potion-drop').setScale(2.5)
+    // Taille FIXE (indépendante de la résolution native de la texture potion-drop, désormais
+    // issue d'une illustration détourée et non plus d'un dessin 16px) → icône HUD nette et stable.
+    const potion = this.add.image(52, 500, 'potion-drop').setDisplaySize(56, 56)
     const potionHit = this.add.rectangle(52, 500, 92, 100, 0xffffff, 0.001).setInteractive({ useHandCursor: true })
     potionHit.on('pointerdown', () => { this.pressFx(potion); this.game.events.emit('input-potion') })
     this.potionText = this.add.text(70, 490, '', { fontSize: '16px', color: '#ffffff' })

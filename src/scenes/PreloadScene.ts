@@ -196,6 +196,10 @@ export class PreloadScene extends Phaser.Scene {
     // correspondants (composés/animés en scène). Best-effort : si un fichier manque, le sort retombe
     // sur son visuel procédural (test d'existence de texture à l'usage).
     for (const id of FX_SPRITES) this.load.image(`fx-${id}`, `art/fx-${id}.png`)
+    // illustration de la potion de soin (art/potion-drop.png, fond transparent). Détourée + rognée +
+    // mise à l'échelle en create() → texture `potion-drop`, en remplacement du dessin procédural.
+    // Best-effort : si le fichier manque ou si le canvas échoue, on retombe sur le dessin procédural.
+    this.load.image('potionart-drop', 'art/potion-drop.png')
   }
 
   // Détoure (fond uni des bords → transparent, flood-fill) puis rogne une illustration chargée
@@ -236,6 +240,55 @@ export class PreloadScene extends Phaser.Scene {
       if (!octx) return false
       octx.drawImage(work, x0, y0, bw, bh, 0, 0, bw, bh)
       this.textures.addCanvas(destKey, out)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  // Bake l'illustration de potion (art/potion-drop.png) dans une PETITE texture carrée `potion-drop`,
+  // remplaçante directe du dessin procédural 16×16 : le monde la lâche à sa taille native, la boutique
+  // et le HUD la redimensionnent. On détoure le fond (flood-fill des bords → transparent, no-op si déjà
+  // transparent), on rogne à la boîte englobante puis on met à l'échelle en conservant le ratio, centré.
+  // Renvoie false si l'art manque ou si le canvas 2D échoue (repli sur le dessin procédural).
+  private bakePotionDrop(size = 28): boolean {
+    const src = 'potionart-drop'
+    if (this.textures.exists('potion-drop')) return true
+    if (!this.textures.exists(src)) return false
+    try {
+      const source = this.textures.get(src).getSourceImage() as HTMLImageElement | HTMLCanvasElement
+      const w = source.width, h = source.height
+      const work = document.createElement('canvas')
+      work.width = w; work.height = h
+      const wctx = work.getContext('2d')
+      if (!wctx) return false
+      wctx.drawImage(source as CanvasImageSource, 0, 0)
+      const imageData = wctx.getImageData(0, 0, w, h)
+      stripBorderBackground(imageData)
+      const data = imageData.data
+      let x0 = w, y0 = h, x1 = -1, y1 = -1
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          if ((data[(y * w + x) * 4 + 3] ?? 0) >= 16) {
+            if (x < x0) x0 = x
+            if (x > x1) x1 = x
+            if (y < y0) y0 = y
+            if (y > y1) y1 = y
+          }
+        }
+      }
+      const bw = x1 - x0 + 1, bh = y1 - y0 + 1
+      if (bw <= 0 || bh <= 0) return false
+      wctx.putImageData(imageData, 0, 0)
+      const out = document.createElement('canvas')
+      out.width = size; out.height = size
+      const octx = out.getContext('2d')
+      if (!octx) return false
+      octx.imageSmoothingEnabled = true
+      const scale = Math.min(size / bw, size / bh)
+      const dw = bw * scale, dh = bh * scale
+      octx.drawImage(work, x0, y0, bw, bh, (size - dw) / 2, (size - dh) / 2, dw, dh)
+      this.textures.addCanvas('potion-drop', out)
       return true
     } catch {
       return false
@@ -2062,6 +2115,8 @@ export class PreloadScene extends Phaser.Scene {
     // icônes d'objet : rognées à leur boîte englobante → item-<id> (repli sur l'affichage
     // existant partout où la texture manque, cf. iconFor/InventoryScene)
     for (const id of Object.keys(ITEMS)) this.bakeCropped(`itemart-${id}`, `item-${id}`)
+    // potion de soin illustrée → texture `potion-drop` (le dessin procédural plus bas est sauté si OK)
+    this.bakePotionDrop()
     this.bakeUiInventory()
     this.drawDecor()
     for (const item of Object.values(ITEMS)) if (item.slot === 'hat') this.drawCosmetic(item.id)
@@ -2359,9 +2414,12 @@ export class PreloadScene extends Phaser.Scene {
     g.lineStyle(5, 0x8d5a2b).beginPath(); g.moveTo(12, 21); g.lineTo(6, 27); g.strokePath()
     g.fillStyle(0xffca28).fillCircle(5, 28, 2); g.generateTexture('ui-attack', 32, 32); g.clear()
     g.lineStyle(4, 0xffffff).beginPath(); g.moveTo(6, 19); g.lineTo(16, 9); g.lineTo(26, 19); g.moveTo(6, 26); g.lineTo(16, 16); g.lineTo(26, 26); g.strokePath(); g.generateTexture('ui-jump', 32, 32); g.clear()
-    g.fillStyle(0xb71c1c).fillRoundedRect(0, 4, 16, 12, 4)
-    g.fillStyle(0xef5350).fillRoundedRect(1, 5, 14, 8, 3)
-    g.fillStyle(0xffffff).fillRect(6, 0, 4, 6); g.generateTexture('potion-drop', 16, 16); g.clear()
+    // repli procédural : uniquement si l'illustration art/potion-drop.png n'a pas pu être bakée
+    if (!this.textures.exists('potion-drop')) {
+      g.fillStyle(0xb71c1c).fillRoundedRect(0, 4, 16, 12, 4)
+      g.fillStyle(0xef5350).fillRoundedRect(1, 5, 14, 8, 3)
+      g.fillStyle(0xffffff).fillRect(6, 0, 4, 6); g.generateTexture('potion-drop', 16, 16); g.clear()
+    }
     g.fillStyle(0xb8860b).fillCircle(6, 6, 6); g.fillStyle(0xffd700).fillCircle(6, 6, 5); g.fillStyle(0xfff59d).fillCircle(4, 4, 1); g.generateTexture('coin', 12, 12); g.clear()
     g.fillStyle(0x7b1fa2).fillRoundedRect(1, 1, 14, 14, 3); g.fillStyle(0xba68c8).fillRoundedRect(2, 2, 12, 12, 2); g.generateTexture('item-drop', 16, 16); g.clear()
 
