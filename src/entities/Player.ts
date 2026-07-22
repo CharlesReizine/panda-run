@@ -548,7 +548,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.weaponIsBig) { this.weaponImage?.setVisible(true); this.weaponGlow?.setVisible(true) }
     this.spinTimer?.remove()
     this.spinTimer = this.scene.time.addEvent({
-      delay: 150, loop: true, callback: () => {
+      delay: 240, loop: true, callback: () => {
         if (!this.isSpinning()) {
           this.spinTimer?.remove(); this.spinTimer = null
           this.setFlipX(this.facing === -1) // retour à l'orientation réelle

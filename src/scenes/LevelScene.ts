@@ -2987,10 +2987,12 @@ export class LevelScene extends Phaser.Scene {
   // Lance-flammes : jet de feu monté sur le sprite fx-lance-flammes (haut+bas), + braises fugaces.
   private flamethrowerFx(px: number, py: number, f: 1 | -1, reach: number) {
     if (this.textures.exists('fx-lance-flammes')) {
+      // blend NORMAL + teinte orange (pas ADD blanc) ; déformation par tick (hauteur/angle/longueur variés)
       const jet = this.add.image(px + f * (reach * 0.5 + 10), py, 'fx-lance-flammes')
-        .setDepth(7).setBlendMode(Phaser.BlendModes.ADD).setFlipX(f === -1).setAlpha(0.92)
-      jet.setDisplaySize(reach, 150).setScale(jet.scaleX, jet.scaleY * Phaser.Math.FloatBetween(0.85, 1.1))
-      this.tweens.add({ targets: jet, alpha: 0, duration: 130, onComplete: () => jet.destroy() })
+        .setDepth(7).setFlipX(f === -1).setAlpha(0.9).setTint(0xff7a33)
+      jet.setDisplaySize(reach * Phaser.Math.FloatBetween(0.9, 1.12), 150 * Phaser.Math.FloatBetween(0.7, 1.25))
+      jet.setAngle(f * Phaser.Math.FloatBetween(-7, 7))
+      this.tweens.add({ targets: jet, scaleY: jet.scaleY * Phaser.Math.FloatBetween(1.1, 1.3), alpha: 0, duration: 150, ease: 'Sine.out', onComplete: () => jet.destroy() })
     }
     for (let i = 0; i < 3; i++) {
       const ex = px + f * Phaser.Math.Between(30, reach)
