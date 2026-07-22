@@ -19,13 +19,52 @@
       html, body { position: fixed; inset: 0; width: 100%; height: 100%; }
       /* #game : conteneur dont main.ts fixe la taille EXACTE de la zone visible
          (window.visualViewport, qui exclut les barres Safari). Phaser (Scale.FIT)
-         insère le jeu dedans → il rentre toujours en entier, jamais coupé. */
-      #game { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+         insère le jeu dedans → il rentre toujours en entier, jamais coupé.
+         box-sizing:border-box + padding safe-area : sur un écran à encoche / barre
+         gestuelle (env(safe-area-inset-*) > 0) le jeu est repoussé hors de ces zones ;
+         sur un écran sans encoche tous les insets valent 0 → aucun effet, centrage intact. */
+      #game {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        box-sizing: border-box;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
       canvas { display: block; }
+
+      /* Overlay « tourne ton téléphone » : le jeu est conçu en PAYSAGE (960×540). En
+         portrait il deviendrait minuscule → on masque tout et on invite à pivoter.
+         CSS pur, indépendant de Phaser : robuste sur tous les mobiles. */
+      #rotate {
+        display: none; /* paysage : masqué (défaut) */
+        position: fixed; inset: 0; z-index: 9999;
+        background: linear-gradient(160deg, #ffe1ec 0%, #ffd6a5 55%, #bde0fe 100%);
+        color: #5a3b2e;
+        text-align: center;
+        flex-direction: column; align-items: center; justify-content: center;
+        gap: 18px;
+        padding: calc(24px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
+        font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+        -webkit-user-select: none; user-select: none;
+      }
+      #rotate .rotate-emoji { font-size: 84px; line-height: 1; animation: rotate-wobble 1.8s ease-in-out infinite; }
+      #rotate .rotate-title { font-size: 26px; font-weight: 800; letter-spacing: 0.3px; }
+      #rotate .rotate-sub { font-size: 16px; font-weight: 600; opacity: 0.75; max-width: 18em; }
+      @keyframes rotate-wobble {
+        0%, 100% { transform: rotate(-18deg); }
+        50% { transform: rotate(72deg); }
+      }
+      /* PORTRAIT uniquement : on affiche l'overlay (il recouvre le jeu). */
+      @media (orientation: portrait) {
+        #rotate { display: flex; }
+      }
     </style>
-    <script type="module" crossorigin src="./assets/index-DLzxwz7W.js"></script>
+    <script type="module" crossorigin src="./assets/index-V4MwD3sU.js"></script>
   <link rel="manifest" href="./manifest.webmanifest"></head>
   <body>
     <div id="game"></div>
+    <div id="rotate" aria-hidden="true">
+      <div class="rotate-emoji">🔄</div>
+      <div class="rotate-title">🐼 Tourne ton téléphone</div>
+      <div class="rotate-sub">Panda-Run se joue en mode paysage. Mets ton téléphone à l'horizontale pour commencer&nbsp;!</div>
+    </div>
   </body>
 </html>
