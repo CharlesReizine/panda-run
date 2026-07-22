@@ -3000,6 +3000,13 @@ export class LevelScene extends Phaser.Scene {
       const flame = this.add.ellipse(fx, fy, size * 1.5, size, col).setDepth(6).setAlpha(0.85)
       this.tweens.add({ targets: flame, scaleX: 0.4, scaleY: 0.4, alpha: 0, duration: Phaser.Math.Between(120, 210), ease: 'Cubic.out', onComplete: () => flame.destroy() })
     }
+    // un peu de BLANC chaud au cœur (près du panda) — reste minoritaire, pas de cramage global
+    for (let i = 0; i < 4; i++) {
+      const t = i / 4
+      const cx = px + f * (6 + t * reach * 0.55)
+      const core = this.add.ellipse(cx, y0 + Phaser.Math.FloatBetween(-8, 8), 11 - t * 5, 8 - t * 3, 0xfff3c4).setBlendMode(Phaser.BlendModes.ADD).setDepth(7).setAlpha(0.6)
+      this.tweens.add({ targets: core, alpha: 0, duration: Phaser.Math.Between(90, 150), onComplete: () => core.destroy() })
+    }
     for (let i = 0; i < 3; i++) {
       const ex = px + f * Phaser.Math.Between(20, reach)
       const em = this.add.circle(ex, y0 + Phaser.Math.Between(-55, 55), Phaser.Math.Between(2, 4), 0xffa040).setDepth(6).setAlpha(0.8)

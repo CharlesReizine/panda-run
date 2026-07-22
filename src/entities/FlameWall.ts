@@ -40,8 +40,10 @@ export class FlameWall extends Phaser.Physics.Arcade.Image {
     const hasSprite = scene.textures.exists('fx-mur-de-flamme')
     if (hasSprite) {
       // blend NORMAL (pas ADD) → garde les oranges du sprite au lieu de cramer en blanc.
+      // image de flamme BASSE, ancrée au sol (origine bas) : bande basse ~0.5·hauteur → elle ne
+      // flotte plus centrée en hauteur ; les colonnes procédurales portent le reste de la hauteur.
       const sheet = scene.add.image(this.x, this.groundY, 'fx-mur-de-flamme').setOrigin(0.5, 1).setDepth(5)
-        .setAlpha(0.95).setDisplaySize(this.wallWidth, this.wallHeight)
+        .setAlpha(0.95).setDisplaySize(this.wallWidth, this.wallHeight * 0.5)
       const sx = sheet.scaleX, sy = sheet.scaleY
       // « respiration » : grossit/rétrécit symétriquement (largeur ET hauteur) en continu.
       scene.tweens.add({ targets: sheet, scaleX: sx * 1.06, scaleY: sy * 1.1, duration: 300, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
