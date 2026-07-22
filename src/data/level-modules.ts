@@ -17,6 +17,7 @@
 
 import type { LevelDef } from './levels'
 import { MIN_LADDER_TILES, MAX_LADDER_TILES } from '../core/platforming'
+import { MONSTERS } from './monsters'
 
 // altitude = nombre de rangées AU-DESSUS du sol (0 = surface du sol). row = groundRow - alt.
 // 'lave' = cuve de LAVE (enfer) : rendu rouge/orange incandescent, MORTELLE au contact (gros dégâts
@@ -1672,9 +1673,63 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   // SAFE_SPAWN_TILES tuiles du x de départ. Couvre les monstres des modules voisins et les oiseaux
   // qui, malgré le module de spawn vidé, se retrouveraient à portée du point d'apparition.
   const SAFE_SPAWN_TILES = 8
-  const safeSpawns = start
+  const nearSafe = start
     ? spawns.filter((s) => Math.abs(s.x - start!.x) >= SAFE_SPAWN_TILES)
     : spawns
+  // DÉCLUSTERING (retour joueur : « des mobs collés, 2-3 spawnés à quelques tuiles ») : on impose un
+  // ESPACEMENT MINIMUM entre les spawns qui jalonnent le CHEMIN — les mobs TERRESTRES et les OISEAUX
+  // piqueurs (les grappes que le joueur se prend en pleine face). Les mobs AQUATIQUES sont EXCLUS : ils
+  // vivent dans les cuves d'eau (bancs de poissons rencontrés À LA NAGE), c'est une menace de milieu, pas
+  // une grappe sur le chemin — les déclustérer viderait les plans d'eau et effondrerait l'XP des biomes
+  // aquatiques (désert/jungle/plage). Balayage gauche→droite (tri STABLE → déterministe) : on ne garde
+  // qu'UN spawn par FENÊTRE de MIN_SPAWN_SPACING tuiles. Dans une fenêtre on retient l'espèce la plus
+  // PRÉCIEUSE, dans l'ordre : (1) PAS ENCORE gardée dans ce niveau (→ MAXIMISE les espèces distinctes,
+  // aucune ne disparaît même arrivée en nuée) ; (2) la plus RARE du niveau ; (3) TERRESTRE plutôt
+  // qu'AÉRIEN (le sol porte le vrai contenu) ; (4) le plus à gauche. Préserve la DIVERSITÉ sans grappe.
+  const MIN_SPAWN_SPACING = 10
+  const isAquatic = (id: string) => !!MONSTERS[id]?.aquatic
+  const aquaticSpawns = nearSafe.filter((s) => isAquatic(s.monsterId)) // laissés tels quels (menace d'eau)
+  const sorted = [...nearSafe].filter((s) => !isAquatic(s.monsterId)).sort((a, b) => a.x - b.x)
+  const total: Record<string, number> = {}
+  for (const s of sorted) total[s.monsterId] = (total[s.monsterId] ?? 0) + 1
+  const aerialOf = (id: string) => (MONSTERS[id]?.aerial ? 1 : 0)
+  const safeSpawns: LevelDef['spawns'] = []
+  const kept: Record<string, number> = {}
+  // ordre lexicographique de priorité (plus PETIT = préféré) : [déjà gardé, rareté, aérien, x]
+  const rank = (s: LevelDef['spawns'][number]): [number, number, number, number] =>
+    [kept[s.monsterId] ?? 0, total[s.monsterId]!, aerialOf(s.monsterId), s.x]
+  const better = (a: [number, number, number, number], b: [number, number, number, number]) => {
+    for (let t = 0; t < a.length; t++) { if (a[t]! !== b[t]!) return a[t]! < b[t]! }
+    return false
+  }
+  let lastSpawnX = -Infinity
+  let i = 0
+  while (i < sorted.length) {
+    if (sorted[i]!.x - lastSpawnX < MIN_SPAWN_SPACING) { i++; continue } // trop près du dernier gardé
+    let j = i
+    while (j < sorted.length && sorted[j]!.x - sorted[i]!.x < MIN_SPAWN_SPACING) j++ // fenêtre [x, x+MIN)
+    let bestK = i
+    for (let k = i + 1; k < j; k++) if (better(rank(sorted[k]!), rank(sorted[bestK]!))) bestK = k
+    const pick = sorted[bestK]!
+    safeSpawns.push(pick)
+    kept[pick.monsterId] = (kept[pick.monsterId] ?? 0) + 1
+    lastSpawnX = pick.x
+    i = j
+  }
+  // FILET DE SÉCURITÉ (sans jamais créer de grappe) : si une espèce présente avant déclustering a été
+  // entièrement évincée, on la réintroduit à sa 1ʳᵉ instance qui RESPECTE l'espacement. On ne force
+  // jamais une instance trop proche (cela recréerait une grappe) : une espèce absente d'UN niveau mais
+  // présente ailleurs est acceptable. La garantie qu'aucune espèce ne disparaît du JEU entier est
+  // assurée globalement à l'assemblage des niveaux (cf. ensureRosterCoverage dans levels.ts).
+  const present = new Set(safeSpawns.map((s) => s.monsterId))
+  for (const id of new Set(sorted.map((s) => s.monsterId))) {
+    if (present.has(id)) continue
+    const inst = sorted.find((s) => s.monsterId === id
+      && safeSpawns.every((k) => Math.abs(k.x - s.x) >= MIN_SPAWN_SPACING))
+    if (inst) { safeSpawns.push(inst); present.add(id) }
+  }
+  safeSpawns.push(...aquaticSpawns) // menaces d'eau réintégrées intactes (bancs en cuve, hors déclustering)
+  safeSpawns.sort((a, b) => a.x - b.x)
 
   return {
     id: opts.id, name: opts.name, biome: opts.biome,
@@ -1817,6 +1872,11 @@ export interface ComposeOpts {
   ending: 'bas' | 'haut' // sortie franchement plus BASSE ou plus HAUTE que le départ (mi-hauteur)
   ground: string[]       // pool de monstres terrestres (ordre = difficulté croissante)
   birds: string[]        // pool d'oiseaux du biome
+  // PLAFOND DE DENSITÉ D'OISEAUX (aériens piqueurs). Les oiseaux (corbeau…) plongent sur le joueur ;
+  // en NUÉE dès le début, ils rendent le jeu injouable (retour joueur). birdCap borne le nombre
+  // d'oiseaux posés par motif : 0 = AUCUN oiseau (tout premier niveau, chill), 1 = un oiseau ISOLÉ,
+  // etc. Absent → densité pleine (birdCountFor). Ne change pas le flux RNG (le 1er tirage est conservé).
+  birdCap?: number
   // PLAFOND DE SÉLECTION DES MOTIFS (variété), DISTINCT de tierCap (difficulté/tension). Sert à
   // DÉBRIDER la variété des premiers niveaux : à tierCap=1 (plaine), les pools centraux s'effondraient
   // sur escalier + descente (seuls motifs tier 1 non-eau) → terrains PLATS et répétitifs. En relevant
@@ -1883,17 +1943,24 @@ export function planModules(o: ComposeOpts): Module[] {
   const pick = <T>(arr: T[]): T => arr[Math.floor(rng() * arr.length)] ?? arr[0]!
   // DENSITÉ D'OISEAUX : les beats de PLEIN AIR respirent trop avec 1 seul oiseau. On densifie selon le
   // motif — volée (grand ciel ouvert) 4-5, crêtes/corniches sur le vide 3, autres reliefs aérés 2.
-  const birdCountFor = (k: ModuleKind): number =>
-    k === 'volee' ? 4 + (hashSeed(o.id + ':' + k) % 2) : (k === 'crete' || k === 'corniche-vide') ? 3 : 2
+  const birdCountFor = (k: ModuleKind): number => {
+    const base = k === 'volee' ? 4 + (hashSeed(o.id + ':' + k) % 2) : (k === 'crete' || k === 'corniche-vide') ? 3 : 2
+    // DÉCLUSTERING AÉRIEN : borne la densité par birdCap (0 = aucun oiseau, 1 = un seul isolé…).
+    return o.birdCap !== undefined ? Math.max(0, Math.min(base, o.birdCap)) : base
+  }
   // On CONSOMME exactement UN tirage rng (comme avant) pour le 1er oiseau → le flux RNG qui pilote le
-  // CHOIX des modules reste identique (géométrie inchangée) ; les oiseaux SUPPLÉMENTAIRES sont tirés
-  // d'une source à part (hashSeed), donc densifier ne perturbe pas le terrain.
+  // CHOIX des modules reste identique (géométrie inchangée), MÊME si birdCap réduit le nombre d'oiseaux
+  // rendus. Les oiseaux SUPPLÉMENTAIRES sont tirés d'une source à part (hashSeed).
   const flock = (k: ModuleKind): string[] => {
-    const first = pick(o.birds)
-    const extra = Array.from({ length: Math.max(0, birdCountFor(k) - 1) },
+    const first = o.birds.length ? pick(o.birds) : undefined // tirage rng conservé (flux inchangé)
+    const n = birdCountFor(k)
+    if (n <= 0 || first === undefined) return []
+    const extra = Array.from({ length: n - 1 },
       (_, i) => o.birds[hashSeed(o.id + ':bird:' + k + ':' + i) % o.birds.length] ?? first)
     return [first, ...extra]
   }
+  // veut-on des oiseaux sur les plans d'eau imposés ? (cap 0 → non). Le tirage rng reste consommé.
+  const wantBird = o.birdCap === undefined || o.birdCap > 0
   const cap = o.tierCap
   // PLAFOND DE SÉLECTION (variété) ≥ tierCap : débride les motifs tier 2-3 dès les premiers niveaux
   // sans toucher à la TENSION (pics), qui reste gouvernée par tierCap (cf. nTension / biais tension).
@@ -1991,7 +2058,7 @@ export function planModules(o: ComposeOpts): Module[] {
       const spec = CATALOG[wk]
       // coffre déjà pré-réservé dans le budget (chests) → on ne ré-incrémente pas ici
       modules.push(mk(wk, {
-        ground: o.aquatic ?? [], birds: spec.birds ? [pick(o.birds)] : undefined,
+        ground: o.aquatic ?? [], birds: spec.birds && o.birds.length ? (wantBird ? [pick(o.birds)] : (pick(o.birds), undefined)) : undefined,
         ...(o.lava && spec.below === 'marine' ? { fillBelow: 'lave' as Fill } : {}),
       }))
       lastKind = wk

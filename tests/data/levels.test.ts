@@ -188,3 +188,52 @@ describe('apnée dynamique (souffle max lié au niveau du perso)', () => {
     expect(breathMaxMs(50) - breathMaxMs(49)).toBe(BREATH_PER_LEVEL_MS)
   })
 })
+
+// ─── DÉBUT CHILL + DÉCLUSTERING (retour joueur build R186) ───────────────────────────────────────
+// Le tout premier niveau (plaine-1) était injouable : nuées de corbeaux (Nv4, aériens piqueurs) en
+// grappes, mobs collés. On garantit désormais : (1) plaine-1 ne contient QUE des mobs de CONTACT
+// faibles (gloopy/fabre), aucun oiseau/chargeur ; (2) un espacement MINIMUM entre spawns terrestres/
+// aériens sur TOUS les niveaux générés (plus de grappes). Les mobs AQUATIQUES (bancs en cuve d'eau,
+// menace de nage) sont hors périmètre du déclustering — ils ne jalonnent pas le chemin.
+const MIN_SPAWN_SPACING = 10
+describe('début accessible + déclustering', () => {
+  it('plaine-1 = uniquement gloopy/fabre de CONTACT, aucun corbeau ni aérien ni chargeur', () => {
+    const l = LEVELS['plaine-1']!
+    expect(l.spawns.length).toBeGreaterThan(0)
+    for (const s of l.spawns) {
+      const m = MONSTERS[s.monsterId]!
+      expect(['gloopy', 'fabre'], `${s.monsterId} interdit en plaine-1`).toContain(s.monsterId)
+      expect(m.behavior, `${s.monsterId} doit être de contact`).toBe('contact')
+      expect(!!m.aerial, `${s.monsterId} ne doit pas être aérien`).toBe(false)
+    }
+    expect(l.spawns.some((s) => s.monsterId === 'corbeau'), 'aucun corbeau en plaine-1').toBe(false)
+    // gloopy présent (le mob-école Nv1) ; fabre est l'apex de contact du niveau (lent, inoffensif).
+    expect(l.spawns.some((s) => s.monsterId === 'gloopy')).toBe(true)
+  })
+
+  it('rampe aérienne : plaine-1 sans corbeau, plaine-2/3 en introduisent peu et ESPACÉS (aucune nuée)', () => {
+    const crowsAt = (id: string) => LEVELS[id]!.spawns.filter((s) => s.monsterId === 'corbeau')
+    expect(crowsAt('plaine-1').length, 'plaine-1 : zéro corbeau').toBe(0)
+    for (const id of ['plaine-2', 'plaine-3']) {
+      const crows = crowsAt(id).map((s) => s.x).sort((a, b) => a - b)
+      expect(crows.length, `${id}: trop de corbeaux`).toBeLessThanOrEqual(4)
+      // ESPACÉS : jamais deux corbeaux collés (pas de nuée piqueuse) — au moins la marge de déclustering.
+      for (let i = 1; i < crows.length; i++) {
+        expect(crows[i]! - crows[i - 1]!, `${id}: corbeaux en nuée`).toBeGreaterThanOrEqual(MIN_SPAWN_SPACING)
+      }
+    }
+  })
+
+  it('espacement ≥ 10 tuiles entre spawns terrestres/aériens sur tous les niveaux générés', () => {
+    for (const l of Object.values(LEVELS)) {
+      if (l.boss || l.id === 'epave-1') continue // arènes de boss + épave bespoke : hors générateur
+      const sp = l.spawns.filter((s) => !MONSTERS[s.monsterId]?.aquatic).sort((a, b) => a.x - b.x)
+      for (let i = 1; i < sp.length; i++) {
+        expect(
+          sp[i]!.x - sp[i - 1]!.x,
+          `${l.id}: ${sp[i - 1]!.monsterId}@${sp[i - 1]!.x} & ${sp[i]!.monsterId}@${sp[i]!.x} collés`,
+        ).toBeGreaterThanOrEqual(MIN_SPAWN_SPACING)
+      }
+    }
+  })
+})

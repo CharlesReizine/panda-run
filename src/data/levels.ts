@@ -245,12 +245,22 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   let groundPool = (biome === 'plaine' ? pool.ground.slice(0, distinctCap) : rotate(pool.ground, idx).slice(0, distinctCap))
   const mix = TRANSITION_MIX[biome]
   if (rank === 1 && mix && !groundPool.includes(mix)) groundPool = [mix, ...groundPool]
+  // RAMPE AÉRIENNE (retour joueur : « des corbeaux Nv4 qui plongent en GRAPPES dès le 1er niveau, ça
+  // défonce »). Les oiseaux (corbeau : aérien PIQUEUR à comportement charge) sont ce qui rend le tout
+  // début injouable. On plafonne donc leur DENSITÉ par un cap croissant : plaine-1 = 0 oiseau (début
+  // CHILL, on apprend à jouer sur des mobs de contact inoffensifs) ; plaine-2/3 = UN corbeau ISOLÉ max
+  // par motif (jamais de nuée) ; plaine-4/5 = 2 ; ensuite densité pleine. À l'orée de forêt, cap modéré.
+  // Ailleurs (undefined) → densité normale du biome.
+  const birdCap: number | undefined = biome === 'plaine'
+    ? (rank === 1 ? 0 : rank <= 3 ? 1 : rank <= 5 ? 2 : undefined)
+    : (biome === 'foret' && rank <= 2) ? 2 : undefined
   const base = {
     id, name, biome,
     tierCap: pool.tier,
     ending,
     ground: groundPool,
     birds: pool.birds,
+    ...(birdCap !== undefined ? { birdCap } : {}),
     ...(pool.aquatic ? { aquatic: pool.aquatic } : {}),
     ...(useMvp ? { mvp: pool.mvp } : {}),
     midCount,
@@ -456,5 +466,41 @@ const list: LevelDef[] = [
   // recalibre AUCUN niveau de monstre (mob-level.ts lit l'ordre de `list`).
   epave(),
 ]
+
+// COUVERTURE DU ROSTER : le déclustering (level-modules) privilégie l'espacement et la diversité, mais
+// dans un biome à un seul terrain, une espèce qui n'apparaît qu'en NUÉE serrée (p. ex. l'oiseau unique
+// du cimetière) peut être entièrement évincée de TOUS les niveaux → un monstre conçu ne spawnerait plus
+// nulle part (contenu mort, niveau calibré à 1 aberrant). On garantit ici, globalement, qu'au moins une
+// instance de chaque espèce attendue de chaque pool subsiste, en l'injectant dans son biome d'origine à
+// un emplacement libre (respectant l'espacement et la marge de départ). Déterministe (aucun Math.random).
+function ensureRosterCoverage(levels: LevelDef[]): void {
+  const present = new Set<string>()
+  for (const l of levels) for (const s of l.spawns) present.add(s.monsterId)
+  for (const [biome, pool] of Object.entries(POOLS)) {
+    const expected = [...pool.ground, ...pool.birds, ...(pool.aquatic ?? []), ...(pool.mvp ? [pool.mvp] : [])]
+    for (const id of expected) {
+      if (present.has(id)) continue
+      const home = levels.find((l) => l.biome === biome && !l.boss && l.id !== 'epave-1')
+      if (!home) continue
+      const startX = home.start?.x ?? 0
+      const xs = home.spawns.map((s) => s.x)
+      let x = -1
+      for (let cand = 12; cand < home.widthTiles - 4; cand++) {
+        if (Math.abs(cand - startX) < 8) continue
+        if (xs.every((sx) => Math.abs(sx - cand) >= 10)) { x = cand; break }
+      }
+      if (x < 0) continue
+      if (MONSTERS[id]?.aerial) {
+        home.spawns.push({ monsterId: id, x, y: Math.max(2, Math.floor((home.heightTiles ?? 16) / 3)) })
+      } else {
+        const pl = home.platforms.find((p) => x >= p.x && x < p.x + p.w)
+        if (!pl) continue
+        home.spawns.push({ monsterId: id, x, y: pl.y - 1 })
+      }
+      present.add(id)
+    }
+  }
+}
+ensureRosterCoverage(list)
 
 export const LEVELS: Record<string, LevelDef> = Object.fromEntries(list.map((l) => [l.id, l]))

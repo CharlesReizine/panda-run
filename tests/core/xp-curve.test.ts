@@ -41,15 +41,18 @@ describe('repères de progression (playthrough tronc principal)', () => {
     expect(lvl).toBeLessThanOrEqual(9)
   })
 
-  it('MOROCC (fin de désert) ≈ niveau 25-30', () => {
+  it('MOROCC (fin de désert) ≈ niveau 20-28', () => {
+    // Re-calibré après le déclustering (build R186) : supprimer les nuées d'oiseaux/grappes du TRONC
+    // (plaine surtout) baisse l'XP cumulée absolue → repère MOROCC ~21 (avant ~25). La COURBE est
+    // conservée (Prontera ~7-8 inchangé, désert toujours un mur ; cf. test suivant).
     const lvl = playerLevelForXp(trunkReward(TO_MOROCC))
-    expect(lvl).toBeGreaterThanOrEqual(24)
-    expect(lvl).toBeLessThanOrEqual(31)
+    expect(lvl).toBeGreaterThanOrEqual(19)
+    expect(lvl).toBeLessThanOrEqual(28)
   })
 
   it('le passage plaine→désert est un MUR de niveau (gros saut) qui force à farmer', () => {
     const pront = playerLevelForXp(trunkReward(TO_PRONTERA))
     const moro = playerLevelForXp(trunkReward(TO_MOROCC))
-    expect(moro - pront).toBeGreaterThanOrEqual(15)
+    expect(moro - pront).toBeGreaterThanOrEqual(12)
   })
 })
