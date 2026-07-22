@@ -17,6 +17,12 @@ const CLIMB_TILT = 6 // légère inclinaison alternée (degrés) pour vendre l'e
 const SWIM_SPEED = 150 // vitesse verticale de nage dans l'eau (up/down)
 const SWIM_DRIFT = 40 // léger enfoncement quand on ne nage pas activement
 const SWIM_RUN_MULT = 0.7 // déplacement horizontal ralenti dans l'eau
+const SWIM_STRIDE = 18 // px parcourus (nage réelle) entre deux poses du cycle de brasse (fige à l'arrêt)
+// Échelle du sprite EN EAU : la pose de nage est horizontale ; orientée à la VERTICALE (colonne/puits)
+// l'empreinte du sprite = la HAUTEUR du cadre de texture (92 px) qui déborderait d'une colonne de 2
+// tuiles (64 px). On réduit donc légèrement l'échelle en eau (92 × 0,68 ≈ 63 px) pour que le nageur
+// vertical rentre dans 2 tuiles (vérifié par getBounds sur le moteur réel : bornes ≤ 64 px).
+const SWIM_SCALE = 0.68
 const MAX_ENERGY = 100
 // Régénération PROGRESSIVE (~12,5 s pour refaire la jauge). Volontairement plus lente que
 // l'ancien réglage (22/s) : à 22/s la régén sur un cooldown de 2 s (44) dépassait le coût d'un
@@ -107,6 +113,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private climbPhase = 0
   private climbAccum = 0
   private climbLastY = 0
+  // cycle de nage : phase (0/1) alternant nage1/nage2, avancée par la DISTANCE réellement parcourue
+  // dans l'eau (swimAccum sur x+y), pas par une horloge → fige à l'arrêt, comme le cycle de grimpe.
+  private swimPhase = 0
+  private swimAccum = 0
+  private swimLastX = 0
+  private swimLastY = 0
+  private swimming = false
   // Sauts : compteur remis à 0 à l'atterrissage ; front montant de `jump` détecté via jumpWasDown
   // (l'input est maintenu, pas événementiel) → un appui = un saut. maxJumps() = 2 pour la lignée
   // du sabreur (double saut), 1 sinon.
@@ -486,6 +499,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     body.setAllowGravity(true)
     this.setAngle(0) // hors échelle : plus d'inclinaison de grimpe
+    // hors eau : rendu neutre (échelle pleine, plus d'orientation de nage) — reset avant la
+    // branche eau (qui réimpose l'échelle/l'angle de nage) pour purger l'état à la sortie de l'eau
+    if (!this.inWater) { this.setScale(1); this.swimming = false }
 
     // horizontale (ralentie dans l'eau) — le passif « course rapide » (archer) l'accélère durablement
     const runSpeed = (this.inWater ? RUN_SPEED * SWIM_RUN_MULT : RUN_SPEED) * this.moveSpeedMult()
@@ -634,10 +650,54 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     else if (c.down) this.setVelocityY(this.inCascade ? SWIM_SPEED * 1.4 : SWIM_SPEED)
     // au repos : cascade = courant DESCENDANT ; bassin = léger enfoncement (flottaison)
     else this.setVelocityY(this.inCascade ? SWIM_SPEED * 0.5 : SWIM_DRIFT)
-    if (!this.attacking) {
-      if (c.left || c.right) this.play(this.anim('run'), true)
-      else this.play(this.anim('jump'), true)
+    this.animateSwim(c, body)
+  }
+
+  // NAGE : cycle de brasse nage1↔nage2 (avancé par la distance parcourue, figé à l'arrêt) + le sprite
+  // PIVOTE vers la direction de nage d'après la vélocité. La pose d'art est horizontale (panda face à
+  // droite) → angle 0 = à plat (lac large) ; nage verticale (colonne/puits/cascade) → orientation ~
+  // verticale (empreinte fine, rentre dans 2 tuiles grâce à SWIM_SCALE). flipX gauche/droite conservé.
+  // ATTAQUE : override par la pose d'attaque normale (horizontale, face au regard, échelle pleine) +
+  // le swing d'arme habituel — pas de conflit avec l'arme. Repli propre sur idle si l'art nage manque.
+  private animateSwim(c: ControlsState, body: Phaser.Physics.Arcade.Body) {
+    // ATTAQUE EN EAU : pose d'attaque normale, à plat et face au regard, échelle pleine → l'arme
+    // (overlay, angle de repos) s'aligne sur le corps. L'anim d'attaque (play, déjà lancée par
+    // playAttack) tient la texture ; on se contente de neutraliser l'orientation/échelle de nage.
+    if (this.attacking) {
+      this.setAngle(0)
+      this.setScale(1)
+      this.setFlipX(this.facing === -1)
+      return
     }
+    this.setScale(SWIM_SCALE)
+    // entrée dans l'eau : cycle remis à zéro pour ne pas hériter d'une phase/position d'ailleurs
+    if (!this.swimming) { this.swimming = true; this.swimPhase = 0; this.swimAccum = 0; this.swimLastX = this.x; this.swimLastY = this.y }
+    // avance du cycle par la distance réellement nagée (fige à l'arrêt), comme le cycle de grimpe
+    const moved = Math.hypot(this.x - this.swimLastX, this.y - this.swimLastY)
+    this.swimLastX = this.x; this.swimLastY = this.y
+    const actively = c.left || c.right || c.up || c.down || c.jump
+    if (actively) {
+      this.swimAccum += moved
+      if (this.swimAccum >= SWIM_STRIDE) { this.swimAccum -= SWIM_STRIDE; this.swimPhase ^= 1 }
+    }
+    const cls = getPlayer().classId
+    const key = `panda-${cls}-nage${this.swimPhase === 0 ? 1 : 2}`
+    // ORIENTATION : la pose est horizontale (nose vers +x) → on la fait pointer dans le sens de la
+    // vélocité. pitch = atan2(vy, |vx|) : 0 à l'horizontale (lac), ±90° à la verticale (colonne).
+    // Mirroré par le facing pour que « haut » reste haut quel que soit le sens du regard (flipX).
+    const vx = body.velocity.x, vy = body.velocity.y
+    const pitch = Math.atan2(vy, Math.max(Math.abs(vx), 1)) // garde-fou : évite atan2(0,0) au repos
+    this.anims.stop() // poses de nage pilotées à la main (pas d'horloge d'animation)
+    if (this.scene.textures.exists(key)) {
+      this.setTexture(key)
+      this.setFlipX(this.facing === -1)
+      this.setRotation(pitch * this.facing)
+      return
+    }
+    // repli propre : pas d'art de nage → pose idle à plat (aucun crash)
+    this.setTexture(`panda-${cls}`)
+    this.setFlipX(this.facing === -1)
+    this.setAngle(0)
   }
 
   // rang investi dans le skill passif de double saut (0 = pas appris → pas de 2e saut)

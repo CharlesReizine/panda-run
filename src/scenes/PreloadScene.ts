@@ -142,7 +142,7 @@ const FISH_IDS = ['poisson', 'poisson-tropical', 'piranha'] as const
 // PRELOAD sous la clé fx-<id> ; consommés par LevelScene / FlameWall (test d'existence à l'usage).
 const FX_SPRITES = [
   'faille-neant', 'tempete', 'blizzard', 'lance-flammes', 'mur-de-flamme', 'aura-epines',
-  'grand-croix', 'tir-faucon', 'blitz-faucon', 'meteore', 'fleche-grappin', 'fleche-enflammee',
+  'grand-croix', 'tir-faucon', 'blitz-faucon', 'meteore', 'fleche-enflammee',
   'mitraillette',
 ] as const
 
@@ -178,6 +178,9 @@ export class PreloadScene extends Phaser.Scene {
       this.load.image(`pandaart-${cls}-attaque`, `art/panda-${art}-attaque.png`)
       // pose de grimpe (vue de dos, tête nue) : illustration dédiée par classe
       this.load.image(`pandaart-${cls}-echelle`, `art/panda-${art}-echelle.png`)
+      // poses de NAGE (2 frames de brasse, panda horizontal face à droite) : alternées au mouvement
+      this.load.image(`pandaart-${cls}-nage1`, `art/panda-${art}-nage1.png`)
+      this.load.image(`pandaart-${cls}-nage2`, `art/panda-${art}-nage2.png`)
     }
     // PNJ pandas de la ville + illustration K.O. — détourés/rognés en create() (bakeCropped)
     for (const id of NPC_IDS) this.load.image(`npcart-${id}`, `art/npc-${id}.png`)
@@ -441,10 +444,12 @@ export class PreloadScene extends Phaser.Scene {
       }
       const bw = x1 - x0 + 1, bh = y1 - y0 + 1
       if (bw <= 0 || bh <= 0) return false
-      // Échelle par la HAUTEUR uniquement : toutes les poses font la même hauteur à l'écran.
-      // On ne borne PAS la largeur (le cadre PANDA_TEX est assez large pour la pose la plus
-      // écartée), sinon une pose large serait réduite et le perso « rapetisserait » en courant.
-      const scale = STAND_H / bh
+      // Échelle par la HAUTEUR : toutes les poses debout font la même hauteur à l'écran. On BORNE
+      // toutefois par la largeur du cadre (marge 4 px) : les poses debout (idle/course/saut/attaque/
+      // échelle) tiennent toutes largement sous 96 px → borne inactive, aucun rapetissement. Seules les
+      // poses de NAGE (horizontales, plus larges que hautes) la déclenchent → évite que le nageur soit
+      // rogné à gauche/droite par le cadre (museau/queue coupés).
+      const scale = Math.min(STAND_H / bh, (PANDA_TEX.w - 4) / bw)
       const dw = bw * scale, dh = bh * scale
       const dx = (PANDA_TEX.w - dw) / 2, dy = FEET_Y - dh
       // Ancre de tête de CETTE pose : centre horizontal de la bande supérieure du contenu
@@ -492,6 +497,9 @@ export class PreloadScene extends Phaser.Scene {
     // pose de grimpe optionnelle (même détourage/rognage/ancrage-pieds → taille cohérente) ;
     // absente = repli sur l'ancienne grimpe procédurale dans Player.animateClimb
     this.bakePandaPose(this.pandaArtKey(cls, 'echelle'), `panda-${cls}-echelle`)
+    // poses de NAGE optionnelles (même bake) : absentes = repli sur la pose idle dans Player.animateSwim
+    this.bakePandaPose(this.pandaArtKey(cls, 'nage1'), `panda-${cls}-nage1`)
+    this.bakePandaPose(this.pandaArtKey(cls, 'nage2'), `panda-${cls}-nage2`)
     if (!this.anims.exists(`panda-${cls}-run`)) {
       this.anims.create({ key: `panda-${cls}-idle`, frames: [{ key: `panda-${cls}` }], frameRate: 1, repeat: -1 })
       this.anims.create({ key: `panda-${cls}-run`, frames: [{ key: `panda-${cls}` }, { key: `panda-${cls}-course` }], frameRate: 7, repeat: -1 })
