@@ -18,11 +18,9 @@ const SWIM_SPEED = 150 // vitesse verticale de nage dans l'eau (up/down)
 const SWIM_DRIFT = 40 // léger enfoncement quand on ne nage pas activement
 const SWIM_RUN_MULT = 0.7 // déplacement horizontal ralenti dans l'eau
 const SWIM_STRIDE = 18 // px parcourus (nage réelle) entre deux poses du cycle de brasse (fige à l'arrêt)
-// Échelle du sprite EN EAU : la pose de nage est horizontale ; orientée à la VERTICALE (colonne/puits)
-// l'empreinte du sprite = la HAUTEUR du cadre de texture (92 px) qui déborderait d'une colonne de 2
-// tuiles (64 px). On réduit donc légèrement l'échelle en eau (92 × 0,68 ≈ 63 px) pour que le nageur
-// vertical rentre dans 2 tuiles (vérifié par getBounds sur le moteur réel : bornes ≤ 64 px).
-const SWIM_SCALE = 0.68
+// Le nageur garde sa TAILLE PLEINE (échelle 1) : on ne le rétrécit plus pour tenir dans une colonne
+// étroite (retour joueur : rétrécissement visuellement bizarre). Les puits/colonnes sont désormais
+// élargis côté level-modules pour laisser passer le panda pleine taille (cf. data/level-modules).
 const MAX_ENERGY = 100
 // Régénération PROGRESSIVE (~12,5 s pour refaire la jauge). Volontairement plus lente que
 // l'ancien réglage (22/s) : à 22/s la régén sur un cooldown de 2 s (44) dépassait le coût d'un
@@ -300,8 +298,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const flip = this.isSpinning() ? (this.spinFlip ? -1 : 1) : this.facing
     if (this.hatImage) {
       const a = PANDA_HEAD_ANCHORS[this.texture.key] ?? { dx: 0, dy: HAT_OFFSET_Y }
-      this.hatImage.setPosition(this.x + a.dx * flip, this.y + a.dy)
+      // l'offset d'ancre est mis à l'ÉCHELLE puis TOURNÉ comme le sprite : en nage le panda s'incline
+      // (pitch, jusqu'à ±90° en colonne), donc un offset brut décrochait le chapeau de la tête. On
+      // pivote le vecteur (dx,dy) par la rotation courante et on aligne rotation/échelle du chapeau.
+      const ox = a.dx * flip * this.scaleX
+      const oy = a.dy * this.scaleY
+      const cos = Math.cos(this.rotation), sin = Math.sin(this.rotation)
+      this.hatImage.setPosition(this.x + ox * cos - oy * sin, this.y + ox * sin + oy * cos)
       this.hatImage.setFlipX(flip === -1)
+      this.hatImage.setRotation(this.rotation)
+      this.hatImage.setScale(this.scaleX, this.scaleY)
     }
     if (this.weaponImage) {
       // décalage avant propre à la classe (bâton du mage/sorcier poussé nettement devant le panda)
@@ -678,8 +684,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   // NAGE : cycle de brasse nage1↔nage2 (avancé par la distance parcourue, figé à l'arrêt) + le sprite
   // PIVOTE vers la direction de nage d'après la vélocité. La pose d'art est horizontale (panda face à
-  // droite) → angle 0 = à plat (lac large) ; nage verticale (colonne/puits/cascade) → orientation ~
-  // verticale (empreinte fine, rentre dans 2 tuiles grâce à SWIM_SCALE). flipX gauche/droite conservé.
+  // droite) → angle 0 = à plat (lac large) ; nage verticale (puits) → orientation ~verticale. Le panda
+  // garde sa TAILLE PLEINE (plus de rétrécissement) — les puits sont élargis en conséquence. flipX
+  // gauche/droite conservé. CASCADE : cas à part, on GRIMPE (anim d'escalade) au lieu de nager.
   // ATTAQUE : override par la pose d'attaque normale (horizontale, face au regard, échelle pleine) +
   // le swing d'arme habituel — pas de conflit avec l'arme. Repli propre sur idle si l'art nage manque.
   private animateSwim(c: ControlsState, body: Phaser.Physics.Arcade.Body) {
@@ -692,7 +699,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.setFlipX(this.facing === -1)
       return
     }
-    this.setScale(SWIM_SCALE)
+    // CASCADE : on GRIMPE la colonne d'eau — pose d'escalade (vue de dos), TAILLE PLEINE, sans
+    // orientation de nage. La physique (remontée à contre-courant) reste gérée par updateSwim ; seul
+    // le VISUEL passe en grimpe. Aucune échelle n'est dessinée dans la cascade (cf. LevelScene).
+    if (this.inCascade) { this.setScale(1); this.setAngle(0); this.animateClimb(c); return }
+    this.setScale(1)
     // entrée dans l'eau : cycle remis à zéro pour ne pas hériter d'une phase/position d'ailleurs
     if (!this.swimming) { this.swimming = true; this.swimPhase = 0; this.swimAccum = 0; this.swimLastX = this.x; this.swimLastY = this.y }
     // avance du cycle par la distance réellement nagée (fige à l'arrêt), comme le cycle de grimpe

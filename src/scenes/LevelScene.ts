@@ -55,6 +55,11 @@ const BUBBLE_INTERVAL_MS = 170 // intervalle d'émission des bulles tant que la 
 // inflige de gros dégâts continus (chemin de dégâts standard, cf. drownTick) → y tomber tue vite.
 const LAVA_DPS = 120 // PV perdus par seconde au contact de la lave (bien plus violent que la noyade)
 const LAVA_TICK_MS = 150 // cadence des ticks de brûlure : perte rapide et régulière
+// FLAMMES AU SOL (ex-« pics ») : mur de flammes du mage posé comme piège de terrain. NE tue PLUS d'un
+// coup — brûle 30 % des PV MAX par seconde, INDÉPENDAMMENT du niveau (danger constant, jamais fatal
+// instantanément → ~3,3 s dans les flammes pour un K.O. plein). Même modèle de tick que la lave/noyade.
+const FLAME_HP_FRAC_PER_SEC = 0.30 // fraction des PV MAX perdue par seconde dans les flammes
+const FLAME_TICK_MS = 150 // cadence des ticks de brûlure des flammes
 
 export { TILE }
 
@@ -84,6 +89,10 @@ export class LevelScene extends Phaser.Scene {
   // CUVES DE LAVE (water:'lave', enfer) : zones de contact MORTELLES (brûlure continue, cf. updateLava).
   private lavaRects: Phaser.Geom.Rectangle[] = []
   private lavaAccumMs = 0
+  // FLAMMES AU SOL (ex-pics) : zones de brûlure continue (30 % PV max/s, cf. updateFlames). Rendu =
+  // image du mur de flammes du mage, légèrement animée. Pas de corps physique (détection par rect).
+  private flameRects: Phaser.Geom.Rectangle[] = []
+  private flameAccumMs = 0
   // Plongée : réserve d'apnée restante (ms), accumulateurs de ticks de noyade et d'émission de
   // bulles, voile bleuté quand la tête est immergée, petite jauge d'apnée au-dessus de la tête.
   private breathMs = BREATH_BASE_MS
@@ -175,6 +184,8 @@ export class LevelScene extends Phaser.Scene {
     this.cascadeSprites = []
     this.lavaRects = []
     this.lavaAccumMs = 0
+    this.flameRects = []
+    this.flameAccumMs = 0
     this.airPocketRects = []
     // plongée : on entame chaque niveau souffle plein, sans dette de noyade ; les overlays
     // (voile, jauge) sont recréés plus bas (la scène est réutilisée → références remises à zéro)
@@ -389,23 +400,33 @@ export class LevelScene extends Phaser.Scene {
       }
     }
 
-    // pics = danger mortel ; eau = plan d'eau (bassin contenu / cascade / nappe libre héritée)
-    const spikes = this.physics.add.staticGroup()
+    // flammes = piège de terrain (brûlure continue) ; eau = plan d'eau (bassin / cascade / nappe libre)
     // PAROIS RIGIDES des bassins : corps statiques (un par paroi) qu'on ne traverse PAS en
     // marchant. Collision avec le joueur ET les ennemis. La nage se fait EN DESCENDANT par le HAUT.
     const basinWalls = this.physics.add.staticGroup()
     for (const hz of this.levelDef.hazards ?? []) {
       if (hz.kind === 'spikes') {
-        // PICS EN HAUTEUR : `hz.top` = rangée de la surface qui porte les pics (dessus d'une corniche).
-        // Absent → pics au SOL (comportement historique EXACT : groundTopPx - 8 = groundRow*TILE + 8).
-        // Les pics sont posés SUR la surface (base au dessus de la corniche, pointes vers le haut).
+        // FLAMMES AU SOL (ex-pics) : `hz.top` = rangée de la surface qui les porte (dessus d'une
+        // corniche), absent → au SOL. On réutilise l'image du MUR DE FLAMMES du mage
+        // ('fx-mur-de-flamme'), ancrée en bas sur la surface, avec une légère respiration + ondulation
+        // pour qu'elle « bouge un peu ». Dégâts = brûlure continue (updateFlames), JAMAIS de one-shot.
         const surfaceTopPx = hz.top !== undefined ? hz.top * TILE : groundTopPx
-        for (let i = 0; i < hz.w; i++) {
-          // pics GÉANTS (~2 tuiles) posés SUR la surface : base ancrée au sol (origine bas), pointes
-          // dressées vers le haut. refreshBody recale le corps statique sur la nouvelle géométrie.
-          const s = spikes.create((hz.x + i) * TILE + TILE / 2, surfaceTopPx + 2, 'spikes') as Phaser.Physics.Arcade.Sprite
-          s.setOrigin(0.5, 1).refreshBody()
+        const fwPx = hz.w * TILE
+        const fhPx = Math.round(TILE * 1.9) // hauteur de la nappe de feu (~2 tuiles, comme les ex-pics)
+        const cxPx = hz.x * TILE + fwPx / 2
+        if (this.textures.exists('fx-mur-de-flamme')) {
+          const fire = this.add.image(cxPx, surfaceTopPx + 2, 'fx-mur-de-flamme')
+            .setOrigin(0.5, 1).setDepth(-1).setDisplaySize(fwPx, fhPx)
+          const bsx = fire.scaleX, bsy = fire.scaleY
+          this.tweens.add({ targets: fire, scaleX: bsx * 1.05, scaleY: bsy * 1.12, duration: 320, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+          this.tweens.add({ targets: fire, x: cxPx - 3, duration: 480, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+        } else {
+          // repli sans art : nappe orangée simple (aucun crash si la texture manque)
+          this.add.rectangle(cxPx, surfaceTopPx + 2, fwPx, fhPx, 0xff7043, 0.85).setOrigin(0.5, 1).setDepth(-1)
         }
+        // zone de brûlure : couvre la nappe de feu posée sur la surface (le centre/les pieds du panda
+        // qui marche dedans y tombent) → tick de dégâts continu tant qu'on y reste (updateFlames).
+        this.flameRects.push(new Phaser.Geom.Rectangle(hz.x * TILE, surfaceTopPx - fhPx, fwPx, fhPx + 4))
         continue
       }
       // EAU. top = rangée de surface, h = profondeur (rangées). Sans top/h → ancienne bande près du
@@ -423,7 +444,9 @@ export class LevelScene extends Phaser.Scene {
         // visible en haut d'où l'eau jaillit. Immersion douce (traversée courte, jamais mortelle).
         const fall = this.add.tileSprite(xPx, topPx, wPx, heightPx, 'waterfall').setOrigin(0, 0).setDepth(-2)
         this.waterfalls.push(fall)
-        this.add.image(xPx + wPx / 2, topPx, 'waterfall-source').setOrigin(0.5, 0.75).setDepth(-1)
+        // source rocheuse posée EN TÊTE de rideau (origine bas → la roche coiffe le sommet de la chute
+        // sans flotter/déborder au-dessus, cf. ancien origin 0.75 qui la faisait léviter)
+        this.add.image(xPx + wPx / 2, topPx, 'waterfall-source').setOrigin(0.5, 1).setDepth(-1)
         // bassin d'écume au pied de la chute
         this.add.ellipse(xPx + wPx / 2, waterBottom * TILE + TILE, wPx + 20, 16, 0xe3f2fd, 0.4).setDepth(-1)
         this.waterRects.push(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))
@@ -439,11 +462,8 @@ export class LevelScene extends Phaser.Scene {
         const col = this.add.tileSprite(xPx, topPx, wPx, heightPx, 'waterfall').setOrigin(0, 0).setDepth(-2).setTint(0xa9e8ff).setAlpha(0.82)
         this.cascadeSprites.push(col)
         this.cascadeRects.push(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))
-        // BARREAUX D'ÉCHELLE superposés à la colonne : on réutilise le rendu des échelles normales
-        // (barreaux + montants, texture 'ladder') tuilé sur toute la largeur, pour signifier clairement
-        // « ON PEUT REMONTER ICI ». STATIQUES (une échelle ne coule pas), posés PAR-DESSUS l'eau claire
-        // qui, elle, défile (cascadeSprites) → la chute reste lisible, la grimpe est explicite.
-        this.add.tileSprite(xPx, topPx, wPx, heightPx, 'ladder').setOrigin(0, 0).setDepth(-1).setAlpha(0.9)
+        // PLUS D'ÉCHELLE PLAQUÉE SUR LA CASCADE (retour joueur : « idiot », gros défaut graphique) :
+        // la colonne d'eau claire se REMONTE directement (le panda joue l'anim de grimpe, cf. Player).
         // HAUT ONDULÉ : au lieu d'une ligne droite, un chapelet de bulbes d'écume qui montent et
         // descendent en décalé → vagues + remous animés en tête de cascade (là où l'eau jaillit et
         // où l'on émerge). Chaque bulbe oscille en boucle autour du bord supérieur.
@@ -524,7 +544,6 @@ export class LevelScene extends Phaser.Scene {
         this.addFish(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))
       }
     }
-    this.physics.add.overlap(this.player, spikes, () => this.hitSpikes())
     this.physics.add.collider(this.player, basinWalls)
     this.physics.add.collider(this.enemies, basinWalls, undefined, groundedEnemy)
 
@@ -535,11 +554,23 @@ export class LevelScene extends Phaser.Scene {
     this.submergeVeil = this.add.rectangle(480, 270, 960, 540, 0x0a4a7a, 0)
       .setScrollFactor(0).setDepth(15)
 
+    // plages de colonnes (en tuiles) occupées par une CASCADE remontable : sert à NE PAS dessiner
+    // l'échelle parallèle qui borde une cascade (retour joueur : « cascade collée à une échelle,
+    // inutile / idiot »). L'échelle reste dans les DONNÉES (zone d'accroche + atteignabilité
+    // inchangées, calibration intacte) : on masque seulement son VISUEL — on remonte la cascade en
+    // grimpant (anim d'escalade, colonne d'eau claire lisible).
+    const cascadeTileRanges = this.cascadeRects.map((r) => ({ x: Math.round(r.x / TILE), w: Math.round(r.width / TILE) }))
+    const bordersCascade = (lx: number) => cascadeTileRanges.some((c) => lx >= c.x - 1 && lx <= c.x + c.w)
     // échelles : texture répétée (UN TileSprite par échelle) + zone d'escalade (via ladderRects)
     for (const l of this.levelDef.ladders ?? []) {
-      // VISUEL élargi de +50 % (1,5 tuile, centré sur l'échelle) pour rester cohérent avec la zone
-      // d'accroche élargie ci-dessous — le montant ne paraît plus étriqué sous une fenêtre plus large.
-      this.add.tileSprite(l.x * TILE - TILE / 4, l.y * TILE, TILE * 1.5, l.h * TILE, 'ladder').setOrigin(0, 0).setDepth(-1)
+      // VISUEL élargi de +50 % (1,5 tuile, centré sur l'échelle) : on ÉTIRE la texture (tileScaleX 1,5)
+      // au lieu de la TUILER — sans ça un tileSprite de 48 px sur une texture de 32 px répétait UNE
+      // échelle + une DEMI-échelle collée à côté (retour joueur). setTileScale(1.5, 1) → une SEULE
+      // échelle large ; le tuilage VERTICAL des barreaux (Y) reste au pas naturel. On SAUTE le dessin
+      // des échelles qui bordent une cascade (masquées : on grimpe la cascade elle-même).
+      if (!bordersCascade(l.x)) {
+        this.add.tileSprite(l.x * TILE - TILE / 4, l.y * TILE, TILE * 1.5, l.h * TILE, 'ladder').setOrigin(0, 0).setDepth(-1).setTileScale(1.5, 1)
+      }
       // on descend d'une tuile sous le bas de l'échelle pour pouvoir l'attraper depuis le sol
       // zone d'accroche ÉLARGIE de +50 % : demi-largeur 1,5 tuile (avant : 1 tuile), soit 3 tuiles
       // centrées sur l'échelle → on ne décroche plus involontairement en montant (retour joueur R180).
@@ -1225,16 +1256,21 @@ export class LevelScene extends Phaser.Scene {
     this.time.delayedCall(1100, () => { this.player.ragdolling = false; this.showGameOver() })
   }
 
-  // Pics MORTELS : contact = MORT IMMÉDIATE (one-shot), même chemin que la chute mortelle → écran
-  // « Essaie encore ! » puis reprise au début. Respecte le god mode (émulateur/tests).
-  private hitSpikes() {
-    if ((globalThis as { __pandaGodMode?: boolean }).__pandaGodMode) return
-    if (this.player.hp <= 0) return
-    this.showDamageNumber(this.player.x, this.player.y - 44, this.player.hp, true) // gros chiffre ROUGE (coup fatal)
-    this.player.takeDamage(this.player.hp) // one-shot : vide toute la vie d'un coup
-    audio.playSfx('player-death')
-    save(getPlayer())
-    this.showGameOver()
+  // FLAMMES AU SOL (ex-pics) : contact = brûlure CONTINUE, jamais de mort instantanée. Perte de
+  // 30 % des PV MAX par seconde, INDÉPENDAMMENT du niveau (danger constant : ~3,3 s pour un K.O.
+  // plein). Même modèle de ticks que la lave/noyade (drownTick → god mode, chiffres, K.O.).
+  private updateFlames(delta: number) {
+    if (!this.flameRects.length) return
+    const body = this.player.body as Phaser.Physics.Arcade.Body
+    const touching = this.flameRects.some((r) => r.contains(this.player.x, body.bottom) || r.contains(this.player.x, this.player.y))
+    if (!touching) { this.flameAccumMs = 0; return }
+    this.flameAccumMs += delta
+    // dégât par tick = fraction des PV MAX proportionnelle à la durée du tick (30 % PV max/s)
+    const perTick = this.player.stats.maxHp * FLAME_HP_FRAC_PER_SEC * (FLAME_TICK_MS / 1000)
+    while (this.flameAccumMs >= FLAME_TICK_MS) {
+      this.flameAccumMs -= FLAME_TICK_MS
+      this.drownTick(perTick)
+    }
   }
 
   // écran K.O. avec choix « Réessayer » (relance le niveau au DÉBUT) ou « Carte »
@@ -3827,6 +3863,7 @@ export class LevelScene extends Phaser.Scene {
     this.wasInWater = this.player.inWater
     this.updateWater(delta)
     this.updateLava(delta)
+    this.updateFlames(delta)
     if (this.time.now < this.dashUntil) {
       // pendant la roulade : vitesse imposée, contrôles suspendus (le saut/déplacement
       // reprennent la main dès la fin de la fenêtre)
