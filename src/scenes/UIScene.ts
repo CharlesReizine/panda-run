@@ -86,7 +86,7 @@ export class UIScene extends Phaser.Scene {
     // aucun point. Cliquer dessus ouvre le même menu des compétences que la barre de vie.
     // badge « point(s) de compétence dispo » : placé SOUS les slots de skills / le bouton Compétences
     // (haut-droite), et non plus près de la barre de vie — c'est là qu'on gère les compétences.
-    this.spBadge = this.add.container(SLOT_X0 + 14, 104).setDepth(60)
+    this.spBadge = this.add.container(40, 116).setDepth(60)
     const badgeBg = this.add.rectangle(76, 0, 152, 32, 0xffca28, 0.97).setStrokeStyle(2, 0x7a4f00, 1)
     const badgeArrow = this.add.text(-4, 0, '◀', { fontSize: '20px', color: '#ffca28', fontStyle: 'bold', stroke: '#3a2600', strokeThickness: 4 }).setOrigin(1, 0.5)
     this.spBadgeText = this.add.text(14, 0, '', { fontSize: '15px', color: '#3a2600', fontStyle: 'bold' }).setOrigin(0, 0.5)
@@ -147,10 +147,10 @@ export class UIScene extends Phaser.Scene {
 
     // bouton EXPLICITE « compétences » sous les slots (le clic sur la barre de vie l'ouvre aussi,
     // mais un bouton dédié est bien plus découvrable) — disponible en jeu ET en entraînement.
-    const skillsBtn = this.add.rectangle(SLOT_X0 + 90, SLOT_Y + 40, 138, 24, 0x37474f, 0.9)
+    const skillsBtn = this.add.rectangle(116, 90, 138, 24, 0x37474f, 0.9)
       .setStrokeStyle(1, 0xffffff, 0.55)
       .setInteractive(new Phaser.Geom.Rectangle(-11, -13, 160, 50), Phaser.Geom.Rectangle.Contains)
-    this.add.text(SLOT_X0 + 90, SLOT_Y + 40, '⚙ Compétences', { fontSize: '12px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
+    this.add.text(116, 90, '⚙ Compétences', { fontSize: '12px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
     skillsBtn.on('pointerdown', () => { this.pressFx(skillsBtn); this.openSkillMenu() })
 
     // Bas-droite : contrôles saut / attaque. Zone tactile TRÈS ÉLARGIE au-delà du disque visuel pour
