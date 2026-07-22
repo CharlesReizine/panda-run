@@ -116,12 +116,22 @@ const OY = 14 // décalage vertical : laisse de la place au-dessus de la tête p
 // FALLBACK si une texture d'art venait à manquer au chargement.
 const ART_MONSTERS = Object.keys(MONSTERS)
 
-// Terrains disposant d'une VRAIE illustration de fond dédiée (public/art/bg-<id>.jpg). Les autres
-// niveaux du monde carte A retombent sur le fond de biome (biome-<clé>.jpg) — voir preload().
-const LEVELS_WITH_BG = new Set<string>(['cave-1', 'plage-1', 'plage-2', 'carriere-1', 'epave-1'])
+// Terrains disposant d'une VRAIE illustration de fond dédiée (public/art/bg-<id>.png) — un décor
+// UNIQUE par niveau (nommé d'après le terrain). Les niveaux de BOSS retombent sur le fond de biome.
+const LEVELS_WITH_BG = new Set<string>([
+  'plaine-1', 'plaine-2', 'plaine-3', 'plaine-4', 'plaine-5', 'plaine-6', 'plaine-7',
+  'foret-1', 'foret-2', 'foret-3', 'foret-4', 'foret-5', 'foret-6', 'foret-7',
+  'desert-1', 'desert-2', 'desert-3', 'desert-4', 'desert-5', 'desert-6', 'desert-7', 'desert-8', 'desert-9', 'desert-10', 'desert-11',
+  'jungle-1', 'jungle-2', 'jungle-3', 'jungle-4', 'jungle-5',
+  'montagne-1', 'montagne-2', 'montagne-3',
+  'cimetiere-1', 'cimetiere-2',
+  'plage-1', 'plage-2', 'plage-3', 'plage-4',
+  'cave-1', 'carriere-1', 'epave-1',
+  'enfer-1', 'enfer-2', 'enfer-3', 'enfer-4', 'enfer-5', 'enfer-6', 'enfer-7',
+])
 
-// Fonds livrés en PNG (transparence / galion coulé) plutôt qu'en JPG — l'extension diffère au chargement.
-const BG_PNG = new Set<string>(['epave-1'])
+// Tous les fonds de niveau sont désormais livrés en PNG → l'extension de chargement est .png.
+const BG_PNG = LEVELS_WITH_BG
 
 // POISSONS décoratifs des bassins : illustrations OPTIONNELLES (public/art/fish-<id>.png), chargées
 // en BEST-EFFORT. Elles seront générées par l'user ; tant qu'un fichier manque, le loader échoue

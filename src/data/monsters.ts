@@ -78,7 +78,7 @@ const list: MonsterDef[] = [
     ],
   },
   {
-    id: 'spectre-ancien', name: 'Spectre ancien', lore: 'Revenant millénaire drapé de brume, son regard vide glace le sang de qui ose l\'approcher.', color: 0xb39ddb, hp: 920, atk: 195, def: 36, xp: 6800, level: 56, speed: 45, behavior: 'projectile', mvp: true,
+    id: 'spectre-ancien', name: 'Spectre ancien', lore: 'Revenant millénaire drapé de brume, son regard vide glace le sang de qui ose l\'approcher.', color: 0xb39ddb, hp: 920, atk: 195, def: 36, xp: 6800, level: 57, speed: 45, behavior: 'projectile', mvp: true,
     drops: [
       { kind: 'gold', chance: 1, min: 120, max: 200 },
       { kind: 'potion', chance: 0.5, min: 1, max: 1 },
