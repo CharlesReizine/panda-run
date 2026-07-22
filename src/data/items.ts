@@ -32,6 +32,12 @@ const list: ItemDef[] = [
   { id: 'carapace-scarabee', name: 'Carapace de scarabée', slot: 'armor', bonus: { def: 9, maxHp: 40 }, rarity: 'rare', description: 'Une carapace de scarabée géant, dure comme la corne et étonnamment légère.' },
   { id: 'grelot-porte-bonheur', name: 'Grelot porte-bonheur', slot: 'accessory', bonus: { maxHp: 30 }, rarity: 'rare', description: 'Son tintement clair éloigne le mauvais sort et réconforte le cœur.' },
   { id: 'amulette-pharaon', name: 'Amulette du pharaon', slot: 'accessory', bonus: { atk: 6, maxHp: 25 }, rarity: 'epique', description: 'Un talisman des tombeaux royaux, chargé d\'une puissance millénaire.' },
+  // ── Armures & accessoires de boutique — étoffent les échoppes de Prontera (early) et Morocc (mid).
+  // Sans art dédié : icône de secours par emplacement (pastille DEF/PV), comme les autres armures.
+  { id: 'veste-rembourree', name: 'Veste rembourrée', slot: 'armor', bonus: { def: 3, maxHp: 12 }, rarity: 'commun', description: 'Une veste matelassée bon marché : amortit les premiers coups sans ruiner la bourse.' },
+  { id: 'bracelet-cuir', name: 'Bracelet de cuir', slot: 'accessory', bonus: { maxHp: 12 }, rarity: 'commun', description: 'Un simple bracelet de cuir tanné qui raffermit un peu la constitution.' },
+  { id: 'cotte-mailles', name: 'Cotte de mailles', slot: 'armor', bonus: { def: 7, maxHp: 30 }, rarity: 'rare', description: 'Un maillage d\'anneaux d\'acier souple : bonne protection contre lames et griffes.' },
+  { id: 'anneau-turquoise', name: 'Anneau de turquoise', slot: 'accessory', bonus: { atk: 4, maxHp: 20 }, rarity: 'rare', description: 'Une turquoise du désert sertie d\'argent, qui avive la vigueur du porteur.' },
   { id: 'ruban', name: 'Ruban', slot: 'hat', bonus: { maxHp: 3 }, rarity: 'commun', description: 'Un simple ruban coquet qui remonte un peu le moral.' },
   { id: 'sakkat', name: 'Sakkat', slot: 'hat', bonus: { maxHp: 8 }, rarity: 'commun', description: 'Un chapeau de paille tressé qui protège du soleil des longues routes.' },
   { id: 'chapeau-poring', name: 'Chapeau Poring', slot: 'hat', bonus: { maxHp: 5 }, rarity: 'commun', description: 'Un bonnet en forme de Poring tout rond : adorable et réconfortant.' },

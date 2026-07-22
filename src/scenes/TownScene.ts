@@ -5,7 +5,7 @@ import { buyPotion, buyItem } from '../core/shop'
 import { canCraft, doCraft } from '../core/craft'
 import { canReforge, doReforge, reforgeCost, upgradedBonus, sellItem, sellValue, MAX_REFORGE_LEVEL } from '../core/reforge'
 import { acceptQuest, refreshQuestProgress, claimQuest, currentChainQuest } from '../core/quests'
-import { POTION_PRICE, WEAPON_SHOP, ARMOR_SHOP, HAT_SHOP, QUEST_CHAIN, type QuestDef, type ShopItemDef } from '../data/shops'
+import { POTION_PRICE, getTownStock, QUEST_CHAIN, type QuestDef, type ShopItemDef } from '../data/shops'
 import { WORLD_NODES } from '../data/worldmap'
 import { ITEMS, rarityColor, SLOT_ORDER, SLOT_LABEL_PLURAL } from '../data/items'
 import { equipRestrictionMessage } from '../core/equip'
@@ -504,10 +504,12 @@ export class TownScene extends Phaser.Scene {
   }
 
   private openSpot(kind: SpotKind) {
+    // stock de la VILLE courante (Prontera ≠ Morocc…), repli propre sur Prontera si non défini
+    const stock = getTownStock(this.townId)
     if (kind === 'potions') this.openPotionShop()
-    // armurerie = ARMES + ARMURES (le tri par type les regroupe) ; tailleur = CHAPEAUX/cosmétiques
-    else if (kind === 'armes') this.openItemShop('armes', [...WEAPON_SHOP, ...ARMOR_SHOP])
-    else if (kind === 'vetements') this.openItemShop('vetements', HAT_SHOP)
+    // armurerie = ARMES + ARMURES/accessoires (le tri par type les regroupe) ; tailleur = CHAPEAUX
+    else if (kind === 'armes') this.openItemShop('armes', [...stock.weapons, ...stock.armors])
+    else if (kind === 'vetements') this.openItemShop('vetements', stock.hats)
     else if (kind === 'forge') this.openForge()
     else if (kind === 'quete') this.openQuestNpc()
   }
@@ -663,16 +665,17 @@ export class TownScene extends Phaser.Scene {
 
   private openPotionShop() {
     this.closePanel()
-    const w = 380, h = 300
+    const w = 380, h = 330
     const c = this.add.container(0, 0).setDepth(50).setScrollFactor(0)
     this.panel = c
     const top = this.drawPanelFrame(c, w, h, 'Herboristerie')
     const p = getPlayer()
     const goldText = this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
-    const stockText = this.add.text(480, top + 96, `Potions en réserve : ${p.potions}`, { fontSize: '14px', color: '#cfd8dc' }).setOrigin(0.5)
+    this.drawShopTabs(c, top, 'buy', 'Herboristerie', () => this.openPotionShop())
+    const stockText = this.add.text(480, top + 112, `Potions en réserve : ${p.potions}`, { fontSize: '14px', color: '#cfd8dc' }).setOrigin(0.5)
     c.add(stockText)
     this.drawItemCard(
-      c, 480, top + 190, 200, 130,
+      c, 480, top + 208, 200, 130,
       { texture: 'potion-drop' }, 'Potion de soin', 'Restaure des PV en combat', POTION_PRICE,
       () => { const pl = getPlayer(); return buyPotion(pl) },
       () => {
@@ -749,6 +752,7 @@ export class TownScene extends Phaser.Scene {
     const top = this.drawPanelFrame(c, w, h, title)
     const p = getPlayer()
     const goldText = this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
+    this.drawShopTabs(c, top, 'buy', title, () => this.openItemShop(kind, list, 0))
     const owned = this.ownedIds()
 
     const gridLeft = 480 - (cols * cardW + (cols - 1) * gapX) / 2 + cardW / 2
@@ -879,27 +883,54 @@ export class TownScene extends Phaser.Scene {
     else this.renderSell(c, page)
   }
 
-  // barre d'onglets commune aux trois panneaux de la forge, sous le titre
-  private drawForgeTabs(c: Phaser.GameObjects.Container, top: number, active: 'craft' | 'reforge' | 'sell') {
-    const tabs: { id: 'craft' | 'reforge' | 'sell'; label: string }[] = [
-      { id: 'craft', label: 'Forger' },
-      { id: 'reforge', label: 'Réforger' },
-      { id: 'sell', label: 'Vendre' },
-    ]
+  // barre d'onglets générique, centrée sous le titre (top + 74). L'onglet actif est mis en valeur ;
+  // un onglet inactif muni d'un `onSelect` devient cliquable. Partagée par la forge
+  // (Forger / Réforger / Vendre) et les boutiques (Acheter / Vendre).
+  private drawTabBar(
+    c: Phaser.GameObjects.Container, top: number,
+    tabs: { label: string; active: boolean; onSelect?: () => void }[],
+  ) {
     const tw = 128, gap = 10
     const totalW = tabs.length * tw + (tabs.length - 1) * gap
     let x = 480 - totalW / 2 + tw / 2
     for (const tab of tabs) {
-      const on = tab.id === active
       const btn = this.add.text(x, top + 74, tab.label, {
-        fontSize: '15px', color: on ? '#ffd54f' : '#cfd8dc',
-        backgroundColor: on ? '#5d4037' : '#3a2b28', fontStyle: on ? 'bold' : 'normal',
+        fontSize: '15px', color: tab.active ? '#ffd54f' : '#cfd8dc',
+        backgroundColor: tab.active ? '#5d4037' : '#3a2b28', fontStyle: tab.active ? 'bold' : 'normal',
         padding: { x: 14, y: 6 },
       }).setOrigin(0.5)
       c.add(btn)
-      if (!on) btn.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openForgePanel(tab.id))
+      if (!tab.active && tab.onSelect) btn.setInteractive({ useHandCursor: true }).on('pointerdown', tab.onSelect)
       x += tw + gap
     }
+  }
+
+  // onglets de la forge, sous le titre : Forger / Réforger / Vendre
+  private drawForgeTabs(c: Phaser.GameObjects.Container, top: number, active: 'craft' | 'reforge' | 'sell') {
+    this.drawTabBar(c, top, [
+      { label: 'Forger', active: active === 'craft', onSelect: () => this.openForgePanel('craft') },
+      { label: 'Réforger', active: active === 'reforge', onSelect: () => this.openForgePanel('reforge') },
+      { label: 'Vendre', active: active === 'sell', onSelect: () => this.openForgePanel('sell') },
+    ])
+  }
+
+  // onglets Acheter / Vendre d'une boutique classique (herboristerie, armurerie, vêtements) : la
+  // vente n'est plus cachée dans la forge, chaque échoppe y donne accès. `back` rouvre l'onglet
+  // Acheter de la boutique d'origine.
+  private drawShopTabs(c: Phaser.GameObjects.Container, top: number, active: 'buy' | 'sell', title: string, back: () => void) {
+    this.drawTabBar(c, top, [
+      { label: 'Acheter', active: active === 'buy', onSelect: back },
+      { label: 'Vendre', active: active === 'sell', onSelect: () => this.openShopSell(title, back) },
+    ])
+  }
+
+  // Ouvre l'onglet Vendre d'une boutique classique (réutilise renderSell, la mécanique de revente
+  // partagée avec la forge : sellValue = 50 % du prix d'achat). `back` rouvre l'onglet Acheter.
+  private openShopSell(title: string, back: () => void, page = 0) {
+    this.closePanel()
+    const c = this.add.container(0, 0).setDepth(50).setScrollFactor(0)
+    this.panel = c
+    this.renderSell(c, page, undefined, undefined, { title, back })
   }
 
   // Forger : transforme les matériaux collectés en équipement. Une ligne par recette avec
@@ -1128,7 +1159,9 @@ export class TownScene extends Phaser.Scene {
 
   // Vendre : revend un objet de l'inventaire contre de l'or (selon sa rareté). Une ligne par
   // objet avec son prix de vente et un bouton Vendre. renderSell() reconstruit tout après une vente.
-  private renderSell(c: Phaser.GameObjects.Container, page = 0, msg?: string, ok?: boolean) {
+  // `ctx` présent = panneau Vendre ouvert depuis une boutique classique (titre de l'échoppe +
+  // onglets Acheter/Vendre) ; absent = onglet Vendre de la forge (titre « Forge » + onglets forge).
+  private renderSell(c: Phaser.GameObjects.Container, page = 0, msg?: string, ok?: boolean, ctx?: { title: string; back: () => void }) {
     c.removeAll(true)
     const w = 860
     const rowH = 44
@@ -1141,14 +1174,15 @@ export class TownScene extends Phaser.Scene {
     const pageItems = p.inventory.slice(start, start + rowsPerPage)
     const rowsForH = pageCount > 1 ? rowsPerPage : Math.max(pageItems.length, 1)
     const h = Math.min(500, headerH + rowsForH * rowH + footerH)
-    const top = this.drawPanelFrame(c, w, h, 'Forge')
+    const top = this.drawPanelFrame(c, w, h, ctx?.title ?? 'Forge')
     this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
-    this.drawForgeTabs(c, top, 'sell')
+    if (ctx) this.drawShopTabs(c, top, 'sell', ctx.title, ctx.back)
+    else this.drawForgeTabs(c, top, 'sell')
     c.add(this.add.text(480, top + 104, 'Revends les objets de ton inventaire non équipé.', {
       fontSize: '12px', color: '#cfd8dc', align: 'center',
     }).setOrigin(0.5))
 
-    const render = (m?: string, o?: boolean) => this.renderSell(c, page, m, o)
+    const render = (m?: string, o?: boolean) => this.renderSell(c, page, m, o, ctx)
     const rowsTop = top + headerH
     const rowLeft = 480 - w / 2 + 16
 
@@ -1200,7 +1234,7 @@ export class TownScene extends Phaser.Scene {
       fontSize: '14px', color: ok ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
     }).setOrigin(0.5))
 
-    this.drawPager(c, 480, top + h - 46, page, pageCount, (pg) => this.renderSell(c, pg))
+    this.drawPager(c, 480, top + h - 46, page, pageCount, (pg) => this.renderSell(c, pg, undefined, undefined, ctx))
     c.add(this.add.text(480, top + h - 18, '← Fermer', {
       fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()))
