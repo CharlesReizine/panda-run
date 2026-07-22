@@ -556,7 +556,7 @@ export class PreloadScene extends Phaser.Scene {
     for (const item of Object.values(ITEMS)) {
       if (item.slot !== 'weapon' || !item.weaponType) continue
       const g = this.add.graphics()
-      this.drawItemWeapon(g, item.weaponType, rarityColor(item.rarity), 20, 44)
+      this.drawItemWeapon(g, item.id, item.weaponType, rarityColor(item.rarity), 20, 44)
       g.generateTexture(`weapon-${item.id}`, 40, 60)
       g.destroy()
     }
@@ -610,10 +610,29 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0xffffff, 0.6).fillRect(hx + 4, hy - 38, 1.6, 34)
   }
 
-  // Overlay d'arme PROPRE À UN OBJET équipé : silhouette par famille (lame/arc/bâton) TEINTÉE par la
-  // rareté → deux objets d'un même type se distinguent (épée en bambou grise ↔ katana d'éclair doré).
+  // Overlay d'arme PROPRE À UN OBJET équipé. Les armes qui ont une SILHOUETTE dédiée (cf. switch)
+  // sont dessinées avec leur forme et leurs couleurs propres → aucun clone teinté ; les autres
+  // retombent sur la silhouette générique de leur famille (lame/arc/bâton) teintée par la rareté.
   // Grip ancré en (hx, hy) dans le cadre 40×60, comme les armes de classe.
-  private drawItemWeapon(g: Phaser.GameObjects.Graphics, type: WeaponType, tint: number, hx: number, hy: number) {
+  private drawItemWeapon(g: Phaser.GameObjects.Graphics, id: string, type: WeaponType, tint: number, hx: number, hy: number) {
+    switch (id) {
+      case 'dague-jumelle': return this.drawTwinDaggers(g, hx, hy)
+      case 'cimeterre-desert': return this.drawScimitar(g, hx, hy)
+      case 'epee-cristal': return this.drawCrystalSword(g, hx, hy)
+      case 'lame-solaire': return this.drawSolarBlade(g, hx, hy)
+      case 'arc-corne': return this.drawHornBow(g, hx, hy)
+      case 'arc-elfique': return this.drawElvenBow(g, hx, hy)
+      case 'arc-tempete': return this.drawStormBow(g, hx, hy)
+      case 'baton-noueux': return this.drawGnarledStaff(g, hx, hy)
+      case 'sceptre-glace': return this.drawIceScepter(g, hx, hy)
+      case 'sceptre-arcane': return this.drawArcaneScepter(g, hx, hy)
+      case 'baton-cosmique': return this.drawCosmicStaff(g, hx, hy)
+    }
+    this.drawGenericWeapon(g, type, tint, hx, hy)
+  }
+
+  // silhouette générique par famille (repli pour les armes sans dessin dédié) — teintée par la rareté.
+  private drawGenericWeapon(g: Phaser.GameObjects.Graphics, type: WeaponType, tint: number, hx: number, hy: number) {
     if (type === 'bow') {
       // arc recourbé : bois brun, corde claire, poignée + nock TEINTÉS par la rareté
       g.lineStyle(4, 0x6d4c41).beginPath()
@@ -642,6 +661,162 @@ export class PreloadScene extends Phaser.Scene {
     g.fillRect(hx - 5, hy - 38, 11, 38)
     g.fillTriangle(hx - 5, hy - 36, hx + 6, hy - 36, hx + 0.5, hy - 43)
     g.fillStyle(0xffffff, 0.9).fillRect(hx - 0.5, hy - 38, 2.5, 34) // arête brillante
+  }
+
+  // ───────────── Silhouettes d'armes DÉDIÉES (grip ancré en (hx, hy), cadre 40×60) ─────────────
+  // Chacune a une forme et des couleurs propres → deux armes de la même famille ne se confondent pas.
+
+  // Dagues jumelles (commun) : deux lames courtes croisées, acier bleuté, courtes gardes.
+  private drawTwinDaggers(g: Phaser.GameObjects.Graphics, hx: number, hy: number) {
+    g.fillStyle(0x37474f).fillRect(hx - 2, hy + 2, 4, 9) // poignée commune
+    g.fillStyle(0x263238).fillCircle(hx, hy + 12, 2.5)
+    for (const s of [-1, 1] as const) {
+      g.fillStyle(0x9e9e9e).fillRect(hx - 5 * s, hy - 1, 4, 3) // garde
+      g.fillStyle(0xb0bec5).fillTriangle(hx + s * 2, hy - 2, hx + s * 5, hy - 2, hx + s * 9, hy - 22) // lame courte oblique
+      g.fillStyle(0xeceff1, 0.9).fillTriangle(hx + s * 2, hy - 2, hx + s * 3, hy - 2, hx + s * 8, hy - 21) // fil clair
+    }
+  }
+
+  // Cimeterre du désert (rare) : longue lame CURVE monotranchant, garde et pommeau dorés.
+  private drawScimitar(g: Phaser.GameObjects.Graphics, hx: number, hy: number) {
+    g.fillStyle(0x8d6e63).fillRect(hx - 2.5, hy + 2, 5, 11) // poignée bois
+    g.fillStyle(0xffb300).fillCircle(hx, hy + 14, 3) // pommeau doré
+    g.fillStyle(0xffd54f).fillRect(hx - 7, hy - 1, 16, 4) // garde dorée
+    // lame en croissant : bord courbe convexe à droite, dos concave
+    g.fillStyle(0xcfd8dc).fillTriangle(hx - 3, hy - 2, hx + 4, hy - 4, hx + 14, hy - 40)
+    g.fillStyle(0xcfd8dc).fillTriangle(hx - 3, hy - 2, hx + 14, hy - 40, hx + 4, hy - 34)
+    g.fillStyle(0xffffff, 0.9).fillTriangle(hx + 5, hy - 6, hx + 8, hy - 6, hx + 14, hy - 38) // fil brillant convexe
+  }
+
+  // Épée de cristal (épique) : lame translucide facettée cyan, halo froid, garde argentée.
+  private drawCrystalSword(g: Phaser.GameObjects.Graphics, hx: number, hy: number) {
+    g.fillStyle(0x455a64).fillRect(hx - 2.5, hy + 2, 5, 11) // poignée
+    g.fillStyle(0xb0bec5).fillCircle(hx, hy + 14, 3) // pommeau argenté
+    g.fillStyle(0xcfd8dc).fillRect(hx - 8, hy - 2, 16, 4) // garde argentée
+    this.bakeGlow(g, hx, hy - 20, 12, 0x40c4ff, 6, 0.4) // halo glacé
+    // lame cristalline : deux facettes claires + arête centrale vive
+    g.fillStyle(0x4dd0e1).fillTriangle(hx - 5, hy - 3, hx - 5, hy - 34, hx + 0.5, hy - 44)
+    g.fillStyle(0x80deea).fillTriangle(hx + 5, hy - 3, hx + 5, hy - 34, hx + 0.5, hy - 44)
+    g.fillStyle(0xe0f7fa, 0.95).fillTriangle(hx - 1.5, hy - 3, hx + 1.5, hy - 3, hx + 0.5, hy - 43) // arête centrale
+    g.fillStyle(0xffffff, 0.8).fillCircle(hx - 2, hy - 20, 1.4) // éclat facette
+  }
+
+  // Lame solaire (légendaire) : large lame incandescente or/rouge, grand rayonnement, garde ailée.
+  private drawSolarBlade(g: Phaser.GameObjects.Graphics, hx: number, hy: number) {
+    this.bakeGlow(g, hx, hy - 18, 17, 0xff7a1e, 8, 0.5) // aura solaire
+    this.bakeGlow(g, hx, hy - 20, 9, 0xffe082, 6, 0.55)
+    g.fillStyle(0x5d2c0a).fillRect(hx - 2.5, hy + 2, 5, 11) // poignée
+    g.fillStyle(0xffca28).fillCircle(hx, hy + 14, 3.4) // pommeau or
+    // garde ailée dorée
+    g.fillStyle(0xffb300).fillRect(hx - 9, hy - 2, 20, 5)
+    g.fillTriangle(hx - 9, hy - 2, hx - 12, hy - 8, hx - 6, hy - 2)
+    g.fillTriangle(hx + 11, hy - 2, hx + 14, hy - 8, hx + 8, hy - 2)
+    // lame : cœur braise → arête blanche-jaune
+    g.fillStyle(0xff5a1e).fillRect(hx - 5, hy - 40, 11, 40)
+    g.fillTriangle(hx - 5, hy - 38, hx + 6, hy - 38, hx + 0.5, hy - 47)
+    g.fillStyle(0xffb547).fillRect(hx - 2.5, hy - 40, 6, 38)
+    g.fillStyle(0xfff3c4, 0.95).fillRect(hx - 0.5, hy - 40, 2.2, 36) // cœur incandescent
+  }
+
+  // Arc de corne (commun) : petit arc court à double courbure, corne claire.
+  private drawHornBow(g: Phaser.GameObjects.Graphics, hx: number, hy: number) {
+    g.lineStyle(3.5, 0xd7c9a8).beginPath()
+    g.arc(hx - 1, hy - 3, 11, Phaser.Math.DegToRad(-70), Phaser.Math.DegToRad(70), false); g.strokePath()
+    const c = Phaser.Math.DegToRad(-70), d = Phaser.Math.DegToRad(70)
+    g.lineStyle(1, 0xf5f5f5).beginPath()
+    g.moveTo(hx - 1 + 11 * Math.cos(c), hy - 3 + 11 * Math.sin(c)); g.lineTo(hx - 1 + 11 * Math.cos(d), hy - 3 + 11 * Math.sin(d)); g.strokePath()
+    g.fillStyle(0x8d6e63).fillCircle(hx - 1, hy - 3, 2.5) // poignée bois
+  }
+
+  // Arc elfique (épique) : grand arc élancé vert émeraude à volutes, corde dorée, halo végétal.
+  private drawElvenBow(g: Phaser.GameObjects.Graphics, hx: number, hy: number) {
+    this.bakeGlow(g, hx - 2, hy - 3, 13, 0x66bb6a, 6, 0.35) // halo végétal
+    g.lineStyle(4, 0x2e7d32).beginPath()
+    g.arc(hx - 2, hy - 3, 16, Phaser.Math.DegToRad(-82), Phaser.Math.DegToRad(82), false); g.strokePath()
+    g.lineStyle(1.5, 0x81c784).beginPath()
+    g.arc(hx - 2, hy - 3, 16, Phaser.Math.DegToRad(-82), Phaser.Math.DegToRad(82), false); g.strokePath() // liseré clair
+    const c = Phaser.Math.DegToRad(-82), d = Phaser.Math.DegToRad(82)
+    g.lineStyle(1.2, 0xffe082).beginPath()
+    g.moveTo(hx - 2 + 16 * Math.cos(c), hy - 3 + 16 * Math.sin(c)); g.lineTo(hx - 2 + 16 * Math.cos(d), hy - 3 + 16 * Math.sin(d)); g.strokePath() // corde dorée
+    // feuilles aux extrémités
+    g.fillStyle(0x66bb6a).fillEllipse(hx - 2 + 16 * Math.cos(c), hy - 3 + 16 * Math.sin(c), 4, 7)
+    g.fillStyle(0x66bb6a).fillEllipse(hx - 2 + 16 * Math.cos(d), hy - 3 + 16 * Math.sin(d), 4, 7)
+    g.fillStyle(0xffca28).fillCircle(hx - 2, hy - 3, 2.5) // poignée sertie
+  }
+
+  // Arc de tempête (légendaire) : arc d'orage sombre nervuré d'éclairs, corde électrique, halo bleu.
+  private drawStormBow(g: Phaser.GameObjects.Graphics, hx: number, hy: number) {
+    this.bakeGlow(g, hx - 2, hy - 3, 16, 0x40c4ff, 8, 0.45) // halo orageux
+    g.lineStyle(4.5, 0x263238).beginPath()
+    g.arc(hx - 2, hy - 3, 16, Phaser.Math.DegToRad(-82), Phaser.Math.DegToRad(82), false); g.strokePath()
+    g.lineStyle(1.5, 0x82b1ff).beginPath()
+    g.arc(hx - 2, hy - 3, 16, Phaser.Math.DegToRad(-82), Phaser.Math.DegToRad(82), false); g.strokePath()
+    const c = Phaser.Math.DegToRad(-82), d = Phaser.Math.DegToRad(82)
+    // corde en zigzag (éclair) entre les nocks
+    const x0 = hx - 2 + 16 * Math.cos(c), y0 = hy - 3 + 16 * Math.sin(c)
+    const x1 = hx - 2 + 16 * Math.cos(d), y1 = hy - 3 + 16 * Math.sin(d)
+    g.lineStyle(1.6, 0xe1f5fe).beginPath()
+    g.moveTo(x0, y0); g.lineTo((x0 + x1) / 2 + 5, (y0 + y1) / 2 - 4); g.lineTo((x0 + x1) / 2 - 3, (y0 + y1) / 2 + 3); g.lineTo(x1, y1); g.strokePath()
+    g.fillStyle(0x40c4ff).fillCircle(hx - 2, hy - 3, 3) // poignée électrique
+    g.fillStyle(0xfff59d).fillCircle(hx - 2, hy - 3, 1.4)
+  }
+
+  // Bâton noueux (commun) : hampe irrégulière brun clair, galet gris poli au sommet.
+  private drawGnarledStaff(g: Phaser.GameObjects.Graphics, hx: number, hy: number) {
+    g.lineStyle(4, 0x8d6e63).beginPath(); g.moveTo(hx - 1, hy - 20); g.lineTo(hx + 1, hy - 6); g.lineTo(hx + 3, hy + 10); g.strokePath() // hampe coudée
+    g.lineStyle(2, 0x6d4c41).beginPath(); g.moveTo(hx - 2, hy - 4); g.lineTo(hx - 5, hy - 1); g.strokePath() // nœud/branche
+    g.fillStyle(0x78909c).fillCircle(hx - 1, hy - 23, 5) // galet
+    g.fillStyle(0xb0bec5).fillCircle(hx - 2, hy - 24, 2) // reflet du galet
+  }
+
+  // Sceptre de glace (rare) : hampe bleu givré surmontée d'un éclat de glace anguleux, halo froid.
+  private drawIceScepter(g: Phaser.GameObjects.Graphics, hx: number, hy: number) {
+    g.lineStyle(4, 0x5c6bc0).beginPath(); g.moveTo(hx, hy - 20); g.lineTo(hx + 2, hy + 10); g.strokePath()
+    this.bakeGlow(g, hx, hy - 26, 11, 0x81d4fa, 6, 0.4)
+    // cristal de glace : losange anguleux + éclats
+    g.fillStyle(0x4fc3f7).fillTriangle(hx, hy - 36, hx - 6, hy - 26, hx + 6, hy - 26)
+    g.fillStyle(0x4fc3f7).fillTriangle(hx, hy - 18, hx - 6, hy - 26, hx + 6, hy - 26)
+    g.fillStyle(0xe1f5fe, 0.9).fillTriangle(hx, hy - 34, hx - 2, hy - 27, hx + 2, hy - 27) // arête claire
+    g.fillStyle(0xb3e5fc).fillTriangle(hx - 9, hy - 24, hx - 12, hy - 30, hx - 6, hy - 27) // éclat latéral
+    g.fillStyle(0xffffff, 0.85).fillCircle(hx - 2, hy - 28, 1.2)
+  }
+
+  // Sceptre arcanique (épique) : hampe violette, anneau runique flottant + gemme centrale, halo mauve.
+  private drawArcaneScepter(g: Phaser.GameObjects.Graphics, hx: number, hy: number) {
+    g.lineStyle(4, 0x5e35b1).beginPath(); g.moveTo(hx, hy - 18); g.lineTo(hx + 2, hy + 10); g.strokePath()
+    this.bakeGlow(g, hx, hy - 27, 13, 0xba68c8, 7, 0.42)
+    g.lineStyle(2.5, 0xce93d8).strokeCircle(hx, hy - 27, 8) // anneau runique
+    g.lineStyle(1.2, 0xf3e5f5).strokeCircle(hx, hy - 27, 8)
+    // marques runiques sur l'anneau
+    for (const a of [0, 90, 180, 270]) {
+      const rad = Phaser.Math.DegToRad(a)
+      g.fillStyle(0xf3e5f5).fillCircle(hx + 8 * Math.cos(rad), hy - 27 + 8 * Math.sin(rad), 1.4)
+    }
+    g.fillStyle(0x8e24aa).fillCircle(hx, hy - 27, 4) // gemme centrale
+    g.fillStyle(0xffffff, 0.85).fillCircle(hx - 1.4, hy - 28.4, 1.3)
+  }
+
+  // Bâton cosmique (légendaire) : hampe indigo, étoile miniature à branches + halo stellaire, éclats.
+  private drawCosmicStaff(g: Phaser.GameObjects.Graphics, hx: number, hy: number) {
+    this.bakeGlow(g, hx, hy - 27, 18, 0x7c4dff, 8, 0.5) // nébuleuse
+    this.bakeGlow(g, hx, hy - 27, 9, 0xe1bee7, 6, 0.55)
+    g.lineStyle(4, 0x311b92).beginPath(); g.moveTo(hx, hy - 20); g.lineTo(hx + 2, hy + 10); g.strokePath()
+    // étoile à 4 branches (astre)
+    const star = (cx: number, cy: number, R: number, r: number, col: number) => {
+      g.fillStyle(col)
+      g.fillTriangle(cx, cy - R, cx - r, cy, cx + r, cy)
+      g.fillTriangle(cx, cy + R, cx - r, cy, cx + r, cy)
+      g.fillTriangle(cx - R, cy, cx, cy - r, cx, cy + r)
+      g.fillTriangle(cx + R, cy, cx, cy - r, cx, cy + r)
+    }
+    star(hx, hy - 27, 10, 3.5, 0xb388ff)
+    star(hx, hy - 27, 6, 2, 0xfff8e1)
+    g.fillStyle(0xffffff).fillCircle(hx, hy - 27, 2)
+    // petits astres satellites
+    for (const [sx, sy, sr] of [[hx - 9, hy - 18, 1.3], [hx + 8, hy - 34, 1.1], [hx + 7, hy - 20, 1]] as const) {
+      g.fillStyle(0xffffff, 0.95).fillCircle(sx, sy, sr)
+      g.fillStyle(0xb388ff, 0.5).fillCircle(sx, sy, sr + 1.6)
+    }
   }
 
   // panda K.O. : allongé sur le dos, pattes en l'air, yeux en croix et langue pendante.
@@ -1387,6 +1562,178 @@ export class PreloadScene extends Phaser.Scene {
           g.fillStyle(0xffe082, 0.95).fillCircle(sx, sy, sr)
           g.fillStyle(0xff8a3d, 0.5).fillCircle(sx, sy, sr + 1.6)
         }
+        break
+      }
+      case 'bandeau-guerrier': {
+        // COMMUN : bandeau de tissu serré avec nœud sur le côté et pans flottants
+        const base = 0x3949ab
+        g.fillStyle(this.shadeColor(base, 0.7)).fillRoundedRect(4, 15, 32, 9, 3) // bande (ombre)
+        g.fillStyle(base).fillRoundedRect(4, 14, 32, 8, 3)
+        g.fillStyle(this.shadeColor(base, 1.4), 0.6).fillRect(6, 15, 28, 2) // reflet
+        g.fillStyle(this.shadeColor(base, 0.55)).fillCircle(33, 19, 4) // nœud (ombre)
+        g.fillStyle(base).fillCircle(33, 18, 3.5)
+        g.fillStyle(this.shadeColor(base, 0.7)).fillTriangle(33, 20, 39, 24, 37, 28) // pan flottant
+        g.fillStyle(base).fillTriangle(33, 20, 38, 26, 34, 27)
+        break
+      }
+      case 'plume-eclaireur': {
+        // COMMUN : bandeau de cuir avec une grande plume colorée fichée sur le côté
+        g.fillStyle(0x5d4037).fillRoundedRect(5, 17, 30, 7, 2) // bandeau cuir
+        g.fillStyle(0x795548, 0.8).fillRect(7, 18, 26, 2) // couture claire
+        // plume : hampe + barbes vertes-turquoise dégradées
+        g.fillStyle(0x00695c).fillTriangle(28, 20, 40, 2, 34, 20) // barbe extérieure (ombre)
+        g.fillStyle(0x26a69a).fillTriangle(29, 19, 38, 3, 33, 19) // barbe vive
+        g.fillStyle(0x80cbc4, 0.9).fillTriangle(31, 18, 37, 5, 34, 16) // reflet
+        g.lineStyle(1.5, 0xede7f6).beginPath(); g.moveTo(30, 20); g.lineTo(38, 4); g.strokePath() // rachis
+        break
+      }
+      case 'bonnet-laine': {
+        // COMMUN : bonnet tricoté à revers et pompon, mailles suggérées par des rayures
+        const base = 0xc62828
+        g.fillStyle(this.shadeColor(base, 0.7)).fillEllipse(20, 15, 32, 20) // calotte (ombre)
+        g.fillStyle(base).fillEllipse(20, 14, 30, 18)
+        g.fillStyle(this.shadeColor(base, 1.25), 0.7).fillEllipse(15, 9, 14, 7) // reflet
+        g.lineStyle(1, this.shadeColor(base, 0.6), 0.6).beginPath() // mailles verticales
+        for (const mx of [10, 15, 20, 25, 30]) { g.moveTo(mx, 8); g.lineTo(mx, 22) }
+        g.strokePath()
+        g.fillStyle(0xf5f5f5).fillRoundedRect(4, 20, 32, 7, 3) // revers en laine claire
+        g.fillStyle(0xe0e0e0, 0.7).fillRect(4, 24, 32, 3)
+        g.fillStyle(0xf5f5f5).fillCircle(20, 5, 4) // pompon
+        g.fillStyle(0xffffff, 0.8).fillCircle(18.5, 3.5, 1.5)
+        break
+      }
+      case 'oreilles-chat': {
+        // RARE : serre-tête à deux oreilles de chat triangulaires, intérieur rose
+        const fur = 0x5d4037
+        g.fillStyle(0x4e342e).fillRoundedRect(6, 20, 28, 5, 2) // serre-tête
+        for (const s of [-1, 1] as const) {
+          const cx = 20 + s * 10
+          g.fillStyle(this.shadeColor(fur, 0.8)).fillTriangle(cx - 7, 22, cx + 7, 22, cx, 2) // oreille (ombre)
+          g.fillStyle(fur).fillTriangle(cx - 6, 21, cx + 6, 21, cx, 4)
+          g.fillStyle(0xf48fb1).fillTriangle(cx - 3, 19, cx + 3, 19, cx, 8) // intérieur rose
+          g.fillStyle(0xffffff, 0.6).fillTriangle(cx - 4, 20, cx - 2, 20, cx - 1, 9) // reflet bord
+        }
+        break
+      }
+      case 'chapeau-sorciere': {
+        // RARE : grand chapeau pointu à large bord, boucle dorée, dégradé violet nuit
+        const base = 0x4a148c
+        g.fillStyle(this.shadeColor(base, 0.55)).fillEllipse(20, 27, 40, 10) // bord (ombre)
+        g.fillStyle(base).fillEllipse(20, 26, 38, 8)
+        g.fillStyle(this.shadeColor(base, 1.3), 0.5).fillEllipse(15, 25, 20, 3) // reflet du bord
+        // cône légèrement courbé à la pointe (3 bandes de volume)
+        g.fillStyle(this.shadeColor(base, 0.65)).fillTriangle(9, 26, 31, 26, 26, 1)
+        g.fillStyle(base).fillTriangle(9, 26, 24, 26, 24, 3)
+        g.fillStyle(this.shadeColor(base, 1.25)).fillTriangle(12, 26, 20, 26, 23, 4) // arête éclairée
+        g.fillStyle(0x2a0a52).fillRect(6, 22, 28, 4) // ruban sombre
+        g.fillStyle(0xffca28).fillRect(17, 21, 7, 6) // boucle dorée
+        g.fillStyle(0x2a0a52).fillRect(19, 22, 3, 4)
+        break
+      }
+      case 'lunettes-aviateur': {
+        // RARE : lunettes d'aviateur relevées sur le front — bandeau cuir, deux verres cerclés cuivre
+        g.fillStyle(0x5d4037).fillRoundedRect(4, 12, 32, 8, 3) // bandeau cuir
+        g.fillStyle(0x795548, 0.7).fillRect(6, 13, 28, 2)
+        for (const cx of [13, 27] as const) {
+          g.fillStyle(0xb87333).fillCircle(cx, 20, 7) // cerclage cuivre
+          g.fillStyle(0x8d5a24).fillCircle(cx, 20, 6)
+          g.fillStyle(0x4fc3f7).fillCircle(cx, 20, 4.5) // verre bleuté
+          g.fillStyle(0xe1f5fe, 0.8).fillCircle(cx - 1.6, 18.4, 1.6) // reflet
+        }
+        g.fillStyle(0xb87333).fillRect(18, 19, 4, 2.5) // pont central
+        break
+      }
+      case 'casque-viking': {
+        // ÉPIQUE : casque de fer arrondi, bande rivetée, deux grandes cornes claires écartées
+        const m = 0x607d8b
+        g.fillStyle(0x37474f).fillEllipse(20, 18, 30, 20) // dôme (base)
+        g.fillStyle(m).fillEllipse(20, 17, 27, 17)
+        g.fillStyle(this.shadeColor(m, 1.45), 0.7).fillEllipse(15, 12, 16, 6) // reflet
+        g.fillStyle(0x455a64).fillRect(6, 16, 28, 5) // bande frontale rivetée
+        for (const rx of [10, 20, 30]) { g.fillStyle(0x263238).fillCircle(rx, 18, 1.4); g.fillStyle(0xb0bec5).fillCircle(rx - 0.4, 17.6, 0.6) }
+        // cornes recourbées (dégradé os)
+        for (const s of [-1, 1] as const) {
+          g.fillStyle(0x8d6e5a).fillTriangle(20 + s * 8, 15, 20 + s * 20, 12, 20 + s * 13, 1)
+          g.fillStyle(0xcbb494).fillTriangle(20 + s * 9, 14, 20 + s * 17, 11, 20 + s * 13, 3)
+          g.fillStyle(0xf0e6d2, 0.8).fillTriangle(20 + s * 10, 13, 20 + s * 12, 11, 20 + s * 12.5, 4) // arête claire
+        }
+        break
+      }
+      case 'diademe-fee': {
+        // ÉPIQUE : fin diadème d'argent à volutes, grande gemme rose lumineuse, halo doux
+        this.bakeGlow(g, 20, 15, 12, 0xf48fb1, 6, 0.4) // aura féerique
+        g.lineStyle(2.5, 0xcfd8dc).beginPath() // arceau
+        g.arc(20, 26, 15, Phaser.Math.DegToRad(-152), Phaser.Math.DegToRad(-28), false); g.strokePath()
+        g.lineStyle(1.2, 0xffffff).beginPath()
+        g.arc(20, 26, 15, Phaser.Math.DegToRad(-152), Phaser.Math.DegToRad(-28), false); g.strokePath()
+        // volutes latérales
+        g.lineStyle(2, 0xcfd8dc).beginPath(); g.arc(11, 18, 3, 0, Math.PI * 2); g.moveTo(32, 18); g.arc(29, 18, 3, 0, Math.PI * 2); g.strokePath()
+        // gemme centrale à facette
+        g.fillStyle(0xad1457).fillCircle(20, 12, 4.4)
+        g.fillStyle(0xf06292).fillCircle(20, 12, 3.4)
+        g.fillStyle(0xffffff, 0.9).fillCircle(18.5, 10.5, 1.2)
+        g.fillStyle(0xfff59d).fillCircle(11, 14, 1.6).fillCircle(29, 14, 1.6) // petites gemmes
+        break
+      }
+      case 'aureole-sacree': {
+        // ÉPIQUE : auréole dorée rayonnante flottant au-dessus de la tête, halo sacré et plumes
+        this.bakeGlow(g, 20, 12, 16, 0xfff3b0, 8, 0.45) // grand halo
+        this.bakeGlow(g, 20, 12, 8, 0xfffde7, 5, 0.5)
+        // petites ailes légères de part et d'autre
+        for (const s of [-1, 1] as const) {
+          g.fillStyle(0xeceff1).fillEllipse(20 + s * 15, 20, 8, 5)
+          g.fillStyle(0xffffff, 0.9).fillEllipse(20 + s * 15, 19, 5, 3)
+        }
+        // anneau doré (auréole)
+        g.lineStyle(4, 0xffca28).strokeEllipse(20, 11, 26, 9)
+        g.lineStyle(2, 0xfff59d).strokeEllipse(20, 11, 26, 9)
+        // scintillements
+        for (const [sx, sy] of [[8, 6], [32, 6], [20, 2]] as const) {
+          g.fillStyle(0xffffff, 0.95).fillCircle(sx, sy, 1.3)
+          g.fillStyle(0xfff2b0, 0.6).fillCircle(sx, sy, 2.5)
+        }
+        break
+      }
+      case 'couronne-glace': {
+        // LÉGENDAIRE : couronne de glace à pics anguleux, dégradé cyan, halo froid, gemme saphir
+        this.bakeGlow(g, 20, 13, 16, 0x40c4ff, 8, 0.48) // aura glaciale
+        const ice = 0x81d4fa
+        g.fillStyle(this.shadeColor(ice, 0.6)).fillRect(4, 18, 32, 9) // bandeau (ombre)
+        g.fillStyle(ice).fillRect(4, 18, 32, 7)
+        g.fillStyle(0xe1f5fe, 0.7).fillRect(5, 19, 30, 1.6) // rim clair
+        // pics de glace irréguliers
+        for (const [x0, xm, x1, ty] of [[4, 9, 14, 4], [12, 20, 28, -2], [26, 31, 36, 5]] as const) {
+          g.fillStyle(this.shadeColor(ice, 0.7)).fillTriangle(x0, 20, xm, ty + 2, x1, 20)
+          g.fillStyle(ice).fillTriangle(x0, 19, xm, ty, x1, 19)
+          g.fillStyle(0xe1f5fe, 0.9).fillTriangle(xm - 2, 15, xm, ty, xm + 1, 14) // arête givrée
+        }
+        // saphir central
+        g.fillStyle(0x0277bd).fillCircle(20, 22, 3)
+        g.fillStyle(0x4fc3f7).fillCircle(20, 22, 2.2)
+        g.fillStyle(0xffffff, 0.9).fillCircle(19, 21, 0.9)
+        break
+      }
+      case 'masque-demon': {
+        // LÉGENDAIRE : masque d'oni écarlate, cornes noires ardentes, crocs, yeux rougeoyants, feu
+        this.bakeGlow(g, 20, 14, 17, 0xff3d00, 8, 0.5) // aura infernale
+        const red = 0xc62828
+        g.fillStyle(this.shadeColor(red, 0.6)).fillEllipse(20, 17, 32, 24) // face (ombre)
+        g.fillStyle(red).fillEllipse(20, 16, 29, 21)
+        g.fillStyle(this.shadeColor(red, 1.25), 0.6).fillEllipse(14, 11, 14, 7) // reflet
+        // cornes noires recourbées, pointe braise
+        for (const s of [-1, 1] as const) {
+          g.fillStyle(0x1a1a1a).fillTriangle(20 + s * 9, 12, 20 + s * 19, 6, 20 + s * 12, -2)
+          g.fillStyle(0x3a2a2a).fillTriangle(20 + s * 10, 11, 20 + s * 16, 6, 20 + s * 12.5, 0)
+          g.fillStyle(0xff5a1e, 0.9).fillCircle(20 + s * 12.5, 0, 1.6) // pointe ardente
+        }
+        // yeux rougeoyants en amande
+        this.bakeGlow(g, 13, 16, 4, 0xff5252, 4, 0.6)
+        this.bakeGlow(g, 27, 16, 4, 0xff5252, 4, 0.6)
+        g.fillStyle(0xffeb3b).fillEllipse(13, 16, 5, 3).fillEllipse(27, 16, 5, 3)
+        g.fillStyle(0x1a1a1a).fillCircle(13, 16, 1.2).fillCircle(27, 16, 1.2)
+        // rictus + crocs
+        g.fillStyle(0x1a1a1a).fillRect(12, 23, 16, 3)
+        for (const cx of [14, 18, 22, 26]) g.fillStyle(0xfff6e0).fillTriangle(cx - 1.5, 23, cx + 1.5, 23, cx, 28)
         break
       }
       default:

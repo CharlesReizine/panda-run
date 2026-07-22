@@ -55,6 +55,31 @@ const list: ItemDef[] = [
   { id: 'talisman-trefle', name: 'Talisman du trèfle', slot: 'accessory', bonus: { maxHp: 60 }, rarity: 'legendaire', description: 'Un trèfle à quatre feuilles pétrifié : une chance insolente, une vitalité de fer.' },
   { id: 'casque-croc', name: 'Casque à crocs', slot: 'hat', bonus: { def: 5, atk: 4 }, rarity: 'epique', description: 'Un heaume orné de crocs de fauve, aussi menaçant que protecteur.' },
   { id: 'corne-kaho', name: 'Corne de Lord Kaho', slot: 'hat', bonus: { atk: 6, def: 6 }, rarity: 'legendaire', description: 'La corne légendaire de Lord Kaho, symbole ultime de puissance martiale.' },
+  // ── Armes supplémentaires — silhouettes DÉDIÉES (cf. drawItemWeapon), spectre complet des trois
+  // familles (lame / arc / bâton) sur toute la montée en rareté. Bonus croissants avec la rareté.
+  { id: 'dague-jumelle', name: 'Dagues jumelles', slot: 'weapon', weaponType: 'sword', bonus: { atk: 6 }, rarity: 'commun', description: 'Deux lames courtes jumelles, vives et légères, pour frapper en éclair.' },
+  { id: 'cimeterre-desert', name: 'Cimeterre du désert', slot: 'weapon', weaponType: 'sword', bonus: { atk: 12 }, rarity: 'rare', description: 'Un cimeterre à la lame courbe, tranchant hérité des cavaliers du désert.' },
+  { id: 'epee-cristal', name: 'Épée de cristal', slot: 'weapon', weaponType: 'sword', bonus: { atk: 15 }, rarity: 'epique', description: 'Une lame de cristal pur qui capte la lumière et blesse d\'un éclat glacé.' },
+  { id: 'lame-solaire', name: 'Lame solaire', slot: 'weapon', weaponType: 'sword', bonus: { atk: 22 }, rarity: 'legendaire', description: 'Forgée au cœur d\'un soleil, sa lame incandescente réduit les ténèbres en cendres.' },
+  { id: 'arc-corne', name: 'Arc de corne', slot: 'weapon', weaponType: 'bow', bonus: { atk: 7 }, rarity: 'commun', description: 'Un arc court taillé dans la corne, nerveux et facile à bander.' },
+  { id: 'arc-elfique', name: 'Arc elfique', slot: 'weapon', weaponType: 'bow', bonus: { atk: 15 }, rarity: 'epique', description: 'Un arc elfique gravé de feuilles, d\'une précision et d\'une grâce surnaturelles.' },
+  { id: 'arc-tempete', name: 'Arc de tempête', slot: 'weapon', weaponType: 'bow', bonus: { atk: 20 }, rarity: 'legendaire', description: 'Chaque flèche décochée déchaîne la foudre : l\'arc gronde comme l\'orage.' },
+  { id: 'baton-noueux', name: 'Bâton noueux', slot: 'weapon', weaponType: 'staff', bonus: { atk: 8 }, rarity: 'commun', description: 'Un bâton noueux surmonté d\'un galet poli : l\'outil du mage débutant.' },
+  { id: 'sceptre-glace', name: 'Sceptre de glace', slot: 'weapon', weaponType: 'staff', bonus: { atk: 12, maxHp: 12 }, rarity: 'rare', description: 'Un sceptre couronné d\'un éclat de glace éternelle qui mord et fortifie.' },
+  { id: 'sceptre-arcane', name: 'Sceptre arcanique', slot: 'weapon', weaponType: 'staff', bonus: { atk: 16, maxHp: 18 }, rarity: 'epique', description: 'Un sceptre serti d\'une rune arcanique qui bourdonne de savoir interdit.' },
+  { id: 'baton-cosmique', name: 'Bâton cosmique', slot: 'weapon', weaponType: 'staff', bonus: { atk: 21, maxHp: 25 }, rarity: 'legendaire', description: 'Un bâton coiffé d\'une étoile miniature : il canalise la puissance des astres.' },
+  // ── Chapeaux supplémentaires — chacun DESSINÉ distinctement (cf. drawCosmetic), inspirés Ragnarok.
+  { id: 'bandeau-guerrier', name: 'Bandeau du guerrier', slot: 'hat', bonus: { def: 3 }, rarity: 'commun', description: 'Un bandeau de tissu serré qui garde la sueur hors des yeux au combat.' },
+  { id: 'plume-eclaireur', name: 'Plume d\'éclaireur', slot: 'hat', bonus: { maxHp: 4 }, rarity: 'commun', description: 'Une plume colorée fichée dans un bandeau : la marque des éclaireurs.' },
+  { id: 'bonnet-laine', name: 'Bonnet de laine', slot: 'hat', bonus: { maxHp: 6 }, rarity: 'commun', description: 'Un bonnet de grosse laine qui tient bien chaud sur les routes du nord.' },
+  { id: 'oreilles-chat', name: 'Oreilles de chat', slot: 'hat', bonus: { maxHp: 12 }, rarity: 'rare', description: 'Une paire d\'oreilles de chat trop mignonnes : impossible de résister.' },
+  { id: 'chapeau-sorciere', name: 'Chapeau de sorcière', slot: 'hat', bonus: { atk: 5 }, rarity: 'rare', description: 'Un grand chapeau pointu de sorcière qui amplifie les incantations.' },
+  { id: 'lunettes-aviateur', name: 'Lunettes d\'aviateur', slot: 'hat', bonus: { def: 4, atk: 2 }, rarity: 'rare', description: 'Des lunettes d\'aviateur relevées sur le front : style et protection.' },
+  { id: 'casque-viking', name: 'Casque viking', slot: 'hat', bonus: { def: 6, atk: 3 }, rarity: 'epique', description: 'Un casque à cornes de guerrier du nord, brut et imposant.' },
+  { id: 'diademe-fee', name: 'Diadème de fée', slot: 'hat', bonus: { atk: 4, maxHp: 20 }, rarity: 'epique', description: 'Un diadème de fée serti d\'une gemme qui pulse d\'une douce lumière.' },
+  { id: 'aureole-sacree', name: 'Auréole sacrée', slot: 'hat', bonus: { maxHp: 35 }, rarity: 'epique', description: 'Une auréole sacrée flottant au-dessus de la tête : bénédiction des cieux.' },
+  { id: 'couronne-glace', name: 'Couronne de glace', slot: 'hat', bonus: { atk: 6, def: 6 }, rarity: 'legendaire', description: 'Une couronne de glace éternelle qui ne fond jamais, froide et royale.' },
+  { id: 'masque-demon', name: 'Masque de démon', slot: 'hat', bonus: { atk: 8, def: 4 }, rarity: 'legendaire', description: 'Un masque d\'oni démoniaque aux cornes ardentes : la terreur incarnée.' },
 ]
 
 export const ITEMS: Record<string, ItemDef> = Object.fromEntries(list.map((i) => [i.id, i]))
