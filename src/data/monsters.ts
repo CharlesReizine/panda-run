@@ -27,7 +27,7 @@ const list: MonsterDef[] = [
   // Placeholders dessinés en code (PreloadScene) ; art Gemini art-<id>.png pris automatiquement.
   { id: 'faucon', name: 'Faucon', lore: 'Rapace brun des reliefs arides : plus vif et plus hargneux que le corbeau, il fond en piqué éclair sur sa proie.', color: 0x8b5a2b, hp: 90, atk: 105, def: 8, xp: 720, level: 25, speed: 125, behavior: 'charge', aerial: true, drops: [goldMid, potion, { kind: 'material', materialId: 'croc-de-loup', chance: 0.05, min: 1, max: 1 }] },
   { id: 'ara', name: 'Ara', lore: 'Perroquet tropical au plumage flamboyant, criard et curieux, il voltige au-dessus des frondaisons et pique les intrus.', color: 0x1e88e5, hp: 150, atk: 120, def: 10, xp: 1300, level: 35, speed: 110, behavior: 'charge', aerial: true, drops: [goldMid, potion, { kind: 'material', materialId: 'spore-lumineuse', chance: 0.05, min: 1, max: 1 }] },
-  { id: 'harfang-spectral', name: 'Harfang spectral', lore: 'Chouette fantomatique au plumage blafard, elle plane sans bruit dans la brume du cimetière et fond en silence, plus coriace qu\'elle n\'en a l\'air.', color: 0xe3f2fd, hp: 380, atk: 190, def: 28, xp: 3100, level: 45, speed: 85, behavior: 'charge', aerial: true, drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] },
+  { id: 'harfang-spectral', name: 'Harfang spectral', lore: 'Chouette fantomatique au plumage blafard, elle plane sans bruit dans la brume du cimetière et fond en silence, plus coriace qu\'elle n\'en a l\'air.', color: 0xe3f2fd, hp: 380, atk: 190, def: 28, xp: 3100, level: 44, speed: 85, behavior: 'charge', aerial: true, drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] },
   // Zone 2 — désert
   { id: 'scorpion', name: 'Scorpion', lore: 'Chasseur du sable, patient et venimeux, il détend son dard dès qu\'une ombre s\'approche.', color: 0xd98e32, hp: 100, atk: 88, def: 15, xp: 650, level: 25, speed: 60, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'dard-de-scorpion', chance: 0.05, min: 1, max: 1 }] },
   // MOBILE-MÊLÉE rapide (charge) — désert/cave. Détale vite et fond en ligne droite sur sa proie.
@@ -88,7 +88,7 @@ const list: MonsterDef[] = [
     ],
   },
   {
-    id: 'dragon-flamme', name: 'Dragon de flamme', lore: 'Terreur écailleuse au souffle brûlant : majestueux, féroce, il ne laisse que des cendres.', color: 0xc62828, hp: 1450, atk: 235, def: 52, xp: 9500, level: 59, speed: 60, behavior: 'charge', mvp: true,
+    id: 'dragon-flamme', name: 'Dragon de flamme', lore: 'Terreur écailleuse au souffle brûlant : majestueux, féroce, il ne laisse que des cendres.', color: 0xc62828, hp: 1450, atk: 235, def: 52, xp: 9500, level: 58, speed: 60, behavior: 'charge', mvp: true,
     drops: [
       { kind: 'gold', chance: 1, min: 180, max: 300 },
       { kind: 'potion', chance: 0.6, min: 1, max: 1 },
@@ -136,15 +136,15 @@ const list: MonsterDef[] = [
   { id: 'golem-de-pierre', name: 'Golem de pierre', lore: 'Monolithe animé, impassible et lent, il broie tout sur son passage sans jamais s\'énerver.', color: 0x8a8078, hp: 340, atk: 150, def: 40, xp: 2400, level: 37, speed: 25, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.08, min: 1, max: 1 }, { kind: 'item', itemId: 'carapace-scarabee', chance: 0.03, min: 1, max: 1 }] },
   { id: 'gobelin-mineur', name: 'Gobelin mineur', lore: 'Petit fouineur cupide de la carrière, il balance ses cailloux avant de détaler en ricanant.', color: 0x6d8a3f, hp: 220, atk: 138, def: 18, xp: 2000, level: 34, speed: 60, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.06, min: 1, max: 1 }] },
   // Zone 5 — cimetière
-  { id: 'goule', name: 'Goule', lore: 'Charognarde des tombes, vorace et griffue, elle traque la chair fraîche au fond du cimetière.', color: 0x556b2f, hp: 420, atk: 200, def: 30, xp: 3200, level: 48, speed: 70, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }, { kind: 'item', itemId: 'baton-feuillu', chance: 0.03, min: 1, max: 1 }] },
-  { id: 'banshee', name: 'Banshee', lore: 'Spectre plaintif au hurlement funeste, son chant déchirant transperce l\'âme à distance.', color: 0x9575cd, hp: 320, atk: 225, def: 20, xp: 3000, level: 45, speed: 50, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] },
-  { id: 'pretre-goule', name: 'Prêtre-goule', lore: 'Officiant corrompu des morts, il psalmodie des malédictions et anime les ombres à sa guise.', color: 0x455a64, hp: 360, atk: 188, def: 25, xp: 3200, level: 48, speed: 40, behavior: 'caster', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.06, min: 1, max: 1 }] },
+  { id: 'goule', name: 'Goule', lore: 'Charognarde des tombes, vorace et griffue, elle traque la chair fraîche au fond du cimetière.', color: 0x556b2f, hp: 420, atk: 200, def: 30, xp: 3200, level: 47, speed: 70, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }, { kind: 'item', itemId: 'baton-feuillu', chance: 0.03, min: 1, max: 1 }] },
+  { id: 'banshee', name: 'Banshee', lore: 'Spectre plaintif au hurlement funeste, son chant déchirant transperce l\'âme à distance.', color: 0x9575cd, hp: 320, atk: 225, def: 20, xp: 3000, level: 44, speed: 50, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] },
+  { id: 'pretre-goule', name: 'Prêtre-goule', lore: 'Officiant corrompu des morts, il psalmodie des malédictions et anime les ombres à sa guise.', color: 0x455a64, hp: 360, atk: 188, def: 25, xp: 3200, level: 47, speed: 40, behavior: 'caster', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.06, min: 1, max: 1 }] },
   // IMMOBILE-DISTANCE — totem planté (cimetière). Racine funeste : il ne bouge pas et CRACHE des
   // projectiles nécrotiques dès que le joueur est à portée.
-  { id: 'totem-maudit', name: 'Totem maudit', lore: 'Mât funéraire gravé de visages hurlants, scellé au sol : il vomit des feux follets maudits sur qui s\'approche.', color: 0x5a4636, hp: 340, atk: 205, def: 26, xp: 3100, level: 45, speed: 0, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.06, min: 1, max: 1 }] },
+  { id: 'totem-maudit', name: 'Totem maudit', lore: 'Mât funéraire gravé de visages hurlants, scellé au sol : il vomit des feux follets maudits sur qui s\'approche.', color: 0x5a4636, hp: 340, atk: 205, def: 26, xp: 3100, level: 44, speed: 0, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.06, min: 1, max: 1 }] },
   // Zone 6 — enfer
   { id: 'diablotin', name: 'Diablotin', lore: 'Farceur des flammes, vif et hargneux, il fonce en ricanant droit sorti des enfers.', color: 0xd84315, hp: 480, atk: 238, def: 35, xp: 4200, level: 55, speed: 150, behavior: 'charge', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.06, min: 1, max: 1 }] },
-  { id: 'gargouille', name: 'Gargouille', lore: 'Statue de pierre qui feint le sommeil, puis s\'éveille d\'un coup pour fondre sur l\'imprudent.', color: 0x546e7a, hp: 620, atk: 250, def: 55, xp: 4800, level: 57, speed: 60, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.06, min: 1, max: 1 }, { kind: 'item', itemId: 'arc-souple', chance: 0.03, min: 1, max: 1 }] },
+  { id: 'gargouille', name: 'Gargouille', lore: 'Statue de pierre qui feint le sommeil, puis s\'éveille d\'un coup pour fondre sur l\'imprudent.', color: 0x546e7a, hp: 620, atk: 250, def: 55, xp: 4800, level: 56, speed: 60, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'minerai-fer', chance: 0.06, min: 1, max: 1 }, { kind: 'item', itemId: 'arc-souple', chance: 0.03, min: 1, max: 1 }] },
   // MOBILE-MÊLÉE, GRAND & TANKY (contact) — enfer. Titan de roche en fusion : lent, brûlant, il se
   // plante à portée et abat un coup dévastateur télégraphié (gabarit 'grand' → rendu + hitbox agrandis).
   { id: 'golem-de-lave', name: 'Golem de lave', lore: 'Colosse de roche en fusion aux veines incandescentes : chaque pas fait fumer le sol, chaque coup calcine.', color: 0xb3401a, hp: 790, atk: 246, def: 52, xp: 4700, level: 55, speed: 32, behavior: 'contact', size: 'grand', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.08, min: 1, max: 1 }] },
@@ -157,7 +157,7 @@ const list: MonsterDef[] = [
   { id: 'gardien-flamme', name: 'Gardien Flamme', lore: 'Colosse ardent scellé aux portes de l\'enfer, brasier vivant qui calcine quiconque prétend passer.', color: 0xbf360c, hp: 5000, atk: 130, def: 65, xp: 6000, level: 67, speed: 0, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.25, min: 1, max: 2 }] },
   // Boss — zone 3 (jungle)
   {
-    id: 'seigneur-liane', name: 'Seigneur Liane', lore: 'Souverain de la jungle aux mille lianes, archimage sylvestre : il embrase l\'air de sphères ardentes et fait pleuvoir le feu du ciel.', color: 0x1b5e20, hp: 5200, atk: 122, def: 34, xp: 9000, level: 43, speed: 60, behavior: 'projectile', boss: true, bossClass: 'mage', bossSummon: 'flora-vorace',
+    id: 'seigneur-liane', name: 'Seigneur Liane', lore: 'Souverain de la jungle aux mille lianes, archimage sylvestre : il embrase l\'air de sphères ardentes et fait pleuvoir le feu du ciel.', color: 0x1b5e20, hp: 5200, atk: 122, def: 34, xp: 9000, level: 42, speed: 60, behavior: 'projectile', boss: true, bossClass: 'mage', bossSummon: 'flora-vorace',
     drops: [
       { kind: 'gold', chance: 1, min: 200, max: 320 },
       { kind: 'item', itemId: 'baton-feuillu', chance: 1, min: 1, max: 1 },
@@ -211,7 +211,7 @@ const list: MonsterDef[] = [
   // Boss-03 — Golem des Cavernes (cave) : monolithe INCARNANT l'Archer (déluge de pierres, salves).
   // Art placeholder = art-golem-de-pierre.png.
   {
-    id: 'boss-golem-cave', name: 'Golem des Cavernes', lore: 'Titan de roche brute scellé au cœur des cavernes : il pilonne l\'écho de ses poings de granit et fait pleuvoir des éclats du plafond.', color: 0x7c7168, hp: 5200, atk: 132, def: 46, xp: 9200, level: 37, speed: 48, behavior: 'projectile', boss: true, bossClass: 'archer', bossSummon: 'gobelin-mineur', size: 'grand',
+    id: 'boss-golem-cave', name: 'Golem des Cavernes', lore: 'Titan de roche brute scellé au cœur des cavernes : il pilonne l\'écho de ses poings de granit et fait pleuvoir des éclats du plafond.', color: 0x7c7168, hp: 5200, atk: 132, def: 46, xp: 9200, level: 38, speed: 48, behavior: 'projectile', boss: true, bossClass: 'archer', bossSummon: 'gobelin-mineur', size: 'grand',
     drops: [
       { kind: 'gold', chance: 1, min: 200, max: 320 },
       { kind: 'item', itemId: 'carapace-scarabee', chance: 1, min: 1, max: 1 },

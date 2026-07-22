@@ -77,7 +77,7 @@ import { composeLevel, planModules, type ComposeOpts, type ModuleKind, type Tier
 import {
   overStackedColumns, unlevelWaterBanks, deadEndSurfaces, suspendedWaterBanks,
   unreachablePlatforms, laddersToNowhere, unreachableLadders, unreachableChests,
-  oversizedGaps, oversizedLadders, monstersOffSurface,
+  oversizedGaps, oversizedLadders, monstersOffSurface, startExitProblems, caveCeilingClearance,
 } from '../core/level-validator'
 import { MONSTERS } from './monsters'
 
@@ -85,8 +85,6 @@ import { MONSTERS } from './monsters'
 // de `list`. Sert au rapport de diversité (script d'instrumentation) et au test de variété : on peut
 // vérifier quels motifs sortent, leur fréquence, et qu'aucun catalogue n'est laissé inutilisé.
 export const LEVEL_MODULE_KINDS: Record<string, ModuleKind[]> = {}
-
-const plat = (x: number, y: number, w: number) => ({ x, y, w })
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 // MONDE CARTE A (docs/worldmap-spec.md) — 48 niveaux jouables + 9 arènes de boss.
@@ -127,6 +125,13 @@ const WATER_ROT: ModuleKind[][] = [
   ['petit-pont', 'bassin'],
   ['trou-filet', 'cascade'],
   ['tresor-bassin', 'cascade'],
+  // REFONTE DES MOTIFS D'EAU (vrais passages) : plongeoir, puits étroit, cascade-bassin, boyau immergé.
+  // Chaque entrée garde AU MOINS un coffre (plongeoir/puits/cascade-bassin en portent ; le boyau immergé
+  // n'a pas de coffre → apparié à une cascade qui en pose un).
+  ['plongeoir', 'cascade'],
+  ['puits', 'bassin'],
+  ['cascade-bassin', 'bassin'],
+  ['boyau-immerge', 'cascade'],
 ]
 
 // Biomes ROCHEUX : on y autorise les MARCHES DE PIERRE rigides (escalier-pierre), jusque-là jamais
@@ -164,6 +169,16 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   const allowLadders = !(biome === 'plaine' && rank === 1) // le tout premier niveau reste le plus simple
   // MVP posé seulement sur un niveau tardif du biome (dernier ou avant-dernier terrain)
   const useMvp = pool.mvp && rank >= 2
+  // ITEM 1 — GROTTE DE DÉPART souterraine : sur le 1er terrain des biomes rocheux (hors enfer, où l'eau
+  // n'a pas de sens), le spawn est une grotte fermée avec un bassin immergé à franchir à la nage.
+  const caveStart = STONY_BIOMES.has(biome) && biome !== 'enfer' && rank === 1
+  // ITEM 7 — ZIGZAG dès le tout début du jeu : les deux premiers terrains de plaine ouvrent sur un zigzag.
+  const openZigzag = biome === 'plaine' && rank <= 2
+  // ITEM 11 — RELIEF VALLONNÉ (silhouette plus haute/découpée) : vallons, collines, montagne, jungle.
+  const hilly = (biome === 'plaine' && (rank === 3 || rank === 5)) || biome === 'montagne' || biome === 'jungle'
+  // ITEM 10 — DIFFÉRENCIER NETTEMENT plaine-1/2/3 (Prairie / Champs / Vallon) : signature d'eau distincte.
+  //   Prairie = bassin + cascade (doux) · Champs = petit pont sur mare + cascade · Vallon = plongeoir + bassin.
+  const PLAINE_WATER: Record<number, ModuleKind[]> = { 1: ['bassin', 'cascade'], 2: ['petit-pont', 'cascade'], 3: ['plongeoir', 'bassin'] }
   const base = {
     id, name, biome,
     tierCap: pool.tier,
@@ -176,14 +191,24 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
     allowLadders,
     stony: STONY_BIOMES.has(biome),
     caves: CAVE_BIOMES.has(biome),
+    ...(caveStart ? { caveStart: true } : {}),
+    ...(openZigzag ? { openZigzag: true } : {}),
+    ...(hilly ? { hilly: true } : {}),
     // En ENFER, les cuves marine deviennent de la LAVE (aucun coffre de plongée) : on garantit alors
     // au moins une CASCADE remontable (seule cuve qui pose un coffre en biome lave) → chaque niveau
     // conserve son coffre exigé par la registry de props.
+    // En ENFER (lava), on reste sur les 6 rotations HISTORIQUES (les nouveaux motifs marine — plongeoir,
+    // puits, boyau immergé — n'ont pas de sémantique de LAVE cohérente et créaient des impasses) ; les
+    // biomes non-lave profitent de toute la rotation enrichie.
     waterKinds: SPECIAL_WATER_LEVELS[id]
       ? SPECIAL_WATER_LEVELS[id]!
-      : pool.lava && !WATER_ROT[idx % WATER_ROT.length]!.some((w) => w === 'cascade' || w === 'sortie-humide')
-        ? (['bassin', 'cascade'] as ModuleKind[])
-        : WATER_ROT[idx % WATER_ROT.length]!,
+      : biome === 'plaine' && PLAINE_WATER[rank]
+        ? PLAINE_WATER[rank]!
+        : pool.lava
+          ? (WATER_ROT[idx % 6]!.some((w) => w === 'cascade' || w === 'sortie-humide')
+            ? WATER_ROT[idx % 6]!
+            : (['bassin', 'cascade'] as ModuleKind[]))
+          : WATER_ROT[idx % WATER_ROT.length]!,
     ...(pool.lava ? { lava: true } : {}),
   }
   // Certaines graines produisent une colonne à 4 paliers empilés, un rebord de lac désaxé, ou un
@@ -203,6 +228,7 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
     && unreachableLadders(l).length === 0 && unreachableChests(l).length === 0
     && oversizedGaps(l).length === 0 && oversizedLadders(l).length === 0
     && monstersOffSurface(l, isAerial).length === 0
+    && startExitProblems(l).length === 0 && caveCeilingClearance(l).length === 0
   const salts = [`${id}-${ending}`, ...Array.from({ length: 80 }, (_, i) => `${id}-${ending}-${i}`)]
   let chosen = salts[0]!
   let level = composeLevel({ ...base, seed: chosen })
@@ -214,9 +240,22 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   return level
 }
 
-// Une arène de boss : plateaux posés à la main pour esquiver les patterns, aucun monstre normal.
-function arena(id: string, name: string, biome: string, boss: string, widthTiles: number, platforms: LevelDef['platforms']): LevelDef {
-  return { id, name, biome, widthTiles, platforms, spawns: [], boss }
+// ITEM 12 — arène de boss PLUS GRANDE et VARIÉE, à PLUS de plateformes, GARANTIES atteignables :
+// deux rangées BASSES (12 et 10) joignables directement du sol (rise ≤ 4 tuiles), plus une rangée
+// HAUTE (8) posée PILE au-dessus des plateformes médianes (saut court hgap 0, rise 2) → tout est
+// atteignable au saut simple (vérifié par reachable.test), l'arène offre plus d'appuis pour esquiver.
+// `spacing`/`pw` varient d'une arène à l'autre → silhouettes distinctes. Sol plein sur toute la largeur.
+function bigArena(id: string, name: string, biome: string, boss: string, w: number, spacing = 10, pw = 5): LevelDef {
+  const plats: { x: number; y: number; w: number }[] = []
+  const n = Math.floor((w - 6) / spacing)
+  for (let i = 0; i <= n; i++) {
+    const x = 6 + i * spacing
+    plats.push({ x, y: i % 2 === 0 ? 12 : 10, w: pw }) // rangées basses/médianes (atteignables du sol)
+  }
+  for (let i = 1; i <= n; i += 2) {
+    plats.push({ x: 6 + i * spacing, y: 8, w: pw }) // rangée haute PILE au-dessus d'une médiane
+  }
+  return { id, name, biome, widthTiles: w, platforms: plats, spawns: [], boss }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -287,12 +326,12 @@ const list: LevelDef[] = [
   terrain('foret-5', 'Ronces', 'foret', 5),
   terrain('foret-6', 'Halliers', 'foret', 6),
   terrain('foret-7', 'Lisière', 'foret', 7),
-  arena('boss-01', 'Gardien de la Sylve', 'foret', 'boss-sylve', 40, [plat(8, 11, 4), plat(18, 10, 5), plat(28, 11, 4)]),
+  bigArena('boss-01', 'Gardien de la Sylve', 'foret', 'boss-sylve', 52, 10, 5),
   // Désert (début)
   terrain('desert-1', 'Piste', 'desert', 1),
   terrain('desert-2', 'Dunes', 'desert', 2),
   terrain('desert-3', 'Erg', 'desert', 3),
-  arena('boss-02', 'Pyramide du Pharaon', 'desert', 'pharaon-scarabee', 44, [plat(7, 12, 6), plat(13, 10, 5), plat(18, 8, 8), plat(26, 10, 5), plat(32, 12, 6)]),
+  bigArena('boss-02', 'Pyramide du Pharaon', 'desert', 'pharaon-scarabee', 56, 9, 6),
   terrain('desert-4', 'Oasis', 'desert', 4),
   terrain('desert-5', 'Ravin', 'desert', 5),
   terrain('desert-6', 'Gorge', 'desert', 6),
@@ -300,34 +339,34 @@ const list: LevelDef[] = [
   terrain('desert-8', 'Carrefour', 'desert', 8),
   // Cave
   terrain('cave-1', 'Caverne', 'cave', 1),
-  arena('boss-03', 'Cœur de la Caverne', 'cave', 'boss-golem-cave', 42, [plat(6, 12, 5), plat(15, 10, 5), plat(24, 10, 5), plat(33, 12, 5)]),
+  bigArena('boss-03', 'Cœur de la Caverne', 'cave', 'boss-golem-cave', 54, 11, 5),
   // Jungle
   terrain('jungle-1', 'Palmeraie', 'jungle', 1),
   terrain('jungle-2', 'Jungle', 'jungle', 2),
   terrain('jungle-3', 'Canopée', 'jungle', 3),
   terrain('jungle-4', 'Fourré', 'jungle', 4),
   terrain('jungle-5', 'Marais', 'jungle', 5),
-  arena('boss-04', 'Cœur de la Jungle', 'jungle', 'seigneur-liane', 42, [plat(5, 11, 4), plat(13, 10, 5), plat(24, 10, 5), plat(33, 11, 4)]),
+  bigArena('boss-04', 'Cœur de la Jungle', 'jungle', 'seigneur-liane', 54, 10, 4),
   // Montagne
   terrain('desert-9', 'Col sec', 'desert', 9),
   terrain('montagne-1', 'Cimes', 'montagne', 1),
   terrain('montagne-2', 'Crête', 'montagne', 2),
   terrain('montagne-3', 'Névé', 'montagne', 3),
-  arena('boss-05', 'Repaire du Yéti', 'montagne', 'boss-yeti', 46, [plat(6, 12, 5), plat(14, 10, 4), plat(24, 11, 5), plat(34, 10, 4), plat(40, 12, 4)]),
+  bigArena('boss-05', 'Repaire du Yéti', 'montagne', 'boss-yeti', 58, 12, 5),
   // Cimetière
   terrain('cimetiere-1', 'Tombes', 'cimetiere', 1),
   terrain('cimetiere-2', 'Ossuaire', 'cimetiere', 2),
-  arena('boss-06', 'Trône du Roi Liche', 'cimetiere', 'roi-liche', 44, [plat(6, 11, 6), plat(8, 9, 5), plat(17, 12, 10), plat(33, 11, 6), plat(31, 9, 5)]),
+  bigArena('boss-06', 'Trône du Roi Liche', 'cimetiere', 'roi-liche', 56, 10, 6),
   // Plage
   terrain('desert-10', 'Fourche', 'desert', 10),
   terrain('plage-1', 'Rivage', 'plage', 1),
   terrain('plage-2', 'Lagon', 'plage', 2),
   terrain('plage-3', 'Récif', 'plage', 3),
   terrain('plage-4', 'Corail', 'plage', 4),
-  arena('boss-07', 'Antre du Roi Crabe', 'plage', 'boss-crabe', 42, [plat(6, 12, 5), plat(15, 10, 5), plat(24, 10, 5), plat(33, 12, 5)]),
+  bigArena('boss-07', 'Antre du Roi Crabe', 'plage', 'boss-crabe', 54, 9, 5),
   // Carrière
   terrain('carriere-1', 'Carrière', 'carriere', 1),
-  arena('boss-08', 'Pic du Golem Ancien', 'carriere', 'golem-ancien', 46, [plat(6, 12, 5), plat(14, 10, 4), plat(24, 11, 5), plat(34, 10, 4), plat(40, 12, 4)]),
+  bigArena('boss-08', 'Pic du Golem Ancien', 'carriere', 'golem-ancien', 58, 11, 5),
   // Enfer (zone finale)
   terrain('desert-11', 'Braise', 'desert', 11),
   terrain('enfer-1', 'Sentier', 'enfer', 1),
@@ -337,7 +376,7 @@ const list: LevelDef[] = [
   terrain('enfer-5', 'Brasier', 'enfer', 5),
   terrain('enfer-6', 'Abîme', 'enfer', 6),
   terrain('enfer-7', 'Géhenne', 'enfer', 7),
-  arena('boss-09', 'Antre du Seigneur Déchu', 'enfer', 'seigneur-dechu', 50, [plat(6, 12, 5), plat(15, 10, 7), plat(23, 8, 7), plat(31, 10, 7), plat(42, 12, 5)]),
+  bigArena('boss-09', 'Antre du Seigneur Déchu', 'enfer', 'seigneur-dechu', 64, 10, 6),
   // ÉPAVE — branche sous-marine de la plage (nœud à gauche de Corail sur la carte). Placée en FIN de
   // liste : elle n'introduit aucun monstre inédit (crabe/méduse vus dès la plage), donc son rang ne
   // recalibre AUCUN niveau de monstre (mob-level.ts lit l'ordre de `list`).

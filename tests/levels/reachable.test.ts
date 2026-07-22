@@ -453,6 +453,99 @@ describe('nouvelles familles de motifs — jouabilité', () => {
   })
 })
 
+// ─── REFONTE DES MOTIFS (retour joueur) : eau = vrai PASSAGE, chaînes verticales variées, etc. ────
+// On verrouille que les NOUVEAUX motifs sont bien générés ET jouables (atteignables, sauts francs,
+// pas de piège, cuves fermées à bancs égaux, plafonds de grotte dégagés).
+describe('refonte des motifs — eau-passage, plongeoir, puits, chaînes verticales variées', () => {
+  const kindsOfLevel = (id: string): string[] => LEVEL_MODULE_KINDS[id] ?? []
+  const levelsWith = (kind: string) => Object.keys(LEVEL_MODULE_KINDS).filter((id) => kindsOfLevel(id).includes(kind))
+  const playable = (id: string) => {
+    const lvl = LEVELS[id]!
+    expect(unreachablePlatforms(lvl), `${id}: plateforme injoignable`).toEqual([])
+    expect(unreachableChests(lvl), `${id}: coffre injoignable`).toEqual([])
+    expect(oversizedGaps(lvl), `${id}: saut infranchissable`).toEqual([])
+    expect(deadEndSurfaces(lvl), `${id}: piège sans retour`).toEqual([])
+    expect(unlevelWaterBanks(lvl), `${id}: rebords désaxés`).toEqual([])
+    expect(suspendedWaterBanks(lvl), `${id}: eau suspendue`).toEqual([])
+    expect(caveCeilingClearance(lvl), `${id}: plafond de grotte trop bas`).toEqual([])
+  }
+
+  it('les nouveaux motifs d’EAU-PASSAGE sont générés (plongeoir, puits, cascade-bassin, boyau immergé)', () => {
+    for (const k of ['plongeoir', 'puits', 'cascade-bassin', 'boyau-immerge']) {
+      const ids = levelsWith(k)
+      expect(ids.length, `${k} jamais généré`).toBeGreaterThan(0)
+      for (const id of ids) playable(id)
+    }
+  })
+
+  it('le BOYAU IMMERGÉ pose une cuve marine à paroi OUVERTE (openSide) — vrai passage à la nage', () => {
+    const ids = levelsWith('boyau-immerge')
+    expect(ids.length).toBeGreaterThan(0)
+    for (const id of ids) {
+      const lvl = LEVELS[id]!
+      expect((lvl.hazards ?? []).some((h) => h.kind === 'water' && h.water === 'basin' && h.openSide), `${id}: pas de cuve ouverte`).toBe(true)
+      // plafond de roche IMMERGÉ (on nage dessous) + rebords non suspendus (banc de sortie à niveau)
+      expect((lvl.rockBands ?? []).some((r) => r.solid), `${id}: pas de plafond immergé`).toBe(true)
+      expect(suspendedWaterBanks(lvl), `${id}: cuve ouverte suspendue`).toEqual([])
+    }
+  })
+
+  it('ITEM 1 — GROTTE DE DÉPART souterraine générée (bassin immergé + toit de roche) et jouable', () => {
+    const ids = levelsWith('grotte-depart')
+    expect(ids.length, 'aucune grotte de départ générée').toBeGreaterThan(0)
+    for (const id of ids) {
+      const lvl = LEVELS[id]!
+      expect((lvl.hazards ?? []).some((h) => h.kind === 'water' && h.water === 'basin'), `${id}: pas de bassin de nage`).toBe(true)
+      expect((lvl.rockBands ?? []).some((r) => r.solid), `${id}: pas de roche solide (grotte fermée)`).toBe(true)
+      playable(id)
+    }
+  })
+
+  it('ITEM 6 — chaînes verticales variées générées (échelle-trou-échelle, échelle-zigzag, échelles décalées)', () => {
+    for (const k of ['echelle-trou-echelle', 'echelle-zigzag', 'echelles-decalees']) {
+      const ids = levelsWith(k)
+      expect(ids.length, `${k} jamais généré`).toBeGreaterThan(0)
+      for (const id of ids) playable(id)
+    }
+  })
+
+  it('ITEM 8 — les DEUX variantes de passerelles flottantes existent : full trou ET full sol', () => {
+    expect(levelsWith('passerelles-zigzag').length, 'variante full-trou absente').toBeGreaterThan(0)
+    expect(levelsWith('passerelles-plein').length, 'variante full-sol absente').toBeGreaterThan(0)
+    for (const id of levelsWith('passerelles-plein')) playable(id)
+  })
+
+  it('ITEM 7 — ZIGZAG dès le tout début du jeu (plaine-1 ouvre sur un zigzag)', () => {
+    expect(kindsOfLevel('plaine-1'), 'plaine-1 sans zigzag d’ouverture').toContain('zigzag')
+  })
+
+  it('ITEM 10 — plaine-1/2/3 (Prairie/Champs/Vallon) ont des signatures de motifs DISTINCTES', () => {
+    const a = kindsOfLevel('plaine-1').join(',')
+    const b = kindsOfLevel('plaine-2').join(',')
+    const c = kindsOfLevel('plaine-3').join(',')
+    expect(a).not.toBe(b)
+    expect(b).not.toBe(c)
+    expect(a).not.toBe(c)
+  })
+
+  it('ITEM 11 — maps de hauteurs VARIÉES (plusieurs hauteurs distinctes, certaines nettement plus hautes)', () => {
+    const heights = Object.values(LEVELS).map((l) => l.heightTiles ?? 16)
+    const distinct = new Set(heights)
+    expect(distinct.size, 'hauteurs trop uniformes').toBeGreaterThanOrEqual(8)
+    expect(Math.max(...heights), 'aucune map vraiment haute').toBeGreaterThanOrEqual(30)
+  })
+
+  it('ITEM 12 — arènes de boss PLUS GRANDES avec PLUS de plateformes (toutes atteignables)', () => {
+    const arenas = Object.values(LEVELS).filter((l) => l.boss)
+    expect(arenas.length).toBe(9)
+    for (const a of arenas) {
+      expect(a.platforms.length, `${a.id}: trop peu de plateformes`).toBeGreaterThanOrEqual(6)
+      expect(a.widthTiles, `${a.id}: arène trop petite`).toBeGreaterThanOrEqual(50)
+      expect(unreachablePlatforms(a), `${a.id}: plateforme d’arène injoignable`).toEqual([])
+    }
+  })
+})
+
 // PLAFOND DE LONGUEUR D'ÉCHELLE : aucune échelle ne doit dépasser MAX_LADDER_TILES. Une montée
 // géante doit se faire en segments d'échelle empilés séparés par de vrais paliers (builder tower).
 describe('plafond de longueur d’échelle (MAX_LADDER_TILES)', () => {
