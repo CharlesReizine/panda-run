@@ -2988,12 +2988,13 @@ export class LevelScene extends Phaser.Scene {
   private flamethrowerFx(px: number, py: number, f: 1 | -1, reach: number) {
     // cône de flammes PROCÉDURAL (orange/rouge, AUCUN blanc, blend NORMAL), collé au joueur et évasé
     // (couvre haut ET bas). Fini le sprite fx-lance-flammes trop clair + l'écart avec le panda.
+    const y0 = py - this.player.displayHeight * 0.25 // remonté d'~1/4 de la taille du perso
     const n = 11
     for (let i = 0; i < n; i++) {
       const t = i / n
-      const fx = px + f * (16 + t * reach) // part du panda (~16px devant) → pas d'écart
+      const fx = px + f * (6 + t * reach) // part quasiment du panda → collé, pas d'écart
       const spread = 10 + t * 62 // s'évase avec la distance → couvre haut et bas
-      const fy = py + Phaser.Math.FloatBetween(-spread, spread)
+      const fy = y0 + Phaser.Math.FloatBetween(-spread, spread)
       const size = Phaser.Math.Between(11, 20) * (0.7 + t)
       const col = Phaser.Math.RND.pick([0xff5722, 0xff7043, 0xf4511e, 0xe64a19, 0xff8f00])
       const flame = this.add.ellipse(fx, fy, size * 1.5, size, col).setDepth(6).setAlpha(0.85)
@@ -3001,7 +3002,7 @@ export class LevelScene extends Phaser.Scene {
     }
     for (let i = 0; i < 3; i++) {
       const ex = px + f * Phaser.Math.Between(20, reach)
-      const em = this.add.circle(ex, py + Phaser.Math.Between(-55, 55), Phaser.Math.Between(2, 4), 0xffa040).setDepth(6).setAlpha(0.8)
+      const em = this.add.circle(ex, y0 + Phaser.Math.Between(-55, 55), Phaser.Math.Between(2, 4), 0xffa040).setDepth(6).setAlpha(0.8)
       this.tweens.add({ targets: em, y: em.y - Phaser.Math.Between(14, 28), alpha: 0, duration: 260, onComplete: () => em.destroy() })
     }
   }
