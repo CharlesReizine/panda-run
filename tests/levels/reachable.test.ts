@@ -546,6 +546,86 @@ describe('refonte des motifs — eau-passage, plongeoir, puits, chaînes vertica
   })
 })
 
+// ─── R168 — NIVEAUX PLUS LONGS + ÉCHELLE-DESCENTE PIÉGÉE + VARIANTES DE CASCADES ─────────────────
+describe('R168 — niveaux plus longs, échelle-descente piégée, cascades variées, plongeoir « saut de la foi »', () => {
+  const kindsOfLevel = (id: string): string[] => LEVEL_MODULE_KINDS[id] ?? []
+  const levelsWith = (kind: string) => Object.keys(LEVEL_MODULE_KINDS).filter((id) => kindsOfLevel(id).includes(kind))
+  const playable = (id: string) => {
+    const lvl = LEVELS[id]!
+    expect(unreachablePlatforms(lvl), `${id}: plateforme injoignable`).toEqual([])
+    expect(unreachableChests(lvl), `${id}: coffre injoignable`).toEqual([])
+    expect(oversizedGaps(lvl), `${id}: saut infranchissable`).toEqual([])
+    expect(deadEndSurfaces(lvl), `${id}: piège sans retour`).toEqual([])
+    expect(unlevelWaterBanks(lvl), `${id}: rebords désaxés`).toEqual([])
+    expect(suspendedWaterBanks(lvl), `${id}: eau suspendue`).toEqual([])
+    expect(caveCeilingClearance(lvl), `${id}: plafond de grotte trop bas`).toEqual([])
+  }
+
+  it('NIVEAUX PLUS LONGS : largeur moyenne nettement relevée + progression (early < late)', () => {
+    const ws = Object.values(LEVELS).filter((l) => !l.boss && l.id !== 'epave-1').map((l) => l.widthTiles)
+    const avg = ws.reduce((a, b) => a + b, 0) / ws.length
+    expect(avg, `largeur moyenne = ${avg.toFixed(0)}`).toBeGreaterThan(220) // avant ~179
+    // PROGRESSION dans la plaine : le 1er terrain est plus court que le dernier
+    expect(LEVELS['plaine-1']!.widthTiles).toBeLessThan(LEVELS['plaine-7']!.widthTiles)
+  })
+
+  it('ÉCHELLE-DESCENTE PIÉGÉE générée et jouable (échelle + trou mortel + passerelle coiffée de roche)', () => {
+    const ids = levelsWith('echelle-descente-piegee')
+    expect(ids.length, 'echelle-descente-piegee jamais générée').toBeGreaterThan(0)
+    for (const id of ids) {
+      const lvl = LEVELS[id]!
+      expect((lvl.ladders ?? []).length, `${id}: pas d’échelle`).toBeGreaterThan(0)
+      expect((lvl.bridges ?? []).length, `${id}: pas de passerelle`).toBeGreaterThan(0)
+      expect((lvl.rockBands ?? []).some((r) => r.solid), `${id}: pas de roche coiffante`).toBe(true)
+      expect((lvl.gaps ?? []).length, `${id}: pas de trou mortel`).toBeGreaterThan(0)
+      playable(id)
+    }
+  })
+
+  it('les 5 VARIANTES DE CASCADES sont générées et jouables', () => {
+    for (const k of ['cascade-grotte', 'cascade-trou', 'cascade-large', 'cascade-trouee', 'cascade-cul-de-sac']) {
+      const ids = levelsWith(k)
+      expect(ids.length, `${k} jamais générée`).toBeGreaterThan(0)
+      for (const id of ids) playable(id)
+    }
+  })
+
+  it('CASCADE → GROTTE SOUS-MARINE : bassin marine + toit de roche solide + cascade + coffre au fond', () => {
+    const id = levelsWith('cascade-grotte')[0]!
+    const lvl = LEVELS[id]!
+    expect((lvl.hazards ?? []).some((h) => h.kind === 'water' && h.water === 'basin')).toBe(true)
+    expect((lvl.hazards ?? []).some((h) => h.kind === 'water' && h.water === 'cascade')).toBe(true)
+    expect((lvl.rockBands ?? []).some((r) => r.solid)).toBe(true)
+    expect((lvl.props ?? []).some((p) => p.kind === 'coffre')).toBe(true)
+  })
+
+  it('CASCADE LARGE : rideau large (≥5 colonnes) qui alimente un bassin, SANS trou mortel sous la chute', () => {
+    const id = levelsWith('cascade-large')[0]!
+    const lvl = LEVELS[id]!
+    const wide = (lvl.hazards ?? []).find((h) => h.kind === 'water' && h.water === 'cascade' && h.w >= 5)
+    expect(wide, `${id}: pas de rideau large`).toBeDefined()
+    expect(oversizedGaps(lvl), `${id}: le rideau large ne doit PAS créer de trou infranchissable`).toEqual([])
+  })
+
+  it('PLONGEOIR « saut de la foi » : perchoir TRÈS HAUT (échelle) + PANNEAU + lac ALIGNÉ dessous', () => {
+    const ids = levelsWith('plongeoir')
+    expect(ids.length, 'plongeoir jamais généré').toBeGreaterThan(0)
+    for (const id of ids) {
+      const lvl = LEVELS[id]!
+      expect((lvl.signs ?? []).length, `${id}: pas de panneau`).toBeGreaterThan(0)
+      expect((lvl.ladders ?? []).length, `${id}: pas d’échelle de plongeoir`).toBeGreaterThan(0)
+      // le lac (bassin) est bien présent sous le point de saut
+      expect((lvl.hazards ?? []).some((h) => h.kind === 'water' && h.water === 'basin'), `${id}: pas de lac`).toBe(true)
+      playable(id)
+    }
+  })
+
+  it('les maps montent PLUS HAUT (les nouveaux perchoirs/tours de cascade créent des mondes hauts)', () => {
+    const maxH = Math.max(...Object.values(LEVELS).map((l) => l.heightTiles ?? 16))
+    expect(maxH, 'aucune map vraiment haute').toBeGreaterThanOrEqual(30)
+  })
+})
+
 // PLAFOND DE LONGUEUR D'ÉCHELLE : aucune échelle ne doit dépasser MAX_LADDER_TILES. Une montée
 // géante doit se faire en segments d'échelle empilés séparés par de vrais paliers (builder tower).
 describe('plafond de longueur d’échelle (MAX_LADDER_TILES)', () => {

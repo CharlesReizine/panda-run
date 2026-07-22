@@ -26,6 +26,9 @@ export interface LevelDef {
   // (pas en l'air, pas dans le sol). Absent → au sol. Sert à peupler la VERTICALE (monstres en hauteur).
   spawns: { monsterId: string; x: number; y?: number }[]
   props?: { kind: string; x: number; y?: number }[] // x en tuiles ; y (tuiles) seulement pour les coffres sur plateforme
+  // PANNEAUX décoratifs (plongeoir « saut de la foi ») : poteau + flèche vers le bas, dessinés en
+  // primitives par LevelScene. Aucune collision, aucun drop — pur décor indiquant où plonger.
+  signs?: { x: number; y: number }[]
   // spikes = danger ; water = plan d'eau. Pour les PICS, `top` = rangée de la surface qui PORTE les
   // pics (dessus d'une corniche/plateforme en hauteur) ; absent → pics au SOL (rétrocompat exacte).
   // Les pics infligent les mêmes dégâts et se chevauchent pareil, quelle que soit la hauteur.
@@ -132,6 +135,14 @@ const WATER_ROT: ModuleKind[][] = [
   ['puits', 'bassin'],
   ['cascade-bassin', 'bassin'],
   ['boyau-immerge', 'cascade'],
+  // R168 — VARIANTES DE CASCADES (appendues APRÈS l'index 5 → jamais tirées par le branchement LAVE,
+  // qui reste sur WATER_ROT[idx % 6] historique). cascade-trou / cascade-trouee ne portent pas de coffre
+  // → appariés à une cuve porteuse de coffre (bassin) pour garantir le coffre exigé par niveau.
+  ['cascade-large', 'bassin'],
+  ['cascade-grotte', 'cascade'],
+  ['cascade-trou', 'bassin'],
+  ['cascade-cul-de-sac', 'cascade'],
+  ['cascade-trouee', 'bassin'],
 ]
 
 // Biomes ROCHEUX : on y autorise les MARCHES DE PIERRE rigides (escalier-pierre), jusque-là jamais
@@ -151,6 +162,14 @@ const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
   'plage-3': ['grotte-noyee', 'bassin'],
   'carriere-1': ['grotte-noyee', 'cascade'],
   'montagne-2': ['lac-en-u', 'cascade'],
+  // R168 — VARIANTES DE CASCADES épinglées à des terrains thématiques (elles n'apparaîtraient sinon que
+  // très rarement, car appendues en fin de WATER_ROT que peu de biomes atteignent par `idx % len`).
+  // cascade-trou / cascade-trouee ne portent pas de coffre → appariées à une cuve à coffre (bassin).
+  'foret-3': ['cascade-grotte', 'cascade'],
+  'jungle-1': ['cascade-large', 'bassin'],
+  'montagne-1': ['cascade-trou', 'bassin'],
+  'jungle-3': ['cascade-cul-de-sac', 'cascade'],
+  'plage-4': ['cascade-trouee', 'bassin'],
 }
 
 // Biomes ROCHEUX / SOUTERRAINS / JUNGLE PROFONDE : on y autorise les GROTTES-TUNNELS (boyaux de
@@ -165,7 +184,12 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   const pool = POOLS[biome]!
   const idx = rank - 1
   const ending: 'bas' | 'haut' = idx % 2 === 0 ? 'bas' : 'haut'
-  const midCount = (pool.tier <= 2 ? 6 : pool.tier === 5 ? 8 : 7) + (idx % 2)
+  // NIVEAUX PLUS LONGS (retour joueur : « une pause toilette = 1-2 niveaux, un niveau doit DURER »).
+  // On AUGMENTE nettement le nombre de modules centraux, avec une PROGRESSION : base plus haute pour les
+  // biomes avancés (tier) + croissance par rang DANS le biome (les premiers terrains un peu plus courts,
+  // ça s'allonge). Chaque niveau enchaîne ainsi plusieurs séquences de motifs (plusieurs minutes de jeu).
+  const midBase = pool.tier <= 1 ? 8 : pool.tier === 2 ? 9 : pool.tier === 5 ? 12 : pool.tier + 7
+  const midCount = midBase + Math.floor((rank - 1) / 2) + (idx % 2)
   const allowLadders = !(biome === 'plaine' && rank === 1) // le tout premier niveau reste le plus simple
   // MVP posé seulement sur un niveau tardif du biome (dernier ou avant-dernier terrain)
   const useMvp = pool.mvp && rank >= 2

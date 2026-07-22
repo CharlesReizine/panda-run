@@ -354,6 +354,15 @@ export class LevelScene extends Phaser.Scene {
     // le groupe applique ses defaults (allowGravity: true, immovable: false) à chaque ajout et
     // écraserait sinon les setAllowGravity(false)/setImmovable(true) posés dans Prop — sans ça,
     // un coffre "tombe" (gravité réactivée) dès qu'il rejoint le groupe
+    // PANNEAUX « SAUT DE LA FOI » (plongeoir) : décor pur (poteau + flèche vers le bas), dessiné via les
+    // primitives — pas un Prop destructible, aucune collision. Invite à plonger dans le lac en contrebas.
+    for (const sign of this.levelDef.signs ?? []) {
+      const px = sign.x * TILE + TILE / 2
+      const py = sign.y * TILE + TILE / 2
+      this.add.rectangle(px, py + 6, 4, 26, 0x6d4c41).setOrigin(0.5, 0).setDepth(-3) // poteau
+      this.add.rectangle(px, py, 26, 18, 0xffd54f).setOrigin(0.5, 0.5).setDepth(-2).setStrokeStyle(2, 0x6d4c41) // panneau
+      this.add.text(px, py, '▼', { fontSize: '15px', color: '#5d4037', fontStyle: 'bold' }).setOrigin(0.5).setDepth(-1) // flèche bas
+    }
     this.props = this.physics.add.group({ allowGravity: false, immovable: true })
     for (const propDef of this.levelDef.props ?? []) {
       const yTile = propDef.y ?? this.groundRow - 1

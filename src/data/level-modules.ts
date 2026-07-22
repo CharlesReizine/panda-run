@@ -94,6 +94,26 @@ export type ModuleKind =
   // mêmes passerelles alternées gauche/droite, mais posées AU-DESSUS D'UN SOL PLEIN continu (rater un
   // saut = retomber au sol, pas de chute mortelle). Corrige le « miroir bizarre » sous les passerelles.
   | 'passerelles-plein'
+  // ─── R168 — ÉCHELLE-DESCENTE PIÉGÉE + VARIANTES DE CASCADES (retour joueur) ───────────────────
+  // ÉCHELLE-DESCENTE PIÉGÉE : on DESCEND une échelle, un TROU MORTEL attend en bas, il faut SAUTER sur
+  // une PASSERELLE latérale COIFFÉE DE ROCHE (inaccessible par le haut, atteignable seulement par ce
+  // chemin) avec un dégagement de saut sous la roche.
+  | 'echelle-descente-piegee'
+  // CASCADE → GROTTE SOUS-MARINE : la cascade tombe (par une lucarne du toit) dans un BASSIN marine
+  // coiffé d'un TOIT DE ROCHE (grotte inondée) ; coffre au fond.
+  | 'cascade-grotte'
+  // CASCADE → TROU MORTEL (piège) : cascade étroite dont la chute débouche sur le VIDE (mort) ; on ne
+  // la descend PAS, on FRANCHIT le rideau au saut d'une corniche à l'autre par le haut.
+  | 'cascade-trou'
+  // CASCADE LARGE (rideau large) : un large rideau d'eau REMONTABLE qui alimente un BASSIN en contrebas
+  // (pas de vide mortel : l'eau retombe dans le lac) ; coffre au fond.
+  | 'cascade-large'
+  // CASCADE TROUÉE : colonnes de cascade ALTERNÉES avec des TROUS MORTELS (eau / vide / eau…), franchies
+  // au saut sur des pierres de gué au-dessus ; tomber dans une colonne (eau OU vide) = chute mortelle.
+  | 'cascade-trouee'
+  // CASCADE → LAC-TRÉSOR EN CUL-DE-SAC : la cascade descend dans un lac SANS SORTIE PAR LE BAS, trésor
+  // au fond ; il faut faire DEMI-TOUR, remonter (cascade remontable) et repasser par le HAUT (sortie haute).
+  | 'cascade-cul-de-sac'
 
 // Tier de difficulté (D1..D5) et tags d'accroche : altitude du bord GAUCHE (entrée) / DROIT (sortie).
 export type Tier = 1 | 2 | 3 | 4 | 5
@@ -159,19 +179,24 @@ interface Piece {
   // cuves d'eau : marine (noyade), cascade (remontable) ou lave (mortelle, enfer). bankAlt = rangée des
   // berges (surface juste dessous) ; le liquide descend jusqu'au sol (fond). Le moteur pose murs + fond + déco.
   // `openSide` : ouvre une paroi (passage sous-marin — on ressort par le côté immergé).
-  waters: { x: number; w: number; kind: 'marine' | 'cascade' | 'lave'; bankAlt: number; openSide?: 'left' | 'right' | 'both' }[]
+  // `bottomAlt` (CASCADE uniquement) : la cascade s'arrête à cette altitude (surface d'un BASSIN qui la
+  // recueille) au lieu de couler jusqu'au bas du monde → PAS de vide mortel dessous (l'eau alimente le lac).
+  waters: { x: number; w: number; kind: 'marine' | 'cascade' | 'lave'; bankAlt: number; openSide?: 'left' | 'right' | 'both'; bottomAlt?: number }[]
   // ÉCHELLES : montant vertical de topAlt (haut) jusqu'à topAlt-h (pied). h∈[MIN,MAX]_LADDER_TILES.
   // Correct-par-construction : pied posé sur une surface + palier de sortie 2 rangées sous le sommet.
   ladders: { x: number; topAlt: number; h: number }[]
   spawns: { monsterId: string; x: number; alt?: number; aerial?: boolean }[]
   props: { kind: string; x: number; alt?: number }[]
+  // PANNEAUX décoratifs (poteau + flèche vers le bas) — plongeoir « saut de la foi ». Canal DISTINCT
+  // des props destructibles (aucune collision, aucun drop, hors registre PROPS).
+  signs: { x: number; alt: number }[]
   start?: { x: number; alt: number }
   exit?: { x: number; alt: number }
   exitAlt: number // altitude de sortie (pour chaîner le module suivant)
 }
 
 function emptyPiece(exitAlt: number): Piece {
-  return { platforms: [], rocks: [], gaps: [], spikes: [], bridges: [], waters: [], ladders: [], spawns: [], props: [], exitAlt }
+  return { platforms: [], rocks: [], gaps: [], spikes: [], bridges: [], waters: [], ladders: [], spawns: [], props: [], signs: [], exitAlt }
 }
 
 // Dégagement libre (en rangées) garanti sous un PLAFOND DE ROCHE de tunnel : strictement supérieur à
@@ -1029,18 +1054,26 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       break
     }
 
-    // ─── PLONGEOIR : corniche haute qui SURPLOMBE un bassin en contrebas (on saute dedans) ────────
+    // ─── PLONGEOIR « SAUT DE LA FOI » : perchoir TRÈS HAUT + panneau, on plonge à l'aveugle dans le lac ──
     case 'plongeoir': {
+      // On grimpe une échelle jusqu'à un perchoir TRÈS HAUT en surplomb du lac, un petit PANNEAU (flèche
+      // vers le bas) invite au saut ; on plonge sans voir l'atterrissage et on tombe dans le LAC en
+      // contrebas ALIGNÉ pile sous le point de saut (atterrissage dans l'EAU garanti, jamais sol/pics).
       const bankAlt = Math.max(2, entryAlt)
       const rampW = 3
-      p.platforms.push({ x: 0, alt: bankAlt, w: rampW }) // berge gauche (bord du bassin)
-      const wx = rampW
-      const ww = Math.max(6, w - 2 * rampW)
+      p.platforms.push({ x: 0, alt: bankAlt, w: rampW + 1 }) // berge gauche (colonne wx-1 pile à bankAlt)
+      const wx = rampW + 1
+      const ww = Math.max(9, w - 2 * rampW)
       p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt })
-      // PLONGEOIR : corniche haute (SIMPLE_JUMP_ROWS au-dessus de la berge) qui juTe au-dessus du bord
-      // gauche de l'eau — accessible depuis la berge au saut simple. On s'élance de là dans le bassin.
-      const boardAlt = bankAlt + SIMPLE_JUMP_ROWS
-      p.platforms.push({ x: wx, alt: boardAlt, w: 4 })
+      // JETÉE au ras de l'eau (pied de l'échelle) + ÉCHELLE vers le perchoir TRÈS HAUT (boardAlt = topAlt-2)
+      const h = LADDER_H
+      const topAlt = bankAlt + h
+      const boardAlt = topAlt - 2 // ~7 rangées au-dessus de la surface : vraiment haut, saut à l'aveugle
+      p.platforms.push({ x: wx, alt: bankAlt, w: 2 }) // jetée (surface d'accès à l'échelle)
+      p.ladders.push({ x: wx, topAlt, h })
+      p.platforms.push({ x: wx, alt: boardAlt, w: 4 }) // PLONGEOIR en surplomb (déborde la jetée à droite)
+      // PANNEAU (poteau + flèche vers le bas) posé au BOUT du plongeoir, au-dessus de l'eau libre → « saute ici »
+      p.signs.push({ x: wx + 3, alt: boardAlt + 1 })
       // berge droite AU MÊME niveau (surface horizontale), puis redescente vers la sortie
       const rbx = wx + ww
       const flatW = Math.min(bank, Math.max(1, w - rbx))
@@ -1222,6 +1255,170 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.exitAlt = top
       break
     }
+
+    // ─── ÉCHELLE-DESCENTE PIÉGÉE : on descend, TROU mortel en bas, saut sur passerelle coiffée de roche ──
+    case 'echelle-descente-piegee': {
+      // On MONTE jusqu'au sommet de l'échelle (palier d'accès), on DESCEND l'échelle jusqu'à un petit
+      // pied près du sol, un TROU MORTEL barre la route → il faut SAUTER sur une PASSERELLE latérale
+      // COIFFÉE DE ROCHE (inaccessible par le haut : le toit de roche empêche d'y tomber d'en haut ;
+      // seul le saut depuis le pied l'atteint), avec un dégagement de saut confortable sous la roche.
+      const h = LADDER_H
+      const footAlt = 1
+      const topAlt = footAlt + h
+      const palierAlt = topAlt - 2 // palier d'accès au sommet de l'échelle (règle du décalage pieds)
+      const upW = Math.max(5, Math.floor(w * 0.32))
+      p.platforms.push({ x: 0, alt: entryAlt, w: bank }) // berge d'entrée
+      p.platforms.push(...ramp(bank, upW, entryAlt, palierAlt)) // rampe d'accès au sommet de l'échelle
+      const ladX = bank + upW + 1
+      p.platforms.push({ x: ladX - 2, alt: palierAlt, w: 4 }) // palier haut (on descend d'ici)
+      p.ladders.push({ x: ladX, topAlt, h })
+      p.platforms.push({ x: ladX - 1, alt: footAlt, w: 3 }) // pied de l'échelle (près du sol)
+      const gapX = ladX + 2
+      const gapW = 3
+      p.gaps.push({ x: gapX, w: gapW }) // TROU MORTEL juste après le pied
+      const passX = gapX + gapW
+      const passAlt = footAlt + 1
+      p.bridges.push({ x: passX, alt: passAlt, w: 4 }) // PASSERELLE latérale (saut depuis le pied)
+      // TOIT DE ROCHE au-dessus de la passerelle (inaccessible par le haut), dégagement de saut ≥ CAVE_CLEARANCE
+      p.rocks.push({ x: passX, altBot: passAlt + CAVE_CLEARANCE, altTop: passAlt + CAVE_CLEARANCE + 2, w: 4, solid: true })
+      const outX = passX + 4
+      if (w - outX > 0) p.platforms.push(...ramp(outX, w - outX, passAlt, exitAlt)) // sortie
+      p.exitAlt = exitAlt
+      break
+    }
+
+    // ─── CASCADE → GROTTE SOUS-MARINE : le rideau tombe (lucarne) dans un bassin sous toit de roche ──
+    case 'cascade-grotte': {
+      const bankAlt = entryAlt + 2
+      const rampW = 3
+      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt)) // berge gauche → surface du lac
+      const wx = rampW
+      const bw = Math.max(10, w - 2 * rampW)
+      p.waters.push({ x: wx, w: bw, kind: basinKind, bankAlt }) // BASSIN marine (grotte inondée)
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + bw - 3 }) // coffre au fond, sous le toit
+      // CASCADE qui tombe par une LUCARNE du toit dans le lac (bottomAlt = surface → pas de vide mortel)
+      const casX = wx
+      const roofBot = bankAlt + CAVE_CLEARANCE // dégagement de saut sous le toit
+      const roofTop = roofBot + CAVE_CEILING_THICK
+      const casTop = roofTop + 3 // source de la cascade AU-DESSUS du toit
+      p.waters.push({ x: casX, w: 2, kind: 'cascade', bankAlt: casTop, bottomAlt: bankAlt })
+      // TOIT DE ROCHE au-dessus de la surface du lac, AVEC UNE LUCARNE (casX..casX+1) par où tombe la cascade.
+      // Deux pans nets de part et d'autre de la lucarne (dégagement de saut ≥ CAVE_CLEARANCE sous chacun).
+      if (casX - wx > 0) p.rocks.push({ x: wx, altBot: roofBot, altTop: roofTop, w: casX - wx, solid: true })
+      const rrx = casX + 2
+      if (wx + bw - rrx > 0) p.rocks.push({ x: rrx, altBot: roofBot, altTop: roofTop, w: wx + bw - rrx, solid: true })
+      // berge droite à niveau + sortie
+      const rbx = wx + bw
+      const flatW = Math.min(bank, Math.max(1, w - rbx))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, exitAlt))
+      if (groundMobs.length) {
+        const nAqua = Math.max(1, Math.min(3, Math.round((bw * bankAlt) / 80)))
+        spread(bw, nAqua).forEach((ax, i) => p.spawns.push({ monsterId: groundMobs[i % groundMobs.length]!, x: wx + ax }))
+      }
+      p.exitAlt = exitAlt
+      break
+    }
+
+    // ─── CASCADE → TROU MORTEL (piège) : on FRANCHIT le rideau par le haut, la descendre = mort ────────
+    case 'cascade-trou': {
+      const low = Math.max(entryAlt, 1)
+      const top = low + Math.max(4, 4 + Math.floor(rng() * 2))
+      const L = Math.max(4, Math.floor(w * 0.3))
+      p.platforms.push({ x: 0, alt: low, w: L }) // corniche gauche d'appel
+      p.waters.push({ x: L, w: 2, kind: 'cascade', bankAlt: top }) // rideau étroit AU-DESSUS DU VIDE (chute = mort)
+      // corniche droite au MÊME niveau bas, à 2 tuiles (largeur du rideau) → on SAUTE par-dessus le vide
+      const rx = L + 2
+      const rw = Math.max(4, w - rx)
+      p.platforms.push({ x: rx, alt: low, w: rw })
+      placeBirds(top + 2)
+      p.exitAlt = low
+      break
+    }
+
+    // ─── CASCADE LARGE (rideau large) qui alimente un bassin (pas de vide mortel) ─────────────────────
+    case 'cascade-large': {
+      const bankAlt = entryAlt + 2
+      const rampW = 3
+      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt)) // berge gauche → surface du bassin
+      const wx = rampW
+      const bw = Math.max(10, w - 2 * rampW)
+      p.waters.push({ x: wx, w: bw, kind: basinKind, bankAlt }) // BASSIN qui recueille la chute
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(bw / 2) })
+      // RIDEAU LARGE remontable (5-7 tuiles) qui retombe dans le bassin (bottomAlt = surface → aucun vide)
+      const top = bankAlt + Math.max(4, 4 + Math.floor(rng() * 2))
+      const curtainW = Math.max(5, Math.min(7, bw - 2))
+      p.waters.push({ x: wx + 1, w: curtainW, kind: 'cascade', bankAlt: top, bottomAlt: bankAlt })
+      // berge droite à niveau + sortie
+      const rbx = wx + bw
+      const flatW = Math.min(bank, Math.max(1, w - rbx))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, exitAlt))
+      placeBirds(top + 2)
+      p.exitAlt = exitAlt
+      break
+    }
+
+    // ─── CASCADE TROUÉE : colonnes cascade / vide alternées, franchies au saut sur des pierres de gué ──
+    case 'cascade-trouee': {
+      const alt = Math.max(entryAlt, 2)
+      const top = alt + Math.max(4, 4 + Math.floor(rng() * 2))
+      p.platforms.push({ x: 0, alt, w: bank }) // berge gauche (solide)
+      // CHASME central : VIDE mortel sous toute la travée (tranches ≤3 → chacune, mais on ne les
+      // franchit pas au sol : on saute de PIERRE DE GUÉ en pierre de gué). Rater = chute mortelle.
+      const rightBerge = w - bank
+      for (let gx = bank; gx < rightBerge; gx += 3) p.gaps.push({ x: gx, w: Math.min(3, rightBerge - gx) })
+      // motif répété : colonne (cascade OU vide, 2) → PIERRE de gué (3) → … Le rideau (cascade) coule au
+      // DESSUS DU VIDE (chute = mort) ; on alterne eau / vide entre les gués.
+      let x = bank
+      let toggle = 0
+      while (x < rightBerge - 2) {
+        const colW = 2
+        if (toggle % 2 === 0) p.waters.push({ x, w: colW, kind: 'cascade', bankAlt: top }) // rideau (chute = mort)
+        // toggle impair → simple colonne de vide (déjà gappée par le chasme central)
+        x += colW
+        const stoneW = Math.min(3, rightBerge - x)
+        if (stoneW <= 0) break
+        p.platforms.push({ x, alt, w: stoneW }) // pierre de gué flottante (on saute de l'une à l'autre)
+        x += stoneW
+        toggle++
+      }
+      p.platforms.push({ x: rightBerge, alt, w: bank }) // berge droite (solide)
+      placeBirds(top + 2)
+      p.exitAlt = alt
+      break
+    }
+
+    // ─── CASCADE → LAC-TRÉSOR EN CUL-DE-SAC : trésor au fond, demi-tour + remontée, sortie par le HAUT ──
+    case 'cascade-cul-de-sac': {
+      // On arrive en HAUT, une cascade descend dans un lac SANS SORTIE PAR LE BAS (trésor au fond) : un
+      // PONT coiffe le lac avec un TROU central par lequel on plonge chercher le coffre, puis on remonte
+      // et on REPASSE PAR LE HAUT (le pont) pour ressortir. La sortie est HAUTE (jamais par le bas).
+      const bankAlt = entryAlt + 4 // lac profond, berges hautes
+      const rampW = 4
+      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt)) // montée vers le pont/berge
+      const wx = rampW
+      const ww = Math.max(8, w - 2 * rampW)
+      p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt })
+      // PONT à bankAlt avec un TROU central (on plonge par là chercher le trésor du fond)
+      const holeL = wx + Math.floor(ww / 2) - 1
+      if (holeL - wx > 0) p.bridges.push({ x: wx, alt: bankAlt, w: holeL - wx })
+      if (wx + ww - (holeL + 3) > 0) p.bridges.push({ x: holeL + 3, alt: bankAlt, w: wx + ww - (holeL + 3) })
+      // CASCADE remontable qui descend par le trou du pont dans le lac (bottomAlt = surface → pas de vide)
+      p.waters.push({ x: holeL, w: 3, kind: 'cascade', bankAlt: bankAlt + Math.max(4, 4 + Math.floor(rng() * 2)), bottomAlt: bankAlt })
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) }) // trésor au FOND (cul-de-sac)
+      // berge droite au MÊME niveau (rebords à niveau), puis SORTIE HAUTE (on repasse par le haut)
+      const rbx = wx + ww
+      const flatW = Math.min(bank, Math.max(1, w - rbx))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, exitAlt))
+      placeBirds(bankAlt + 2)
+      p.exitAlt = exitAlt
+      break
+    }
   }
 
   // Placement GÉNÉRIQUE des monstres terrestres : posés SUR les plateformes marchables assez larges
@@ -1314,6 +1511,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   const rockBands: NonNullable<LevelDef['rockBands']> = []
   const spawns: LevelDef['spawns'] = []
   const props: NonNullable<LevelDef['props']> = []
+  const signs: NonNullable<LevelDef['signs']> = []
   let start: LevelDef['start']
   let exit: LevelDef['exit']
 
@@ -1330,11 +1528,19 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     for (const wtr of piece.waters) {
       const top = row(wtr.bankAlt) // surface d'eau À RAS du rebord (berges) — pas de bande d'air au-dessus
       if (wtr.kind === 'cascade') {
-        // CASCADE claire REMONTABLE : elle COULE JUSQU'AU BAS DE LA CARTE (rangée heightTiles), au
-        // DESSUS DU VIDE (aucun sol dessous) — la descendre jusqu'au fond = chute mortelle
-        // (checkPitDeath). Aucune pierre/cuve : c'est de l'eau qui s'écoule, pas un bassin.
-        hazards.push({ kind: 'water', x: x0 + wtr.x, w: wtr.w, top, h: Math.max(2, heightTiles - top), water: 'cascade' })
-        gaps.push({ x: x0 + wtr.x, w: wtr.w }) // VIDE sous la cascade → descendre au fond = mort
+        if (wtr.bottomAlt !== undefined) {
+          // CASCADE QUI ALIMENTE UN BASSIN : le rideau s'arrête à la surface du lac (bottomAlt), PAS de
+          // vide mortel dessous — l'eau retombe dans le bassin marine posé à cette altitude (cf.
+          // cascade-grotte / cascade-large / cascade-cul-de-sac). Remontable, jamais de noyade.
+          const bottomRow = row(wtr.bottomAlt)
+          hazards.push({ kind: 'water', x: x0 + wtr.x, w: wtr.w, top, h: Math.max(2, bottomRow - top), water: 'cascade' })
+        } else {
+          // CASCADE claire REMONTABLE : elle COULE JUSQU'AU BAS DE LA CARTE (rangée heightTiles), au
+          // DESSUS DU VIDE (aucun sol dessous) — la descendre jusqu'au fond = chute mortelle
+          // (checkPitDeath). Aucune pierre/cuve : c'est de l'eau qui s'écoule, pas un bassin.
+          hazards.push({ kind: 'water', x: x0 + wtr.x, w: wtr.w, top, h: Math.max(2, heightTiles - top), water: 'cascade' })
+          gaps.push({ x: x0 + wtr.x, w: wtr.w }) // VIDE sous la cascade → descendre au fond = mort
+        }
       } else {
         // CUVE de fond plein (marine OU lave) : le FOND repose TOUJOURS sur le SOL PLEIN, sans espace
         // vide. On étend le liquide jusqu'à recouvrir la surface du sol (rangée groundRow) → jamais de
@@ -1344,6 +1550,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     }
     for (const s of piece.spawns) spawns.push({ monsterId: s.monsterId, x: x0 + s.x, ...(s.alt !== undefined ? { y: row(s.alt) } : {}) })
     for (const pr of piece.props) props.push({ kind: pr.kind, x: x0 + pr.x, ...(pr.alt !== undefined ? { y: row(pr.alt) } : {}) })
+    for (const sg of piece.signs) signs.push({ x: x0 + sg.x, y: row(sg.alt) })
     if (piece.start) start = { x: x0 + piece.start.x, y: row(piece.start.alt) }
     if (piece.exit) exit = { x: x0 + piece.exit.x, y: row(piece.exit.alt) }
   }
@@ -1365,6 +1572,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     widthTiles: totalWidth, heightTiles,
     start, exit,
     platforms, bridges, gaps, hazards, ladders, rockBands, spawns: safeSpawns, props,
+    ...(signs.length ? { signs } : {}),
   }
 }
 
@@ -1461,6 +1669,14 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'echelles-decalees': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [18, 28], below: 'sol', above: 'air', ladder: true },
   // PASSERELLES FLOTTANTES sur SOL PLEIN (variante « full sol » du miroir)
   'passerelles-plein': { tier: 2, family: 'vertical', entry: 'bas', exit: 'haut', width: [14, 22], below: 'sol', above: 'air' },
+  // R168 — ÉCHELLE-DESCENTE PIÉGÉE (on descend, trou mortel, saut sur passerelle coiffée de roche)
+  'echelle-descente-piegee': { tier: 3, family: 'vertical', entry: 'bas', exit: 'milieu', width: [18, 26], below: 'sol', above: 'roche', ladder: true },
+  // R168 — VARIANTES DE CASCADES
+  'cascade-grotte': { tier: 3, family: 'risque', entry: 'bas', exit: 'milieu', width: [22, 32], below: 'marine', above: 'roche', chest: true, water: true },
+  'cascade-trou': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [16, 24], below: 'cascade', above: 'air', water: true },
+  'cascade-large': { tier: 2, family: 'risque', entry: 'bas', exit: 'milieu', width: [20, 30], below: 'marine', above: 'air', chest: true, water: true },
+  'cascade-trouee': { tier: 4, family: 'tension', entry: 'milieu', exit: 'milieu', width: [18, 28], below: 'vide', above: 'air', water: true },
+  'cascade-cul-de-sac': { tier: 3, family: 'risque', entry: 'bas', exit: 'haut', width: [20, 30], below: 'marine', above: 'air', chest: true, water: true },
 }
 
 // Construit un Module à partir de son kind (fills + métadonnées du CATALOG) + peuplement/flags.
@@ -1573,7 +1789,10 @@ export function planModules(o: ComposeOpts): Module[] {
   order.push(...bag)
 
   const modules: Module[] = []
-  let chests = 0
+  // BUDGET DE COFFRES (plafonné à 3) : on PRÉ-RÉSERVE les coffres des plans d'eau IMPOSÉS (placés
+  // inconditionnellement) pour que les modules centraux cessent d'en ajouter dès que le total atteint 3
+  // → fini les niveaux (désormais plus longs) qui cumulaient > 3 coffres (eau imposée + détours à coffre).
+  let chests = (o.waterKinds ?? ['bassin']).slice(0, 2).filter((w) => CATALOG[w].chest).length
   let lastKind: ModuleKind | null = null
   // PLAFOND DE RÉPÉTITION : un même motif central ne se pose pas plus de MAX_REPEAT fois par niveau
   // → fini les niveaux « le même motif encore et encore » (retour user sur la redondance).
@@ -1609,7 +1828,7 @@ export function planModules(o: ComposeOpts): Module[] {
     if (waterSlots.has(idx + 1) && waters.length) {
       const wk = waters.shift()!
       const spec = CATALOG[wk]
-      if (spec.chest && chests < 3) chests++
+      // coffre déjà pré-réservé dans le budget (chests) → on ne ré-incrémente pas ici
       modules.push(mk(wk, {
         ground: o.aquatic ?? [], birds: spec.birds ? [pick(o.birds)] : undefined,
         ...(o.lava && spec.below === 'marine' ? { fillBelow: 'lave' as Fill } : {}),
@@ -1634,8 +1853,12 @@ export function planModules(o: ComposeOpts): Module[] {
     const fresh = notLast.filter((k) => (usage[k] ?? 0) < MAX_REPEAT)
     let kind = pick(fresh.length ? fresh : notLast.length ? notLast : cands)
     if (CATALOG[kind].chest && chests >= 3) {
-      const src = fresh.length ? fresh : notLast.length ? notLast : cands
-      const noChest = src.filter((k) => !CATALOG[k].chest)
+      // budget de coffres atteint : on cherche un motif SANS coffre — d'abord dans le pool du bucket,
+      // sinon en REPLI CROISÉ sur traversée/filler (à bas tier, le bucket 'risque' n'a que detour-balcon,
+      // à coffre → sans repli on dépassait 3 coffres sur les niveaux longs). Cap DUR à 3 coffres.
+      let noChest = cands.filter((k) => !CATALOG[k].chest)
+      if (!noChest.length) noChest = kindsOf('traverse').filter((k) => !CATALOG[k].chest && k !== lastKind)
+      if (!noChest.length) noChest = kindsOf('filler').filter((k) => !CATALOG[k].chest)
       if (noChest.length) kind = pick(noChest)
     }
     if (CATALOG[kind].chest) chests++
@@ -1650,10 +1873,9 @@ export function planModules(o: ComposeOpts): Module[] {
     lastKind = kind
   })
 
-  // 4) plan(s) d'eau non encore placé(s) (sécurité : garantit l'eau + un coffre)
+  // 4) plan(s) d'eau non encore placé(s) (sécurité : garantit l'eau + un coffre) — coffre pré-réservé
   for (const wk of waters) {
     const spec = CATALOG[wk]
-    if (spec.chest && chests < 3) chests++
     modules.push(mk(wk, {
       ground: o.aquatic ?? [], birds: spec.birds ? [pick(o.birds)] : undefined,
       ...(o.lava && spec.below === 'marine' ? { fillBelow: 'lave' as Fill } : {}),
@@ -1671,9 +1893,14 @@ export function planModules(o: ComposeOpts): Module[] {
   } else {
     // petite marche variée puis MONTÉE variée (échelle, cage, tour, zigzag, passerelles flottantes…)
     const stepKind = structural(['marche', 'escalier', 'ligne-droite'], 'step')
-    modules.push(mk(stepKind, { ground: nextGround() }))
+    // FILET DE SÉCURITÉ MVP (fins 'haut') : si le MVP n'a pas été posé dans un module de risque, on le
+    // pose sur la marche de fin (surface plate → mob terrestre bien posé). Garantit que chaque niveau à
+    // MVP le fait bien apparaître, quel que soit l'ending (les niveaux plus longs déplaçaient parfois
+    // tous les buckets de risque hors des 2 derniers slots → MVP jamais posé).
+    const mvpTail = o.mvp && !modules.some((m) => m.ground?.includes(o.mvp!)) ? [o.mvp] : []
+    modules.push(mk(stepKind, { ground: [...mvpTail, ...nextGround()] }))
     const climbPool: ModuleKind[] = allowLadders
-      ? ['echelle-tranquille', 'cage-echelles', 'echelle-vs-sauts', 'tour-creuse', 'zigzag', 'passerelles-zigzag', 'passerelles-plein', 'echelle-trou-echelle', 'echelle-zigzag', 'echelles-decalees']
+      ? ['echelle-tranquille', 'cage-echelles', 'echelle-vs-sauts', 'tour-creuse', 'zigzag', 'passerelles-zigzag', 'passerelles-plein', 'echelle-trou-echelle', 'echelle-zigzag', 'echelles-decalees', 'echelle-descente-piegee']
       : ['escalier', 'zigzag', 'passerelles-zigzag', 'passerelles-plein']
     const climbKind = structural(climbPool, 'climb')
     modules.push(mk(climbKind, { exitHere: true, ...(climbKind === 'escalier' ? { rise: 6 } : {}), ground: nextGround(), tags: ['montée'] }))
