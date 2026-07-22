@@ -3,6 +3,8 @@ import type { StatBlock } from '../core/types'
 import type { ControlsState } from '../core/controls'
 import { computeStats } from '../core/stats'
 import { getPlayer } from '../state'
+import { ITEMS, rarityColor } from '../data/items'
+import { displayedWeaponType, isBigWeapon, weaponTextureKeys } from '../core/equip'
 import { PANDA_BODY, PANDA_HEAD_ANCHORS } from './player-body'
 import { JUMP_SPEED, RUN_SPEED } from '../core/platforming'
 import { MAX_SKILL_RANK } from '../core/player-state'
@@ -37,11 +39,16 @@ const DOUBLE_JUMP_MIN_FRAC = 0.45 // hauteur du 2e saut au rang 1 (fraction du 1
 const FLIGHT_SKILL = 'vol-arcanique'
 const FLIGHT_VSPEED = 300 // vitesse verticale du vol (montée quand saut tenu, descente sur bas), px/s
 // Lignée du sabreur : la GROSSE épée n'est PAS affichée au repos ; elle n'apparaît (agrandie) que
-// le temps d'un coup (swingWeapon), puis se rétracte. Les autres classes gardent leur arme visible.
-const BIG_SWORD_CLASSES = new Set<string>(['swordsman', 'chevalier'])
-// La grosse épée reste plus grande que les autres armes (bien visible à l'attaque), mais ramenée à
-// une taille crédible : ~1,7 la faisait encore paraître 2× trop grosse → divisée par ~2.
-const BIG_SWORD_SCALE = 0.9 // agrandissement de la grosse épée à l'affichage (grosse, mais raisonnable)
+// le temps d'un coup (swingWeapon) ou d'un tourbillon (spinWhirl), puis se rétracte. Les autres
+// armes (arc/bâton) restent visibles en permanence. (voir core/equip.isBigWeapon)
+// Retour joueur : l'épée du sabreur paraissait ENCORE trop grosse (0,9 × la croissance ×1,36 au
+// palier max → ~1,22). On divise la base (0,6) ET on plafonne la croissance par palier (voir
+// BIG_SWORD_TIER_GROWTH) pour une lame imposante mais crédible.
+const BIG_SWORD_SCALE = 0.6 // agrandissement de base de la grosse épée à l'affichage
+// Croissance par palier RÉDUITE pour les grosses épées (les autres armes gardent +12 %/palier) :
+// +5 %/palier → au palier max (3) la lame n'enfle que de ~15 %, elle ne redevient pas démesurée.
+const BIG_SWORD_TIER_GROWTH = 0.05
+const WEAPON_TIER_GROWTH = 0.12 // croissance par palier des armes normales (arc/bâton, inchangé)
 const HAT_OFFSET_Y = -38 // place le chapeau au-dessus de la tête du panda illustré (crown haute)
 const WEAPON_OFFSET_X = 11 // décalage horizontal de l'arme (patte avant), mirroré selon l'orientation
 const WEAPON_OFFSET_Y = 12 // décalage vertical de l'arme (hauteur de la patte avant)
@@ -129,6 +136,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private spinTimer: Phaser.Time.TimerEvent | null = null
   private hatImage: Phaser.GameObjects.Image | null = null
   private weaponImage: Phaser.GameObjects.Image | null = null
+  // true quand l'arme AFFICHÉE est une grosse épée (lame portée par un épéiste) : masquée au repos,
+  // révélée le temps d'un coup / tourbillon. Calculé à chaque refreshWeapon selon l'arme équipée.
+  private weaponIsBig = false
   // Halo de classe derrière l'arme (montée en gamme) : même texture que l'arme, teintée de la couleur
   // de classe, en fondu additif, échelle un peu plus grande → lueur qui suit rigidement l'arme.
   private weaponGlow: Phaser.GameObjects.Image | null = null
@@ -180,37 +190,56 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.hatImage = hatId ? this.scene.add.image(this.x, this.y + HAT_OFFSET_Y, `cosmetic-${hatId}`).setDepth(this.depth + 1) : null
   }
 
-  // (ré)affiche l'arme de classe en overlay dans la patte avant (le panda illustré a les mains
-  // vides) ; retirée si la classe n'a pas d'arme (novice). Suivie/mirrorée chaque frame.
+  // (ré)affiche l'arme ÉQUIPÉE en overlay dans la patte avant (le panda illustré a les mains vides).
+  // L'overlay reflète l'OBJET porté (getPlayer().equipment.weapon) : texture procédurale propre à
+  // l'objet (`weapon-<itemId>`, silhouette par famille + teinte de rareté), avec repli sur l'arme
+  // générique de la classe (`weapon-<cls>`) quand aucun objet n'est équipé. Suivie/mirrorée chaque frame.
   private refreshWeapon() {
-    const cls = getPlayer().classId
-    const key = `weapon-${cls}`
+    const p = getPlayer()
+    const cls = p.classId
+    const weaponId = p.equipment.weapon ?? null
     this.weaponImage?.destroy()
     this.weaponGlow?.destroy()
     this.weaponImage = null
     this.weaponGlow = null
+    this.weaponIsBig = false
+    // arme de l'objet équipé si sa texture existe, sinon arme générique de classe (repli sûr)
+    const keys = weaponTextureKeys(cls, weaponId)
+    const key = keys.item && this.scene.textures.exists(keys.item) ? keys.item : keys.fallback
     if (!this.scene.textures.exists(key)) return
-    const big = BIG_SWORD_CLASSES.has(cls)
+    const type = displayedWeaponType(cls, weaponId)
+    const big = isBigWeapon(cls, type)
+    this.weaponIsBig = big
     const style = WEAPON_STYLE[cls] ?? { scale: 1, glow: 0xffffff }
     const tier = this.weaponTier()
-    // échelle : base de classe (les grosses épées partent de BIG_SWORD_SCALE, jamais regrossi) et
-    // AGRANDIE par palier (+12 % par palier) → l'arme devient plus imposante au fil de la progression
+    // échelle : base de classe (les grosses épées partent de BIG_SWORD_SCALE) et AGRANDIE par palier
+    // — croissance PLAFONNÉE pour les grosses épées (BIG_SWORD_TIER_GROWTH), normale sinon.
     const base = big ? BIG_SWORD_SCALE * style.scale : style.scale
-    const scale = base * (1 + 0.12 * tier)
+    const growth = 1 + (big ? BIG_SWORD_TIER_GROWTH : WEAPON_TIER_GROWTH) * tier
+    const scale = base * growth
     const w = this.scene.add.image(this.x + WEAPON_OFFSET_X, this.y + WEAPON_OFFSET_Y, key)
       .setOrigin(0.5, 44 / 60).setDepth(this.depth + 1).setScale(scale)
-    // halo de classe : n'apparaît qu'à partir du palier 1 et s'intensifie ensuite (montée en gamme).
-    // Couleur propre à la classe (distingue sabreur/chevalier, mage/sorcier…) ; teinte dorée noble au
-    // palier max. Derrière l'arme (depth − 1), fondu additif, un peu plus grand qu'elle.
+    // halo : n'apparaît qu'à partir du palier 1 et s'intensifie ensuite (montée en gamme). Couleur =
+    // RARETÉ de l'objet équipé (distingue deux armes d'un même type), sinon couleur de classe ;
+    // teinte dorée noble au palier max. Derrière l'arme (depth − 1), fondu additif, un peu plus grand.
     if (tier >= 1) {
       this.weaponGlow = this.scene.add.image(this.x + WEAPON_OFFSET_X, this.y + WEAPON_OFFSET_Y, key)
         .setOrigin(0.5, 44 / 60).setDepth(this.depth).setScale(scale * 1.25)
-        .setTint(tier >= 3 ? WEAPON_GLOW_TOP : style.glow)
+        .setTint(this.weaponGlowColor(weaponId, style.glow, tier))
         .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.28 + 0.18 * tier)
     }
-    // Lignée du sabreur : GROSSE épée MASQUÉE au repos → révélée (halo compris) le temps du balayage.
+    // GROSSE épée MASQUÉE au repos → révélée (halo compris) le temps du balayage / tourbillon.
     if (big) { w.setVisible(false); this.weaponGlow?.setVisible(false) }
     this.weaponImage = w
+  }
+
+  // Couleur du halo d'arme : teinte NOBLE au palier max, sinon couleur de la RARETÉ de l'objet
+  // équipé (deux armes d'un même type se distinguent), à défaut couleur de la classe.
+  private weaponGlowColor(weaponId: string | null, classGlow: number, tier: number): number {
+    if (tier >= 3) return WEAPON_GLOW_TOP
+    const it = weaponId ? ITEMS[weaponId] : undefined
+    if (it && it.slot === 'weapon') return rarityColor(it.rarity)
+    return classGlow
   }
 
   // Palier de « montée en gamme » déduit du NIVEAU perso existant (aucun nouveau système de save).
@@ -364,9 +393,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // No-op sans arme (novice). L'ampleur suit un peu la classe (épée = grand arc franc).
   swingWeapon() {
     if (!this.weaponImage) return
-    // Lignée du sabreur : la grosse épée n'apparaît QUE pendant le coup (révélée ici, rétractée à la
-    // fin du retour au repos). Les autres armes restent visibles en permanence.
-    const big = BIG_SWORD_CLASSES.has(getPlayer().classId)
+    // Grosse épée : n'apparaît QUE pendant le coup (révélée ici, rétractée à la fin du retour au
+    // repos). Les autres armes (arc/bâton) restent visibles en permanence.
+    const big = this.weaponIsBig
     if (big) { this.weaponImage.setVisible(true); this.weaponGlow?.setVisible(true) }
     this.swingTween?.remove()
     this.attackSwing = Phaser.Math.DegToRad(-60) // arme relevée vers l'arrière
@@ -461,17 +490,22 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.isSpinning()) this.setFlipX(this.spinFlip)
   }
 
-  // Tourbillon : fait TOURNER le panda visuellement — alterne rapidement flipX gauche↔droite sur la
-  // durée du skill (effet de rotation), puis rend l'orientation réelle (facing) à la fin.
+  // Tourbillon : fait TOURNER le panda visuellement — alterne flipX gauche↔droite sur la durée du
+  // skill (effet de rotation), puis rend l'orientation réelle (facing) à la fin. L'alternance à 60 ms
+  // était trop rapide (grésillement illisible) → 150 ms, une rotation lisible. La grosse épée
+  // (masquée au repos) est RÉVÉLÉE pendant tout le tourbillon puis rétractée à la fin.
   spinWhirl(durationMs: number) {
     this.spinUntil = this.scene.time.now + durationMs
     this.spinFlip = this.facing === -1
+    if (this.weaponIsBig) { this.weaponImage?.setVisible(true); this.weaponGlow?.setVisible(true) }
     this.spinTimer?.remove()
     this.spinTimer = this.scene.time.addEvent({
-      delay: 60, loop: true, callback: () => {
+      delay: 150, loop: true, callback: () => {
         if (!this.isSpinning()) {
           this.spinTimer?.remove(); this.spinTimer = null
           this.setFlipX(this.facing === -1) // retour à l'orientation réelle
+          // grosse épée : on la rétracte à la fin du tourbillon (sauf si un coup la garde visible)
+          if (this.weaponIsBig && this.attackSwing === 0) { this.weaponImage?.setVisible(false); this.weaponGlow?.setVisible(false) }
           return
         }
         this.spinFlip = !this.spinFlip

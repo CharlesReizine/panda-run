@@ -3,6 +3,7 @@ import { getPlayer } from '../state'
 import { save } from '../core/save'
 import { ITEMS, rarityColor, SLOT_ORDER, SLOT_LABEL_PLURAL } from '../data/items'
 import { upgradedBonus } from '../core/reforge'
+import { canEquipItem, equipRestrictionMessage } from '../core/equip'
 import type { EquipSlot, Rarity } from '../core/types'
 import type { LevelScene } from './LevelScene'
 
@@ -33,6 +34,7 @@ export class InventoryScene extends Phaser.Scene {
   private overlay = false // true = lancée par-dessus le jeu en pause (à reprendre à la fermeture)
   private dirty = false // un équipement a changé → rafraîchir le panda en jeu à la fermeture
   private selected: Selection | null = null // objet dont la fiche info est ouverte
+  private notice: string | null = null // message contextuel (ex. arme réservée à une autre classe)
 
   constructor() { super('Inventory') }
 
@@ -41,6 +43,7 @@ export class InventoryScene extends Phaser.Scene {
     this.overlay = data.overlay ?? false
     this.dirty = false
     this.selected = null
+    this.notice = null
   }
 
   create() {
@@ -117,6 +120,7 @@ export class InventoryScene extends Phaser.Scene {
           // clic sur la case = ouvrir la fiche info de l'objet (l'équipement se fait depuis la fiche)
           tile.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
             this.selected = { itemId: e.itemId, source: 'stock', slot: item.slot, invIndex: e.i }
+            this.notice = null
             this.render()
           })
         })
@@ -143,6 +147,7 @@ export class InventoryScene extends Phaser.Scene {
         // clic sur le slot équipé = ouvrir la fiche info (le retrait se fait depuis la fiche)
         box.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
           this.selected = { itemId, source: 'equip', slot }
+          this.notice = null
           this.render()
         })
       } else {
@@ -158,10 +163,18 @@ export class InventoryScene extends Phaser.Scene {
     if (this.selected) this.drawInfoPanel()
   }
 
-  // équipe l'objet sélectionné du stock (l'objet déjà porté retourne au stock), puis ferme la fiche
+  // équipe l'objet sélectionné du stock (l'objet déjà porté retourne au stock), puis ferme la fiche.
+  // RESTRICTION DE CLASSE : une arme hors spécialité (ex. épée pour un mage) est refusée avec un
+  // message clair, la fiche reste ouverte. Les objets déjà équipés (saves existantes) restent en
+  // place — seul le RÉ-équipement d'une arme non autorisée est bloqué.
   private equipSelected(sel: Selection) {
     const p = getPlayer()
     if (sel.invIndex === undefined) return
+    if (!canEquipItem(p.classId, sel.itemId)) {
+      this.notice = equipRestrictionMessage(p.classId, sel.itemId)
+      this.render()
+      return
+    }
     const prev = p.equipment[sel.slot]
     p.equipment[sel.slot] = sel.itemId
     p.inventory.splice(sel.invIndex, 1)
@@ -212,6 +225,11 @@ export class InventoryScene extends Phaser.Scene {
     const propsY = top + 226
     this.add.text(cx, propsY, 'PROPRIÉTÉS', { fontSize: '12px', color: '#80cbc4', fontStyle: 'bold' }).setOrigin(0.5, 0)
     this.add.text(cx, propsY + 20, props.length ? props.join('   ') : '(aucun bonus)', { fontSize: '15px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5, 0)
+
+    // message contextuel (ex. « Arme réservée aux mages ») au-dessus du bouton d'action
+    if (this.notice) {
+      this.add.text(cx, top + cardH - 74, this.notice, { fontSize: '13px', color: '#ff8a80', fontStyle: 'bold', align: 'center', wordWrap: { width: cardW - 48 } }).setOrigin(0.5)
+    }
 
     // bouton d'action contextuel
     const btnY = top + cardH - 42
