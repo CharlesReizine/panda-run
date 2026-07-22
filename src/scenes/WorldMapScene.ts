@@ -91,7 +91,7 @@ export class WorldMapScene extends Phaser.Scene {
     // brouillard de guerre INVERSÉ : voile sombre plein écran, percé autour de chaque nœud ANCRE
     // (fait/courant) d'un double cercle de révélation (intérieur net + anneau à 50 %). Dessiné APRÈS
     // les nœuds/labels pour teinter le lointain ; sous les boutons d'UI ci-dessous (depth supérieur).
-    this.drawFog(anchors)
+    this.drawFog(anchors, revealed)
 
     // marqueur du panda sur le nœud courant
     const marker = this.add.image(current.x, current.y - RADIUS[current.type] - 14, `panda-${p.classId}`).setDisplaySize(26, 26).setDepth(8)
@@ -155,16 +155,21 @@ export class WorldMapScene extends Phaser.Scene {
   // est nettement masqué.
   private readonly DARK_COLOR = 0x060812 // bleu nuit très sombre, jamais 0x000000
   private readonly DARK_ALPHA = 0.97 // opacité du voile (bien plus opaque qu'avant : lointain masqué)
-  private readonly REVEAL_IN = 66 // rayon du cercle INTÉRIEUR (net, 100 % clair) — découvre un peu plus loin
-  private readonly REVEAL_OUT = 124 // rayon du cercle EXTÉRIEUR (anneau à 50 %, on devine) — portée élargie
+  private readonly REVEAL_IN = 130 // rayon du cercle INTÉRIEUR (net, 100 % clair) — 2× plus grand (on voit clair en découvrant)
+  private readonly REVEAL_OUT = 200 // rayon du cercle EXTÉRIEUR (anneau à 50 %, on devine) — élargi en proportion
 
-  private drawFog(anchors: Set<string>) {
+  private drawFog(anchors: Set<string>, revealed: Set<string>) {
     this.ensurePuffTexture()
     const key = 'fog-dark'
     const dt = this.getFogTexture(key)
     dt.fill(this.DARK_COLOR, 1) // voile plein écran
-    // double cercle de révélation autour de chaque nœud ancre
-    for (const n of WORLD_NODES) if (anchors.has(n.id)) this.revealNode(dt, n)
+    for (const n of WORLD_NODES) {
+      if (anchors.has(n.id)) this.revealNode(dt, n) // fait/courant : anneau deviné + disque net
+      else if (revealed.has(n.id)) { // PROCHAINE map : disque NET (bien visible, plus de clic à l'aveugle)
+        this.punch(dt, 'fog-clear', n.x, n.y, this.REVEAL_IN)
+        this.punch(dt, 'fog-clear', n.x, n.y + 26, this.REVEAL_IN * 0.72)
+      }
+    }
     dt.render()
     this.add.image(0, 0, key).setOrigin(0, 0).setDepth(6).setAlpha(this.DARK_ALPHA)
   }
