@@ -4,6 +4,7 @@ import { ITEMS, rarityColor } from '../data/items'
 import { MATERIALS } from '../data/materials'
 import { getPlayer } from '../state'
 import type { DropEntry, MonsterDef } from '../core/types'
+import { playerXpForMobLevel } from '../core/progression'
 
 // Bestiaire — page en lecture seule listant tous les monstres, leurs stats et leur table de drop.
 // Aucune écriture dans la sauvegarde ni dans les données du jeu.
@@ -164,7 +165,7 @@ export class BestiaryScene extends Phaser.Scene {
       ['PV', seen ? `${m.hp}` : hidden],
       ['ATK', seen ? `${m.atk}` : hidden],
       ['DEF', seen ? `${m.def}` : hidden],
-      ['XP', seen ? `${m.xp}` : hidden],
+      ['XP', seen ? `${playerXpForMobLevel(m.level)}` : hidden],
       ['Comportement', seen ? behaviorLabel(m) : hidden],
     ]
     rows.forEach(([k, v], i) => {

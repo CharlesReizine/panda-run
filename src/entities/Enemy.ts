@@ -3,6 +3,7 @@ import type { MonsterDef } from '../core/types'
 import { Projectile } from './Projectile'
 import type { LevelScene } from '../scenes/LevelScene'
 import { getPlayer } from '../state'
+import { diesOnFall, hasFallenOutOfWorld } from '../core/mob-fall'
 
 // Texture de projectile thématique par monstre à distance (fireProjectile). La mandragore tire
 // en cloche (fx-lob, géré à part) ; tout id absent retombe sur l'orbe générique fx-shot.
@@ -142,7 +143,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   aiDisabled = false
 
   constructor(scene: LevelScene, x: number, y: number, def: MonsterDef) {
-    super(scene, x, y, `monster-${def.id}`)
+    // TEXTURE : soit une clé explicite réutilisée (def.tex, ex. piranha → fish-piranha), soit la texture
+    // bakée de la base pour une variante GÉANTE (def.artFrom), soit la texture bakée du monstre lui-même.
+    super(scene, x, y, def.tex && scene.textures.exists(def.tex) ? def.tex : `monster-${def.artFrom ?? def.id}`)
     scene.add.existing(this)
     scene.physics.add.existing(this)
     this.homeX = x; this.homeY = y
@@ -162,6 +165,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // GABARIT : les 'grand' (ours, golem) sont agrandis AVANT le calcul de hitbox — le corps Arcade
     // reprend la scale du sprite (Phaser 4), donc la hitbox grossit avec le rendu.
     this.baseScale = def.size === 'grand' ? GRAND_SCALE : 1
+    // TEXTURE réutilisée brute (non bakée, ex. fish-piranha) : normalise l'échelle à ~46px (taille
+    // standard d'un mob) pour que le sprite ne s'affiche pas à sa résolution native (souvent énorme).
+    if (def.tex && scene.textures.exists(def.tex)) {
+      const src = scene.textures.get(def.tex).getSourceImage() as { width?: number }
+      if (src.width && src.width > 0) this.baseScale = (46 / src.width) * (def.size === 'grand' ? GRAND_SCALE : 1)
+    }
     if (this.baseScale !== 1) this.setScale(this.baseScale)
     // hitbox = la créature seule (la texture a de la marge : ombre au sol + place au-dessus),
     // pour qu'elle repose au sol au même niveau que le panda
@@ -201,20 +210,26 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // chiffre de dégâts INFLIGÉS (taille ∝ ampleur, jaune→orange→rouge selon la force) — style et
     // regroupement gérés par LevelScene, distinct du ROUGE des dégâts subis par le joueur
     this.levelScene.showDamageNumber(this.x, this.y - 30, amount, false)
-    if (this.hp <= 0) {
-      this.scene.events.emit('enemy-died', this)
-      this.bar.destroy()
-      this.lvlText.destroy()
-      this.tierText?.destroy()
-      this.eliteAura?.destroy()
-      this.zzz?.destroy()
-      this.burnTimer?.remove()
-      this.snareFx?.destroy()
-      this.fearFx?.destroy()
-      this.slowFx?.destroy()
-      this.meleeFx?.destroy()
-      this.destroy()
-    }
+    if (this.hp <= 0) this.die(true)
+  }
+
+  // MORT du monstre : nettoie tous les FX flottants et détruit le sprite. `grantReward` (vrai en combat
+  // normal) émet 'enemy-died' → XP/loot au joueur. Chemin UNIQUE de mort (coup fatal ET chute hors map),
+  // pour que rien ne « remonte » ou ne colle : hors-map = mort NETTE (cf. preUpdate).
+  private die(grantReward: boolean) {
+    if (!this.active) return
+    if (grantReward) this.scene.events.emit('enemy-died', this)
+    this.bar.destroy()
+    this.lvlText.destroy()
+    this.tierText?.destroy()
+    this.eliteAura?.destroy()
+    this.zzz?.destroy()
+    this.burnTimer?.remove()
+    this.snareFx?.destroy()
+    this.fearFx?.destroy()
+    this.slowFx?.destroy()
+    this.meleeFx?.destroy()
+    this.destroy()
   }
 
   // Applique/prolonge une brûlure : dégâts par palier toutes les 500 ms pendant durationMs,
@@ -451,19 +466,16 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     return false
   }
 
-  // FILET DE SÉCURITÉ anti-traversée de map : un monstre terrestre (ni aérien) qui a chuté jusqu'au
-  // FOND du monde (tombé dans un trou, ou passé sous la surface solide) est REPOSÉ sur son point
-  // d'apparition (surface solide garantie), vélocité nulle → « s'ils tombent, ils remontent », jamais
-  // disparu sous la carte. Les aériens (gravité coupée) ne sont pas concernés.
+  // CHUTE HORS MAP = MORT NETTE (retour playtest : l'ancien filet REPOSAIT le mob sur son spawn → il
+  // « remontait »/collait, buggé). Désormais un monstre terrestre tombé au FOND du monde (trou, cuve,
+  // sous la surface) MEURT proprement (retiré, XP/loot au joueur), sans remontée ni blocage. Les
+  // aériens (volent) et aquatiques (nagent) en sont exemptés — le vide n'est pas mortel pour eux.
+  // Renvoie true si le monstre est mort ce tick (détruit) → l'appelant coupe le reste du preUpdate.
   private checkFallThrough(): boolean {
-    if (this.monster.aerial) return false
+    if (!diesOnFall(this.monster)) return false
     const body = this.body as Phaser.Physics.Arcade.Body
     const worldBottom = this.levelScene.physics.world.bounds.bottom
-    if (body.bottom >= worldBottom - 4) {
-      this.setPosition(this.homeX, this.homeY)
-      this.setVelocity(0, 0)
-      return true
-    }
+    if (hasFallenOutOfWorld(body.bottom, worldBottom)) { this.die(true); return true }
     return false
   }
 
@@ -473,27 +485,24 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // disparaître sous la carte. La collision au sol peut lâcher pour un GROS corps (boss/élite 'grand')
     // dont la scale — donc la hauteur du corps Arcade — oscille à chaque frame (respiration/dandinement) :
     // sur une bande de sol fine, la séparation ne se stabilise plus et le monstre s'enfonce puis chute.
-    // On garde-fou en deux temps :
-    //  1) pieds enfoncés SOUS la surface de l'arène, AU-DESSUS d'un sol plein → on repose les pieds
-    //     PILE sur la surface et on coupe la vitesse verticale (il reste planté au sol, ne s'enfonce plus) ;
-    //  2) carrément sous le bas du monde (au-dessus d'un trou, tunneling) → retour au point d'apparition.
+    // ANTI-JITTER (conservé) : pieds enfoncés SOUS la surface de l'arène MAIS AU-DESSUS d'un sol plein
+    // (la collision d'un GROS corps 'grand' dont la scale oscille peut lâcher sur une bande fine) → on
+    // repose les pieds PILE sur la surface, sans téléport. Ce n'est PAS une remontée hors-map : il y a
+    // un sol sous lui. La chute dans un VRAI trou (pas de sol) tombe dans checkFallThrough → mort nette.
     // Les aériens/aquatiques nagent/volent → non concernés.
     if (!this.monster.aerial && !this.monster.aquatic) {
       const body = this.body as Phaser.Physics.Arcade.Body
       const surface = this.levelScene.groundSurfaceY()
       if (body.bottom > surface + 4 && this.levelScene.floorAt(this.x, surface + 2)) {
-        this.y -= body.bottom - surface // recale les pieds sur la surface solide
+        this.y -= body.bottom - surface // recale les pieds sur la surface solide (sol présent sous lui)
         body.setVelocityY(0)
-      } else if (body.top > this.levelScene.worldFloorY()) {
-        this.setPosition(this.homeX, this.homeY)
-        body.setVelocity(0, 0)
       }
     }
     // NOYADE : un monstre terrestre tombé dans l'eau marine se noie (dégâts jusqu'à la mort). Testé
     // avant toute IA — un mob en train de couler ne patrouille/charge plus, il crève.
     if (this.checkDrown(d)) return
-    // FILET anti-chute hors map : reposé sur son spawn s'il a atteint le fond du monde.
-    if (this.checkFallThrough()) { this.updateVisuals(t); return }
+    // CHUTE HORS MAP = MORT NETTE (plus de remontée sur le spawn) : atteint le fond du monde → il meurt.
+    if (this.checkFallThrough()) return
     // BOSS piloté par le contrôleur : on ne joue AUCUNE IA autonome (le BossController impose la
     // vélocité et les skills chaque frame). On conserve seulement le rendu flottant.
     if (this.aiDisabled) { this.updateVisuals(t); return }

@@ -3559,7 +3559,7 @@ export class LevelScene extends Phaser.Scene {
     audio.playSfx('enemy-death')
     p.monstersKilled += 1
     recordKill(p, e.monster.id)
-    const { levelsGained } = grantXp(p, playerXpGain(e.monster.xp))
+    const { levelsGained } = grantXp(p, playerXpGain(e.monster))
     this.events.emit('enemy-loot', e) // consommé en Task 13
     if (levelsGained > 0) {
       this.player.refreshStats()

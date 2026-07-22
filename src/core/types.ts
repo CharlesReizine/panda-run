@@ -117,6 +117,8 @@ export interface DropEntry {
 
 export type MonsterBehavior = 'contact' | 'projectile' | 'charge' | 'caster'
 
+import type { MobRole } from './mob-stats'
+
 export interface MonsterDef {
   id: string
   name: string
@@ -127,6 +129,16 @@ export interface MonsterDef {
   def: number
   xp: number
   level: number // niveau calibré sur l'économie d'XP (voir core/mob-level.ts)
+  // RÔLE de combat (monstres normaux) : les PV/ATK/DÉF DÉRIVENT du niveau via ce rôle (core/mob-stats).
+  // Absent (boss / MVP / gardien) → stats posées à la main.
+  role?: MobRole
+  // VARIANTE GÉANTE : id d'un monstre de BASE dont on RÉUTILISE l'illustration (art-<base>) — l'entrée
+  // géante n'a pas d'art propre, Enemy affiche la texture de la base, agrandie par size:'grand'.
+  artFrom?: string
+  // TEXTURE explicite (clé Phaser) à afficher au lieu de `monster-<id>` : sert à réutiliser une
+  // illustration déjà chargée sous une autre clé (ex. le piranha réutilise le poisson décoratif
+  // fish-piranha). Enemy normalise l'échelle. Absent → texture bakée `monster-<artFrom ?? id>`.
+  tex?: string
   speed: number // px/s
   behavior: MonsterBehavior
   boss?: boolean

@@ -6,18 +6,24 @@ export const CLASS_CHANGE_LEVEL = 10
 export const CLASS_EVOLVE_LEVEL = 30
 export const STAT_POINTS_PER_LEVEL = 2 // points de stat gagnés à chaque niveau
 
-// Multiplicateur appliqué au GAIN d'XP du joueur (retours user successifs : la progression allait
-// trop vite). Deux réductions cumulatives de −30% : 0.7 (1er retour) puis ×0.7 (2e retour) = 0.49.
-// Volontairement appliqué au gain côté joueur et NON à MonsterDef.xp : la valeur `xp` d'un
-// monstre reste l'invariant qui pilote computeMonsterLevels (src/core/mob-level.ts). On ne touche
-// donc pas à la courbe de niveaux des monstres ; seule la vitesse de montée du joueur ralentit.
-// Source de vérité unique — importée au point d'attribution d'XP (LevelScene.onEnemyDied).
-export const XP_GAIN_MULTIPLIER = 0.49
+// XP GAGNÉE PAR LE JOUEUR = fonction du NIVEAU du monstre (retours playtest : caler la courbe de
+// progression sur des repères — Prontera ~niv 7-8 en fin de plaine, Morocc ~niv 25-30 en fin de désert).
+// On DÉCOUPLE volontairement la récompense de `MonsterDef.xp` : le champ `xp` reste l'invariant qui
+// pilote la CALIBRATION des niveaux (src/core/mob-level.ts, inchangée), tandis que la récompense suit
+// une courbe puissance du niveau. Comme les mobs de plaine sont niv ~1 et ceux du désert niv ~31, la
+// courbe rend la plaine peu rémunératrice et le désert riche → gros SAUT de niveau (mur voulu) au
+// passage plaine→désert, qui force à farmer. Réglé par MOB_XP_BASE / MOB_XP_EXP (cf. mob-level.test).
+export const MOB_XP_BASE = 16   // XP d'un mob de niveau 1
+export const MOB_XP_EXP = 1.3   // exposant de la courbe puissance (niveau^exp)
 
-// Convertit la récompense brute d'un monstre (MonsterDef.xp) en XP réellement gagnée par le joueur,
-// après le multiplicateur ci-dessus (arrondi au plus proche pour rester entier).
-export function playerXpGain(monsterXp: number): number {
-  return Math.round(monsterXp * XP_GAIN_MULTIPLIER)
+// XP accordée au joueur pour un monstre de niveau `level` (arrondi entier, ≥ 1).
+export function playerXpForMobLevel(level: number): number {
+  return Math.max(1, Math.round(MOB_XP_BASE * Math.pow(Math.max(1, level), MOB_XP_EXP)))
+}
+
+// XP réellement gagnée à la mort d'un monstre (dérivée de son niveau calibré).
+export function playerXpGain(monster: { level: number }): number {
+  return playerXpForMobLevel(monster.level)
 }
 
 // voies d'évolution : classe de 1er palier → classe évoluée (2e palier, niveau 30)

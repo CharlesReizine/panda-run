@@ -101,18 +101,25 @@ export const LEVEL_MODULE_KINDS: Record<string, ModuleKind[]> = {}
 
 interface BiomePool { ground: string[]; birds: string[]; aquatic?: string[]; mvp?: string; tier: Tier; lava?: boolean }
 
+// MENACE D'EAU GÉNÉRIQUE (retour playtest) : requin + méduse + piranha nagent dans les plans d'eau de
+// TOUTES les zones (hors lave), indépendamment du biome, et blessent le nageur. Injectée dans le pool
+// aquatique de chaque biome à eau ; le premier plan d'eau croisé est en désert → calibrées ~niv 30.
+const WATER_THREATS = ['requin', 'meduse', 'piranha']
+
 // Pools de monstres par biome (réutilisent les monstres existants ; ordre ≈ difficulté croissante).
+// Les VARIANTES GÉANTES (<base>-geant) sont posées dans un biome PLUS AVANCÉ que leur base → niveau
+// calibré supérieur (le niveau dérive du 1er biome où le monstre apparaît, cf. mob-level).
 const POOLS: Record<string, BiomePool> = {
   plaine: { tier: 1, ground: ['gloopy', 'fabre', 'angeling', 'lapin-bondissant', 'mandragore', 'poporing', 'louveteau', 'willow', 'ronce-cracheuse'], birds: ['corbeau'], mvp: 'poring-dore' },
-  foret: { tier: 2, ground: ['louveteau', 'willow', 'poporing', 'mandragore', 'ronce-cracheuse', 'rocker', 'singe-grimpeur', 'ours-brun'], birds: ['corbeau'], mvp: 'poring-dore' },
-  desert: { tier: 2, ground: ['scorpion', 'fourmi-geante', 'scarabee-cornu', 'momie', 'vautour', 'orc-guerrier', 'zombie', 'mini-baphomet'], birds: ['faucon'], mvp: 'orc-seigneur' },
-  jungle: { tier: 3, ground: ['willow', 'frelon-geant', 'flora-vorace', 'singe-grimpeur', 'ours-brun', 'ronce-cracheuse'], birds: ['ara'] },
-  cave: { tier: 3, ground: ['chauve-souris', 'squelette', 'fantome', 'gobelin-mineur', 'fourmi-geante', 'mage-noir', 'golem-de-pierre'], birds: ['corbeau'] },
-  montagne: { tier: 3, ground: ['harpie', 'ours-brun', 'yeti', 'louveteau'], birds: ['faucon'] },
-  cimetiere: { tier: 4, ground: ['squelette', 'goule', 'totem-maudit', 'banshee', 'fantome', 'pretre-goule'], birds: ['harfang-spectral'], mvp: 'spectre-ancien' },
-  plage: { tier: 3, ground: ['crabe-geant', 'harpie'], birds: ['ara'], aquatic: ['meduse', 'crabe-geant'], mvp: 'roi-crabe' },
-  carriere: { tier: 4, ground: ['gobelin-mineur', 'golem-de-pierre', 'gargouille', 'scarabee-cornu'], birds: ['faucon'] },
-  enfer: { tier: 5, ground: ['diablotin', 'mage-noir', 'golem-de-lave', 'gargouille', 'mini-baphomet', 'gardien-flamme'], birds: ['corbeau'], mvp: 'dragon-flamme', lava: true },
+  foret: { tier: 2, ground: ['louveteau', 'willow', 'poporing', 'mandragore', 'ronce-cracheuse', 'rocker', 'singe-grimpeur', 'ours-brun', 'gloopy-geant', 'fabre-geant'], birds: ['corbeau'], mvp: 'poring-dore' },
+  desert: { tier: 2, ground: ['scorpion', 'fourmi-geante', 'scarabee-cornu', 'momie', 'vautour', 'orc-guerrier', 'zombie', 'mini-baphomet'], birds: ['faucon'], aquatic: WATER_THREATS, mvp: 'orc-seigneur' },
+  jungle: { tier: 3, ground: ['willow', 'frelon-geant', 'flora-vorace', 'singe-grimpeur', 'ours-brun', 'ronce-cracheuse', 'scorpion-geant'], birds: ['ara'], aquatic: WATER_THREATS },
+  cave: { tier: 3, ground: ['chauve-souris', 'squelette', 'fantome', 'gobelin-mineur', 'fourmi-geante', 'mage-noir', 'golem-de-pierre'], birds: ['corbeau'], aquatic: WATER_THREATS },
+  montagne: { tier: 3, ground: ['harpie', 'ours-brun', 'yeti', 'louveteau', 'singe-geant'], birds: ['faucon'], aquatic: WATER_THREATS },
+  cimetiere: { tier: 4, ground: ['squelette', 'goule', 'totem-maudit', 'banshee', 'fantome', 'pretre-goule', 'momie-geante', 'squelette-geant', 'goule-geante'], birds: ['harfang-spectral'], aquatic: WATER_THREATS, mvp: 'spectre-ancien' },
+  plage: { tier: 3, ground: ['crabe-geant', 'harpie'], birds: ['ara'], aquatic: ['meduse', 'crabe-geant', 'requin', 'piranha'], mvp: 'roi-crabe' },
+  carriere: { tier: 4, ground: ['gobelin-mineur', 'golem-de-pierre', 'gargouille', 'scarabee-cornu'], birds: ['faucon'], aquatic: WATER_THREATS },
+  enfer: { tier: 5, ground: ['diablotin', 'mage-noir', 'golem-de-lave', 'gargouille', 'mini-baphomet', 'diablotin-geant', 'gardien-flamme'], birds: ['corbeau'], mvp: 'dragon-flamme', lava: true },
 }
 
 // Rotation de plans d'eau (variété d'un niveau à l'autre) : chaque entrée = les cuves imposées.
@@ -224,11 +231,25 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   // ITEM 10 — DIFFÉRENCIER NETTEMENT plaine-1/2/3 (Prairie / Champs / Vallon) : signature d'eau distincte.
   //   Prairie = bassin + cascade (doux) · Champs = petit pont sur mare + cascade · Vallon = plongeoir + bassin.
   const PLAINE_WATER: Record<number, ModuleKind[]> = { 1: ['bassin', 'cascade'], 2: ['petit-pont', 'cascade'], 3: ['plongeoir', 'bassin'] }
+  // PACING (retour playtest : « n'introduis pas trop de mobs distincts DÈS le début ») : en plaine,
+  // montée PROGRESSIVE du nombre d'espèces (2 au 1er terrain → tout le pool en fin de plaine) ; à l'orée
+  // de forêt, cap modéré ; ailleurs, rotation complète. Aux TRANSITIONS de biome (1er terrain), on
+  // MÉLANGE 1 mob du biome PRÉCÉDENT — déjà croisé, donc son niveau calibré (1er biome où il apparaît)
+  // est INCHANGÉ → aucun recalibrage — pour lisser le passage d'un biome à l'autre.
+  const TRANSITION_MIX: Record<string, string> = {
+    desert: 'ours-brun', jungle: 'scorpion', cave: 'scorpion', montagne: 'gobelin-mineur',
+    cimetiere: 'squelette', carriere: 'squelette', enfer: 'gargouille',
+  }
+  const distinctCap = biome === 'plaine' ? Math.min(pool.ground.length, 1 + rank)
+    : (biome === 'foret' && rank <= 2) ? 4 + rank : pool.ground.length
+  let groundPool = (biome === 'plaine' ? pool.ground.slice(0, distinctCap) : rotate(pool.ground, idx).slice(0, distinctCap))
+  const mix = TRANSITION_MIX[biome]
+  if (rank === 1 && mix && !groundPool.includes(mix)) groundPool = [mix, ...groundPool]
   const base = {
     id, name, biome,
     tierCap: pool.tier,
     ending,
-    ground: rotate(pool.ground, idx),
+    ground: groundPool,
     birds: pool.birds,
     ...(pool.aquatic ? { aquatic: pool.aquatic } : {}),
     ...(useMvp ? { mvp: pool.mvp } : {}),
