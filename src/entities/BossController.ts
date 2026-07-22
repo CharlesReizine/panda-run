@@ -11,7 +11,9 @@ import type { Enemy } from './Enemy'
 //   1. GROSSE ATTAQUE à barre de CHARGE : une réserve d'ÉNÉRGIE se remplit (jauge HUD dorée) ; pleine,
 //      le boss CHARGE (barre rouge au-dessus de lui = télégraphe), lâche une attaque quasi fatale
 //      ÉVITABLE, puis reste VULNÉRABLE en récupération (immobile, terni).
-//   2. INVOCATION d'adds à COMPTE À REBOURS visible (3…2…1) — incite à tuer vite / gérer les adds.
+//   2. INVOCATION CONTINUE et CROISSANTE : le boss invoque des adds SANS DISCONTINUER tant qu'il
+//      vit, à un rythme qui S'ACCÉLÈRE et par paquets qui GROSSISSENT au fil du combat (montée de
+//      pression), plafonnés à MAX_ADDS adds vivants simultanément (perf + jouabilité).
 //   3. Skills de CLASSE cadencés + alternance DISTANCE/MÊLÉE selon la classe.
 // Phase 2 (sous 50 % PV) : énergie plus rapide, cadence resserrée, patterns plus agressifs.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -22,8 +24,8 @@ interface Kit {
   role: Role
   desiredPx: number // distance de confort (mêlée : distance d'approche ; distance : à garder)
   energyFillMs: number // temps pour remplir la jauge d'énergie (→ grosse attaque)
-  summonEveryMs: number
-  summonCount: number
+  summonEveryMs: number // INTERVALLE INITIAL entre deux invocations (se raccourcit avec le temps)
+  summonCount: number // TAILLE INITIALE d'un paquet d'adds (grossit avec le temps)
   skillEveryMs: number
   color: number // teinte signature des FX du boss
 }
@@ -32,16 +34,24 @@ interface Kit {
 // NB : les mêlées gardent une distance de confort LARGE (ils ne collent pas le joueur en continu —
 // sinon les dégâts de contact deviennent inévitables). Ils menacent par des LUNGES télégraphiées et
 // le bond chargé ; le joueur peut esquiver/sauter par-dessus. C'est le cœur du « dur mais évitable ».
+// summonEveryMs / summonCount = valeurs de DÉPART : l'invocation est CONTINUE et monte en pression
+// (intervalle → SUMMON_FLOOR_MS, paquet → SUMMON_MAX_BATCH) au fil du combat.
 const KITS: Record<string, Kit> = {
-  novice: { role: 'melee', desiredPx: 78, energyFillMs: 9000, summonEveryMs: 11000, summonCount: 3, skillEveryMs: 2600, color: 0xff8fc0 },
-  swordsman: { role: 'melee', desiredPx: 108, energyFillMs: 8500, summonEveryMs: 12000, summonCount: 2, skillEveryMs: 2400, color: 0xffca6b },
-  mage: { role: 'ranged', desiredPx: 330, energyFillMs: 8000, summonEveryMs: 12000, summonCount: 3, skillEveryMs: 2200, color: 0xff7043 },
-  archer: { role: 'ranged', desiredPx: 320, energyFillMs: 8500, summonEveryMs: 12000, summonCount: 3, skillEveryMs: 1900, color: 0xd7a86e },
-  sorcier: { role: 'ranged', desiredPx: 340, energyFillMs: 7500, summonEveryMs: 10000, summonCount: 3, skillEveryMs: 2000, color: 0xb388ff },
-  chevalier: { role: 'melee', desiredPx: 118, energyFillMs: 7000, summonEveryMs: 9000, summonCount: 3, skillEveryMs: 1900, color: 0xff5252 },
+  novice: { role: 'melee', desiredPx: 78, energyFillMs: 9000, summonEveryMs: 5200, summonCount: 2, skillEveryMs: 2600, color: 0xff8fc0 },
+  swordsman: { role: 'melee', desiredPx: 108, energyFillMs: 8500, summonEveryMs: 5600, summonCount: 2, skillEveryMs: 2400, color: 0xffca6b },
+  mage: { role: 'ranged', desiredPx: 330, energyFillMs: 8000, summonEveryMs: 5400, summonCount: 2, skillEveryMs: 2200, color: 0xff7043 },
+  archer: { role: 'ranged', desiredPx: 320, energyFillMs: 8500, summonEveryMs: 5400, summonCount: 2, skillEveryMs: 1900, color: 0xd7a86e },
+  sorcier: { role: 'ranged', desiredPx: 340, energyFillMs: 7500, summonEveryMs: 4800, summonCount: 3, skillEveryMs: 2000, color: 0xb388ff },
+  chevalier: { role: 'melee', desiredPx: 118, energyFillMs: 7000, summonEveryMs: 4600, summonCount: 3, skillEveryMs: 1900, color: 0xff5252 },
 }
 
-const MAX_ADDS = 6 // plafond d'adds vivants (hors boss) : on n'ensevelit jamais le joueur
+const MAX_ADDS = 9 // plafond d'adds vivants (hors boss) : flux continu mais on n'ensevelit jamais le joueur
+// Montée en pression de l'invocation au fil du combat : l'intervalle décroît de summonEveryMs
+// jusqu'à SUMMON_FLOOR_MS et le paquet croît de summonCount jusqu'à SUMMON_MAX_BATCH, en atteignant
+// la pleine pression après SUMMON_RAMP_MS de combat (pression = min(1, elapsed / SUMMON_RAMP_MS)).
+const SUMMON_FLOOR_MS = 1500 // intervalle minimum entre deux invocations (rythme le plus soutenu)
+const SUMMON_MAX_BATCH = 4 // adds max lâchés d'un coup (borné aussi par la place sous MAX_ADDS)
+const SUMMON_RAMP_MS = 55000 // durée pour atteindre la pression maximale
 
 export class BossController {
   private scene: LevelScene
@@ -51,7 +61,9 @@ export class BossController {
 
   private energy = 0 // 0..1 (jauge HUD)
   private phase = 1
+  private phaseSummonFactor = 1 // resserrement de l'intervalle d'invocation en phase 2
   private busyUntil = 0 // tant que now < busyUntil : une action scriptée est en cours (locomotion figée)
+  private combatStart: number // début du combat → sert à la montée en pression de l'invocation
   private nextSummonAt: number
   private nextSkillAt: number
   private skillTurn = 0 // alterne les skills de classe
@@ -74,7 +86,8 @@ export class BossController {
 
     // léger sursis d'ouverture : le joueur voit le boss avant la première salve
     const now = scene.time.now
-    this.nextSummonAt = now + 6000
+    this.combatStart = now
+    this.nextSummonAt = now + 3500
     this.nextSkillAt = now + 1400
 
     this.chargeBar = scene.add.graphics().setDepth(30)
@@ -122,13 +135,33 @@ export class BossController {
 
     // ── ORDONNANCEMENT : grosse attaque (énergie pleine) > invocation > skill de classe ──────────
     if (this.energy >= 1) { this.energy = 0; this.chargedAttack(now); return }
-    if (now >= this.nextSummonAt) { this.nextSummonAt = now + this.kit.summonEveryMs; this.summonWave(now); return }
+    if (now >= this.nextSummonAt) { this.nextSummonAt = now + this.summonPeriod(now); this.summonWave(now); return }
     if (now >= this.nextSkillAt) { this.nextSkillAt = now + this.kit.skillEveryMs; this.regularSkill(); return }
+  }
+
+  // Pression d'invocation : 0 au début du combat → 1 après SUMMON_RAMP_MS. Resserrée encore en phase 2.
+  private summonPressure(now: number): number {
+    return Phaser.Math.Clamp((now - this.combatStart) / SUMMON_RAMP_MS, 0, 1)
+  }
+
+  // Intervalle courant entre deux invocations : décroît de summonEveryMs vers SUMMON_FLOOR_MS avec la
+  // pression (× facteur de phase). → invocation CONTINUE de plus en plus rapprochée, jamais nulle.
+  private summonPeriod(now: number): number {
+    const p = this.summonPressure(now)
+    const base = Phaser.Math.Linear(this.kit.summonEveryMs, SUMMON_FLOOR_MS, p)
+    return Math.max(SUMMON_FLOOR_MS * this.phaseSummonFactor, base * this.phaseSummonFactor)
+  }
+
+  // Taille courante d'un paquet d'adds : croît de summonCount vers SUMMON_MAX_BATCH avec la pression.
+  private summonBatchSize(now: number): number {
+    const p = this.summonPressure(now)
+    return Math.round(Phaser.Math.Linear(this.kit.summonCount, SUMMON_MAX_BATCH, p))
   }
 
   private enterPhase2() {
     this.phase = 2
-    this.kit = { ...this.kit, energyFillMs: this.kit.energyFillMs * 0.6, summonEveryMs: this.kit.summonEveryMs * 0.7, skillEveryMs: this.kit.skillEveryMs * 0.65 }
+    this.phaseSummonFactor = 0.7 // invocation encore plus soutenue une fois enragé
+    this.kit = { ...this.kit, energyFillMs: this.kit.energyFillMs * 0.6, skillEveryMs: this.kit.skillEveryMs * 0.65 }
     this.scene.showEnrageBanner()
   }
 
@@ -212,32 +245,33 @@ export class BossController {
     }
   }
 
-  // ══════════════════════════ INVOCATION (compte à rebours visible) ══════════════════════════
+  // ══════════════════════════ INVOCATION CONTINUE & CROISSANTE ══════════════════════════
+  // Flux d'adds ININTERROMPU tant que le boss vit : paquets de plus en plus gros, de plus en plus
+  // rapprochés (summonPeriod/summonBatchSize), plafonnés à MAX_ADDS vivants. Télégraphe COURT
+  // (proportionnel à l'intervalle) pour rester lisible sans casser le rythme soutenu.
   private summonWave(now: number) {
     const summonId = this.boss.monster.bossSummon
     if (!summonId) return
     const alive = this.scene.enemies.getChildren().filter((e) => e !== this.boss && (e as Enemy).active).length
-    if (alive >= MAX_ADDS) { this.nextSummonAt = now + 4000; return } // arène déjà pleine : on retente vite
+    const room = MAX_ADDS - alive
+    if (room <= 0) { this.nextSummonAt = now + 700; return } // arène pleine : on retente très vite (flux jamais coupé)
 
+    const count = Math.max(1, Math.min(this.summonBatchSize(now), room))
     this.announce('Invocation…', 0xce93d8)
-    // compte à rebours 3 → 2 → 1 au-dessus du boss, puis apparition
-    let n = 3
-    this.setCountdown(String(n))
-    const tick = this.scene.time.addEvent({
-      delay: 550, repeat: 2, callback: () => {
-        n -= 1
-        if (n > 0) { this.setCountdown(String(n)); return }
-        this.setCountdown(null)
-        if (!this.boss.active) return
-        const count = Math.min(this.kit.summonCount, MAX_ADDS - alive)
-        for (let i = 0; i < count; i++) {
-          const spanX = this.scene.arenaWidthPx()
-          const x = Phaser.Math.Clamp(this.boss.x + Phaser.Math.Between(-220, 220), 80, spanX - 80)
-          this.scene.bossSpawnAdd(summonId, x)
-        }
-      },
+    // télégraphe bref et borné : assez court pour ne jamais chevaucher l'intervalle (montée en rythme)
+    const tele = Phaser.Math.Clamp(this.summonPeriod(now) * 0.32, 200, 560)
+    this.setCountdown('!')
+    this.scene.time.delayedCall(tele, () => {
+      this.setCountdown(null)
+      if (!this.boss.active) return
+      const span = MAX_ADDS - this.scene.enemies.getChildren().filter((e) => e !== this.boss && (e as Enemy).active).length
+      const n = Math.max(1, Math.min(count, span))
+      for (let i = 0; i < n; i++) {
+        const spanX = this.scene.arenaWidthPx()
+        const x = Phaser.Math.Clamp(this.boss.x + Phaser.Math.Between(-220, 220), 80, spanX - 80)
+        this.scene.bossSpawnAdd(summonId, x)
+      }
     })
-    void tick
   }
 
   // ══════════════════════════ GROSSE ATTAQUE CHARGÉE (énergie pleine) ══════════════════════════

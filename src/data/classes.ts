@@ -9,20 +9,24 @@ export const CLASSES: Record<ClassId, ClassDef> = {
   },
   swordsman: {
     id: 'swordsman', name: 'Sabreur', tint: 0xff8888,
-    baseStats: { atk: 16, def: 5, maxHp: 136, attackSpeed: 1.6 },
-    growth: { atk: 2, def: 2, maxHp: 18, attackSpeed: 0 },
+    // atk de base/croissance réduites (retour playtest : tier-1 one-shotait les mobs après le
+    // novice) → vise 3-5 coups à l'attaque de base pour un mob de même niveau, sans one-shot.
+    baseStats: { atk: 13, def: 5, maxHp: 136, attackSpeed: 1.6 },
+    growth: { atk: 1.7, def: 2, maxHp: 18, attackSpeed: 0 },
     skillIds: ['taillade', 'attaque-chargee', 'plongeon', 'lame-ultime', 'folie-enragee', 'estoc-rapide', 'tourbillon', 'lancer-epee', 'double-saut', 'regeneration'],
   },
   mage: {
     id: 'mage', name: 'Mage', tint: 0x88aaff,
-    baseStats: { atk: 20, def: 2, maxHp: 94, attackSpeed: 1.2 },
-    growth: { atk: 2.6, def: 1, maxHp: 11, attackSpeed: 0 },
+    // atk réduite (cf. Sabreur) : le mage tapait le plus fort et one-shotait les mobs fragiles.
+    baseStats: { atk: 16, def: 2, maxHp: 94, attackSpeed: 1.2 },
+    growth: { atk: 2.2, def: 1, maxHp: 11, attackSpeed: 0 },
     skillIds: ['boule-de-feu', 'eclair', 'mur-de-flamme', 'pluie-de-meteores', 'fureur-arcanique', 'nova-de-givre', 'soin-du-panda', 'maitrise-arcanique', 'vitalite-magique', 'vol-arcanique'],
   },
   archer: {
     id: 'archer', name: 'Archer', tint: 0x88dd88,
-    baseStats: { atk: 15, def: 3, maxHp: 110, attackSpeed: 2.0 },
-    growth: { atk: 2, def: 1, maxHp: 15, attackSpeed: 0 },
+    // atk réduite (cf. Sabreur) : reste plus fort que le novice mais ne trivialise plus les mobs.
+    baseStats: { atk: 12, def: 3, maxHp: 110, attackSpeed: 2.0 },
+    growth: { atk: 1.7, def: 1, maxHp: 15, attackSpeed: 0 },
     skillIds: ['fleche-percante', 'tir-charge', 'pluie-de-fleches', 'fleche-enflammee', 'fleche-explosive', 'fleche-autoguidee', 'oeil-de-lynx', 'tir-instinctif', 'double-tir', 'piege', 'reflexes-felins'],
   },
   chevalier: {
