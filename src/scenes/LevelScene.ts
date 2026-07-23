@@ -3399,9 +3399,14 @@ export class LevelScene extends Phaser.Scene {
     // coin de l'écran (monde) le plus ÉLOIGNÉ de la cible → longue diagonale de piqué
     const cornerX = Math.abs(targetX - left) > Math.abs(targetX - right) ? left : right
     const cornerY = Math.abs(targetY - top) > Math.abs(targetY - bottom) ? top : bottom
-    const falcon = this.add.image(cornerX, cornerY, key).setDepth(9).setScale(1.3)
-    falcon.setRotation(Math.atan2(targetY - cornerY, targetX - cornerX)) // orienté vers le vol
-    if (targetX < cornerX) falcon.setFlipY(true) // vol vers la gauche : garde le faucon à l'endroit
+    const falcon = this.add.image(cornerX, cornerY, key).setDepth(9).setScale(1.4)
+    // ORIENTATION : le faucon (dessiné face à DROITE) pointe dans le sens du piqué en restant À
+    // L'ENDROIT (dos en haut). Vol vers la GAUCHE → on MIROIRE horizontalement (flipX) + angle miroir,
+    // au lieu d'un flip vertical qui le mettait ventre en l'air (retour joueur « à l'envers »).
+    const ang = Math.atan2(targetY - cornerY, targetX - cornerX)
+    const leftward = targetX < cornerX
+    falcon.setFlipX(leftward)
+    falcon.setRotation(leftward ? Math.PI - ang : ang)
     this.tweens.add({
       targets: falcon, x: targetX, y: targetY, duration: durationMs, ease: 'Quad.in',
       onComplete: () => { onImpact(); falcon.destroy() },
@@ -3424,7 +3429,7 @@ export class LevelScene extends Phaser.Scene {
     const tx = target ? target.x : px + f * Math.min(skill.range, 320)
     const ty = target ? target.y : this.groundRow * TILE - 20
     const radius = skill.explodeRadius ?? 120
-    this.falconDive(tx, ty, 520, () => {
+    this.falconDive(tx, ty, 950, () => {
       const ex = target && target.active ? target.x : tx
       const ey = target && target.active ? target.y : ty
       this.explosionFx(ex, ey, radius, color)
@@ -3456,7 +3461,7 @@ export class LevelScene extends Phaser.Scene {
     }
     if (!target) {
       // aucune cible : un unique piqué lisible vers un point devant (aucun dégât, pur spectacle)
-      this.falconDive(px + f * Math.min(skill.range, 320), this.groundRow * TILE - 20, 520, () => {})
+      this.falconDive(px + f * Math.min(skill.range, 320), this.groundRow * TILE - 20, 950, () => {})
       return
     }
     const hits = 3
@@ -3464,7 +3469,7 @@ export class LevelScene extends Phaser.Scene {
       // piqués successifs et LISIBLES depuis le coin de l'écran (staggered), chacun ~460 ms
       this.time.delayedCall(i * 220, () => {
         if (!target!.active || target!.ragdolling) return
-        this.falconDive(target!.x, target!.y, 460, () => {
+        this.falconDive(target!.x, target!.y, 820, () => {
           if (target!.active && !target!.ragdolling) {
             target!.takeDamage(physicalDamage(dmg / hits, target!.effectiveDef()))
             this.impactFx(target!.x, target!.y, color)
