@@ -71,12 +71,15 @@ function ladderFootReachable(l: Ladder, platforms: Plat[], reachable: Set<number
 // plateforme de sortie voisine. Ces échelles sont des NŒUDS d'atteignabilité à part entière (elles ne
 // reposent sur rien) — modèle activé UNIQUEMENT si `hung` est vrai (les échelles classiques gardent
 // exactement l'ancien comportement).
-const JUMP_COLS = Math.floor(maxJumpGapPx() / TILE) // portée horizontale d'un saut, en colonnes
-// TRANSFERT échelle→échelle : colonnes distinctes à portée de saut ET travées verticales qui se
-// chevauchent (ou séparées d'au plus un saut) → on bondit de l'une à l'autre.
+const JUMP_COLS = Math.floor(maxJumpGapPx() / TILE) // portée horizontale d'un saut À PLAT (marge de confort), en colonnes
+// TRANSFERT échelle→échelle : on lâche l'échelle en pleine montée et on bondit EN DIAGONALE (souvent
+// légèrement vers le BAS) sur la suivante → l'airtime de la chute donne une allonge horizontale plus
+// grande qu'un saut à plat. On tolère donc +1 colonne (sensation « je vais me rater » voulue), tant
+// que les travées se chevauchent verticalement (on grimpe/retombe dans la travée cible).
+const HUNG_JUMP_COLS = JUMP_COLS + 1
 function hungTransfer(a: Ladder, b: Ladder): boolean {
   const dx = Math.abs(a.x - b.x)
-  if (dx < 1 || dx > JUMP_COLS) return false
+  if (dx < 1 || dx > HUNG_JUMP_COLS) return false
   const vGap = Math.max(0, Math.max(a.y, b.y) - Math.min(a.y + a.h, b.y + b.h)) // 0 si les travées se chevauchent
   return vGap <= LADDER_GRAB_TILES
 }
@@ -101,11 +104,11 @@ interface ReachInfo { nodes: Plat[]; reachable: Set<number>; nPlat: number; grou
 // d'eau (le panda joue l'anim d'escalade). Le sommet d'émergence — une plateforme JOINTIVE au bord de
 // la colonne, ~à la rangée `top` du rideau — est atteignable dès qu'une BERGE BASSE de la colonne
 // (plateforme jointive en contrebas, où l'on saute pour entrer) est elle-même accessible.
-interface Cascade { x: number; w: number; top: number }
+interface Cascade { x: number; w: number; top: number; bot: number }
 function cascadeColumns(level: LevelDef): Cascade[] {
   return (level.hazards ?? [])
     .filter((h) => h.kind === 'water' && h.water === 'cascade')
-    .map((h) => ({ x: h.x, w: h.w, top: h.top ?? 0 }))
+    .map((h) => ({ x: h.x, w: h.w, top: h.top ?? 0, bot: (h.top ?? 0) + (h.h ?? 0) - 1 }))
 }
 function bordersCascade(p: Plat, c: Cascade): boolean {
   return p.x + p.w === c.x || p.x === c.x + c.w
@@ -118,6 +121,30 @@ function cascadeFootReachable(c: Cascade, nodes: Plat[], reachable: Set<number>)
   return nodes.some((p, i) => reachable.has(i) && bordersCascade(p, c) && p.y > c.top)
 }
 
+// ESCALIER TOUT-EN-EAU (retour user : « lac→cascade→lac sans terre ni pierre au milieu ») : une cascade
+// peut naître d'un LAC (au lieu d'une berge de pierre) et déboucher dans un autre lac plus haut. On
+// modélise donc les LACS comme des régions atteignables à part entière : on y entre depuis une rive
+// accessible OU en émergeant d'une cascade, on en ressort à la nage sur n'importe quelle rive.
+interface Basin { x: number; w: number; surf: number }
+function basins(level: LevelDef): Basin[] {
+  const gr = groundRowFor(level.heightTiles)
+  return (level.hazards ?? [])
+    .filter((h) => h.kind === 'water' && h.water === 'basin')
+    .map((h) => ({ x: h.x, w: h.w, surf: h.top ?? gr - 2 }))
+}
+// plateforme marchable posée sur une RIVE du lac (dessus à la surface, jointive à un bord)
+function bordersBasinSurface(p: Plat, b: Basin): boolean {
+  return Math.abs(p.y - b.surf) <= ROW_TOL && (p.x + p.w === b.x || p.x === b.x + b.w)
+}
+// pied de cascade PLONGÉ dans un lac (bas du rideau ≈ surface du lac, colonne au-dessus/au bord du lac)
+function cascadeFootInBasin(c: Cascade, b: Basin): boolean {
+  return Math.abs(b.surf - c.bot) <= ROW_TOL && c.x <= b.x + b.w && c.x + c.w >= b.x
+}
+// sommet de cascade qui DÉBOUCHE dans un lac (haut du rideau ≈ surface du lac supérieur)
+function cascadeIntoBasin(c: Cascade, b: Basin): boolean {
+  return Math.abs(b.surf - c.top) <= ROW_TOL && c.x <= b.x + b.w && c.x + c.w >= b.x
+}
+
 function computeReach(level: LevelDef): ReachInfo {
   const platforms = level.platforms
   const bridges = (level.bridges ?? []).map((b) => ({ x: b.x, y: b.y, w: b.w }))
@@ -127,8 +154,13 @@ function computeReach(level: LevelDef): ReachInfo {
   const groundRow = groundRowFor(level.heightTiles)
   const ground: Plat = { x: 0, y: groundRow, w: level.widthTiles }
   const hung = ladders.filter((l) => l.hung)
+  const lakes = basins(level)
   const reachable = new Set<number>()
   const reachLad = new Set<number>() // indices dans `hung` des échelles suspendues accessibles
+  const reachLake = new Set<number>() // indices dans `lakes` des lacs accessibles
+  // cascade grimpable : pied sur une berge accessible OU plongé dans un lac accessible
+  const cascadeFootOk = (c: Cascade) =>
+    cascadeFootReachable(c, nodes, reachable) || lakes.some((b, bi) => reachLake.has(bi) && cascadeFootInBasin(c, b))
   let changed = true
   while (changed) {
     changed = false
@@ -142,12 +174,14 @@ function computeReach(level: LevelDef): ReachInfo {
       if (i < platforms.length && ladders.some((l) => !l.hung && isLadderTop(b, l) && ladderFootReachable(l, platforms, reachable, groundRow))) {
         reachable.add(i); changed = true; continue
       }
-      // (3) sommet d'émergence d'une cascade REMONTABLE dont une berge basse est accessible
-      if (cascades.some((c) => isCascadeTop(b, c) && cascadeFootReachable(c, nodes, reachable))) {
+      // (3) sommet d'émergence d'une cascade REMONTABLE dont le pied est accessible (berge OU lac)
+      if (cascades.some((c) => isCascadeTop(b, c) && cascadeFootOk(c))) {
         reachable.add(i); changed = true; continue
       }
       // (4) plateforme atteignable depuis le SOMMET d'une échelle SUSPENDUE accessible (on enjambe)
-      if (hung.some((l, li) => reachLad.has(li) && hungTopReaches(l, b))) { reachable.add(i); changed = true }
+      if (hung.some((l, li) => reachLad.has(li) && hungTopReaches(l, b))) { reachable.add(i); changed = true; continue }
+      // (5) RIVE d'un lac accessible : on nage jusqu'au bord et on sort dessus
+      if (lakes.some((lk, li) => reachLake.has(li) && bordersBasinSurface(b, lk))) { reachable.add(i); changed = true }
     }
     // ÉCHELLES SUSPENDUES : accessibles si on agrippe leur pied depuis une surface accessible, OU par
     // transfert depuis une autre échelle suspendue déjà accessible (saut diagonal).
@@ -156,6 +190,14 @@ function computeReach(level: LevelDef): ReachInfo {
       const l = hung[li]!
       if (surfaces.some((a) => footMeets(l, a))) { reachLad.add(li); changed = true; continue }
       if (hung.some((o, oi) => reachLad.has(oi) && hungTransfer(o, l))) { reachLad.add(li); changed = true }
+    }
+    // LACS : accessibles depuis une RIVE marchable accessible, OU en émergeant d'une cascade grimpable
+    // (elle-même pied-accessible) qui débouche à leur surface.
+    for (let li = 0; li < lakes.length; li++) {
+      if (reachLake.has(li)) continue
+      const lk = lakes[li]!
+      if (nodes.some((p, i) => reachable.has(i) && bordersBasinSurface(p, lk))) { reachLake.add(li); changed = true; continue }
+      if (cascades.some((c) => cascadeFootOk(c) && cascadeIntoBasin(c, lk))) { reachLake.add(li); changed = true }
     }
   }
   return { nodes, reachable, nPlat: platforms.length, groundRow, ground, hung, reachLad }

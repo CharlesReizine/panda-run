@@ -73,7 +73,7 @@ const list: MonsterDef[] = [
     ],
   },
   {
-    id: 'roi-crabe', name: 'Roi Crabe', lore: 'Colosse de carapace au blindage insolent, il avance de côté, pinces claquantes et fier de l\'être.', color: 0xe64a19, hp: 640, atk: 115, def: 48, xp: 4400, level: 60, speed: 35, behavior: 'contact', mvp: true,
+    id: 'roi-crabe', name: 'Roi Crabe', lore: 'Colosse de carapace au blindage insolent, il avance de côté, pinces claquantes et fier de l\'être.', color: 0xe64a19, hp: 640, atk: 115, def: 48, xp: 4400, level: 61, speed: 35, behavior: 'contact', mvp: true,
     drops: [
       { kind: 'gold', chance: 1, min: 80, max: 140 },
       { kind: 'potion', chance: 0.5, min: 1, max: 1 },

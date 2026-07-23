@@ -1554,60 +1554,61 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // échelle). Rater = on retombe sur le sol de la grotte et on recommence. Pente régulière.
       const floor = Math.max(1, entryAlt)
       const H = LADDER_H     // longueur d'échelle (≥ MIN_LADDER_TILES)
-      const DX = 3           // écart horizontal entre échelles (≤ portée de saut JUMP_COLS)
+      const DX = 4           // écart horizontal ENTRE échelles : un cran de plus que le saut à plat →
+                             // on saute en diagonale, sensation « je vais me rater » voulue (cf. HUNG_JUMP_COLS)
       const STEP = 4         // gain d'altitude par échelle (travées chevauchantes : STEP < H → transfert au saut)
       p.platforms.push({ x: 0, alt: floor, w: bank }) // corniche d'ACCÈS : on bondit pour agripper la 1re échelle
-      const fitW = Math.floor((w - bank - DX) / DX)
-      const N = Math.max(2, Math.min(4, fitW)) // borné largeur + plafond de sécurité (rise ≈ floor + 2 + (N-1)·STEP + H)
+      const fitW = Math.floor((w - bank - 2) / DX)
+      const N = Math.max(2, Math.min(4, fitW))
       let lastX = bank, lastTop = floor + 2 + H
       for (let i = 0; i < N; i++) {
         const lx = bank + i * DX
         const footAlt = floor + 2 + i * STEP // 1re échelle : pied à floor+2 → agrippable en bondissant de la corniche
-        const topAlt = footAlt + H
-        p.ladders.push({ x: lx, topAlt, h: H, hung: true }) // échelle SUSPENDUE (pied dans le vide)
+        const isLast = i === N - 1
+        // DERNIÈRE échelle plus HAUTE : son sommet dépasse NETTEMENT le plateau de sortie (retour user :
+        // « la dernière ne monte pas assez haut, on ne peut pas sortir »).
+        const h = isLast ? Math.min(MAX_LADDER_TILES, H + 3) : H
+        const topAlt = footAlt + h
+        p.ladders.push({ x: lx, topAlt, h, hung: true }) // échelle SUSPENDUE (pied dans le vide)
         // PIERRE de coiffe (barre du T) : dalle RIGIDE juste au-dessus du sommet → blocage vers le haut
         p.rocks.push({ x: lx - 1, altBot: topAlt + 1, altTop: topAlt + 2, w: 3, solid: true })
         lastX = lx; lastTop = topAlt
       }
-      // PLATEAU DE SORTIE : bord ~2 rangées SOUS le sommet de la dernière échelle (« le top dépasse »)
-      const exitX = lastX + DX
-      const exitAltE = lastTop - 2
+      // PLATEAU DE SORTIE : PROCHE (2 colonnes) et 3 rangées SOUS le sommet de la dernière échelle (haute)
+      // → petite enjambée sûre pour finir (alors que les transferts intermédiaires, eux, sont exigeants).
+      const exitX = lastX + 2
+      const exitAltE = lastTop - 3
       p.platforms.push({ x: exitX, alt: exitAltE, w: Math.max(bank, w - exitX) })
       placeBirds(exitAltE + 3)
       p.exitAlt = exitAltE
       break
     }
 
-    // ─── ESCALIER DE LACS : lacs reliés par des cascades REMONTABLES ; on remonte de lac en lac, de plus
-    // en plus haut (l'eau se déverse en cascade d'un lac au suivant). Largeur maîtrisée (on s'arrête s'il
-    // ne reste plus la place → jamais de débordement), banks jointifs pour un chaînage propre. ──────────
+    // ─── ESCALIER TOUT EN EAU : une suite de LACS reliés DIRECTEMENT par des CASCADES remontables, SANS
+    // aucune berge ni pierre entre les paliers (retour user : « plus joli sans terre au milieu »). On
+    // nage dans un lac, on GRIMPE la cascade qui en jaillit, on émerge dans le lac suivant plus haut, etc.
     case 'lacs-cascade-montee': {
-      // ESCALIER DE LACS (retour user : « la cascade doit tomber DANS un lac, directement SOUS elle, pas
-      // à côté »). Chaque palier : une cascade LARGE remontable dont l'eau PLONGE dans un LAC situé
-      // DIRECTEMENT dessous (surface = pied de la cascade). On grimpe la cascade → perchoir en haut, qui
-      // sert de berge basse au palier suivant. On monte ainsi de lac en lac. Le lac est un peu plus
-      // ÉTROIT que la colonne (son bord droit passe SOUS le rideau → aucune berge à ce bord → surface non
-      // signalée « débordante »). Rater la montée = on retombe dans le lac (pas mortel : on ressort).
-      let alt = Math.max(1, entryAlt)
+      // Rien que de l'eau au milieu : le pied de chaque cascade PLONGE dans le lac du palier, son sommet
+      // DÉBOUCHE dans le lac suivant (le validateur modélise ces lacs comme régions atteignables — on y
+      // entre par une rive, on en ressort à la nage / en grimpant la cascade). Seules surfaces solides :
+      // la RIVE d'accès (bas-gauche) et la RIVE de sortie (haut-droite). Rater = on retombe dans un lac.
+      let alt = Math.max(2, entryAlt)
       let x = 0
       let placedCoffre = false
-      p.platforms.push({ x, alt, w: 2 }); x += 2 // berge d'accès BASSE (borde la 1re cascade)
-      const casW = 4 // colonne LARGE ; palier = lac+cascade (4) + perchoir (4) = 8 (empreinte inchangée)
-      while (x + 8 <= w - 1) {
-        const top = alt + cascadeRise(rng)
-        // LAC directement SOUS la cascade (2 tuiles, bord droit SOUS le rideau → pas de berge à ce bord,
-        // donc surface non signalée « débordante ») : la colonne d'eau claire y PLONGE.
-        p.waters.push({ x, w: 2, kind: basinKind, bankAlt: alt })
-        // CASCADE remontable qui TOMBE dans ce lac (bottomAlt = surface du lac, pas de vide sous elle)
-        p.waters.push({ x, w: casW, kind: 'cascade', bankAlt: top, bottomAlt: alt })
+      const LW = 3, CW = 3 // largeur d'un lac / d'une colonne de cascade
+      p.platforms.push({ x, alt, w: bank }); x += bank // RIVE d'accès (on plonge dans le 1er lac)
+      while (x + LW + CW + LW <= w - bank) {
+        p.waters.push({ x, w: LW, kind: basinKind, bankAlt: alt }) // LAC du palier
         if (basinKind !== 'lave' && !placedCoffre) { p.props.push({ kind: 'coffre', x: x + 1 }); placedCoffre = true }
-        const px = x + casW
-        p.platforms.push({ x: px, alt: top, w: 4 }) // perchoir d'ÉMERGENCE (borde la cascade) = berge basse du palier suivant
-        x = px + 4
+        const top = alt + cascadeRise(rng) // dénivelée ≥ MIN_CASCADE_TILES (vraie montée à la nage/escalade)
+        // CASCADE entre deux lacs : pied dans CE lac (bottomAlt = sa surface), sommet dans le lac suivant
+        p.waters.push({ x: x + LW, w: CW, kind: 'cascade', bankAlt: top, bottomAlt: alt })
+        x += LW + CW
         alt = top
       }
-      p.platforms.push({ x, alt, w: Math.max(1, w - x) }) // plateau de SORTIE (haut), jusqu'au bord
-      placeBirds(alt + 2)
+      p.waters.push({ x, w: LW, kind: basinKind, bankAlt: alt }); x += LW // dernier lac (perché)
+      p.platforms.push({ x, alt, w: Math.max(bank, w - x) }) // RIVE de SORTIE (borde le dernier lac)
+      placeBirds(alt + 3)
       p.exitAlt = alt
       break
     }
