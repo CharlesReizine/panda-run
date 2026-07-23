@@ -685,6 +685,27 @@ export function deadEndSurfaces(level: LevelDef): DeadEndProblem[] {
       for (const e of entries) for (const t of tops) { adj[e]!.add(t); adj[t]!.add(e) }
     }
   }
+  // 2e) EAU VERTICALE : les CASCADES REMONTABLES se GRIMPENT et les LACS se traversent à la nage. Dans une
+  // COMPOSANTE d'eau connexe (lacs reliés par cascades), toutes les rives/berges communiquent (montée ET
+  // descente) → une cascade n'est jamais un cul-de-sac. Une cascade isolée relie ses 2 berges (on la grimpe).
+  const cascE: Cascade[] = waters.filter((h) => h.water === 'cascade').map((h) => ({ x: h.x, w: h.w, top: h.top ?? 0, bot: (h.top ?? 0) + (h.h ?? 0) - 1 }))
+  const lakeE: Basin[] = basins.map((h) => ({ x: h.x, w: h.w, surf: h.top ?? groundRow - 2 }))
+  if (cascE.length) {
+    const Ln = lakeE.length, Cn = cascE.length
+    const par = Array.from({ length: Ln + Cn }, (_, i) => i)
+    const find = (a: number): number => (par[a] === a ? a : (par[a] = find(par[a]!)))
+    const uni = (a: number, b: number) => { par[find(a)] = find(b) }
+    cascE.forEach((c, ci) => lakeE.forEach((lk, li) => { if (cascadeFootInBasin(c, lk) || cascadeIntoBasin(c, lk)) uni(Ln + ci, li) }))
+    const comp = new Map<number, number[]>()
+    const push = (root: number, j: number) => { if (!comp.has(root)) comp.set(root, []); comp.get(root)!.push(j) }
+    for (let j = 0; j < N; j++) {
+      const s = surfaces[j]!
+      const plat = { x: s.x, y: s.y, w: s.w }
+      lakeE.forEach((lk, li) => { if (bordersBasinSurface(plat, lk)) push(find(li), j) })
+      cascE.forEach((c, ci) => { if (s.x + s.w === c.x || s.x === c.x + c.w) push(find(Ln + ci), j) })
+    }
+    for (const arr of comp.values()) for (const a of arr) for (const b of arr) if (a !== b) adj[a]!.add(b)
+  }
 
   // 3) surface de DÉPART et de SORTIE
   const findSurf = (pt?: { x: number; y: number }): number => {

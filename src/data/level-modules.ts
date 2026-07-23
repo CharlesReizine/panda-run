@@ -1618,29 +1618,33 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       break
     }
 
-    // ─── ESCALIER DE LACS : chaque palier = une cascade LARGE remontable dont l'eau PLONGE dans un LAC
-    // situé DIRECTEMENT dessous (jusqu'au sol), puis un perchoir en haut qui sert de berge au palier
-    // suivant. On monte ainsi de lac en lac (version validée par le user : « cascade-lac TB »). ─────────
     case 'lacs-cascade-montee': {
+      // ESCALIER DE LACS À MINI-PAROI (retour user : « mini parois de pierre en séparation, vraiment minus
+      // minus » + « la cascade doit tomber PLEINEMENT dans l'eau, pas moitié-lac / quart-pierre / quart-
+      // trou »). Chaque terrasse : une CASCADE qui plonge dans un LAC AUSSI LARGE qu'elle (eau sur toute
+      // la largeur, jusqu'au SOL → aucun trou), séparé du lac inférieur par une SEULE tuile (rebord posé
+      // sur la paroi partagée).
+      const CW = 4, RIM = 1
       let alt = Math.max(1, entryAlt)
       let x = 0
       let placedCoffre = false
-      p.platforms.push({ x, alt, w: 2 }); x += 2 // berge d'accès BASSE (borde la 1re cascade)
-      const casW = 4 // colonne LARGE ; palier = lac+cascade (4) + perchoir (4) = 8
-      while (x + 8 <= w - 1) {
+      p.platforms.push({ x, alt, w: 2 }); x += 2 // RIVE d'accès
+      while (x + CW + RIM <= w - 1) {
         const top = alt + cascadeRise(rng)
-        // LAC directement SOUS la cascade (2 tuiles, bord droit SOUS le rideau → pas de berge à ce bord,
-        // donc surface non signalée « débordante ») : la colonne d'eau claire y PLONGE (jusqu'au sol).
-        p.waters.push({ x, w: 2, kind: basinKind, bankAlt: alt })
-        // CASCADE remontable qui TOMBE dans ce lac (bottomAlt = surface du lac)
-        p.waters.push({ x, w: casW, kind: 'cascade', bankAlt: top, bottomAlt: alt })
+        // bord AMONT (droit) OUVERT → jamais de « berge désaxée » ; la paroi partagée + le rebord = la
+        // seule pierre (1 tuile) entre 2 terrasses. Lac = cascade en largeur → chute pleinement dans l'eau.
+        p.waters.push({ x, w: CW, kind: basinKind, bankAlt: alt, openSide: 'right' })
+        p.waters.push({ x, w: CW, kind: 'cascade', bankAlt: top, bottomAlt: alt })
         if (basinKind !== 'lave' && !placedCoffre) { p.props.push({ kind: 'coffre', x: x + 1 }); placedCoffre = true }
-        const px = x + casW
-        p.platforms.push({ x: px, alt: top, w: 4 }) // perchoir d'ÉMERGENCE (borde la cascade) = berge du palier suivant
-        x = px + 4
+        p.platforms.push({ x: x + CW, alt: top, w: RIM }) // REBORD d'1 tuile (berge aval du lac suivant, à son niveau)
+        x += CW + RIM
         alt = top
       }
-      p.platforms.push({ x, alt, w: Math.max(1, w - x) }) // plateau de SORTIE (haut), jusqu'au bord
+      // LAC FINAL perché : sa paroi gauche comble sous le dernier rebord ; sa surface est au niveau de la sortie
+      const fw = Math.max(2, w - x - 2)
+      p.waters.push({ x, w: fw, kind: basinKind, bankAlt: alt, openSide: 'right' })
+      x += fw
+      p.platforms.push({ x, alt, w: Math.max(1, w - x) }) // RIVE de sortie
       placeBirds(alt + 2)
       p.exitAlt = alt
       break

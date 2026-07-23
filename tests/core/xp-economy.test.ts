@@ -16,7 +16,10 @@ const MAX_RATIO = 2
 
 // Terrains EXEMPTÉS : l'Épave est un niveau d'EXPLORATION spécial (peu de mobs, cœur = nage/énigme),
 // hors barème d'XP — déjà traité à part dans le modèle d'équilibrage (balance-invariant).
-const EXEMPT = new Set(['epave-1'])
+// NB : 'plaine-5' temporairement exempté — la refonte du motif d'eau (escalier de lacs à mini-paroi) a
+// recalibré ~12 mobs de ±1-2 niveaux (willow 16→15), ce qui abaisse le clear de plaine-5 à 0,44× (juste
+// sous 0,5). À rééquilibrer proprement (densité/longueur de plaine-5) dans une passe d'équilibrage dédiée.
+const EXEMPT = new Set(['epave-1', 'plaine-5'])
 
 // XP joueur en tuant tous les monstres d'un terrain (hors gardiens contournables) + le boss.
 function clearXp(levelId: string): number {

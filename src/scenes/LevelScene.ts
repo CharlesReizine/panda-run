@@ -122,6 +122,8 @@ export class LevelScene extends Phaser.Scene {
   private invulnUntil = 0
   // chiffres de dégâts flottants actifs (garde-fou de perf : au-delà du plafond on n'en crée plus)
   private activeDamageNumbers = 0
+  private passiveHealAccum = 0 // PV de régén passive cumulés, affichés en chiffre vert par paquets
+  private passiveHealFlushAt = 0
   private dashUntil = 0
   private dashCooldownUntil = 0
   private nextBasicAttackAt = 0
@@ -1245,6 +1247,23 @@ export class LevelScene extends Phaser.Scene {
     })
   }
 
+  // SOIN : chiffre VERT « +N » qui monte au-dessus de la tête (potion, coffre, soin passif, sort de
+  // soin). Même logique de taille que les dégâts : plus le soin est gros, plus le chiffre est gros.
+  showHealNumber(amount: number) {
+    const amt = Math.round(amount)
+    if (amt <= 0 || this.activeDamageNumbers >= 28) return
+    const size = Math.round(Phaser.Math.Clamp(16 + Math.sqrt(amt) * 2.4, 18, 46))
+    const color = amt >= 120 ? '#00e676' : amt >= 40 ? '#69f0ae' : '#b9f6ca' // vert d'autant plus vif que le soin est gros
+    const txt = this.add.text(this.player.x + Phaser.Math.Between(-16, 16), this.player.y - 48, `+${amt}`, {
+      fontSize: `${size}px`, color, fontStyle: 'bold', stroke: '#0b3d1a', strokeThickness: 5,
+    }).setOrigin(0.5).setDepth(40)
+    this.activeDamageNumbers++
+    this.tweens.add({
+      targets: txt, y: txt.y - 34 - size * 0.5, alpha: 0, duration: 720, ease: 'Cubic.easeOut',
+      onComplete: () => { txt.destroy(); this.activeDamageNumbers-- },
+    })
+  }
+
   hitPlayer(rawAtk: number, attackerX?: number) {
     // ENTRAÎNEMENT / TEST DE NIVEAUX : le joueur ne subit AUCUN dégât → imperdable (balade).
     if (this.training || this.testMode) return
@@ -2032,7 +2051,7 @@ export class LevelScene extends Phaser.Scene {
       // Piège : posé au sol aux pieds du panda ; immobilise + blesse le premier ennemi qui l'atteint.
       this.castTrap(skill, color, mult)
     } else if (skill.kind === 'heal') {
-      this.player.heal(Math.round(maxHp * mult))
+      this.showHealNumber(this.player.heal(Math.round(maxHp * mult))) // chiffre VERT de soin
       this.aoeRing(this.player.x, this.player.y, 70, 0x66bb6a)
       // halo doux qui pulse sous le panda, en plus de l'onde
       const halo = this.add.image(this.player.x, this.player.y, 'ring').setTint(0x81ffa0).setAlpha(0.35).setDepth(3).setScale(1.6)
@@ -3855,7 +3874,7 @@ export class LevelScene extends Phaser.Scene {
     const p = getPlayer()
     if (p.potions <= 0 || this.player.hp >= this.player.stats.maxHp) return
     p.potions -= 1
-    this.player.heal(Math.round(this.player.stats.maxHp * 0.5))
+    this.showHealNumber(this.player.heal(Math.round(this.player.stats.maxHp * 0.5))) // chiffre VERT de soin
     save(p)
     this.game.events.emit('hud-refresh')
   }
@@ -3940,7 +3959,14 @@ export class LevelScene extends Phaser.Scene {
     if (this.player.hp <= 0) return
     this.player.regenEnergy(delta)
     // Régénération PASSIVE (sabreur) : remonte lentement les PV hors combat si le passif est appris.
-    this.player.passiveRegen(delta, hpRegenPerSec(getPlayer()))
+    // On CUMULE les PV rendus et on affiche un chiffre de soin vert par paquets (~toutes les 900 ms)
+    // plutôt qu'un +1 spammé à chaque frame.
+    this.passiveHealAccum += this.player.passiveRegen(delta, hpRegenPerSec(getPlayer()))
+    if (this.passiveHealAccum > 0 && this.time.now >= this.passiveHealFlushAt) {
+      this.showHealNumber(this.passiveHealAccum)
+      this.passiveHealAccum = 0
+      this.passiveHealFlushAt = this.time.now + 900
+    }
     // zones verticales chevauchées (échelle / eau) lues sur le centre du panda
     const onLad = this.ladderRects.find((r) => r.contains(this.player.x, this.player.y))
     this.player.onLadder = !!onLad

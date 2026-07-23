@@ -993,20 +993,26 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   // Régénération PASSIVE (sabreur) : rend `perSec` PV/s, mais uniquement hors combat (aucun coup reçu
   // depuis REGEN_COMBAT_LOCK_MS). Accumule les PV fractionnaires pour rester fluide à bas taux.
-  passiveRegen(deltaMs: number, perSec: number) {
-    if (perSec <= 0 || this.hp <= 0 || this.hp >= this.stats.maxHp) return
-    if (this.scene.time.now < this.lastDamagedAt + REGEN_COMBAT_LOCK_MS) return
+  // Renvoie les PV rendus par ce tick de régén (0 la plupart des frames) → la scène les cumule pour
+  // afficher un chiffre de soin vert de temps en temps (sans spam à chaque frame).
+  passiveRegen(deltaMs: number, perSec: number): number {
+    if (perSec <= 0 || this.hp <= 0 || this.hp >= this.stats.maxHp) return 0
+    if (this.scene.time.now < this.lastDamagedAt + REGEN_COMBAT_LOCK_MS) return 0
     this.regenAccum += (perSec * deltaMs) / 1000
     if (this.regenAccum >= 1) {
       const whole = Math.floor(this.regenAccum)
       this.regenAccum -= whole
-      this.heal(whole)
+      return this.heal(whole)
     }
+    return 0
   }
 
-  heal(amount: number) {
+  // Rend `amount` PV (borné par maxHp) et renvoie les PV RÉELLEMENT rendus (pour l'affichage du soin).
+  heal(amount: number): number {
+    const before = this.hp
     this.hp = Math.min(this.stats.maxHp, this.hp + amount)
     this.emitHp()
+    return this.hp - before
   }
 
   // PV + énergie au maximum (appelé au passage de niveau : on entame chaque niveau plein)
