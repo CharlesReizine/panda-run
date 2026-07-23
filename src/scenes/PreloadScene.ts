@@ -7,6 +7,8 @@ import { LEVELS } from '../data/levels'
 import type { MonsterDef, WeaponType } from '../core/types'
 import { stripBorderBackground } from '../core/image-strip'
 import { PANDA_TEX, PANDA_HEAD_ANCHORS } from '../entities/player-body'
+import { renderSkillIcon, renderMaterialIcon } from '../art/skill-icon-canvas'
+import { MATERIALS } from '../data/materials'
 
 // icône par skill : couleur + glyphe
 const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
@@ -2223,7 +2225,21 @@ export class PreloadScene extends Phaser.Scene {
       if (this.textures.exists(`art-${m.id}`)) this.artMonster(m.id, isBigArt(m))
       else this.drawMonster(m)
     }
-    for (const s of Object.values(SKILLS)) this.drawSkillIcon(s.id, SKILL_ICONS[s.id] ?? { color: 0xffd54f, glyph: 'sword' })
+    // Icônes de sorts : rendu VECTORIEL soigné (Canvas 2D, cf. art/skill-icon-canvas) au lieu des
+    // anciens glyphes procéduraux plats. drawSkillIcon (repli) reste dispo si besoin.
+    for (const s of Object.values(SKILLS)) {
+      const spec = SKILL_ICONS[s.id] ?? { color: 0xffd54f, glyph: 'sword' }
+      const key = `skill-${s.id}`
+      if (this.textures.exists(key)) this.textures.remove(key)
+      this.textures.addCanvas(key, renderSkillIcon(spec.color, spec.glyph))
+    }
+    // Icônes de MATÉRIAUX (butin) : vraies petites illustrations vectorielles au lieu de la pastille
+    // ronde tintée générique (le « placeholder bleu clair » = gemme brute).
+    for (const mat of Object.values(MATERIALS)) {
+      const key = `material-${mat.id}`
+      if (this.textures.exists(key)) this.textures.remove(key)
+      this.textures.addCanvas(key, renderMaterialIcon(mat.color, mat.id))
+    }
 
     // Tuiles de terrain illustrées (32×32, réutilisées à l'identique par le sol et les
     // plateformes) : dessus herbeux arrondi + terre en dessous. Le dessus (bande d'herbe) est

@@ -3766,7 +3766,11 @@ export class LevelScene extends Phaser.Scene {
       if (this.textures.exists(`item-${itemId}`)) this.makeDrop(x, y, `item-${itemId}`, { itemId }, { size: 26 })
       else this.makeDrop(x, y, 'item-drop', { itemId })
     }
-    for (const materialId of result.materials) this.makeDrop(x, y, 'material-drop', { materialId }, { tint: MATERIALS[materialId]!.color, size: 24 })
+    for (const materialId of result.materials) {
+      // vraie icône vectorielle material-<id> si dispo (gemme, herbe, croc…), sinon la pastille tintée
+      if (this.textures.exists(`material-${materialId}`)) this.makeDrop(x, y, `material-${materialId}`, { materialId }, { size: 26 })
+      else this.makeDrop(x, y, 'material-drop', { materialId }, { tint: MATERIALS[materialId]!.color, size: 24 })
+    }
   }
 
   collectPickup(s: Phaser.Physics.Arcade.Sprite) {

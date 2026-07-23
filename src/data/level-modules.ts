@@ -1789,9 +1789,13 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
   for (const wat of p.waters) {
     if (wat.kind !== 'marine') continue
     const bottomChest = p.props.find((pr) => pr.kind === 'coffre' && pr.alt === undefined && pr.x >= wat.x && pr.x < wat.x + wat.w)
-    if (!bottomChest) continue
-    if (p.signs.some((s) => Math.abs(s.x - bottomChest.x) <= 2)) continue
-    p.signs.push({ x: bottomChest.x, alt: wat.bankAlt + 2 })
+    // panneau si : coffre au fond (puits/bassin) OU grotte en U / boyau immergé (openSide) — dans les
+    // deux cas on veut inviter à PLONGER. Placé à l'ENTRÉE de plongée : au coffre, sinon sur la berge
+    // d'entrée (openSide 'left' → on entre par la droite ; sinon par la gauche).
+    if (!bottomChest && !wat.openSide) continue
+    const signX = bottomChest ? bottomChest.x : wat.openSide === 'left' ? wat.x + wat.w - 2 : wat.x + 2
+    if (p.signs.some((s) => Math.abs(s.x - signX) <= 2)) continue
+    p.signs.push({ x: signX, alt: wat.bankAlt + 2 })
   }
   return p
 }
