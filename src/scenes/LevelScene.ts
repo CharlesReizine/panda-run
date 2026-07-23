@@ -504,11 +504,12 @@ export class LevelScene extends Phaser.Scene {
         const glow = this.add.rectangle(xPx + wPx / 2, topPx, wPx, 30, 0xff7a1e, 0.4)
           .setOrigin(0.5, 0).setDepth(-1).setBlendMode(Phaser.BlendModes.ADD)
         this.tweens.add({ targets: glow, alpha: 0.15, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
-        // parois de pierre (cuve) — mêmes corps rigides que le bassin marine
+        // parois de pierre (cuve de lave) : collision PLEINE HAUTEUR (dès la surface) → on ne peut JAMAIS
+        // traverser la paroi ni entrer dans la lave par le côté. Le visuel couvre exactement la collision.
         for (const wx of [hz.x - 1, hz.x + hz.w]) {
           if (wx < 0 || wx >= this.levelDef.widthTiles) continue
           this.add.tileSprite(wx * TILE, topPx, TILE, heightPx, 'basin-wall').setOrigin(0, 0).setDepth(-2)
-          const collideTopPx = (waterTop + 1) * TILE
+          const collideTopPx = waterTop * TILE
           const collideH = (waterBottom + 1) * TILE - collideTopPx
           this.addStaticBand(basinWalls, wx * TILE, collideTopPx, TILE, collideH)
         }
@@ -546,9 +547,12 @@ export class LevelScene extends Phaser.Scene {
           if (wx < 0 || wx >= this.levelDef.widthTiles) continue
           if (openLeft && wx === hz.x - 1) continue
           if (openRight && wx === hz.x + hz.w) continue
-          this.add.tileSprite(wx * TILE, topPx, TILE, heightPx, 'basin-wall').setOrigin(0, 0).setDepth(-2)
+          // Le VISUEL de la paroi commence PILE là où la collision commence (1 rangée sous la surface) :
+          // ainsi il n'y a AUCUNE pierre visible sans collision (retour user : « on passe à travers la
+          // pierre »). La rangée du dessus reste libre (ni mur ni collision) → on ressort sur la berge.
           const collideTopPx = (waterTop + 1) * TILE
           const collideH = (waterBottom + 1) * TILE - collideTopPx
+          this.add.tileSprite(wx * TILE, collideTopPx, TILE, collideH, 'basin-wall').setOrigin(0, 0).setDepth(-2)
           this.addStaticBand(basinWalls, wx * TILE, collideTopPx, TILE, collideH)
         }
         // déco posée sur la SURFACE du sol (fond du lac) — l'eau recouvre désormais le sol plein

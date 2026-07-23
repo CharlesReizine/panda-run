@@ -1350,20 +1350,19 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // ROCHE PLEINE — roche SOLIDE au-DESSUS (plafond) et en-DESSOUS (falaise jusqu'au sol). La SEULE
       // façon d'atteindre la grotte est de GRIMPER la cascade et d'enjamber sur son plancher. Coffre au fond.
       const A = Math.max(entryAlt, 2)
-      const T = A + cascadeRise(rng) // sommet de la cascade = niveau du plancher de la grotte (≥ MIN_CASCADE_TILES)
+      const T = A + cascadeRise(rng) + 5 // cascade BIEN HAUTE (≥ ~13 tuiles), pas un mini rideau discret
       let x = 0
       p.platforms.push({ x, alt: A, w: bank }); x += bank // berge d'accès (on bondit dans la cascade)
       p.waters.push({ x, w: 2, kind: 'cascade', bankAlt: T, bottomAlt: A }) // CASCADE remontable A → T (repose sur la berge)
       const caveX = x + 2
-      const floorW = Math.max(bank, w - caveX) // plancher de la grotte, jusqu'au bord (= la sortie, au niveau T)
-      p.platforms.push({ x: caveX, alt: T, w: floorW }) // PLANCHER de la grotte (borde la cascade → atteignable en grimpant)
+      const floorW = Math.max(bank, w - caveX) // plancher (grotte à gauche + sortie à droite), au niveau T
+      p.platforms.push({ x: caveX, alt: T, w: floorW }) // PLANCHER (borde la cascade → atteignable en grimpant)
       // ROCHE PLEINE SOUS le plancher (falaise du sol jusqu'à T) → aucun accès par en bas
       if (T - 1 >= 0) p.rocks.push({ x: caveX, altBot: 0, altTop: T - 1, w: floorW, solid: true })
-      // PLAFOND DE ROCHE au-dessus de la partie GAUCHE (contre la cascade) → la « grotte » proprement dite ;
-      // dégagement CAVE_CLEARANCE pour y marcher (≥ saut confortable, cf. validateur de plafond).
-      const roofW = Math.min(floorW, 6)
+      // PETITE grotte contre la cascade : PLAFOND de roche bas (entrée ÉTROITE), dégagement = CAVE_CLEARANCE.
+      const roofW = Math.min(floorW, 4) // grotte PETITE (pas large)
       p.rocks.push({ x: caveX, altBot: T + CAVE_CLEARANCE, altTop: T + CAVE_CLEARANCE + CAVE_CEILING_THICK, w: roofW, solid: true })
-      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + 1 }) // coffre AU FOND de la grotte (sous le toit)
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + 1 }) // coffre AU FOND de la petite grotte
       placeBirds(T + CAVE_CLEARANCE + 4)
       p.exitAlt = T
       break
@@ -1621,20 +1620,23 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       let alt = Math.max(2, entryAlt)
       let x = 0
       let placedCoffre = false
+      let first = true
       p.platforms.push({ x, alt, w: bank }); x += bank // RIVE d'accès (gauche)
       while (x + POOL + 1 <= w - bank) {
         const top = alt + cascadeRise(rng)
-        // LAC : parois internes OUVERTES (eau continue), s'étend SOUS la cascade (colonne x+POOL comprise)
-        p.waters.push({ x, w: POOL + 1, kind: basinKind, bankAlt: alt, openSide: 'both' })
+        // CONTENU : le TOUT PREMIER lac garde sa PAROI GAUCHE (mur d'enceinte) → on ne peut pas nager hors
+        // du bassin par la gauche. Les bords INTERNES restent ouverts (eau continue, sans pierre au milieu).
+        p.waters.push({ x, w: POOL + 1, kind: basinKind, bankAlt: alt, openSide: first ? 'right' : 'both' })
+        first = false
         if (basinKind !== 'lave' && !placedCoffre) { p.props.push({ kind: 'coffre', x: x + 1 }); placedCoffre = true }
         // CASCADE FINE (1 tuile) = la marche d'eau : pied dans CE lac, sommet dans le lac suivant
         p.waters.push({ x: x + POOL, w: 1, kind: 'cascade', bankAlt: top, bottomAlt: alt })
         x += POOL + 1
         alt = top
       }
-      // LAC FINAL (sommet), parois ouvertes ; la rive de sortie borde sa surface (au même niveau)
+      // LAC FINAL (sommet) : garde sa PAROI DROITE (mur d'enceinte) → pas de nage hors du bassin par la droite.
       const fw = Math.max(POOL, w - x - bank)
-      p.waters.push({ x, w: fw, kind: basinKind, bankAlt: alt, openSide: 'both' })
+      p.waters.push({ x, w: fw, kind: basinKind, bankAlt: alt, openSide: 'left' })
       x += fw
       p.platforms.push({ x, alt, w: Math.max(1, w - x) }) // RIVE de sortie (droite)
       placeBirds(alt + 3)
