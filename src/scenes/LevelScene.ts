@@ -1326,7 +1326,10 @@ export class LevelScene extends Phaser.Scene {
       else { this.player.setVelocity(-this.player.facing * 200, -200); this.showGameOver() }
       return
     }
-    this.player.setVelocity(-this.player.facing * 200, -200)
+    // RECUL HORIZONTAL SEULEMENT (retour user : « ça me fait sautiller quand je retombe sur un mob »).
+    // On pousse le joueur sur le côté mais on NE le PROPULSE PLUS vers le haut → la gravité continue de
+    // le faire tomber (fini le petit saut à chaque contact / après un stomp qui traverse le monstre).
+    this.player.setVelocityX(-this.player.facing * 200)
     audio.playSfx('player-hit')
   }
 
