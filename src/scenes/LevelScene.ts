@@ -60,6 +60,10 @@ const LAVA_TICK_MS = 150 // cadence des ticks de brûlure : perte rapide et rég
 // instantanément → ~3,3 s dans les flammes pour un K.O. plein). Même modèle de tick que la lave/noyade.
 const FLAME_HP_FRAC_PER_SEC = 0.30 // fraction des PV MAX perdue par seconde dans les flammes
 const FLAME_TICK_MS = 150 // cadence des ticks de brûlure des flammes
+// RAMASSABLES (butin) : « rien au sol, tout lévite ». Une fois posé/flottant, l'objet se relève d'un
+// cran au-dessus du sol (LIFT) et ondule verticalement de ±BOB → lévitation douce qui attire l'œil.
+const PICKUP_HOVER_LIFT = 14 // hauteur (px) au-dessus du point d'atterrissage (jamais posé au sol)
+const PICKUP_HOVER_BOB = 6 // amplitude (px) du va-et-vient vertical de lévitation
 
 export { TILE }
 
@@ -579,10 +583,17 @@ export class LevelScene extends Phaser.Scene {
       ))
     }
 
-    // contact ennemi → joueur (un CORPS en train de valser — mort humiliante — ne frappe plus)
+    // contact ennemi → joueur (un CORPS en train de valser — mort humiliante — ne frappe plus).
+    // SAUT SUR LA TÊTE (stomp) : si le joueur RETOMBE sur le monstre par le DESSUS, il lui met les
+    // dégâts d'une ATTAQUE DE BASE (cf. stompEnemy) et rebondit — pas de contact subi. Sinon, contact
+    // classique → le joueur encaisse.
     this.physics.add.overlap(this.player, this.enemies, (_p, e) => {
       const en = e as Enemy
       if (en.ragdolling) return
+      const pb = this.player.body as Phaser.Physics.Arcade.Body
+      const eb = en.body as Phaser.Physics.Arcade.Body
+      const stomping = pb.velocity.y > 60 && !pb.blocked.down && pb.bottom <= eb.top + eb.height * 0.5
+      if (stomping) { this.stompEnemy(en); return }
       this.hitPlayer(en.monster.atk, en.x)
     })
     this.physics.add.overlap(this.player, this.enemyProjectiles, (_p, proj) => {
@@ -3543,6 +3554,18 @@ export class LevelScene extends Phaser.Scene {
     }
   }
 
+  // SAUT SUR LA TÊTE : inflige au monstre les MÊMES dégâts qu'une attaque de base (atk du joueur ×
+  // multiplicateurs sortants, réduit par la def du monstre) + brûlure si l'épée est enflammée, puis
+  // fait REBONDIR le joueur (petite détente) pour enchaîner et ne pas retomber au contact.
+  private stompEnemy(e: Enemy) {
+    const atk = this.player.stats.atk * this.player.outgoingMult()
+    e.takeDamage(physicalDamage(atk, e.effectiveDef()))
+    if (this.player.isFlaming()) e.applyBurn(atk * 0.35, 3000)
+    audio.playSfx('hit')
+    this.impactFx(e.x, e.y - 8, 0xffffff)
+    ;(this.player.body as Phaser.Physics.Arcade.Body).setVelocityY(-360) // rebond
+  }
+
   // effet "level up" façon RO : rayons dorés + anneau + texte sur le perso
   private levelUpFx() {
     const x = this.player.x, y = this.player.y
@@ -3573,32 +3596,85 @@ export class LevelScene extends Phaser.Scene {
     this.spawnDrops(prop.x, prop.y, prop.def.drops)
   }
 
+  // Fabrique un ramassable. Deux comportements (retour joueur : « rien au sol, tout lévite ; les
+  // objets qui tombent doivent tomber à côté puis s'arrêter ; les pièces doivent voler et chatoyer ») :
+  //  - `float:true` (pièces) → FLOTTE immédiatement en l'air là où c'est lâché (aucune chute) + chatoie ;
+  //  - sinon → petit saut, CHUTE COURTE à côté (peu de dérive : vitesse H réduite + traînée), puis dès
+  //    qu'il touche le sol il se FIGE et LÉVITE (settlePickup). Objets « pas trop petits » (~26 px).
+  private makeDrop(x: number, y: number, texture: string, data: Record<string, unknown>, opts?: { tint?: number; size?: number; float?: boolean }) {
+    const s = this.pickups.create(x + Phaser.Math.Between(-14, 14), y - 10, texture) as Phaser.Physics.Arcade.Sprite
+    const body = s.body as Phaser.Physics.Arcade.Body
+    s.setData({ ...data, settled: false })
+    if (opts?.tint !== undefined) s.setTint(opts.tint)
+    s.setDisplaySize(opts?.size ?? 26, opts?.size ?? 26)
+    s.setDepth(4)
+    if (opts?.float) {
+      // PIÈCE : vole/flotte sur place + chatoiement (scale + alpha pulsés). Aucune chute.
+      this.settlePickup(s, s.y)
+      this.addShimmer(s)
+    } else {
+      // OBJET : petit pop + chute courte (peu de dérive H, traînée pour s'arrêter net), puis lévitation
+      // dès l'atterrissage (cf. updatePickups → settlePickup).
+      s.setVelocity(Phaser.Math.Between(-22, 22), -150)
+      body.setBounce(0.05, 0.05)
+      body.setDragX(500)
+    }
+    return s
+  }
+
+  // Fige un ramassable et le fait LÉVITER : le corps ne bouge plus par la physique (`moves=false`,
+  // il suit désormais la position du GO), mais reste ACTIF pour l'overlap de ramassage. On pilote un
+  // léger va-et-vient vertical par tween → ondulation bas-haut « qui donne envie », un peu au-dessus
+  // du sol (jamais posé). `restRef` = y de référence (position d'atterrissage ou de flottaison).
+  private settlePickup(s: Phaser.Physics.Arcade.Sprite, restRef: number) {
+    if (s.getData('settled')) return
+    s.setData('settled', true)
+    const body = s.body as Phaser.Physics.Arcade.Body
+    body.setVelocity(0, 0)
+    body.setAllowGravity(false)
+    body.moves = false // la physique ne le déplace plus ; le corps suit le GO (overlap toujours actif)
+    const restY = restRef - PICKUP_HOVER_LIFT // relevé au-dessus du sol → il lévite, jamais posé
+    s.setY(restY)
+    this.tweens.add({
+      targets: s, y: restY + PICKUP_HOVER_BOB, duration: 900, yoyo: true, repeat: -1,
+      ease: 'Sine.inOut', delay: Phaser.Math.Between(0, 320),
+    })
+  }
+
+  // Chatoiement d'une pièce : pulsation douce d'échelle + d'alpha (autour de l'échelle courante fixée
+  // par setDisplaySize) → effet « or scintillant ». N'affecte pas la position (compatible lévitation).
+  private addShimmer(s: Phaser.Physics.Arcade.Sprite) {
+    const bs = s.scaleX
+    this.tweens.add({ targets: s, scaleX: bs * 1.14, scaleY: bs * 1.14, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+    this.tweens.add({ targets: s, alpha: 0.72, duration: 380, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+  }
+
+  // Passe chaque ramassable NON encore figé en lévitation dès qu'il touche une surface (fin de chute).
+  private updatePickups() {
+    for (const obj of this.pickups.getChildren()) {
+      const s = obj as Phaser.Physics.Arcade.Sprite
+      if (!s.active || s.getData('settled')) continue
+      const body = s.body as Phaser.Physics.Arcade.Body
+      if (body.blocked.down || body.touching.down) this.settlePickup(s, s.y)
+    }
+  }
+
   // Lâche un unique objet ramassable (icône illustrée si dispo, sinon pastille générique).
   private spawnItemDrop(x: number, y: number, itemId: string) {
     const illustrated = this.textures.exists(`item-${itemId}`)
-    const s = this.pickups.create(x + Phaser.Math.Between(-20, 20), y - 10, illustrated ? `item-${itemId}` : 'item-drop') as Phaser.Physics.Arcade.Sprite
-    s.setVelocity(Phaser.Math.Between(-80, 80), -200)
-    s.setData({ itemId })
-    if (illustrated) s.setDisplaySize(22, 22)
+    this.makeDrop(x, y, illustrated ? `item-${itemId}` : 'item-drop', { itemId }, { size: illustrated ? 26 : undefined })
   }
 
   spawnDrops(x: number, y: number, drops: DropEntry[]) {
     const result = rollDrops(drops)
-    const spawn = (texture: string, data: Record<string, unknown>, tint?: number, size?: number) => {
-      const s = this.pickups.create(x + Phaser.Math.Between(-20, 20), y - 10, texture) as Phaser.Physics.Arcade.Sprite
-      s.setVelocity(Phaser.Math.Between(-80, 80), -200)
-      s.setData(data)
-      if (tint !== undefined) s.setTint(tint)
-      if (size !== undefined) s.setDisplaySize(size, size)
-    }
-    if (result.gold > 0) spawn('coin', { gold: result.gold })
-    for (let i = 0; i < result.potions; i++) spawn('potion-drop', { potion: 1 })
+    if (result.gold > 0) this.makeDrop(x, y, 'coin', { gold: result.gold }, { float: true, size: 26 })
+    for (let i = 0; i < result.potions; i++) this.makeDrop(x, y, 'potion-drop', { potion: 1 }, { size: 26 })
     // objet lâché : icône illustrée item-<id> (dimensionnée) si dispo, sinon la pastille générique
     for (const itemId of result.items) {
-      if (this.textures.exists(`item-${itemId}`)) spawn(`item-${itemId}`, { itemId }, undefined, 22)
-      else spawn('item-drop', { itemId })
+      if (this.textures.exists(`item-${itemId}`)) this.makeDrop(x, y, `item-${itemId}`, { itemId }, { size: 26 })
+      else this.makeDrop(x, y, 'item-drop', { itemId })
     }
-    for (const materialId of result.materials) spawn('material-drop', { materialId }, MATERIALS[materialId]!.color)
+    for (const materialId of result.materials) this.makeDrop(x, y, 'material-drop', { materialId }, { tint: MATERIALS[materialId]!.color, size: 24 })
   }
 
   collectPickup(s: Phaser.Physics.Arcade.Sprite) {
@@ -3864,6 +3940,7 @@ export class LevelScene extends Phaser.Scene {
     this.updateWater(delta)
     this.updateLava(delta)
     this.updateFlames(delta)
+    this.updatePickups()
     if (this.time.now < this.dashUntil) {
       // pendant la roulade : vitesse imposée, contrôles suspendus (le saut/déplacement
       // reprennent la main dès la fin de la fenêtre)
