@@ -1543,22 +1543,24 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       break
     }
 
-    // ─── ÉCHELLES-LIANES : socles de PIERRE RIGIDE + échelles hautes, on saute d'une échelle à l'autre ──
+    // ─── ÉCHELLES-LIANES : des lianes PENDENT d'un plafond (pied SUSPENDU dans le vide) ; on marche au
+    // sol, on SAUTE pour agripper une liane et grimper vers les paliers du plafond, on enchaîne jusqu'à
+    // la sortie EN HAUT. Pas d'escalier de plateaux — juste le sol d'accès + les lianes. ──────────────
     case 'echelles-lianes': {
-      const stages = 3
-      let footAlt = Math.max(1, entryAlt)
-      let footX = 0
-      let landAlt = footAlt
-      for (let i = 0; i < stages; i++) {
-        const isLast = i === stages - 1
-        p.platforms.push({ x: footX, alt: footAlt, w: 3, solid: true }) // SOCLE de pierre rigide (pas de saut à travers)
-        const ladX = footX + 1
-        const landRight = isLast ? w : ladX + 4
-        landAlt = poseLadderOn(p, ladX, footAlt, landRight) // échelle HAUTE + palier (valideur-compatible)
-        footX = Math.min(w - 3, landRight + 2) // socle suivant après un petit GAP (saut d'échelle en échelle)
-        footAlt = landAlt + 1 // un cran plus haut
+      const floor = Math.max(1, entryAlt)
+      p.platforms.push({ x: 0, alt: floor, w }) // sol continu (accès aux lianes : on saute pour les agripper)
+      const nLianes = 3
+      const seg = Math.max(4, Math.floor(w / (nLianes + 1)))
+      let landAlt = floor
+      for (let i = 0; i < nLianes; i++) {
+        const lx = Math.min(w - 3, seg * (i + 1))
+        const isLast = i === nLianes - 1
+        const landRight = isLast ? w : lx + 3
+        // liane SUSPENDUE : pied à floor+2 (dans le vide, à portée de saut du sol → on l'agrippe en
+        // bondissant), palier de plafond en haut (poseLadderOn ne pose AUCUN socle au pied).
+        landAlt = poseLadderOn(p, lx, floor + 2, landRight)
       }
-      p.exitAlt = landAlt
+      p.exitAlt = landAlt // sortie EN HAUT (plafond)
       break
     }
 

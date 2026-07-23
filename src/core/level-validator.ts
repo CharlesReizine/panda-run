@@ -38,20 +38,31 @@ function isLadderTop(p: Plat, l: Ladder): boolean {
   return drop >= LADDER_TOP_MIN_DROP && drop <= LADDER_TOP_MAX_DROP && l.x >= p.x - 1 && l.x <= p.x + p.w + 1
 }
 
-// Le pied de l'échelle (rangée y+h) rejoint-il le sol (au BAS du monde) ou une plateforme ? (b)
+// ÉCHELLES-LIANES : une échelle SUSPENDUE (accrochée par le haut, pied dans le VIDE) s'attrape en
+// SAUTANT — si une surface est alignée sous son pied, à portée de saut (≤ LADDER_GRAB_TILES rangées),
+// on bondit pour agripper les barreaux du bas. On l'accepte donc comme « pied joignable ».
+const LADDER_GRAB_TILES = 4 // ≈ hauteur de saut (maxJumpHeightPx/TILE) : au-delà, injoignable au saut
+// Le pied « rejoint » une surface : posé dessus (échelle classique) OU juste au-dessus, à portée de
+// saut (échelle-liane suspendue qu'on attrape en bondissant). `col` = alignement horizontal.
+function footMeets(l: Ladder, p: Plat): boolean {
+  const drop = p.y - (l.y + l.h) // >0 : surface SOUS le pied ; ~0 : pied posé
+  return l.x >= p.x - 1 && l.x <= p.x + p.w + 1 && drop >= -ROW_TOL && drop <= LADDER_GRAB_TILES
+}
+
+// Le pied de l'échelle (rangée y+h) rejoint-il le sol (au BAS du monde) ou une plateforme (posé OU à
+// portée de saut) ? (b)
 function ladderFootGrounded(l: Ladder, platforms: Plat[], groundRow: number): boolean {
   const bottom = l.y + l.h
   if (bottom >= groundRow) return true // descend jusqu'au sol
-  return platforms.some((p) => Math.abs(p.y - bottom) <= ROW_TOL && l.x >= p.x - 1 && l.x <= p.x + p.w + 1)
+  return platforms.some((p) => footMeets(l, p))
 }
 
-// Le pied de l'échelle repose-t-il sur une surface DÉJÀ atteignable (sol, ou plateforme du
-// set) ? — condition pour pouvoir emprunter l'échelle et donc atteindre son sommet.
+// Le pied de l'échelle rejoint-il une surface DÉJÀ atteignable (sol, ou plateforme du set, posé ou à
+// portée de saut) ? — condition pour pouvoir emprunter l'échelle et donc atteindre son sommet.
 function ladderFootReachable(l: Ladder, platforms: Plat[], reachable: Set<number>, groundRow: number): boolean {
   const bottom = l.y + l.h
   if (bottom >= groundRow) return true // pied au sol : toujours accessible
-  return platforms.some((p, i) => reachable.has(i)
-    && Math.abs(p.y - bottom) <= ROW_TOL && l.x >= p.x - 1 && l.x <= p.x + p.w + 1)
+  return platforms.some((p, i) => reachable.has(i) && footMeets(l, p))
 }
 
 // Graphe d'atteignabilité (point fixe) : surfaces joignables du sol, de proche en proche par saut,
