@@ -144,13 +144,18 @@ export class LevelIntroScene extends Phaser.Scene {
       g.fillStyle(0x000000, 0.32).fillRoundedRect(cx - cardW / 2, top, cardW, cardH, 8)
       g.lineStyle(1, 0xffffff, 0.14).strokeRoundedRect(cx - cardW / 2, top, cardW, cardH, 8)
 
-      this.add.image(cx, top + 32, `monster-${m.id}`).setDisplaySize(46, 46)
+      this.add.image(cx, top + 28, `monster-${m.id}`).setDisplaySize(44, 44)
       // plaque « Nv X » en coin de carte (couleur selon boss / MVP / normal)
       const nvColor = m.boss ? '#ff5252' : m.mvp ? '#ffd54f' : '#ffffff'
       this.add.text(cx - cardW / 2 + 8, top + 8, `Nv ${m.level}`, { fontSize: '11px', color: nvColor, fontStyle: 'bold' }).setOrigin(0, 0)
-      this.add.text(cx, top + 58, m.name, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: cardW - 12 } }).setOrigin(0.5, 0)
-      const kind = monsterKind(m)
-      this.add.text(cx, top + 78, kind.label, { fontSize: '10px', color: '#0d1b2a', backgroundColor: css(kind.color), fontStyle: 'bold', padding: { x: 5, y: 2 } }).setOrigin(0.5, 0)
+      // badge ÉLITE/BOSS AU-DESSUS du nom (retour user : « trop de trucs entre le badge, les loots et
+      // les skills ») — et SEULEMENT pour les élites/boss (les mobs normaux n'affichent aucun badge,
+      // ça dégage la carte). Puis le nom, puis loots, puis compétences : lecture verticale claire.
+      if (m.boss || m.mvp) {
+        const kind = monsterKind(m)
+        this.add.text(cx, top + 52, kind.label, { fontSize: '10px', color: '#0d1b2a', backgroundColor: css(kind.color), fontStyle: 'bold', padding: { x: 5, y: 1 } }).setOrigin(0.5, 0)
+      }
+      this.add.text(cx, top + 66, m.name, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: cardW - 12 } }).setOrigin(0.5, 0)
 
       // Butins notables : objets + matériaux (l'or/potions, communs à tous, sont omis).
       const notable = m.drops.filter((d) => d.kind === 'item' || d.kind === 'material')
