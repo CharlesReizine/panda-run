@@ -1734,11 +1734,18 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const pitch = stepW + gap
       let x = bank
       let a = base
+      let lastX = -1
       while (x + stepW <= w - bank && a - base < 2 * rise) {
         a += rise
         p.platforms.push({ x, alt: a, w: stepW })
+        lastX = x
         x += pitch
       }
+      // PALIER DE SORTIE : prolonge le dernier palier jusqu'au BORD DROIT à l'altitude de sortie. Sans
+      // lui, le module suivant (raccordé au bord droit à exitAlt = a) est à un saut INFRANCHISSABLE du
+      // dernier palier resté au milieu — autrefois masqué par le sol marchable, désormais muré par la
+      // roche pleine (bug desert-9 : palier [26,27] → module suivant [39,27], même hauteur, 10 tuiles).
+      if (lastX >= 0 && lastX + stepW < w) p.platforms.push({ x: lastX + stepW, alt: a, w: w - (lastX + stepW) })
       p.exitAlt = a
       break
     }
