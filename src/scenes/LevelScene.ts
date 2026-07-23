@@ -360,6 +360,13 @@ export class LevelScene extends Phaser.Scene {
     const groundedEnemy: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (eObj) => !((eObj as Enemy).monster?.aerial)
     this.physics.add.collider(this.enemies, platforms, undefined, groundedEnemy)
     this.physics.add.collider(this.enemies, oneWay, undefined, groundedEnemy)
+    // AÉRIENS vs PIERRE PLEINE (retour user : « les oiseaux passent à travers les murs ») : les oiseaux
+    // gardent leur vol libre au-dessus du terrain, mais ne TRAVERSENT plus les dalles de roche SOLIDE.
+    // Groupe dédié (dalles solides dupliquées) + collider RÉSERVÉ aux aériens (les terrestres passent
+    // déjà par `platforms` ; le processCallback ne laisse résoudre QUE les aériens ici).
+    const solidWalls = this.physics.add.staticGroup()
+    for (const rb of this.levelDef.rockBands ?? []) if (rb.solid) this.addStaticBand(solidWalls, rb.x * TILE, rb.y * TILE, rb.w * TILE, rb.h * TILE)
+    this.physics.add.collider(this.enemies, solidWalls, undefined, (eObj) => !!(eObj as Enemy).monster?.aerial)
 
     // Murs de flamme : groupe statique. Collider → les ennemis butent dessus (passage bloqué) ;
     // overlap → tout ennemi au contact prend une brûlure. Les membres détruits quittent le groupe.
@@ -2529,8 +2536,30 @@ export class LevelScene extends Phaser.Scene {
 
   // Bond en avant (fente/charge) : petit élan avant-arrière (yoyo, la physique reste cohérente) +
   // rémanences dorées du panda pour vendre la vitesse.
+  // Distance de bond RÉELLEMENT libre devant le joueur avant de buter sur un mur de pierre PLEINE
+  // (dalle solide ou plateforme solide) au même niveau vertical. Le bond (lungeFx) déplace x par TWEEN,
+  // ce qui IGNORE la collision Arcade → sans ce garde, l'estoc/l'attaque chargée TRAVERSAIT la pierre
+  // (et on tombait de l'autre côté). On borne donc le bond pour qu'il s'arrête PILE devant le mur.
+  private safeLunge(distance: number): number {
+    const f = this.player.facing
+    const body = this.player.body as Phaser.Physics.Arcade.Body
+    const walls: { x: number; y: number; w: number; h: number }[] = [
+      ...(this.levelDef.rockBands ?? []).filter((r) => r.solid),
+      ...this.levelDef.platforms.filter((p) => p.solid).map((p) => ({ x: p.x, y: p.y, w: p.w, h: 1 })),
+    ]
+    let d = distance
+    for (const rb of walls) {
+      const ry0 = rb.y * TILE, ry1 = (rb.y + rb.h) * TILE
+      if (body.bottom <= ry0 || body.top >= ry1) continue // pas au même niveau vertical
+      if (f > 0) { const front = rb.x * TILE; if (front >= body.right && front < body.right + distance) d = Math.min(d, front - body.right - 1) }
+      else { const front = (rb.x + rb.w) * TILE; if (front <= body.left && front > body.left - distance) d = Math.min(d, body.left - front - 1) }
+    }
+    return Math.max(0, d)
+  }
+
   private lungeFx(distance: number, tint = 0xffe082) {
     const f = this.player.facing
+    distance = this.safeLunge(distance) // ne franchit JAMAIS un mur de pierre (fini la traversée + chute)
     this.tweens.add({ targets: this.player, x: this.player.x + f * distance, duration: 110, yoyo: true, ease: 'Cubic.out' })
     for (let i = 0; i < 3; i++) {
       this.time.delayedCall(i * 30, () => {
