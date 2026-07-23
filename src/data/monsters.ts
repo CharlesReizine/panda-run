@@ -17,8 +17,8 @@ function M(s: NormalSpec): MonsterDef {
 const list: MonsterDef[] = [
   // ═══ Zone 1 — plaine / forêt ═══
   M({ id: 'gloopy', name: 'Gloopy', lore: 'Une petite bulle rose écervelée : plus curieuse que méchante, elle rebondit de joie.', color: 0xff9ecb, xp: 220, level: 1, role: 'frele', speed: 40, behavior: 'contact', drops: [goldSmall, potion] }),
-  M({ id: 'angeling', name: 'Angeling', lore: 'Un ange dodu et candide qui flotte doucement, porte-bonheur ailé au cœur tendre.', color: 0xffffff, xp: 260, level: 6, role: 'frele', speed: 30, behavior: 'contact', drops: [goldSmall, potion, { kind: 'material', materialId: 'trefle-chance', chance: 0.03, min: 1, max: 1 }] }),
-  M({ id: 'fabre', name: 'Fabre', lore: 'Une chenille pataude et placide qui broute l\'herbe tendre sans jamais presser le pas.', color: 0x8bc34a, xp: 260, level: 6, role: 'normal', speed: 15, behavior: 'contact', drops: [goldSmall, potion, { kind: 'material', materialId: 'herbe-tendre', chance: 0.08, min: 1, max: 1 }] }),
+  M({ id: 'angeling', name: 'Angeling', lore: 'Un ange dodu et candide qui flotte doucement, porte-bonheur ailé au cœur tendre.', color: 0xffffff, xp: 260, level: 5, role: 'frele', speed: 30, behavior: 'contact', drops: [goldSmall, potion, { kind: 'material', materialId: 'trefle-chance', chance: 0.03, min: 1, max: 1 }] }),
+  M({ id: 'fabre', name: 'Fabre', lore: 'Une chenille pataude et placide qui broute l\'herbe tendre sans jamais presser le pas.', color: 0x8bc34a, xp: 260, level: 5, role: 'normal', speed: 15, behavior: 'contact', drops: [goldSmall, potion, { kind: 'material', materialId: 'herbe-tendre', chance: 0.08, min: 1, max: 1 }] }),
   M({ id: 'mandragore', name: 'Mandragore', lore: 'Râleuse et sédentaire, elle crache des projectiles plutôt que de bouger son popotin.', color: 0x7bc86c, xp: 380, level: 11, role: 'distant', speed: 0, behavior: 'projectile', drops: [goldSmall, potion] }),
   M({ id: 'lunatic', name: 'Lunatic', lore: 'Un lapin lunatique aux humeurs imprévisibles qui fonce tête baissée sur un coup de sang.', color: 0xff8fc0, xp: 500, level: 1, role: 'frele', speed: 110, behavior: 'charge', drops: [goldMid, potion] }),
   M({ id: 'lapin-bondissant', name: 'Lapin bondissant', lore: 'Boule de poils survoltée qui zigzague dans les herbes et bondit sur l\'intrus dès qu\'il approche.', color: 0xf5deb3, xp: 290, level: 9, role: 'rapide', speed: 118, behavior: 'charge', drops: [goldSmall, potion, { kind: 'material', materialId: 'trefle-chance', chance: 0.03, min: 1, max: 1 }] }),
@@ -28,7 +28,7 @@ const list: MonsterDef[] = [
   M({ id: 'willow', name: 'Willow', lore: 'Vieille souche endormie et débonnaire, elle avance à peine mais encaisse comme du bon bois.', color: 0x6d4c41, xp: 620, level: 15, role: 'tank', speed: 8, behavior: 'contact', drops: [goldMid, potion, { kind: 'material', materialId: 'chapeau-champi', chance: 0.05, min: 1, max: 1 }] }),
   M({ id: 'ronce-cracheuse', name: 'Ronce cracheuse', lore: 'Buisson d\'épines enraciné et hargneux : incapable de bouger, il crache des dards acérés sur qui passe à portée.', color: 0x497a3a, xp: 640, level: 20, role: 'distant', speed: 0, behavior: 'projectile', drops: [goldMid, potion, { kind: 'material', materialId: 'spore-lumineuse', chance: 0.05, min: 1, max: 1 }] }),
   // Oiseaux VOLANTS (aerial)
-  M({ id: 'corbeau', name: 'Corbeau', lore: 'Rapace noir des grands airs : il plane en cercles puis fond en piqué sur l\'imprudent avant de reprendre de la hauteur.', color: 0x37474f, xp: 300, level: 6, role: 'volant', speed: 90, behavior: 'charge', aerial: true, drops: [goldSmall, potion] }),
+  M({ id: 'corbeau', name: 'Corbeau', lore: 'Rapace noir des grands airs : il plane en cercles puis fond en piqué sur l\'imprudent avant de reprendre de la hauteur.', color: 0x37474f, xp: 300, level: 5, role: 'volant', speed: 90, behavior: 'charge', aerial: true, drops: [goldSmall, potion] }),
   M({ id: 'faucon', name: 'Faucon', lore: 'Rapace brun des reliefs arides : plus vif et plus hargneux que le corbeau, il fond en piqué éclair sur sa proie.', color: 0x8b5a2b, xp: 720, level: 28, role: 'volant', speed: 125, behavior: 'charge', aerial: true, drops: [goldMid, potion, { kind: 'material', materialId: 'croc-de-loup', chance: 0.05, min: 1, max: 1 }] }),
   M({ id: 'ara', name: 'Ara', lore: 'Perroquet tropical au plumage flamboyant, criard et curieux, il voltige au-dessus des frondaisons et pique les intrus.', color: 0x1e88e5, xp: 1300, level: 42, role: 'volant', speed: 110, behavior: 'charge', aerial: true, drops: [goldMid, potion, { kind: 'material', materialId: 'spore-lumineuse', chance: 0.05, min: 1, max: 1 }] }),
   M({ id: 'harfang-spectral', name: 'Harfang spectral', lore: 'Chouette fantomatique au plumage blafard, elle plane sans bruit dans la brume du cimetière et fond en silence, plus coriace qu\'elle n\'en a l\'air.', color: 0xe3f2fd, xp: 3100, level: 52, role: 'volant', speed: 85, behavior: 'charge', aerial: true, drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] }),
@@ -54,7 +54,7 @@ const list: MonsterDef[] = [
   M({ id: 'mage-noir', name: 'Mage noir', lore: 'Sorcier félon tapi dans l\'obscurité, il tisse ses maléfices à distance, sournois et calculateur.', color: 0x7e57c2, xp: 850, level: 39, role: 'distant', speed: 45, behavior: 'caster', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] }),
   // MVP — élites rares (mvp: true) : stats POSÉES À LA MAIN (versions surpuissantes, drops rares)
   {
-    id: 'poring-dore', name: 'Poring doré', lore: 'Slime légendaire tout d\'or vêtu : rare, insaisissable et convoité de tous les aventuriers.', color: 0xffd700, hp: 220, atk: 32, def: 14, xp: 2200, level: 9, speed: 30, behavior: 'contact', mvp: true,
+    id: 'poring-dore', name: 'Poring doré', lore: 'Slime légendaire tout d\'or vêtu : rare, insaisissable et convoité de tous les aventuriers.', color: 0xffd700, hp: 220, atk: 32, def: 14, xp: 2200, level: 8, speed: 30, behavior: 'contact', mvp: true,
     drops: [
       { kind: 'gold', chance: 1, min: 40, max: 80 },
       { kind: 'potion', chance: 0.5, min: 1, max: 1 },
@@ -114,7 +114,7 @@ const list: MonsterDef[] = [
     ],
   },
   {
-    id: 'pharaon-scarabee', name: 'Pharaon Scarabée', lore: 'Souverain des sables réveillé de son sarcophage, il fend l\'air de sa lame d\'or et fond sur l\'intrus d\'un bond fulgurant.', color: 0x3fb7b0, hp: 3200, atk: 100, def: 26, xp: 6000, level: 35, speed: 120, behavior: 'charge', boss: true, bossClass: 'swordsman', bossSummon: 'scarabee-cornu',
+    id: 'pharaon-scarabee', name: 'Pharaon Scarabée', lore: 'Souverain des sables réveillé de son sarcophage, il fend l\'air de sa lame d\'or et fond sur l\'intrus d\'un bond fulgurant.', color: 0x3fb7b0, hp: 3200, atk: 100, def: 26, xp: 6000, level: 34, speed: 120, behavior: 'charge', boss: true, bossClass: 'swordsman', bossSummon: 'scarabee-cornu',
     drops: [
       { kind: 'gold', chance: 1, min: 150, max: 250 },
       { kind: 'item', itemId: 'carapace-scarabee', chance: 1, min: 1, max: 1 },
