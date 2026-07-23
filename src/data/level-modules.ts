@@ -115,6 +115,10 @@ export type ModuleKind =
   // CASCADE → LAC-TRÉSOR EN CUL-DE-SAC : la cascade descend dans un lac SANS SORTIE PAR LE BAS, trésor
   // au fond ; il faut faire DEMI-TOUR, remonter (cascade remontable) et repasser par le HAUT (sortie haute).
   | 'cascade-cul-de-sac'
+  // CASCADE EN W : deux rideaux MORTELS (au-dessus du vide) encadrant un îlot central dont la cascade
+  // tombe dans un petit bassin (atterrissage sûr + coffre). Passerelles plates de part et d'autre pour
+  // s'élancer et sauter par-dessus les rideaux latéraux (rater = chute mortelle).
+  | 'cascade-w'
   // ─── R171 — VARIÉTÉ + NOUVEAUX MOTIFS (retours playtest) ───────────────────────────────────────
   // LAC → CASCADE → PLATEAU : un bout de LAC marine horizontal, puis à sa FIN une CASCADE remontable
   // qu'on remonte sur ~3-4 sauts de hauteur pour arriver sur un PLATEAU en HAUT (sortie haute). Une
@@ -1457,6 +1461,32 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       break
     }
 
+    // ─── CASCADE EN W : rideaux mortels latéraux + îlot central (cascade → petit bassin) ────────────
+    case 'cascade-w': {
+      // Passerelle plate GAUCHE (lancement) → cascade GAUCHE au-dessus du VIDE (chute mortelle, on saute
+      // par-dessus) → ÎLOT central (berge | bassin où TOMBE une cascade + coffre au fond | berge) →
+      // cascade DROITE au-dessus du VIDE → passerelle plate DROITE (relance + sortie). Tout à plat (A) :
+      // on enchaîne des sauts de 2-3 tuiles ; rater un rideau = chute mortelle (checkPitDeath).
+      const A = Math.max(entryAlt, 2)
+      const casW = 2 // rideaux latéraux étroits (sautables) au-dessus du vide
+      const top = A + cascadeRise(rng)
+      let x = 0
+      p.platforms.push({ x, alt: A, w: bank }); x += bank // passerelle GAUCHE
+      p.waters.push({ x, w: casW, kind: 'cascade', bankAlt: top }); p.gaps.push({ x, w: casW }); x += casW // rideau GAUCHE → mort
+      p.platforms.push({ x, alt: A, w: 1 }); x += 1 // berge gauche de l'îlot
+      const basinW = 3
+      p.waters.push({ x, w: basinW, kind: basinKind, bankAlt: A }) // petit bassin central (atterrissage sûr)
+      p.waters.push({ x: x + 1, w: 2, kind: 'cascade', bankAlt: A + cascadeRise(rng), bottomAlt: A }) // cascade qui TOMBE dans le bassin
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: x + 1 }) // coffre au fond du bassin
+      x += basinW
+      p.platforms.push({ x, alt: A, w: 1 }); x += 1 // berge droite de l'îlot
+      p.waters.push({ x, w: casW, kind: 'cascade', bankAlt: top }); p.gaps.push({ x, w: casW }); x += casW // rideau DROIT → mort
+      p.platforms.push({ x, alt: A, w: Math.max(bank, w - x) }) // passerelle DROITE + sortie
+      placeBirds(top + 2)
+      p.exitAlt = A
+      break
+    }
+
     // ─── LAC → CASCADE → PLATEAU : lac horizontal, puis cascade remontable vers un plateau EN HAUT ──
     case 'lac-cascade-plateau': {
       // Un bout de LAC marine HORIZONTAL (coffre au fond), puis à sa FIN une CASCADE remontable qu'on
@@ -1832,6 +1862,7 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'cascade-large': { tier: 2, family: 'risque', entry: 'bas', exit: 'milieu', width: [20, 30], below: 'marine', above: 'air', chest: true, water: true },
   'cascade-trouee': { tier: 4, family: 'tension', entry: 'milieu', exit: 'milieu', width: [18, 28], below: 'vide', above: 'air', water: true },
   'cascade-cul-de-sac': { tier: 3, family: 'risque', entry: 'bas', exit: 'haut', width: [20, 30], below: 'marine', above: 'air', chest: true, water: true },
+  'cascade-w': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [16, 26], below: 'vide', above: 'air', chest: true, water: true },
   // R171 — LAC → CASCADE → PLATEAU (lac horizontal + cascade remontable vers un plateau haut)
   'lac-cascade-plateau': { tier: 2, family: 'risque', entry: 'bas', exit: 'haut', width: [22, 32], below: 'marine', above: 'air', chest: true, water: true },
   // R171 — ESCALIER À GRANDS PAS (marches espacées, saut franc) — motif VERTICAL/traversée sec
