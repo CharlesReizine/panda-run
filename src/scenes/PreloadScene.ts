@@ -155,6 +155,8 @@ export class PreloadScene extends Phaser.Scene {
 
   preload() {
     this.load.image('splash', 'art/splash.png')
+    // pièce d'or illustrée (optionnelle) : si art/coin.png existe, elle remplace la pièce procédurale
+    this.load.image('art-coin', 'art/coin.png')
     // fond illustré de la carte du monde (vue du dessus fantasy), affiché par WorldMapScene
     this.load.image('map-monde', 'art/map-monde.jpg')
     for (const id of ART_MONSTERS) this.load.image(`art-${id}`, `art/art-${id}.png`)
@@ -2420,7 +2422,10 @@ export class PreloadScene extends Phaser.Scene {
       g.fillStyle(0xef5350).fillRoundedRect(1, 5, 14, 8, 3)
       g.fillStyle(0xffffff).fillRect(6, 0, 4, 6); g.generateTexture('potion-drop', 16, 16); g.clear()
     }
-    g.fillStyle(0xb8860b).fillCircle(6, 6, 6); g.fillStyle(0xffd700).fillCircle(6, 6, 5); g.fillStyle(0xfff59d).fillCircle(4, 4, 1); g.generateTexture('coin', 12, 12); g.clear()
+    // pièce d'or : art illustré (art/coin.png) si présent, sinon pastille procédurale (repli)
+    if (this.textures.exists('art-coin')) this.bakeCropped('art-coin', 'coin')
+    else { g.fillStyle(0xb8860b).fillCircle(6, 6, 6); g.fillStyle(0xffd700).fillCircle(6, 6, 5); g.fillStyle(0xfff59d).fillCircle(4, 4, 1); g.generateTexture('coin', 12, 12) }
+    g.clear()
     g.fillStyle(0x7b1fa2).fillRoundedRect(1, 1, 14, 14, 3); g.fillStyle(0xba68c8).fillRoundedRect(2, 2, 12, 12, 2); g.generateTexture('item-drop', 16, 16); g.clear()
 
     g.fillStyle(0x33691e).fillEllipse(12, 13, 22, 16)

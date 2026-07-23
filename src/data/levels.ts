@@ -571,6 +571,8 @@ const PINNED_SPAWNS: Record<string, string[]> = {
   'liche-mineure': ['cimetiere-2'],                 // cimetière tardif (bande ~53)
   'kraken-juvenile': ['plage-4'],                   // plage tardive, plan d'eau profond (bande ~59)
   'cerbere': ['enfer-4', 'enfer-5'],                // enfer profond (bande ~66)
+  'gargouille': ['enfer-7'],                         // dernier terrain d'enfer : garantit assez d'XP
+                                                     // au clear (règle 0,5–2× le level-up, cf. xp-economy.test)
 }
 
 // Injecte les placements ciblés dans leurs terrains dédiés, à un emplacement libre (≥10 tuiles des
