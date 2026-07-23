@@ -214,10 +214,14 @@ const CAVE_BIOMES = new Set(['cave', 'montagne', 'carriere', 'enfer', 'jungle', 
 // l'ADN désert (scorpion géant, djinn de feu, serpent des sables) et on laisse la faune du biome SUIVANT
 // déborder sur ces terrains-passerelles (jungle→montagne pour Col sec, montagne pour Fourche/Braise),
 // comme le fait déjà TRANSITION_MIX aux entrées de biome.
+// DÉSERT PROFOND THÉMATIQUEMENT PUR (retour joueur : « bien enfoncé dans le désert = que des monstres
+// désert ») : on remplace les emprunts jungle (frelon-géant) / montagne (harpie) par des GROS variantes
+// DÉSERT (scarabée colosse, vautour royal) de même niveau — l'ADN désert (scorpion géant, djinn, serpent)
+// est conservé. Les transitions douces restent assurées par TRANSITION_MIX aux ENTRÉES de biome.
 const LATE_DESERT_GROUND: Record<string, string[]> = {
-  'desert-9': ['scorpion-geant', 'frelon-geant', 'djinn-mineur', 'serpent-des-sables'],
-  'desert-10': ['harpie', 'scorpion-geant', 'djinn-mineur', 'serpent-des-sables'],
-  'desert-11': ['harpie', 'scorpion-geant', 'djinn-mineur', 'serpent-des-sables'],
+  'desert-9': ['scorpion-geant', 'scarabee-geant', 'djinn-mineur', 'serpent-des-sables'],
+  'desert-10': ['vautour-geant', 'scorpion-geant', 'djinn-mineur', 'serpent-des-sables'],
+  'desert-11': ['vautour-geant', 'scorpion-geant', 'djinn-mineur', 'serpent-des-sables'],
 }
 
 // Fait tourner le pool de monstres pour que deux niveaux d'un même biome ne se ressemblent pas.
