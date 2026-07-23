@@ -1568,23 +1568,32 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     // en plus haut (l'eau se déverse en cascade d'un lac au suivant). Largeur maîtrisée (on s'arrête s'il
     // ne reste plus la place → jamais de débordement), banks jointifs pour un chaînage propre. ──────────
     case 'lacs-cascade-montee': {
+      // ESCALIER DE LACS (retour user : « la cascade doit tomber DANS un lac, directement SOUS elle, pas
+      // à côté »). Chaque palier : une cascade LARGE remontable dont l'eau PLONGE dans un LAC situé
+      // DIRECTEMENT dessous (surface = pied de la cascade). On grimpe la cascade → perchoir en haut, qui
+      // sert de berge basse au palier suivant. On monte ainsi de lac en lac. Le lac est un peu plus
+      // ÉTROIT que la colonne (son bord droit passe SOUS le rideau → aucune berge à ce bord → surface non
+      // signalée « débordante »). Rater la montée = on retombe dans le lac (pas mortel : on ressort).
       let alt = Math.max(1, entryAlt)
       let x = 0
       let placedCoffre = false
-      p.platforms.push({ x, alt, w: 2 }); x += 2 // berge d'accès BASSE
-      // chaque palier = cascade(3) + berge gauche(1) + lac(3) + berge droite(1) = 8 tuiles
+      p.platforms.push({ x, alt, w: 2 }); x += 2 // berge d'accès BASSE (borde la 1re cascade)
+      const casW = 4 // colonne LARGE ; palier = lac+cascade (4) + perchoir (4) = 8 (empreinte inchangée)
       while (x + 8 <= w - 1) {
-        const top = alt + cascadeRise(rng) // cascade HAUTE remontable (bottomAlt = berge → pas de vide)
-        p.waters.push({ x, w: 3, kind: 'cascade', bankAlt: top, bottomAlt: alt })
-        const bx = x + 3
-        p.platforms.push({ x: bx, alt: top, w: 1 }) // corniche d'ÉMERGENCE (jointive au bord droit de la colonne)
-        p.waters.push({ x: bx + 1, w: 3, kind: basinKind, bankAlt: top }) // LAC du palier
-        p.platforms.push({ x: bx + 4, alt: top, w: 1 }) // berge DROITE (pied de la cascade suivante)
-        if (basinKind !== 'lave' && !placedCoffre) { p.props.push({ kind: 'coffre', x: bx + 2 }); placedCoffre = true }
-        x = bx + 5
+        const top = alt + cascadeRise(rng)
+        // LAC directement SOUS la cascade (2 tuiles, bord droit SOUS le rideau → pas de berge à ce bord,
+        // donc surface non signalée « débordante ») : la colonne d'eau claire y PLONGE.
+        p.waters.push({ x, w: 2, kind: basinKind, bankAlt: alt })
+        // CASCADE remontable qui TOMBE dans ce lac (bottomAlt = surface du lac, pas de vide sous elle)
+        p.waters.push({ x, w: casW, kind: 'cascade', bankAlt: top, bottomAlt: alt })
+        if (basinKind !== 'lave' && !placedCoffre) { p.props.push({ kind: 'coffre', x: x + 1 }); placedCoffre = true }
+        const px = x + casW
+        p.platforms.push({ x: px, alt: top, w: 4 }) // perchoir d'ÉMERGENCE (borde la cascade) = berge basse du palier suivant
+        x = px + 4
         alt = top
       }
       p.platforms.push({ x, alt, w: Math.max(1, w - x) }) // plateau de SORTIE (haut), jusqu'au bord
+      placeBirds(alt + 2)
       p.exitAlt = alt
       break
     }
