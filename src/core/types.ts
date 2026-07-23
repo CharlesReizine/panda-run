@@ -151,6 +151,9 @@ export interface MonsterDef {
   bossClass?: ClassId // classe incarnée (affichée à l'apparition ; pilote le kit de skills)
   bossSummon?: string // id du mob invoqué par la vague d'adds (compte à rebours visible)
   mvp?: boolean // élite rare : stats renforcées, drops rares, ni mob ni boss
+  // SKILLS SIGNATURE (ids de data/skills) affichés pour donner du CONTEXTE au joueur (bestiaire +
+  // aperçu de carte) : un boss en a 3, une élite (mvp) en a 1. Purement descriptif (icône + nom).
+  skills?: string[]
   // FLOTTEMENT VISUEL : décale le rendu du sprite de N px VERS LE HAUT (le corps reste posé au sol),
   // pour un monstre qui « vole de quelques centimètres » (ex. angeling). Purement cosmétique.
   floatPx?: number

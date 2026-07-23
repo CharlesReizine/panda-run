@@ -5,6 +5,7 @@ import { MATERIALS } from '../data/materials'
 import { getPlayer } from '../state'
 import type { DropEntry, MonsterDef } from '../core/types'
 import { playerXpForMobLevel } from '../core/progression'
+import { SKILLS } from '../data/skills'
 
 // Bestiaire — page en lecture seule listant tous les monstres, leurs stats et leur table de drop.
 // Aucune écriture dans la sauvegarde ni dans les données du jeu.
@@ -173,6 +174,26 @@ export class BestiaryScene extends Phaser.Scene {
       this.add.text(360, y, k, { fontSize: '15px', color: '#b0bec5' })
       this.add.text(560, y, v, { fontSize: '15px', color: seen ? '#ffffff' : '#607d8b', fontStyle: 'bold' })
     })
+
+    // COMPÉTENCES — seulement pour les monstres QUI EN ONT (boss = 3 avec texte, élite = 1). Rien
+    // affiché pour les mobs sans skill. Icône skill-<id> + nom ; description ajoutée pour les boss.
+    if (seen && m.skills?.length) {
+      this.add.text(360, 330, 'COMPÉTENCES', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' })
+      const withText = !!m.boss
+      let y = 360
+      for (const sid of m.skills) {
+        const sk = SKILLS[sid]
+        if (!sk) continue
+        if (this.textures.exists(`skill-${sid}`)) this.add.image(376, y + 9, `skill-${sid}`).setDisplaySize(26, 26)
+        this.add.text(398, y, sk.name, { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0, 0)
+        if (withText) {
+          this.add.text(398, y + 16, sk.description, { fontSize: '10px', color: '#b0bec5', wordWrap: { width: 232 }, lineSpacing: 1 }).setOrigin(0, 0)
+          y += 46
+        } else {
+          y += 32
+        }
+      }
+    }
 
     // Table de butin — masquée tant que le monstre n'a pas été vaincu
     this.add.text(650, 70, 'BUTIN', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' })

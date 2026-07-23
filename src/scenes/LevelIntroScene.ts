@@ -3,6 +3,7 @@ import { LEVELS } from '../data/levels'
 import { MONSTERS } from '../data/monsters'
 import { ITEMS, rarityColor } from '../data/items'
 import { MATERIALS } from '../data/materials'
+import { SKILLS } from '../data/skills'
 import { audio } from '../audio/audio-engine'
 import type { DropEntry, MonsterDef } from '../core/types'
 
@@ -175,6 +176,21 @@ export class LevelIntroScene extends Phaser.Scene {
         })
         const hidden = notable.length - shown.length
         if (hidden > 0) this.add.text(listLeft + 12, y, `+${hidden} autre${hidden > 1 ? 's' : ''}…`, { fontSize: '10px', color: '#78909c' }).setOrigin(0, 0)
+      }
+
+      // COMPÉTENCES (seulement pour les mobs qui EN ONT : boss/élites) : rangée d'icônes skill + petit
+      // nom dessous, en bas de la carte → contexte immédiat sur ce que fait le monstre.
+      if (m.skills?.length) {
+        const sy = top + cardH - 26
+        const gap = 34
+        let sx = cx - (m.skills.length - 1) * gap / 2
+        for (const sid of m.skills) {
+          const sk = SKILLS[sid]
+          if (!sk) continue
+          if (this.textures.exists(`skill-${sid}`)) this.add.image(sx, sy, `skill-${sid}`).setOrigin(0.5).setDisplaySize(20, 20)
+          this.add.text(sx, sy + 12, sk.name, { fontSize: '8px', color: '#cfd8dc', align: 'center', wordWrap: { width: gap - 1 }, lineSpacing: 0 }).setOrigin(0.5, 0)
+          sx += gap
+        }
       }
     })
   }

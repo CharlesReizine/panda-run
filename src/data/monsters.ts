@@ -256,4 +256,28 @@ const list: MonsterDef[] = [
   },
 ]
 
+// SKILLS SIGNATURE (contexte joueur, affichés bestiaire + aperçu de carte). Boss = 3 skills de leur
+// classe incarnée ; ÉLITES (mvp) = 1 skill thématique. Ids réels de data/skills (icônes skill-<id>).
+const MOB_SKILLS: Record<string, string[]> = {
+  // ── Boss (3) ──
+  'boss-sylve': ['calin-brutal', 'bambou-jete', 'rugissement-panda'],
+  'roi-gloopy': ['calin-brutal', 'bambou-jete', 'rugissement-panda'],
+  'pharaon-scarabee': ['taillade', 'tourbillon', 'attaque-chargee'],
+  'boss-yeti': ['taillade', 'tourbillon', 'plongeon'],
+  'boss-crabe': ['taillade', 'tourbillon', 'attaque-chargee'],
+  'boss-golem-cave': ['fleche-percante', 'pluie-de-fleches', 'piege'],
+  'golem-ancien': ['fleche-percante', 'pluie-de-fleches', 'nuee-de-fleches'],
+  'seigneur-liane': ['boule-de-feu', 'mur-de-flamme', 'nova-de-givre'],
+  'roi-liche': ['faille-du-neant', 'pluie-de-meteores', 'blizzard'],
+  'seigneur-dechu': ['charge-lanciere', 'grand-croix', 'epee-fantome'],
+  // ── Élites / MVP (1) ──
+  'angeling': ['grand-croix'],
+  'poring-dore': ['rugissement-panda'],
+  'orc-seigneur': ['attaque-chargee'],
+  'spectre-ancien': ['eclair'],
+  'roi-crabe': ['tourbillon'],
+  'dragon-flamme': ['pluie-de-meteores'],
+}
+for (const m of list) { const s = MOB_SKILLS[m.id]; if (s) m.skills = s }
+
 export const MONSTERS: Record<string, MonsterDef> = Object.fromEntries(list.map((m) => [m.id, m]))
