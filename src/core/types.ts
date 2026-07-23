@@ -151,6 +151,9 @@ export interface MonsterDef {
   bossClass?: ClassId // classe incarnée (affichée à l'apparition ; pilote le kit de skills)
   bossSummon?: string // id du mob invoqué par la vague d'adds (compte à rebours visible)
   mvp?: boolean // élite rare : stats renforcées, drops rares, ni mob ni boss
+  // FLOTTEMENT VISUEL : décale le rendu du sprite de N px VERS LE HAUT (le corps reste posé au sol),
+  // pour un monstre qui « vole de quelques centimètres » (ex. angeling). Purement cosmétique.
+  floatPx?: number
   // monstre VOLANT (oiseau) : gravité coupée, patrouille en sinus dans les airs et PIQUE vers le
   // joueur par à-coups puis remonte. Ignore sol/rebords (voir Enemy). Exempté de la contrainte
   // « posé sur une surface » des validateurs de niveau.

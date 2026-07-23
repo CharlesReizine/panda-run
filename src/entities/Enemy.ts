@@ -184,7 +184,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const bw = this.width * 0.8
     const bh = this.height - 8
     this.setSize(bw, bh)
-    this.setOffset((this.width - bw) / 2, 2)
+    // FLOTTEMENT VISUEL (def.floatPx) : on descend le CORPS de floatPx px dans la texture → à corps
+    // posé au sol, le sprite (la créature) est rendu floatPx px PLUS HAUT = elle vole légèrement.
+    this.setOffset((this.width - bw) / 2, 2 + (def.floatPx ?? 0))
     this.levelScene = scene
     this.monster = def
     this.hp = def.hp
