@@ -6,6 +6,7 @@ import { getPlayer } from '../state'
 import type { DropEntry, MonsterDef } from '../core/types'
 import { playerXpForMobLevel } from '../core/progression'
 import { SKILLS } from '../data/skills'
+import { BD, truncate } from './bestiary-layout'
 
 // Bestiaire — page en lecture seule listant tous les monstres, leurs stats et leur table de drop.
 // Aucune écriture dans la sauvegarde ni dans les données du jeu.
@@ -191,35 +192,35 @@ export class BestiaryScene extends Phaser.Scene {
     }
 
     // ── COLONNE DROITE : Compétences (si le mob en a) puis Butin, en GRILLE 2 colonnes ──
-    const X0 = 330, COLW = 288, GAP = 12
-    const colX = (c: number) => X0 + c * (COLW + GAP)
-    let y = 64
+    const colX = (c: number) => BD.X0 + c * (BD.COLW + BD.GAP)
+    let y = BD.top
 
     if (!seen) {
-      this.add.text(X0, y, 'Fiche verrouillée', { fontSize: '16px', color: '#607d8b', fontStyle: 'bold' })
+      this.add.text(BD.X0, y, 'Fiche verrouillée', { fontSize: '16px', color: '#607d8b', fontStyle: 'bold' })
     } else {
       // COMPÉTENCES
       const skills = (m.skills ?? []).map((sid) => SKILLS[sid]).filter((s): s is NonNullable<typeof s> => !!s)
       if (skills.length) {
-        this.add.text(X0, y, 'COMPÉTENCES', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' }); y += 26
-        const rowH = m.boss ? 52 : 42
+        this.add.text(BD.X0, y, 'COMPÉTENCES', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' }); y += BD.titleGap
+        const rowH = m.boss ? BD.skillRowHBoss : BD.skillRowH
         skills.forEach((sk, i) => {
           const c = i % 2, r = Math.floor(i / 2)
-          this.gridCard(colX(c), y + r * (rowH + 8) + rowH / 2, COLW, rowH, `skill-${sk.id}`, undefined, sk.name, 0xffffff, m.boss ? sk.description : '', '#b0bec5')
+          // description TRONQUÉE (boss only) → ne déborde jamais de la carte (retour user : « trop de trucs »).
+          this.gridCard(colX(c), y + r * (rowH + BD.rowGap) + rowH / 2, BD.COLW, rowH, `skill-${sk.id}`, undefined, sk.name, 0xffffff, m.boss ? truncate(sk.description, BD.descMax) : '', '#b0bec5')
         })
-        y += Math.ceil(skills.length / 2) * (rowH + 8) + 16
+        y += Math.ceil(skills.length / 2) * (rowH + BD.rowGap) + BD.sectionGap
       }
 
       // BUTIN
-      this.add.text(X0, y, 'BUTIN', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' }); y += 26
-      const rowH = 42
+      this.add.text(BD.X0, y, 'BUTIN', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' }); y += BD.titleGap
+      const rowH = BD.butinRowH
       m.drops.forEach((d, i) => {
         const c = i % 2, r = Math.floor(i / 2)
         const { label, color } = dropLine(d)
         const { key, tint } = this.lootIcon(d)
         const chance = `${+(d.chance * 100).toFixed(1)}%`
         const qty = d.min === d.max ? `×${d.min}` : `×${d.min}–${d.max}`
-        this.gridCard(colX(c), y + r * (rowH + 8) + rowH / 2, COLW, rowH, key, tint, label, color, `${chance}  ${qty}`, '#ffd54f')
+        this.gridCard(colX(c), y + r * (rowH + BD.rowGap) + rowH / 2, BD.COLW, rowH, key, tint, label, color, `${chance}  ${qty}`, '#ffd54f')
       })
     }
 
