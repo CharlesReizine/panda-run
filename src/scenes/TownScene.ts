@@ -192,6 +192,8 @@ export class TownScene extends Phaser.Scene {
   private interactBtn?: Phaser.GameObjects.Text
   private panel?: Phaser.GameObjects.Container
   private feedback?: Phaser.GameObjects.Text
+  private questMarker?: Phaser.GameObjects.Text // « ❗ »/« ❓ » flottant au-dessus du garde (rafraîchi)
+  private questDoorXY = { x: 0, y: 0 }
   private townId = 'prontera'
   private cfg: ThemeConfig = THEME_EUROPEEN
   private spots: TownSpot[] = []
@@ -282,20 +284,8 @@ export class TownScene extends Phaser.Scene {
     // marqueur de quête flottant au-dessus du garde : « ❗ » si la quête courante de la chaîne est à
     // PRENDRE, « ❓ » si sa récompense est PRÊTE à réclamer. Rien tant qu'elle est en cours ou que
     // toute la chaîne est accomplie.
-    const qp = getPlayer()
-    const qdef = currentChainQuest(qp)
-    let questMark: string | null = null
-    if (qdef) {
-      refreshQuestProgress(qp, qdef.id)
-      const qs = qp.quests[qdef.id]
-      questMark = !qs ? '❗' : (qs.done && !qs.claimed ? '❓' : null)
-    }
-    if (questMark) {
-      const mk = this.add.text(cfg.questDoor.x, cfg.questDoor.y - 88, questMark, {
-        fontSize: '32px', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 4,
-      }).setOrigin(0.5).setDepth(6)
-      this.tweens.add({ targets: mk, y: mk.y - 9, yoyo: true, repeat: -1, duration: 640, ease: 'Sine.inOut' })
-    }
+    this.questDoorXY = { x: cfg.questDoor.x, y: cfg.questDoor.y }
+    this.refreshQuestMarker()
 
     // — HUD écran-fixe (scrollFactor 0) : la caméra suivant le panda, ces éléments restent collés —
     // bannière du bourg (nom + sous-titre thématique) en haut au centre
@@ -804,6 +794,26 @@ export class TownScene extends Phaser.Scene {
     return parts.join(' + ')
   }
 
+  // (Re)dessine le marqueur flottant du garde : « ❗ » quête à PRENDRE, « ❓ » récompense PRÊTE, rien
+  // tant qu'elle est EN COURS (acceptée, pas finie) ou toute la chaîne finie. Rafraîchi après accepter/
+  // réclamer (retour user : « une fois acceptée, le ! doit disparaître » — il restait figé sinon).
+  private refreshQuestMarker() {
+    this.questMarker?.destroy()
+    this.questMarker = undefined
+    const p = getPlayer()
+    const def = currentChainQuest(p)
+    if (!def) return
+    refreshQuestProgress(p, def.id)
+    const qs = p.quests[def.id]
+    const mark = !qs ? '❗' : (qs.done && !qs.claimed ? '❓' : null)
+    if (!mark) return
+    const mk = this.add.text(this.questDoorXY.x, this.questDoorXY.y - 88, mark, {
+      fontSize: '32px', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 4,
+    }).setOrigin(0.5).setDepth(6)
+    this.tweens.add({ targets: mk, y: mk.y - 9, yoyo: true, repeat: -1, duration: 640, ease: 'Sine.inOut' })
+    this.questMarker = mk
+  }
+
   private openQuestNpc() {
     this.closePanel()
     const c = this.add.container(0, 0).setDepth(50).setScrollFactor(0)
@@ -840,7 +850,7 @@ export class TownScene extends Phaser.Scene {
           this.add.text(480, 320, 'Accepter la quête', {
             fontSize: '16px', color: '#ffffff', backgroundColor: '#2e7d32', padding: { x: 14, y: 8 },
           }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-            acceptQuest(p, def.id); save(p); render()
+            acceptQuest(p, def.id); save(p); render(); this.refreshQuestMarker()
           }),
         )
       } else if (q.done) {
@@ -849,7 +859,7 @@ export class TownScene extends Phaser.Scene {
           this.add.text(480, 336, 'Réclamer la récompense', {
             fontSize: '16px', color: '#ffffff', backgroundColor: '#2e7d32', padding: { x: 14, y: 8 },
           }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-            if (claimQuest(p, def.id)) { save(p); render() }
+            if (claimQuest(p, def.id)) { save(p); render(); this.refreshQuestMarker() }
           }),
         )
       } else {

@@ -220,7 +220,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private refreshHat() {
     const hatId = getPlayer().equipment.hat
     this.hatImage?.destroy()
-    this.hatImage = hatId ? this.scene.add.image(this.x, this.y + HAT_OFFSET_Y, `cosmetic-${hatId}`).setDepth(this.depth + 1) : null
+    // porté = MÊME image que dans la boutique/inventaire : on privilégie l'illustration item-<id> si
+    // elle existe (retour user : « porté, c'est pas l'image de l'objet, c'est un vieux SVG »), sinon on
+    // retombe sur le dessin cosmetic-<id>.
+    const tex = hatId && this.scene.textures.exists(`item-${hatId}`) ? `item-${hatId}` : hatId ? `cosmetic-${hatId}` : null
+    this.hatImage = tex ? this.scene.add.image(this.x, this.y + HAT_OFFSET_Y, tex).setDepth(this.depth + 1) : null
   }
 
   // (ré)affiche l'arme ÉQUIPÉE en overlay dans la patte avant (le panda illustré a les mains vides).
