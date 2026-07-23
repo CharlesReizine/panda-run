@@ -153,7 +153,11 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private knockbackUntil = 0
   applyKnockback(vx: number, vy: number, durationMs: number) {
     if (!this.active || this.ragdolling) return
-    ;(this.body as Phaser.Physics.Arcade.Body).setVelocity(vx, vy)
+    // CLAMP anti-« dinguerie » (retour user) : on borne la vitesse de recul pour que le mob soit poussé
+    // franchement mais JAMAIS catapulté à l'autre bout de l'écran / à travers le décor à vitesse folle.
+    const cvx = Phaser.Math.Clamp(vx, -460, 460)
+    const cvy = Phaser.Math.Clamp(vy, -340, 340)
+    ;(this.body as Phaser.Physics.Arcade.Body).setVelocity(cvx, cvy)
     this.knockbackUntil = this.scene.time.now + durationMs
   }
   // MORT HUMILIANTE (one-shot depuis la VIE PLEINE) : le mob est propulsé en cloche à l'opposé de
