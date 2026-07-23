@@ -59,10 +59,13 @@ export class WorldMapScene extends Phaser.Scene {
         this.tweens.add({ targets: halo, scale: 1.35, alpha: 0, yoyo: true, repeat: -1, duration: 900 })
       }
 
-      const g = this.add.graphics()
-      if (n.type === 'town') this.drawCastle(g, n.x, n.y, radius, color, interactive)
-      else if (n.type === 'boss') this.drawSkull(g, n.x, n.y, radius, color, interactive)
-      else this.drawTent(g, n.x, n.y, radius, color, interactive)
+      // VILLES : aucun dessin — l'illustration de la carte de fond montre déjà clairement la ville
+      // (retour user). Seuls le halo « jouable » + l'étiquette + la zone cliquable subsistent.
+      if (n.type !== 'town') {
+        const g = this.add.graphics()
+        if (n.type === 'boss') this.drawSkull(g, n.x, n.y, radius, color, interactive)
+        else this.drawTent(g, n.x, n.y, radius, color, interactive)
+      }
 
       // étiquette ancrée sous le nœud : affichée UNIQUEMENT pour les nœuds DÉCOUVERTS (révélés). Le
       // lointain non découvert reste anonyme sous le brouillard (retour joueur : « ce qui n'est pas

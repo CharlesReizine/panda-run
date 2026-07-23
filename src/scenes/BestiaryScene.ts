@@ -138,80 +138,93 @@ export class BestiaryScene extends Phaser.Scene {
     this.btn(60, 24, '✕ Fermer', 0x8e2f2f, () => this.scene.start('Menu'))
   }
 
+  // Texture d'icône d'un butin (vraie image, plus de rond coloré) + teinte de repli éventuelle.
+  private lootIcon(d: DropEntry): { key: string; tint?: number } {
+    if (d.kind === 'gold') return { key: 'coin' }
+    if (d.kind === 'potion') return { key: 'potion-drop' }
+    if (d.kind === 'item') {
+      const k = d.itemId && this.textures.exists(`item-${d.itemId}`) ? `item-${d.itemId}` : 'item-drop'
+      return { key: k }
+    }
+    if (d.materialId && this.textures.exists(`material-${d.materialId}`)) return { key: `material-${d.materialId}` }
+    return { key: 'material-drop', tint: d.materialId ? MATERIALS[d.materialId]?.color : 0xffffff }
+  }
+
+  // Carte de la grille (icône + titre + sous-titre) — brique commune Compétences / Butin.
+  private gridCard(x: number, y: number, w: number, h: number, iconKey: string, tint: number | undefined, title: string, titleColor: number, sub: string, subColor: string) {
+    this.add.rectangle(x, y, w, h, 0x000000, 0.32).setOrigin(0, 0.5).setStrokeStyle(1, 0xffffff, 0.12)
+    if (this.textures.exists(iconKey)) {
+      const img = this.add.image(x + 6, y, iconKey).setOrigin(0, 0.5).setDisplaySize(h - 12, h - 12)
+      if (tint !== undefined) img.setTint(tint)
+    }
+    const tx = x + h + 2
+    this.add.text(tx, y - (sub ? 9 : 7), title, { fontSize: '14px', color: css(titleColor), fontStyle: 'bold', wordWrap: { width: w - h - 10 } }).setOrigin(0, 0.5)
+    if (sub) this.add.text(tx, y + 9, sub, { fontSize: '11px', color: subColor, wordWrap: { width: w - h - 10 } }).setOrigin(0, 0.5)
+  }
+
   private renderDetail(m: MonsterDef) {
     this.clear()
     const seen = this.discovered(m)
     const { label: kindLabel } = monsterKind(m)
-    const hidden = '—'
 
-    // Colonne gauche : gros sprite, nom, type, phrase de bestiaire
-    const big = this.add.image(160, 160, `monster-${m.id}`).setDisplaySize(120, 120)
-    if (!seen) big.setTint(SILHOUETTE_TINT).setAlpha(0.85) // silhouette sombre tant que pas tué
-    this.add.text(160, 240, seen ? m.name : '???', { fontSize: '26px', color: seen ? '#ffffff' : '#78909c', fontStyle: 'bold', align: 'center', wordWrap: { width: 280 } }).setOrigin(0.5, 0)
-    this.badge(160, 300, m, '15px')
+    // ── COLONNE GAUCHE : portrait + identité + stats compactes ──
+    const big = this.add.image(158, 138, `monster-${m.id}`).setDisplaySize(150, 150)
+    if (!seen) big.setTint(SILHOUETTE_TINT).setAlpha(0.85)
+    this.add.text(158, 224, seen ? m.name : '???', { fontSize: '26px', color: seen ? '#ffffff' : '#78909c', fontStyle: 'bold', align: 'center', wordWrap: { width: 290 } }).setOrigin(0.5, 0)
+    this.badge(158, 262, m, '14px')
     if (seen) {
-      // Lore : phrase qui vend du rêve sur le caractère du monstre
-      this.add.text(160, 328, m.lore, { fontSize: '13px', color: '#cfd8dc', align: 'center', fontStyle: 'italic', wordWrap: { width: 290 }, lineSpacing: 2 }).setOrigin(0.5, 0)
-      // nombre de fois vaincu
-      this.add.text(160, 400, `Vaincu ${this.kills[m.id]}×`, { fontSize: '13px', color: '#80cbc4', align: 'center' }).setOrigin(0.5, 0)
-    } else {
-      this.add.text(160, 328, 'Monstre non découvert.\nVaincs-le pour révéler sa fiche.', { fontSize: '13px', color: '#78909c', align: 'center', fontStyle: 'italic', wordWrap: { width: 290 }, lineSpacing: 2 }).setOrigin(0.5, 0)
-    }
-
-    // Stats — masquées tant que le monstre n'a pas été vaincu
-    this.add.text(360, 70, 'CARACTÉRISTIQUES', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' })
-    const rows: [string, string][] = [
-      ['Type', seen ? kindLabel : hidden],
-      ['Niveau', seen ? `${m.level}` : hidden],
-      ['PV', seen ? `${m.hp}` : hidden],
-      ['ATK', seen ? `${m.atk}` : hidden],
-      ['DEF', seen ? `${m.def}` : hidden],
-      ['XP', seen ? `${playerXpForMobLevel(m.level)}` : hidden],
-      ['Comportement', seen ? behaviorLabel(m) : hidden],
-    ]
-    rows.forEach(([k, v], i) => {
-      const y = 104 + i * 30
-      this.add.text(360, y, k, { fontSize: '15px', color: '#b0bec5' })
-      this.add.text(560, y, v, { fontSize: '15px', color: seen ? '#ffffff' : '#607d8b', fontStyle: 'bold' })
-    })
-
-    // COMPÉTENCES — seulement pour les monstres QUI EN ONT (boss = 3 avec texte, élite = 1). Rien
-    // affiché pour les mobs sans skill. Icône skill-<id> + nom ; description ajoutée pour les boss.
-    if (seen && m.skills?.length) {
-      this.add.text(360, 330, 'COMPÉTENCES', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' })
-      const withText = !!m.boss
-      let y = 360
-      for (const sid of m.skills) {
-        const sk = SKILLS[sid]
-        if (!sk) continue
-        if (this.textures.exists(`skill-${sid}`)) this.add.image(376, y + 9, `skill-${sid}`).setDisplaySize(26, 26)
-        this.add.text(398, y, sk.name, { fontSize: '14px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0, 0)
-        if (withText) {
-          this.add.text(398, y + 16, sk.description, { fontSize: '10px', color: '#b0bec5', wordWrap: { width: 232 }, lineSpacing: 1 }).setOrigin(0, 0)
-          y += 46
-        } else {
-          y += 32
-        }
-      }
-    }
-
-    // Table de butin — masquée tant que le monstre n'a pas été vaincu
-    this.add.text(650, 70, 'BUTIN', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' })
-    if (seen) {
-      m.drops.forEach((d, i) => {
-        const { label, color, chance, qty } = dropLine(d)
-        const y = 104 + i * 28
-        this.add.circle(658, y + 9, 5, color)
-        this.add.text(672, y, label, { fontSize: '14px', color: css(color), wordWrap: { width: 180 } })
-        this.add.text(860, y, chance, { fontSize: '13px', color: '#ffd54f' })
-        this.add.text(915, y, qty, { fontSize: '13px', color: '#cfd8dc' }).setOrigin(1, 0)
+      this.add.text(158, 286, m.lore, { fontSize: '12px', color: '#cfd8dc', align: 'center', fontStyle: 'italic', wordWrap: { width: 292 }, lineSpacing: 2 }).setOrigin(0.5, 0)
+      // stats compactes (2 par ligne) + kills
+      const stats: [string, string][] = [
+        ['Niveau', `${m.level}`], ['XP', `${playerXpForMobLevel(m.level)}`],
+        ['PV', `${m.hp}`], ['ATK', `${m.atk}`],
+        ['DEF', `${m.def}`], ['Type', kindLabel],
+      ]
+      stats.forEach(([k, v], i) => {
+        const sx = 30 + (i % 2) * 150, sy = 386 + Math.floor(i / 2) * 24
+        this.add.text(sx, sy, k, { fontSize: '13px', color: '#78909c' })
+        this.add.text(sx + 132, sy, v, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(1, 0)
       })
+      this.add.text(158, 464, `${behaviorLabel(m)} · vaincu ${this.kills[m.id]}×`, { fontSize: '12px', color: '#80cbc4', align: 'center' }).setOrigin(0.5, 0)
     } else {
-      this.add.text(672, 104, hidden, { fontSize: '14px', color: '#607d8b' })
+      this.add.text(158, 292, 'Monstre non découvert.\nVaincs-le pour révéler sa fiche.', { fontSize: '13px', color: '#78909c', align: 'center', fontStyle: 'italic', wordWrap: { width: 292 }, lineSpacing: 2 }).setOrigin(0.5, 0)
+    }
+
+    // ── COLONNE DROITE : Compétences (si le mob en a) puis Butin, en GRILLE 2 colonnes ──
+    const X0 = 330, COLW = 288, GAP = 12
+    const colX = (c: number) => X0 + c * (COLW + GAP)
+    let y = 64
+
+    if (!seen) {
+      this.add.text(X0, y, 'Fiche verrouillée', { fontSize: '16px', color: '#607d8b', fontStyle: 'bold' })
+    } else {
+      // COMPÉTENCES
+      const skills = (m.skills ?? []).map((sid) => SKILLS[sid]).filter((s): s is NonNullable<typeof s> => !!s)
+      if (skills.length) {
+        this.add.text(X0, y, 'COMPÉTENCES', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' }); y += 26
+        const rowH = m.boss ? 52 : 42
+        skills.forEach((sk, i) => {
+          const c = i % 2, r = Math.floor(i / 2)
+          this.gridCard(colX(c), y + r * (rowH + 8) + rowH / 2, COLW, rowH, `skill-${sk.id}`, undefined, sk.name, 0xffffff, m.boss ? sk.description : '', '#b0bec5')
+        })
+        y += Math.ceil(skills.length / 2) * (rowH + 8) + 16
+      }
+
+      // BUTIN
+      this.add.text(X0, y, 'BUTIN', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' }); y += 26
+      const rowH = 42
+      m.drops.forEach((d, i) => {
+        const c = i % 2, r = Math.floor(i / 2)
+        const { label, color } = dropLine(d)
+        const { key, tint } = this.lootIcon(d)
+        const chance = `${+(d.chance * 100).toFixed(1)}%`
+        const qty = d.min === d.max ? `×${d.min}` : `×${d.min}–${d.max}`
+        this.gridCard(colX(c), y + r * (rowH + 8) + rowH / 2, COLW, rowH, key, tint, label, color, `${chance}  ${qty}`, '#ffd54f')
+      })
     }
 
     // Boutons
-    this.btn(360, 508, '◀ Retour', 0x37474f, () => this.renderList())
-    this.btn(600, 508, '✕ Fermer', 0x8e2f2f, () => this.scene.start('Menu'))
+    this.btn(360, 512, '◀ Retour', 0x37474f, () => this.renderList())
+    this.btn(600, 512, '✕ Fermer', 0x8e2f2f, () => this.scene.start('Menu'))
   }
 }
