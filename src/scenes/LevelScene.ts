@@ -426,7 +426,10 @@ export class LevelScene extends Phaser.Scene {
         const fhPx = Math.round(TILE * 1.9) // hauteur de la nappe de feu (~2 tuiles, comme les ex-pics)
         const cxPx = hz.x * TILE + fwPx / 2
         if (this.textures.exists('fx-mur-de-flamme')) {
-          const fire = this.add.image(cxPx, surfaceTopPx + 2, 'fx-mur-de-flamme')
+          // l'art fx-mur-de-flamme a du VIDE sous les flammes (flammes ~centrées) → on ENFONCE l'ancrage
+          // bas de 0,3·hauteur SOUS la surface pour que les flammes retombent PILE sur le sol (même
+          // correctif que FlameWall ; retour user : « les flammes flottent trop au-dessus du sol »).
+          const fire = this.add.image(cxPx, surfaceTopPx + fhPx * 0.3, 'fx-mur-de-flamme')
             .setOrigin(0.5, 1).setDepth(-1).setDisplaySize(fwPx, fhPx)
           const bsx = fire.scaleX, bsy = fire.scaleY
           this.tweens.add({ targets: fire, scaleX: bsx * 1.05, scaleY: bsy * 1.12, duration: 320, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
