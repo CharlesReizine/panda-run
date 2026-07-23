@@ -64,15 +64,17 @@ export class WorldMapScene extends Phaser.Scene {
       else if (n.type === 'boss') this.drawSkull(g, n.x, n.y, radius, color, interactive)
       else this.drawTent(g, n.x, n.y, radius, color, interactive)
 
-      // étiquette ancrée sous le nœud (origine haut-centre) : TOUJOURS en BLANC + contour noir, et
-      // dessinée AU-DESSUS du brouillard (depth 7 > fog 6) → le nom reste lisible même sur une zone
-      // noircie/pas encore découverte (retour joueur). Retour à la ligne pour ne jamais déborder.
-      this.add.text(n.x, n.y + radius + 5, n.name, {
-        fontSize: '11px', color: '#ffffff', fontStyle: isCurrent ? 'bold' : 'normal',
-        align: 'center', wordWrap: { width: 96 },
-        stroke: '#000000', strokeThickness: 3,
-        backgroundColor: 'rgba(20,14,8,0.35)', padding: { x: 4, y: 2 },
-      }).setOrigin(0.5, 0).setDepth(7)
+      // étiquette ancrée sous le nœud : affichée UNIQUEMENT pour les nœuds DÉCOUVERTS (révélés). Le
+      // lointain non découvert reste anonyme sous le brouillard (retour joueur : « ce qui n'est pas
+      // découvert ne doit pas être écrit »). Blanc + contour noir, au-dessus du brouillard, retour ligne.
+      if (revealed.has(n.id)) {
+        this.add.text(n.x, n.y + radius + 5, n.name, {
+          fontSize: '11px', color: '#ffffff', fontStyle: isCurrent ? 'bold' : 'normal',
+          align: 'center', wordWrap: { width: 96 },
+          stroke: '#000000', strokeThickness: 3,
+          backgroundColor: 'rgba(20,14,8,0.35)', padding: { x: 4, y: 2 },
+        }).setOrigin(0.5, 0).setDepth(7)
+      }
 
       if (done) {
         this.add.text(n.x + radius - 4, n.y - radius + 2, '✓', {
