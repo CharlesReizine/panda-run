@@ -254,7 +254,9 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   // niveau 5 → 6 via l'XP cumulée → mur de difficulté au 2e terrain). plaine-1 reste à la longueur de
   // base (≈8 porings, largement de quoi passer niveau 2), la rampe de niveaux reste douce.
   const midCount = midBase + Math.floor((rank - 1) / 2) + (idx % 2)
-  const allowLadders = !(biome === 'plaine' && rank === 1) // le tout premier niveau reste le plus simple
+  // Échelles autorisées PARTOUT, y compris plaine-1 : sans échelle, une chute dans un creux/bassin
+  // pouvait piéger le joueur sans remontée possible (retour joueur « je tombe et je peux pas remonter »).
+  const allowLadders = true
   // NIVEAUX EARLY (retour playtest : « les 6 premiers sont TRÈS répétitifs, aucun gros motif ») : les
   // premiers terrains (toute la plaine + l'orée de forêt) DÉBRIDENT la variété — composeCap relève le
   // plafond de sélection à tier 2-3 (motifs de tier 2-3 accessibles TÔT, plus seulement en fin de jeu),

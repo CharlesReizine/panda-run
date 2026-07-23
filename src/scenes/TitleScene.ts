@@ -44,8 +44,22 @@ export class TitleScene extends Phaser.Scene {
     } catch { /* fallback : couleur pleine */ }
     this.tweens.add({ targets: logo, scale: 1.03, yoyo: true, repeat: -1, duration: 1800, ease: 'Sine.inOut' })
 
+    // ACCÈS DIRECT « Test de niveaux » (sous le logo) : balade INVINCIBLE dans n'importe quel terrain,
+    // sans lancer de partie. Utilise la sauvegarde si présente, sinon un panda par défaut. Ne sauve rien.
+    const testBtn = this.add.text(480, 178, '🧪 Test de niveaux', {
+      fontSize: '22px', color: '#ffffff', backgroundColor: '#37474f', fontStyle: 'bold', padding: { x: 16, y: 9 },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+    testBtn.setShadow(0, 2, '#00000099', 3, false, true)
+    testBtn.on('pointerover', () => testBtn.setBackgroundColor('#546e7a'))
+    testBtn.on('pointerout', () => testBtn.setBackgroundColor('#37474f'))
+    testBtn.on('pointerdown', () => {
+      audio.unlock()
+      setPlayer(this.safeLoad() ?? newPlayer('Test'))
+      this.scene.start('LevelTest')
+    })
+
     // repère de version : dis-moi ce numéro pour qu'on sache si tu vois bien la dernière build
-    this.add.text(10, 8, 'build R209', { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
+    this.add.text(10, 8, 'build R210', { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
 
     // accès aux logs sur mobile (pas de console sur iPhone) : « Logs » ouvre l'overlay DOM,
     // « Vider » réinitialise le ring buffer + localStorage.
