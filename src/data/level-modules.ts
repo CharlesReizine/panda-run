@@ -125,6 +125,13 @@ export type ModuleKind =
   // CASCADE LARGE + PIERRE : cascade très large au-dessus du vide (chute mortelle), grosse pierre rigide
   // à mi-hauteur qui force à gérer montée/descente pour rester dans l'eau.
   | 'cascade-large-pierre'
+  // ÉCHELLES-LIANES : échelles hautes plantées sur des SOCLES de PIERRE RIGIDE, on grimpe puis on SAUTE
+  // d'un socle au suivant (escalier ascendant en quinconce).
+  | 'echelles-lianes'
+  // ESCALIER DE LACS MONTANT : on REMONTE des cascades pour émerger de lac en lac, de plus en plus haut.
+  | 'lacs-cascade-montee'
+  // ESCALIER DE LACS DESCENDANT : on grimpe à un lac perché, d'où l'eau se déverse de lac en lac vers le bas.
+  | 'lacs-cascade-descente'
   // ─── R171 — VARIÉTÉ + NOUVEAUX MOTIFS (retours playtest) ───────────────────────────────────────
   // LAC → CASCADE → PLATEAU : un bout de LAC marine horizontal, puis à sa FIN une CASCADE remontable
   // qu'on remonte sur ~3-4 sauts de hauteur pour arriver sur un PLATEAU en HAUT (sortie haute). Une
@@ -1536,6 +1543,78 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       break
     }
 
+    // ─── ÉCHELLES-LIANES : socles de PIERRE RIGIDE + échelles hautes, on saute d'une échelle à l'autre ──
+    case 'echelles-lianes': {
+      const stages = 3
+      let footAlt = Math.max(1, entryAlt)
+      let footX = 0
+      let landAlt = footAlt
+      for (let i = 0; i < stages; i++) {
+        const isLast = i === stages - 1
+        p.platforms.push({ x: footX, alt: footAlt, w: 3, solid: true }) // SOCLE de pierre rigide (pas de saut à travers)
+        const ladX = footX + 1
+        const landRight = isLast ? w : ladX + 4
+        landAlt = poseLadderOn(p, ladX, footAlt, landRight) // échelle HAUTE + palier (valideur-compatible)
+        footX = Math.min(w - 3, landRight + 2) // socle suivant après un petit GAP (saut d'échelle en échelle)
+        footAlt = landAlt + 1 // un cran plus haut
+      }
+      p.exitAlt = landAlt
+      break
+    }
+
+    // ─── ESCALIER DE LACS MONTANT : on remonte des cascades, on émerge dans un lac, on remonte encore… ──
+    case 'lacs-cascade-montee': {
+      const steps = 3
+      let alt = Math.max(1, entryAlt)
+      let x = 0
+      p.platforms.push({ x, alt, w: 2 }); x += 2 // berge d'accès BASSE
+      for (let i = 0; i < steps; i++) {
+        const top = alt + cascadeRise(rng) // cascade HAUTE remontable vers le palier supérieur
+        p.waters.push({ x, w: 3, kind: 'cascade', bankAlt: top, bottomAlt: alt }) // repose sur la berge (pas de vide)
+        const bx = x + 3 // berge d'ÉMERGENCE jointive au bord droit de la colonne
+        const isLast = i === steps - 1
+        const lakeW = isLast ? Math.max(4, w - bx - 4) : 3
+        p.platforms.push({ x: bx, alt: top, w: 1 }) // corniche d'émergence (gauche du lac)
+        p.waters.push({ x: bx + 1, w: lakeW, kind: basinKind, bankAlt: top }) // LAC du palier
+        p.platforms.push({ x: bx + 1 + lakeW, alt: top, w: 1 }) // berge DROITE du lac (pied de la cascade suivante)
+        if (basinKind !== 'lave' && isLast) p.props.push({ kind: 'coffre', x: bx + 1 + Math.floor(lakeW / 2) })
+        x = bx + 2 + lakeW
+        alt = top
+      }
+      p.platforms.push({ x, alt, w: Math.max(1, w - x) }) // plateau de SORTIE (haut)
+      p.exitAlt = alt
+      break
+    }
+
+    // ─── ESCALIER DE LACS DESCENDANT : on grimpe à un lac perché, l'eau se déverse de lac en lac vers le bas ──
+    case 'lacs-cascade-descente': {
+      const low = Math.max(1, entryAlt)
+      const steps = 3
+      const peak = low + cascadeRise(rng) // sommet atteint en grimpant une cascade
+      let x = 0
+      p.platforms.push({ x, alt: low, w: 2 }); x += 2 // berge d'accès basse
+      // MONTÉE : une cascade remontable jusqu'au lac perché
+      p.waters.push({ x, w: 3, kind: 'cascade', bankAlt: peak, bottomAlt: low }); x += 3
+      p.platforms.push({ x, alt: peak, w: 1 }); x += 1 // corniche d'émergence
+      // DESCENTE : lacs en MARCHES qui descendent (chaque marche ≤ 3 rangées → atteignable au saut depuis le bas)
+      let alt = peak
+      for (let i = 0; i < steps; i++) {
+        const lakeW = 3
+        p.waters.push({ x, w: lakeW, kind: basinKind, bankAlt: alt }) // lac de la marche
+        if (basinKind !== 'lave' && i === steps - 1) p.props.push({ kind: 'coffre', x: x + Math.floor(lakeW / 2) })
+        x += lakeW
+        const lower = Math.max(low, alt - 3)
+        // rideau de cascade qui déverse ce lac dans le suivant (plus bas), reposant sur la marche basse
+        p.waters.push({ x, w: 2, kind: 'cascade', bankAlt: alt, bottomAlt: lower })
+        p.platforms.push({ x: x + 2, alt: lower, w: 1 }) // berge de la marche inférieure
+        x += 2 + 1
+        alt = lower
+      }
+      p.platforms.push({ x, alt, w: Math.max(1, w - x) }) // berge de SORTIE basse
+      p.exitAlt = alt
+      break
+    }
+
     // ─── LAC → CASCADE → PLATEAU : lac horizontal, puis cascade remontable vers un plateau EN HAUT ──
     case 'lac-cascade-plateau': {
       // Un bout de LAC marine HORIZONTAL (coffre au fond), puis à sa FIN une CASCADE remontable qu'on
@@ -1826,6 +1905,10 @@ export interface ModuleSpec {
   chest?: boolean
   water?: boolean
   birds?: boolean // motif de plein air (accueille des oiseaux)
+  // motif RÉSERVÉ : jamais tiré dans le pool générique aléatoire ; n'apparaît QUE s'il est imposé
+  // explicitement via ComposeOpts.forcedKinds (per-terrain). Sert aux gros motifs signature qu'on veut
+  // maîtriser (échelles-lianes, escaliers de lacs…) sans qu'ils polluent tous les niveaux.
+  forcedOnly?: boolean
 }
 
 export const CATALOG: Record<ModuleKind, ModuleSpec> = {
@@ -1914,6 +1997,9 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'cascade-w': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [16, 26], below: 'vide', above: 'air', chest: true, water: true },
   'cascade-saut-ange': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [18, 28], below: 'marine', above: 'air', chest: true, water: true },
   'cascade-large-pierre': { tier: 4, family: 'risque', entry: 'bas', exit: 'haut', width: [16, 24], below: 'vide', above: 'air', chest: true, water: true },
+  'echelles-lianes': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [16, 26], below: 'sol', above: 'air', ladder: true, forcedOnly: true },
+  'lacs-cascade-montee': { tier: 3, family: 'risque', entry: 'bas', exit: 'haut', width: [18, 30], below: 'marine', above: 'air', chest: true, water: true, forcedOnly: true },
+  'lacs-cascade-descente': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [20, 30], below: 'marine', above: 'air', chest: true, water: true, forcedOnly: true },
   // R171 — LAC → CASCADE → PLATEAU (lac horizontal + cascade remontable vers un plateau haut)
   'lac-cascade-plateau': { tier: 2, family: 'risque', entry: 'bas', exit: 'haut', width: [22, 32], below: 'marine', above: 'air', chest: true, water: true },
   // R171 — ESCALIER À GRANDS PAS (marches espacées, saut franc) — motif VERTICAL/traversée sec
@@ -1975,6 +2061,7 @@ export interface ComposeOpts {
   stony?: boolean // biome ROCHEUX : autorise les marches de PIERRE rigides (escalier-pierre)
   caves?: boolean // biome ROCHEUX / SOUTERRAIN / JUNGLE PROFONDE : autorise les grottes-tunnels
   waterKinds?: ModuleKind[] // plans d'eau imposés (variété entre niveaux)
+  forcedKinds?: ModuleKind[] // motifs NON-eau imposés sur ce terrain (échelles-lianes, escaliers de lacs…)
   lava?: boolean // ENFER : les cuves marine (bassin/tresor-bassin/petit-pont) deviennent de la LAVE mortelle
   // GROTTE DE DÉPART souterraine : le module de SPAWN peut être une grotte fermée avec bassin immergé à
   // franchir à la nage (biomes ROCHEUX / souterrains seulement — ailleurs une caverne de départ serait incongrue).
@@ -2050,6 +2137,7 @@ export function planModules(o: ComposeOpts): Module[] {
       if (s.tier > selCap) return false
       if (s.ladder && !allowLadders) return false
       if (s.water) return false // eau imposée séparément
+      if (s.forcedOnly) return false // motifs réservés : imposés seulement via forcedKinds
       if (k === 'plateau' || k === 'arene') return false // réservés spawn / climax
       // marches de PIERRE rigides : uniquement en biome ROCHEUX (ailleurs incongru), jamais ailleurs.
       if (k === 'escalier-pierre') return !!o.stony
@@ -2122,6 +2210,17 @@ export function planModules(o: ComposeOpts): Module[] {
   const waterSlots = new Set<number>()
   waters.forEach((_, i) => waterSlots.add(1 + Math.floor(((i + 1) * order.length) / (waters.length + 1))))
 
+  // 2 bis) motifs NON-eau IMPOSÉS (forcedKinds) : posés sur des slots centraux libres (jamais un slot
+  // d'eau), pour garantir la présence des gros motifs signature (échelles-lianes, escaliers de lacs).
+  const forcedSlots = new Map<number, ModuleKind>()
+  {
+    let n = 1
+    for (const fk of (o.forcedKinds ?? []).slice(0, 2)) {
+      while (n < order.length && (waterSlots.has(n + 1) || forcedSlots.has(n))) n++
+      if (n < order.length) { forcedSlots.set(n, fk); n++ }
+    }
+  }
+
   // 3) modules centraux
   const groundQ = [...o.ground]
   const nextGround = (): string[] => (groundQ.length ? [groundQ.shift()!] : (o.ground.length ? [o.ground[0]!] : []))
@@ -2135,6 +2234,16 @@ export function planModules(o: ComposeOpts): Module[] {
         ...(o.lava && spec.below === 'marine' ? { fillBelow: 'lave' as Fill } : {}),
       }))
       lastKind = wk
+      return
+    }
+    if (forcedSlots.has(idx)) {
+      const fk = forcedSlots.get(idx)!
+      const fspec = CATALOG[fk]
+      modules.push(mk(fk, {
+        ground: fspec.water ? (o.aquatic ?? []) : nextGround(),
+        ...(o.lava && fspec.below === 'marine' ? { fillBelow: 'lave' as Fill } : {}),
+      }))
+      lastKind = fk
       return
     }
     let cands = kindsOf(bucket)

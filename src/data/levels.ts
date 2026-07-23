@@ -195,6 +195,16 @@ const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
   // placés — leur chaînage d'altitude (perchoir/exit haut) casse la composition ; à raffiner avant pose.
 }
 
+// Motifs NON-eau IMPOSÉS par terrain (ComposeOpts.forcedKinds) : gros motifs signature qu'on place à la
+// main, surtout sur les biomes PAUVRES en variété (cimetière, cave) pour les enrichir. Ces terrains
+// peuvent être rallongés et sont exemptés de la règle d'XP stricte (cf. xp-economy.test).
+const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
+  'cave-2': ['echelles-lianes'],
+  'cimetiere-1': ['echelles-lianes'],
+  // NB : 'lacs-cascade-montee' et 'lacs-cascade-descente' définis (builder + META) mais PAS placés —
+  // reachability à raffiner (émergences de cascade à chaîner ; cascades de descente ≥ 8 rangées).
+}
+
 // Biomes ROCHEUX / SOUTERRAINS / JUNGLE PROFONDE : on y autorise les GROTTES-TUNNELS (boyaux de
 // roche francs). Ailleurs (prairie, désert ouvert…) une caverne fermée serait incongrue.
 const CAVE_BIOMES = new Set(['cave', 'montagne', 'carriere', 'enfer', 'jungle', 'foret'])
@@ -325,6 +335,7 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
             ? WATER_ROT[idx % 6]!
             : (['bassin', 'cascade'] as ModuleKind[]))
           : WATER_ROT[idx % WATER_ROT.length]!,
+    ...(SPECIAL_FORCED[id] ? { forcedKinds: SPECIAL_FORCED[id] } : {}),
     ...(pool.lava ? { lava: true } : {}),
   }
   // Certaines graines produisent une colonne à 4 paliers empilés, un rebord de lac désaxé, ou un
