@@ -233,7 +233,9 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   // biomes avancés (tier) + croissance par rang DANS le biome (les premiers terrains un peu plus courts,
   // ça s'allonge). Chaque niveau enchaîne ainsi plusieurs séquences de motifs (plusieurs minutes de jeu).
   const midBase = pool.tier <= 1 ? 8 : pool.tier === 2 ? 9 : pool.tier === 5 ? 12 : pool.tier + 7
-  const midCount = midBase + Math.floor((rank - 1) / 2) + (idx % 2)
+  // plaine-1 LÉGÈREMENT RALLONGÉE (+1 module central) : un peu plus de porings, sans dépasser la
+  // longueur de plaine-4 (progression early<late, cf. reachable.test).
+  const midCount = (biome === 'plaine' && rank === 1 ? midBase + 1 : midBase) + Math.floor((rank - 1) / 2) + (idx % 2)
   const allowLadders = !(biome === 'plaine' && rank === 1) // le tout premier niveau reste le plus simple
   // NIVEAUX EARLY (retour playtest : « les 6 premiers sont TRÈS répétitifs, aucun gros motif ») : les
   // premiers terrains (toute la plaine + l'orée de forêt) DÉBRIDENT la variété — composeCap relève le
@@ -265,7 +267,10 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
     desert: 'ours-brun', jungle: 'scorpion', cave: 'scorpion', montagne: 'gobelin-mineur',
     cimetiere: 'squelette', carriere: 'squelette', enfer: 'gargouille',
   }
-  const distinctCap = biome === 'plaine' ? Math.min(pool.ground.length, 1 + rank)
+  // plaine-1 = UNIQUEMENT des porings (gloopy) : premier terrain « école », le joueur apprend à jouer
+  // sur un seul mob de contact inoffensif (retour joueur : « niveau 1 trop dur, meurs sans arrêt »).
+  // La variété monte ensuite (2 espèces en plaine-2, etc.).
+  const distinctCap = biome === 'plaine' ? (rank === 1 ? 1 : Math.min(pool.ground.length, 1 + rank))
     : (biome === 'foret' && rank <= 2) ? 4 + rank : pool.ground.length
   let groundPool = LATE_DESERT_GROUND[id]
     ?? (biome === 'plaine' ? pool.ground.slice(0, distinctCap) : rotate(pool.ground, idx).slice(0, distinctCap))

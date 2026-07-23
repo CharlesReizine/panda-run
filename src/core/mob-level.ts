@@ -98,7 +98,10 @@ export function computeMonsterLevels(): Record<string, number> {
     for (const m of roster) {
       if (firstSeen[m.id] === undefined) {
         firstSeen[m.id] = index
-        apexAt[m.id] = !isGardien(m.id) && m.xp === maxXp
+        // PAS de bonus apex sur le TOUT PREMIER niveau (index 0, tutoriel) : le contenu en dessous est
+        // vide (cumXp = 0 → base niveau 1) et un +3 sur l'unique mob-école le rendrait dur (retour
+        // joueur : « niveau 1 trop dur »). Le mob d'accueil (poring) doit rester niveau 1.
+        apexAt[m.id] = !isGardien(m.id) && m.xp === maxXp && index > 0
       }
     }
   })
