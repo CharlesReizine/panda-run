@@ -54,7 +54,7 @@ const list: MonsterDef[] = [
   M({ id: 'mage-noir', name: 'Mage noir', lore: 'Sorcier félon tapi dans l\'obscurité, il tisse ses maléfices à distance, sournois et calculateur.', color: 0x7e57c2, xp: 850, level: 33, role: 'distant', speed: 45, behavior: 'caster', drops: [goldMid, potion, { kind: 'material', materialId: 'gemme-brute', chance: 0.05, min: 1, max: 1 }] }),
   // MVP — élites rares (mvp: true) : stats POSÉES À LA MAIN (versions surpuissantes, drops rares)
   {
-    id: 'poring-dore', name: 'Poring doré', lore: 'Slime légendaire tout d\'or vêtu : rare, insaisissable et convoité de tous les aventuriers.', color: 0xffd700, hp: 220, atk: 32, def: 14, xp: 2200, level: 13, speed: 30, behavior: 'contact', mvp: true,
+    id: 'poring-dore', name: 'Poring doré', lore: 'Slime légendaire tout d\'or vêtu : rare, insaisissable et convoité de tous les aventuriers.', color: 0xffd700, hp: 220, atk: 32, def: 14, xp: 2200, level: 19, speed: 30, behavior: 'contact', mvp: true,
     drops: [
       { kind: 'gold', chance: 1, min: 40, max: 80 },
       { kind: 'potion', chance: 0.5, min: 1, max: 1 },

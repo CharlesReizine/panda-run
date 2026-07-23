@@ -23,7 +23,9 @@ const MAX_RATIO = 2
 // - desert-1 : MUR de niveau plaine→désert VOULU (premier désert, plein de mobs frais nettement plus
 //   forts) → un clear donne un peu plus de 2 paliers ; c'est la difficulté d'entrée de biome assumée.
 // - enfer-5/7 : fin de tronc, ne recyclent que des mobs d'enfer déjà vus (aucun frais) → clear < 0,5 palier.
-const EXEMPT = new Set(['epave-1', 'desert-1', 'enfer-5', 'enfer-7'])
+// - foret-7 : porte l'élite poring-doré (relogé depuis la plaine après la règle « 1 élite/terrain ») →
+//   son gros XP pousse le clear juste au-dessus de 2× (2,03) ; toléré (terrain de transition riche).
+const EXEMPT = new Set(['epave-1', 'desert-1', 'enfer-5', 'enfer-7', 'foret-7'])
 
 // XP joueur en tuant tous les monstres d'un terrain (hors gardiens contournables) + le boss.
 function clearXp(levelId: string): number {

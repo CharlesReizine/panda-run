@@ -1942,6 +1942,21 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   spawns.length = 0
   spawns.push(...cleanedSpawns)
 
+  // AU PLUS UN ÉLITE (mvp) par terrain (retour user : « un terrain avec deux élites c'est trop »).
+  // On garde le PREMIER mob élite rencontré et on retire les élites suivants (ex. plaine tardive qui
+  // sortait à la fois l'angeling du pool ET le poring doré du slot mvp).
+  {
+    let eliteSeen = false
+    const noDoubleElite = spawns.filter((s) => {
+      if (!MONSTERS[s.monsterId]?.mvp) return true
+      if (eliteSeen) return false
+      eliteSeen = true
+      return true
+    })
+    spawns.length = 0
+    spawns.push(...noDoubleElite)
+  }
+
   // DÉCO AU SOL (herbe/champignon) POSÉE SUR LA VRAIE SURFACE (retour user : « des champignons DANS la
   // roche »). Le sol du terrain ONDULE (bosses de roche au-dessus de groundRow) : poser la déco à
   // groundRow l'enterrait dans la bosse. On la pose donc PILE sur le sommet de roche/plateforme de sa

@@ -97,6 +97,7 @@ export class LevelScene extends Phaser.Scene {
   // image du mur de flammes du mage, légèrement animée. Pas de corps physique (détection par rect).
   private flameRects: Phaser.Geom.Rectangle[] = []
   private flameAccumMs = 0
+  private flameTinted = false // le joueur clignote-t-il en rouge (dans les flammes) ?
   // Plongée : réserve d'apnée restante (ms), accumulateurs de ticks de noyade et d'émission de
   // bulles, voile bleuté quand la tête est immergée, petite jauge d'apnée au-dessus de la tête.
   private breathMs = BREATH_BASE_MS
@@ -1350,7 +1351,14 @@ export class LevelScene extends Phaser.Scene {
     if (!this.flameRects.length) return
     const body = this.player.body as Phaser.Physics.Arcade.Body
     const touching = this.flameRects.some((r) => r.contains(this.player.x, body.bottom) || r.contains(this.player.x, this.player.y))
-    if (!touching) { this.flameAccumMs = 0; return }
+    if (!touching) {
+      this.flameAccumMs = 0
+      if (this.flameTinted) { this.player.clearTint(); this.flameTinted = false } // fin du clignotement
+      return
+    }
+    // CLIGNOTEMENT ROUGE tant qu'on marche dans les flammes (retour user) — signal clair de brûlure.
+    this.player.setTint(Math.floor(this.time.now / 110) % 2 === 0 ? 0xff2e2e : 0xffffff)
+    this.flameTinted = true
     this.flameAccumMs += delta
     // dégât par tick = fraction des PV MAX proportionnelle à la durée du tick (30 % PV max/s)
     const perTick = this.player.stats.maxHp * FLAME_HP_FRAC_PER_SEC * (FLAME_TICK_MS / 1000)

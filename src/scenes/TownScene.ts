@@ -777,7 +777,9 @@ export class TownScene extends Phaser.Scene {
           c, x, cy, cardW, cardH,
           this.iconFor(entry.itemId), item.name, bonus, entry.price,
           () => { const pl = getPlayer(); return buyItem(pl, entry.itemId, entry.price) },
-          () => { const pl = getPlayer(); save(pl); goldText.setText(`${pl.gold} or`) },
+          // après achat : on RE-RENDU le panneau (après le flash « Acheté ! ») pour que l'objet
+          // désormais possédé passe en GRISÉ « Possédé » → plus de rachat en boucle du même chapeau.
+          () => { const pl = getPlayer(); save(pl); goldText.setText(`${pl.gold} or`); this.time.delayedCall(230, () => this.openItemShop(kind, list, page)) },
           owned.has(entry.itemId),
           equipRestrictionMessage(p.classId, entry.itemId),
         )
