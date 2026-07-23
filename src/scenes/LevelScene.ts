@@ -3399,14 +3399,14 @@ export class LevelScene extends Phaser.Scene {
     // coin de l'écran (monde) le plus ÉLOIGNÉ de la cible → longue diagonale de piqué
     const cornerX = Math.abs(targetX - left) > Math.abs(targetX - right) ? left : right
     const cornerY = Math.abs(targetY - top) > Math.abs(targetY - bottom) ? top : bottom
-    const falcon = this.add.image(cornerX, cornerY, key).setDepth(9).setScale(1.4)
-    // ORIENTATION : le faucon (dessiné face à DROITE) pointe dans le sens du piqué en restant À
-    // L'ENDROIT (dos en haut). Vol vers la GAUCHE → on MIROIRE horizontalement (flipX) + angle miroir,
-    // au lieu d'un flip vertical qui le mettait ventre en l'air (retour joueur « à l'envers »).
-    const ang = Math.atan2(targetY - cornerY, targetX - cornerX)
+    const falcon = this.add.image(cornerX, cornerY, key).setDepth(9).setScale(1.0)
+    // ORIENTATION : le faucon (dessiné face à DROITE) reste TOUJOURS à l'endroit (dos en haut). On gère
+    // le sens horizontal par un flip (flipX) et l'inclinaison du piqué par une rotation bornée à ≤ 90°
+    // (jamais au-delà de la verticale → jamais ventre en l'air). Vol à gauche → flipX + rotation inversée.
+    const down = Math.atan2(Math.abs(targetY - cornerY), Math.abs(targetX - cornerX)) // 0..π/2 (piqué vers le bas)
     const leftward = targetX < cornerX
-    falcon.setFlipX(leftward)
-    falcon.setRotation(leftward ? Math.PI - ang : ang)
+    falcon.setFlipX(!leftward)
+    falcon.setRotation(leftward ? -down : down)
     this.tweens.add({
       targets: falcon, x: targetX, y: targetY, duration: durationMs, ease: 'Quad.in',
       onComplete: () => { onImpact(); falcon.destroy() },

@@ -671,8 +671,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // vélocité de nage (~150) était instantanément annulée par la gravité au franchissement → le
     // panda restait coincé à ras l'eau, incapable de sauter dehors. La quille (body.top) doit être
     // proche de la ligne d'eau pour armer la détente → on ne « fuse » pas depuis le fond du bassin.
-    const nearSurface = body.top <= this.waterSurfaceY + CLIMB_STRIDE
-    if ((c.up || c.jump) && nearSurface && !this.inCascade) { this.setVelocityY(JUMP_VELOCITY); return }
+    // SORTIE PAR LE HAUT (bassin ET cascade) : près du haut de l'eau, up/saut ÉJECTE le panda dehors
+    // avec une vraie détente. Indispensable en CASCADE aussi : sans ça, arrivé en haut de la cascade on
+    // ne pouvait pas franchir le rebord si la sortie était au niveau de l'eau → on restait bloqué
+    // (retour joueur). La détente permet de se hisser sur la corniche.
+    const nearSurface = body.top <= this.waterSurfaceY + CLIMB_STRIDE * 2
+    if ((c.up || c.jump) && nearSurface) { this.setVelocityY(JUMP_VELOCITY); return }
     // cascade : le COURANT POUSSE VERS LE BAS (elle fait tomber). On la REMONTE en maintenant HAUT
     // (grimpe à contre-courant, aucune noyade) ; BAS accélère la descente. Bassin : nage libre.
     if (c.up || c.jump) this.setVelocityY(-SWIM_SPEED)
