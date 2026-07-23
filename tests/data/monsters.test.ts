@@ -47,7 +47,7 @@ describe('mobs de granularité (audit lot 3)', () => {
     { id: 'djinn-mineur', level: 38, biome: 'desert' },
     { id: 'loup-des-neiges', level: 49, biome: 'montagne' },
     { id: 'liche-mineure', level: 53, biome: 'cimetiere' },
-    { id: 'kraken-juvenile', level: 59, biome: 'plage' },
+    { id: 'kraken-juvenile', level: 60, biome: 'plage' },
     { id: 'cerbere', level: 67, biome: 'enfer' },
   ]
 

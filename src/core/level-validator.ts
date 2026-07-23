@@ -13,7 +13,7 @@ import type { LevelDef } from '../data/levels'
 
 const ROW_TOL = 1 // tolérance verticale (en tuiles) pour « le dessus est à la rangée y »
 
-interface Ladder { x: number; y: number; h: number }
+interface Ladder { x: number; y: number; h: number; hung?: boolean }
 
 export interface LadderProblem { x: number; y: number; h: number; reason: 'sommet-sans-plateforme' | 'pied-dans-le-vide' }
 export interface ChestProblem { x: number; y: number }
@@ -65,12 +65,37 @@ function ladderFootReachable(l: Ladder, platforms: Plat[], reachable: Set<number
   return platforms.some((p, i) => reachable.has(i) && footMeets(l, p))
 }
 
+// ÉCHELLES SUSPENDUES (hung) « en T » : accrochées au plafond par une PIERRE rigide qui les coiffe
+// (on ne peut PAS passer au-dessus). On ne débouche donc sur AUCUNE plateforme en haut : on grimpe,
+// puis on SAUTE en diagonale vers l'échelle suivante (qui chevauche en hauteur), ou on enjambe sur la
+// plateforme de sortie voisine. Ces échelles sont des NŒUDS d'atteignabilité à part entière (elles ne
+// reposent sur rien) — modèle activé UNIQUEMENT si `hung` est vrai (les échelles classiques gardent
+// exactement l'ancien comportement).
+const JUMP_COLS = Math.floor(maxJumpGapPx() / TILE) // portée horizontale d'un saut, en colonnes
+// TRANSFERT échelle→échelle : colonnes distinctes à portée de saut ET travées verticales qui se
+// chevauchent (ou séparées d'au plus un saut) → on bondit de l'une à l'autre.
+function hungTransfer(a: Ladder, b: Ladder): boolean {
+  const dx = Math.abs(a.x - b.x)
+  if (dx < 1 || dx > JUMP_COLS) return false
+  const vGap = Math.max(0, Math.max(a.y, b.y) - Math.min(a.y + a.h, b.y + b.h)) // 0 si les travées se chevauchent
+  return vGap <= LADDER_GRAB_TILES
+}
+// Plateforme atteignable depuis le SOMMET d'une échelle suspendue : en haut de la travée, on enjambe
+// sur une plateforme VOISINE un peu plus basse (le top de l'échelle doit dépasser la plateforme).
+function hungTopReaches(l: Ladder, p: Plat): boolean {
+  const drop = p.y - l.y // >0 : plateforme SOUS le sommet de l'échelle
+  if (drop < -ROW_TOL || drop > LADDER_GRAB_TILES) return false
+  const dx = Math.max(0, Math.max(l.x - (p.x + p.w), p.x - l.x))
+  return dx <= JUMP_COLS
+}
+
 // Graphe d'atteignabilité (point fixe) : surfaces joignables du sol, de proche en proche par saut,
 // ou par une échelle dont le pied est accessible. Les PONTS sont des surfaces marchables (one-way)
 // au même titre que les plateformes : inclus comme relais, sinon une traversée qui passe par un pont
 // (ex. franchir une cuve) ferait croire la rive opposée injoignable. Renvoie les nœuds (plateformes
-// PUIS ponts), l'ensemble des indices atteignables, le nb de plateformes et le sol.
-interface ReachInfo { nodes: Plat[]; reachable: Set<number>; nPlat: number; groundRow: number; ground: Plat }
+// PUIS ponts), l'ensemble des indices atteignables, le nb de plateformes et le sol. `reachLad` =
+// indices (dans la liste des échelles SUSPENDUES) des échelles-lianes accessibles.
+interface ReachInfo { nodes: Plat[]; reachable: Set<number>; nPlat: number; groundRow: number; ground: Plat; hung: Ladder[]; reachLad: Set<number> }
 
 // Cascades REMONTABLES = connecteurs VERTICAUX au même titre qu'une échelle : on GRIMPE la colonne
 // d'eau (le panda joue l'anim d'escalade). Le sommet d'émergence — une plateforme JOINTIVE au bord de
@@ -101,7 +126,9 @@ function computeReach(level: LevelDef): ReachInfo {
   const cascades = cascadeColumns(level)
   const groundRow = groundRowFor(level.heightTiles)
   const ground: Plat = { x: 0, y: groundRow, w: level.widthTiles }
+  const hung = ladders.filter((l) => l.hung)
   const reachable = new Set<number>()
+  const reachLad = new Set<number>() // indices dans `hung` des échelles suspendues accessibles
   let changed = true
   while (changed) {
     changed = false
@@ -111,17 +138,27 @@ function computeReach(level: LevelDef): ReachInfo {
       const b = nodes[i]!
       // (1) atteignable par saut depuis le sol ou une surface déjà atteignable
       if (surfaces.some((a) => canReach(a.y, b, hgap(a, b)))) { reachable.add(i); changed = true; continue }
-      // (2) sommet d'une échelle dont le pied est accessible (plateformes uniquement)
-      if (i < platforms.length && ladders.some((l) => isLadderTop(b, l) && ladderFootReachable(l, platforms, reachable, groundRow))) {
+      // (2) sommet d'une échelle CLASSIQUE dont le pied est accessible (plateformes uniquement)
+      if (i < platforms.length && ladders.some((l) => !l.hung && isLadderTop(b, l) && ladderFootReachable(l, platforms, reachable, groundRow))) {
         reachable.add(i); changed = true; continue
       }
       // (3) sommet d'émergence d'une cascade REMONTABLE dont une berge basse est accessible
       if (cascades.some((c) => isCascadeTop(b, c) && cascadeFootReachable(c, nodes, reachable))) {
-        reachable.add(i); changed = true
+        reachable.add(i); changed = true; continue
       }
+      // (4) plateforme atteignable depuis le SOMMET d'une échelle SUSPENDUE accessible (on enjambe)
+      if (hung.some((l, li) => reachLad.has(li) && hungTopReaches(l, b))) { reachable.add(i); changed = true }
+    }
+    // ÉCHELLES SUSPENDUES : accessibles si on agrippe leur pied depuis une surface accessible, OU par
+    // transfert depuis une autre échelle suspendue déjà accessible (saut diagonal).
+    for (let li = 0; li < hung.length; li++) {
+      if (reachLad.has(li)) continue
+      const l = hung[li]!
+      if (surfaces.some((a) => footMeets(l, a))) { reachLad.add(li); changed = true; continue }
+      if (hung.some((o, oi) => reachLad.has(oi) && hungTransfer(o, l))) { reachLad.add(li); changed = true }
     }
   }
-  return { nodes, reachable, nPlat: platforms.length, groundRow, ground }
+  return { nodes, reachable, nPlat: platforms.length, groundRow, ground, hung, reachLad }
 }
 
 // Plateformes qu'on ne peut atteindre ni du sol, ni de proche en proche par saut, ni en
@@ -137,6 +174,7 @@ export function laddersToNowhere(level: LevelDef): LadderProblem[] {
   const groundRow = groundRowFor(level.heightTiles)
   const out: LadderProblem[] = []
   for (const l of (level.ladders ?? []) as Ladder[]) {
+    if (l.hung) continue // échelle SUSPENDUE : ni socle ni palier de sommet (coiffée d'une pierre) — accès vérifié par unreachableLadders
     const hasTop = level.platforms.some((p) => isLadderTop(p, l))
     if (!hasTop) { out.push({ x: l.x, y: l.y, h: l.h, reason: 'sommet-sans-plateforme' }); continue }
     if (!ladderFootGrounded(l, level.platforms, groundRow)) out.push({ x: l.x, y: l.y, h: l.h, reason: 'pied-dans-le-vide' })
@@ -147,13 +185,15 @@ export function laddersToNowhere(level: LevelDef): LadderProblem[] {
 // Échelles dont le pied n'est pas accessible à pied (sol ou plateforme atteignable). Utile en
 // complément : une échelle peut avoir un sommet correct mais un pied injoignable.
 export function unreachableLadders(level: LevelDef): LadderProblem[] {
-  const groundRow = groundRowFor(level.heightTiles)
-  const bad = new Set(unreachablePlatforms(level))
-  const reachable = new Set<number>()
-  level.platforms.forEach((p, i) => { if (!bad.has(p)) reachable.add(i) })
+  const { reachable, nPlat, groundRow, hung, reachLad } = computeReach(level)
+  const reachablePlats = new Set<number>()
+  for (const i of reachable) if (i < nPlat) reachablePlats.add(i)
   const out: LadderProblem[] = []
   for (const l of (level.ladders ?? []) as Ladder[]) {
-    if (!ladderFootReachable(l, level.platforms, reachable, groundRow)) {
+    if (l.hung) {
+      const li = hung.indexOf(l)
+      if (li < 0 || !reachLad.has(li)) out.push({ x: l.x, y: l.y, h: l.h, reason: 'pied-dans-le-vide' })
+    } else if (!ladderFootReachable(l, level.platforms, reachablePlats, groundRow)) {
       out.push({ x: l.x, y: l.y, h: l.h, reason: 'pied-dans-le-vide' })
     }
   }
@@ -574,6 +614,34 @@ export function deadEndSurfaces(level: LevelDef): DeadEndProblem[] {
       if (grounded && l.x >= b.x - 1 && l.x <= b.x + b.w + 1) feet.push(j)
     }
     for (const t of tops) for (const f of feet) { adj[t]!.add(f); adj[f]!.add(t) }
+  }
+  // 2d) ÉCHELLES SUSPENDUES (hung) : nœuds sans palier. Dans chaque COMPOSANTE connexe (échelles
+  // reliées par saut diagonal), on relie toutes les surfaces d'ENTRÉE (on agrippe le pied) aux
+  // surfaces de SORTIE (on enjambe depuis le sommet), dans les deux sens → aucun faux « piège ».
+  const hungLad = ((level.ladders ?? []) as Ladder[]).filter((l) => l.hung)
+  if (hungLad.length) {
+    const M = hungLad.length
+    const parent = Array.from({ length: M }, (_, i) => i)
+    const find = (a: number): number => (parent[a] === a ? a : (parent[a] = find(parent[a]!)))
+    for (let a = 0; a < M; a++) for (let b = a + 1; b < M; b++) if (hungTransfer(hungLad[a]!, hungLad[b]!)) parent[find(a)] = find(b)
+    const entryOf: number[][] = hungLad.map(() => [])
+    const topOf: number[][] = hungLad.map(() => [])
+    for (let li = 0; li < M; li++) {
+      const l = hungLad[li]!
+      for (let j = 0; j < N; j++) {
+        const s = surfaces[j]!
+        const plat = { x: s.x, y: s.y, w: s.w }
+        if (footMeets(l, plat)) entryOf[li]!.push(j)
+        if (hungTopReaches(l, plat)) topOf[li]!.push(j)
+      }
+    }
+    const comps = new Map<number, number[]>()
+    for (let li = 0; li < M; li++) { const r = find(li); if (!comps.has(r)) comps.set(r, []); comps.get(r)!.push(li) }
+    for (const group of comps.values()) {
+      const entries = new Set<number>(), tops = new Set<number>()
+      for (const li of group) { for (const e of entryOf[li]!) entries.add(e); for (const t of topOf[li]!) tops.add(t) }
+      for (const e of entries) for (const t of tops) { adj[e]!.add(t); adj[t]!.add(e) }
+    }
   }
 
   // 3) surface de DÉPART et de SORTIE

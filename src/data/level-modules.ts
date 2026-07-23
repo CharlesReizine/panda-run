@@ -226,7 +226,7 @@ interface Piece {
   waters: { x: number; w: number; kind: 'marine' | 'cascade' | 'lave'; bankAlt: number; openSide?: 'left' | 'right' | 'both'; bottomAlt?: number }[]
   // ÉCHELLES : montant vertical de topAlt (haut) jusqu'à topAlt-h (pied). h∈[MIN,MAX]_LADDER_TILES.
   // Correct-par-construction : pied posé sur une surface + palier de sortie 2 rangées sous le sommet.
-  ladders: { x: number; topAlt: number; h: number }[]
+  ladders: { x: number; topAlt: number; h: number; hung?: boolean }[]
   spawns: { monsterId: string; x: number; alt?: number; aerial?: boolean }[]
   props: { kind: string; x: number; alt?: number }[]
   // PANNEAUX décoratifs (poteau + flèche vers le bas) — plongeoir « saut de la foi ». Canal DISTINCT
@@ -1547,20 +1547,34 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     // sol, on SAUTE pour agripper une liane et grimper vers les paliers du plafond, on enchaîne jusqu'à
     // la sortie EN HAUT. Pas d'escalier de plateaux — juste le sol d'accès + les lianes. ──────────────
     case 'echelles-lianes': {
+      // ÉCHELLES SUSPENDUES « EN T » (retour user) : des échelles accrochées au PLAFOND par une PIERRE
+      // rigide qui les COIFFE (⊤) — on ne peut PAS monter au-dessus. On grimpe une échelle, puis on SAUTE
+      // en DIAGONALE vers la suivante (décalée vers le HAUT et la DROITE, travées qui se CHEVAUCHENT),
+      // jusqu'à enjamber sur le plateau de SORTIE (dont le bord est un peu SOUS le sommet de la dernière
+      // échelle). Rater = on retombe sur le sol de la grotte et on recommence. Pente régulière.
       const floor = Math.max(1, entryAlt)
-      p.platforms.push({ x: 0, alt: floor, w }) // sol continu (accès aux lianes : on saute pour les agripper)
-      const nLianes = 3
-      const seg = Math.max(4, Math.floor(w / (nLianes + 1)))
-      let landAlt = floor
-      for (let i = 0; i < nLianes; i++) {
-        const lx = Math.min(w - 3, seg * (i + 1))
-        const isLast = i === nLianes - 1
-        const landRight = isLast ? w : lx + 3
-        // liane SUSPENDUE : pied à floor+2 (dans le vide, à portée de saut du sol → on l'agrippe en
-        // bondissant), palier de plafond en haut (poseLadderOn ne pose AUCUN socle au pied).
-        landAlt = poseLadderOn(p, lx, floor + 2, landRight)
+      const H = LADDER_H     // longueur d'échelle (≥ MIN_LADDER_TILES)
+      const DX = 3           // écart horizontal entre échelles (≤ portée de saut JUMP_COLS)
+      const STEP = 4         // gain d'altitude par échelle (travées chevauchantes : STEP < H → transfert au saut)
+      p.platforms.push({ x: 0, alt: floor, w: bank }) // corniche d'ACCÈS : on bondit pour agripper la 1re échelle
+      const fitW = Math.floor((w - bank - DX) / DX)
+      const N = Math.max(2, Math.min(4, fitW)) // borné largeur + plafond de sécurité (rise ≈ floor + 2 + (N-1)·STEP + H)
+      let lastX = bank, lastTop = floor + 2 + H
+      for (let i = 0; i < N; i++) {
+        const lx = bank + i * DX
+        const footAlt = floor + 2 + i * STEP // 1re échelle : pied à floor+2 → agrippable en bondissant de la corniche
+        const topAlt = footAlt + H
+        p.ladders.push({ x: lx, topAlt, h: H, hung: true }) // échelle SUSPENDUE (pied dans le vide)
+        // PIERRE de coiffe (barre du T) : dalle RIGIDE juste au-dessus du sommet → blocage vers le haut
+        p.rocks.push({ x: lx - 1, altBot: topAlt + 1, altTop: topAlt + 2, w: 3, solid: true })
+        lastX = lx; lastTop = topAlt
       }
-      p.exitAlt = landAlt // sortie EN HAUT (plafond)
+      // PLATEAU DE SORTIE : bord ~2 rangées SOUS le sommet de la dernière échelle (« le top dépasse »)
+      const exitX = lastX + DX
+      const exitAltE = lastTop - 2
+      p.platforms.push({ x: exitX, alt: exitAltE, w: Math.max(bank, w - exitX) })
+      placeBirds(exitAltE + 3)
+      p.exitAlt = exitAltE
       break
     }
 
@@ -1789,7 +1803,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   for (const { piece, x0 } of pieces) {
     for (const pl of piece.platforms) platforms.push({ x: x0 + pl.x, y: row(pl.alt), w: pl.w, ...(pl.solid ? { solid: true } : {}) })
     for (const b of piece.bridges) bridges.push({ x: x0 + b.x, y: row(b.alt), w: b.w })
-    for (const l of piece.ladders) ladders.push({ x: x0 + l.x, y: row(l.topAlt), h: l.h })
+    for (const l of piece.ladders) ladders.push({ x: x0 + l.x, y: row(l.topAlt), h: l.h, ...(l.hung ? { hung: true } : {}) })
     for (const g of piece.gaps) gaps.push({ x: x0 + g.x, w: g.w })
     // dalles de roche (plafond de tunnel / socle) : y = rangée du HAUT de la dalle, h = épaisseur ;
     // `solid` = plafond à collision pleine (on ne saute pas à travers).

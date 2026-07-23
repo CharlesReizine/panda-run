@@ -67,7 +67,9 @@ export interface LevelDef {
   // PLAFOND DE ROCHE avec COLLISION PLEINE — on ne peut PAS la traverser au saut (le boyau garde un
   // dégagement > saut sous le plafond). Absent → dalle purement décorative (socle/mesa sous le sol).
   rockBands?: { x: number; y: number; w: number; h: number; solid?: boolean }[]
-  ladders?: { x: number; y: number; h: number }[] // échelles (x tuile, y tuile du haut, hauteur en tuiles)
+  // échelles (x tuile, y tuile du haut, hauteur en tuiles). `hung` : échelle SUSPENDUE « en T »
+  // (coiffée d'une pierre, pied dans le vide) qu'on attrape/quitte au saut — cf. motif echelles-lianes.
+  ladders?: { x: number; y: number; h: number; hung?: boolean }[]
   // POCHES D'AIR (niveaux immergés type Épave) : bulles d'air respirable disséminées dans l'eau. Quand
   // le panda en touche une, son souffle remonte au MAX (comme une surface locale) — sans elles, rester
   // sous l'eau = noyade continue. x,y en tuiles = CENTRE de la poche ; r = rayon en tuiles (défaut 1,6).
@@ -199,7 +201,7 @@ const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
 // main, surtout sur les biomes PAUVRES en variété (cimetière, cave) pour les enrichir. Ces terrains
 // peuvent être rallongés et sont exemptés de la règle d'XP stricte (cf. xp-economy.test).
 const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
-  'cave-2': ['echelles-lianes'],
+  'cave-1': ['echelles-lianes'], // (il n'existe qu'UNE cave — l'ancien 'cave-2' ne ciblait aucun niveau : les échelles n'apparaissaient jamais)
   'cimetiere-1': ['echelles-lianes'],
   'foret-5': ['lacs-cascade-montee'],
   'montagne-2': ['lacs-cascade-montee'],
