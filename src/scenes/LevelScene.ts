@@ -3241,8 +3241,10 @@ export class LevelScene extends Phaser.Scene {
         const dx = (e.x - px) * f // devant le panda
         const dy = Math.abs(e.y - py)
         if (dx < -20 || dx > reach || dy > 90) continue
-        // POUSSE l'ennemi devant (knockback continu, pas de traversée) + dégâts par tick
-        ;(e.body as Phaser.Physics.Arcade.Body).setVelocity(f * cfg.knockbackPx, -120)
+        // POUSSE l'ennemi devant (knockback qui PREND : l'IA de déplacement est suspendue le temps du
+        // recul → il part vraiment en arrière) + dégâts par tick. Un peu plus long que le tick pour un
+        // recul continu et lisible pendant toute la ruée.
+        e.applyKnockback(f * cfg.knockbackPx, -140, cfg.tickMs + 120)
         e.takeDamage(physicalDamage(damage, e.effectiveDef()))
         this.impactFx(e.x, e.y, color)
       }

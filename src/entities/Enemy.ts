@@ -142,6 +142,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   // flottant (barre, plaque, télégraphes) et la physique (gravité/collisions/bornes). Piège/terreur
   // n'ont de toute façon aucune prise sur un boss.
   aiDisabled = false
+  // REPOUSSÉ : tant que `now < knockbackUntil`, l'IA de déplacement est suspendue et la vélocité de
+  // recul imposée prime → le monstre part vraiment en arrière (ex. charge lancière) au lieu de
+  // réavancer aussitôt vers le joueur à la frame suivante.
+  private knockbackUntil = 0
+  applyKnockback(vx: number, vy: number, durationMs: number) {
+    if (!this.active || this.ragdolling) return
+    ;(this.body as Phaser.Physics.Arcade.Body).setVelocity(vx, vy)
+    this.knockbackUntil = this.scene.time.now + durationMs
+  }
   // MORT HUMILIANTE (one-shot depuis la VIE PLEINE) : le mob est propulsé en cloche à l'opposé de
   // l'attaquant, tournoie, retombe (peut rebondir), puis disparaît (poof) au contact du sol ou au
   // timer max. Tant que c'est vrai, l'IA est court-circuitée (physique libre). Faux = mort normale.
@@ -579,6 +588,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // BOSS piloté par le contrôleur : on ne joue AUCUNE IA autonome (le BossController impose la
     // vélocité et les skills chaque frame). On conserve seulement le rendu flottant.
     if (this.aiDisabled) { this.updateVisuals(t); return }
+    // REPOUSSÉ : on laisse filer la vélocité de recul (IA de déplacement suspendue) le temps du push.
+    if (t < this.knockbackUntil) { this.updateVisuals(t); return }
     const player = this.levelScene.player
     const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y)
     const dir = Math.sign(player.x - this.x) || 1
