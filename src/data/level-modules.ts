@@ -1346,29 +1346,26 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
 
     // ─── CASCADE → GROTTE SOUS-MARINE : le rideau tombe (lucarne) dans un bassin sous toit de roche ──
     case 'cascade-grotte': {
-      // CASCADE + GROTTE CACHÉE (spec user) : une CASCADE. EN HAUT = le VRAI PASSAGE (on grimpe la cascade
-      // et on continue). EN BAS, DERRIÈRE le rideau = une GROTTE cachée avec un MONSTRE gardien et un
-      // TRÉSOR. On y entre en traversant la cascade par le bas ; on repart en la remontant. Roche pleine
-      // tout autour (plafond + paroi de fond) : la grotte est un cul-de-sac gardé, la cascade en est la porte.
-      const A = Math.max(entryAlt, 2)         // niveau BAS (entrée + grotte)
-      const T = A + cascadeRise(rng)          // niveau HAUT (le vrai passage) — cascade ≥ MIN_CASCADE_TILES
+      // CASCADE + GROTTE EN HAUT (spec user) : une CASCADE HAUTE au-dessus du VIDE (la descendre = MORT,
+      // « le bas du niveau »). On la GRIMPE pour monter à une GROTTE perchée EN HAUT (donc à un niveau
+      // DIFFÉRENT de la plateforme d'entrée — pas ennuyeux) : plancher + PLAFOND DE ROCHE (vraie grotte)
+      // avec un TRÉSOR dedans, puis le passage continue. Roche solide → rien de traversable.
+      const A = Math.max(entryAlt, 2)   // plateforme d'ENTRÉE (en bas)
+      const T = A + cascadeRise(rng)    // GROTTE + passage (en haut) — cascade ≥ MIN_CASCADE_TILES
       let x = 0
-      p.platforms.push({ x, alt: A, w: bank }); x += bank // berge d'accès BASSE
-      p.waters.push({ x, w: 2, kind: 'cascade', bankAlt: T, bottomAlt: A }) // CASCADE : grimper = passage haut ; traverser en bas = grotte
+      p.platforms.push({ x, alt: A, w: bank }); x += bank // berge d'accès BASSE (on bondit dans la cascade)
+      // CASCADE au-dessus du VIDE (bas du niveau) : y tomber = mort ; on la GRIMPE pour atteindre la grotte
+      p.waters.push({ x, w: 2, kind: 'cascade', bankAlt: T }); p.gaps.push({ x, w: 2 })
       const caveX = x + 2
-      const caveW = Math.max(4, Math.min(6, w - caveX - bank)) // petite grotte
-      // GROTTE en BAS (derrière la cascade) : plancher à A, plafond de roche au-dessus, paroi de fond à droite
-      p.platforms.push({ x: caveX, alt: A, w: caveW }) // plancher de la grotte (borde la cascade)
-      p.rocks.push({ x: caveX, altBot: A + CAVE_CLEARANCE, altTop: T, w: caveW, solid: true }) // TOIT de roche (jusqu'au passage haut)
-      p.rocks.push({ x: caveX + caveW, altBot: A, altTop: T - 1, w: 1, solid: true }) // PAROI de fond (ferme la grotte à droite)
-      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + caveW - 1 }) // TRÉSOR au fond
-      // MONSTRE gardien : seulement un mob TERRESTRE (les aquatiques resteraient figés sur le sol sec de
-      // la grotte). Sinon, la grotte n'a que le trésor (le pipeline de mobs des modules-feature ne place
-      // pas toujours de terrestre ici → gardien opportuniste, jamais figé).
+      const floorW = Math.max(bank, w - caveX)
+      p.platforms.push({ x: caveX, alt: T, w: floorW }) // PLANCHER de la grotte EN HAUT (borde la cascade) + passage
+      // PLAFOND DE ROCHE sur la partie gauche (contre la cascade) = la grotte ; dégagement CAVE_CLEARANCE
+      const roofW = Math.min(floorW, 5)
+      p.rocks.push({ x: caveX, altBot: T + CAVE_CLEARANCE, altTop: T + CAVE_CLEARANCE + CAVE_CEILING_THICK, w: roofW, solid: true })
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + 1 }) // TRÉSOR dans la grotte
+      // gardien TERRESTRE si dispo (jamais d'aquatique figé)
       const guard = groundMobs.find((id) => !MONSTERS[id]?.aquatic && !MONSTERS[id]?.aerial)
-      if (guard) p.spawns.push({ monsterId: guard, x: caveX + Math.floor(caveW / 2), alt: A })
-      // LE VRAI PASSAGE (haut) : plateforme à T au-dessus de la grotte, jusqu'à la sortie
-      p.platforms.push({ x: caveX, alt: T, w: Math.max(bank, w - caveX) })
+      if (guard) p.spawns.push({ monsterId: guard, x: caveX + 2, alt: T })
       placeBirds(T + 2)
       p.exitAlt = T
       break
