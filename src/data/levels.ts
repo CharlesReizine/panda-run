@@ -201,8 +201,10 @@ const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
 const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
   'cave-2': ['echelles-lianes'],
   'cimetiere-1': ['echelles-lianes'],
-  // NB : 'lacs-cascade-montee' et 'lacs-cascade-descente' définis (builder + META) mais PAS placés —
-  // reachability à raffiner (émergences de cascade à chaîner ; cascades de descente ≥ 8 rangées).
+  'foret-5': ['lacs-cascade-montee'],
+  'montagne-2': ['lacs-cascade-montee'],
+  // NB : 'lacs-cascade-descente' (chute pure de lac en lac) NON placé — non validable (le validateur ne
+  // modélise pas la chute → lacs du haut injoignables) ; l'escalier de lacs GRIMPABLE ci-dessus le remplace.
 }
 
 // Biomes ROCHEUX / SOUTERRAINS / JUNGLE PROFONDE : on y autorise les GROTTES-TUNNELS (boyaux de

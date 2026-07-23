@@ -1562,26 +1562,27 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       break
     }
 
-    // ─── ESCALIER DE LACS MONTANT : on remonte des cascades, on émerge dans un lac, on remonte encore… ──
+    // ─── ESCALIER DE LACS : lacs reliés par des cascades REMONTABLES ; on remonte de lac en lac, de plus
+    // en plus haut (l'eau se déverse en cascade d'un lac au suivant). Largeur maîtrisée (on s'arrête s'il
+    // ne reste plus la place → jamais de débordement), banks jointifs pour un chaînage propre. ──────────
     case 'lacs-cascade-montee': {
-      const steps = 3
       let alt = Math.max(1, entryAlt)
       let x = 0
+      let placedCoffre = false
       p.platforms.push({ x, alt, w: 2 }); x += 2 // berge d'accès BASSE
-      for (let i = 0; i < steps; i++) {
-        const top = alt + cascadeRise(rng) // cascade HAUTE remontable vers le palier supérieur
-        p.waters.push({ x, w: 3, kind: 'cascade', bankAlt: top, bottomAlt: alt }) // repose sur la berge (pas de vide)
-        const bx = x + 3 // berge d'ÉMERGENCE jointive au bord droit de la colonne
-        const isLast = i === steps - 1
-        const lakeW = isLast ? Math.max(4, w - bx - 4) : 3
-        p.platforms.push({ x: bx, alt: top, w: 1 }) // corniche d'émergence (gauche du lac)
-        p.waters.push({ x: bx + 1, w: lakeW, kind: basinKind, bankAlt: top }) // LAC du palier
-        p.platforms.push({ x: bx + 1 + lakeW, alt: top, w: 1 }) // berge DROITE du lac (pied de la cascade suivante)
-        if (basinKind !== 'lave' && isLast) p.props.push({ kind: 'coffre', x: bx + 1 + Math.floor(lakeW / 2) })
-        x = bx + 2 + lakeW
+      // chaque palier = cascade(3) + berge gauche(1) + lac(3) + berge droite(1) = 8 tuiles
+      while (x + 8 <= w - 1) {
+        const top = alt + cascadeRise(rng) // cascade HAUTE remontable (bottomAlt = berge → pas de vide)
+        p.waters.push({ x, w: 3, kind: 'cascade', bankAlt: top, bottomAlt: alt })
+        const bx = x + 3
+        p.platforms.push({ x: bx, alt: top, w: 1 }) // corniche d'ÉMERGENCE (jointive au bord droit de la colonne)
+        p.waters.push({ x: bx + 1, w: 3, kind: basinKind, bankAlt: top }) // LAC du palier
+        p.platforms.push({ x: bx + 4, alt: top, w: 1 }) // berge DROITE (pied de la cascade suivante)
+        if (basinKind !== 'lave' && !placedCoffre) { p.props.push({ kind: 'coffre', x: bx + 2 }); placedCoffre = true }
+        x = bx + 5
         alt = top
       }
-      p.platforms.push({ x, alt, w: Math.max(1, w - x) }) // plateau de SORTIE (haut)
+      p.platforms.push({ x, alt, w: Math.max(1, w - x) }) // plateau de SORTIE (haut), jusqu'au bord
       p.exitAlt = alt
       break
     }
