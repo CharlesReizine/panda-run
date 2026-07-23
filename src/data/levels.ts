@@ -560,6 +560,10 @@ function ensureRosterCoverage(levels: LevelDef[]): void {
 // Espacement ≥10 tuiles et marge de départ respectés (même logique que ensureRosterCoverage).
 // Déterministe (aucun Math.random).
 const PINNED_SPAWNS: Record<string, string[]> = {
+  'corbeau': ['plaine-2'],                           // ANCRE le corbeau tôt (1er vu = plaine-2 → Nv ~5,
+                                                     // stable) : sinon le placement RNG des oiseaux le
+                                                     // décale de terrain quand la géométrie change et
+                                                     // son niveau calibré saute (retour joueur : début doux)
   'serpent-des-sables': ['desert-3', 'desert-4'],   // désert (bande ~30, transition plaine→désert)
   'elementaire-de-sable': ['desert-6', 'desert-7'], // milieu de désert (bande ~35)
   'djinn-mineur': ['desert-8'],                     // fin de désert (bande ~38)

@@ -60,11 +60,34 @@ function ladderFootReachable(l: Ladder, platforms: Plat[], reachable: Set<number
 // (ex. franchir une cuve) ferait croire la rive opposée injoignable. Renvoie les nœuds (plateformes
 // PUIS ponts), l'ensemble des indices atteignables, le nb de plateformes et le sol.
 interface ReachInfo { nodes: Plat[]; reachable: Set<number>; nPlat: number; groundRow: number; ground: Plat }
+
+// Cascades REMONTABLES = connecteurs VERTICAUX au même titre qu'une échelle : on GRIMPE la colonne
+// d'eau (le panda joue l'anim d'escalade). Le sommet d'émergence — une plateforme JOINTIVE au bord de
+// la colonne, ~à la rangée `top` du rideau — est atteignable dès qu'une BERGE BASSE de la colonne
+// (plateforme jointive en contrebas, où l'on saute pour entrer) est elle-même accessible.
+interface Cascade { x: number; w: number; top: number }
+function cascadeColumns(level: LevelDef): Cascade[] {
+  return (level.hazards ?? [])
+    .filter((h) => h.kind === 'water' && h.water === 'cascade')
+    .map((h) => ({ x: h.x, w: h.w, top: h.top ?? 0 }))
+}
+function bordersCascade(p: Plat, c: Cascade): boolean {
+  return p.x + p.w === c.x || p.x === c.x + c.w
+}
+function isCascadeTop(b: Plat, c: Cascade): boolean {
+  const drop = b.y - c.top
+  return drop >= 0 && drop <= LADDER_TOP_MAX_DROP && bordersCascade(b, c)
+}
+function cascadeFootReachable(c: Cascade, nodes: Plat[], reachable: Set<number>): boolean {
+  return nodes.some((p, i) => reachable.has(i) && bordersCascade(p, c) && p.y > c.top)
+}
+
 function computeReach(level: LevelDef): ReachInfo {
   const platforms = level.platforms
   const bridges = (level.bridges ?? []).map((b) => ({ x: b.x, y: b.y, w: b.w }))
   const nodes: Plat[] = [...platforms, ...bridges]
   const ladders = (level.ladders ?? []) as Ladder[]
+  const cascades = cascadeColumns(level)
   const groundRow = groundRowFor(level.heightTiles)
   const ground: Plat = { x: 0, y: groundRow, w: level.widthTiles }
   const reachable = new Set<number>()
@@ -79,6 +102,10 @@ function computeReach(level: LevelDef): ReachInfo {
       if (surfaces.some((a) => canReach(a.y, b, hgap(a, b)))) { reachable.add(i); changed = true; continue }
       // (2) sommet d'une échelle dont le pied est accessible (plateformes uniquement)
       if (i < platforms.length && ladders.some((l) => isLadderTop(b, l) && ladderFootReachable(l, platforms, reachable, groundRow))) {
+        reachable.add(i); changed = true; continue
+      }
+      // (3) sommet d'émergence d'une cascade REMONTABLE dont une berge basse est accessible
+      if (cascades.some((c) => isCascadeTop(b, c) && cascadeFootReachable(c, nodes, reachable))) {
         reachable.add(i); changed = true
       }
     }
@@ -133,9 +160,14 @@ export function oversizedLadders(level: LevelDef): OversizedLadder[] {
 // Trous du sol trop LARGES pour être franchis au saut simple (w × TILE > distance de saut
 // confortable). Le sol couvre toute la largeur (les plateformes restent atteignables du sol,
 // donc un trou ne casse jamais l'atteignabilité) ; on ne vérifie ici que la franchissabilité.
+// EXEMPTION : un trou situé SOUS une cascade REMONTABLE n'est PAS censé se franchir au saut — on
+// GRIMPE la cascade au-dessus (y tomber = mort volontaire). On l'exclut donc du contrôle de saut
+// (sinon élargir la colonne de cascade ferait croire à un trou infranchissable).
 export function oversizedGaps(level: LevelDef): GapProblem[] {
   const max = maxJumpGapPx()
-  return (level.gaps ?? []).filter((g) => g.w * TILE > max).map((g) => ({ x: g.x, w: g.w }))
+  const cascades = cascadeColumns(level)
+  const underCascade = (g: GapProblem) => cascades.some((c) => c.x <= g.x && c.x + c.w >= g.x + g.w)
+  return (level.gaps ?? []).filter((g) => g.w * TILE > max && !underCascade(g)).map((g) => ({ x: g.x, w: g.w }))
 }
 
 // ─── VALIDATEURS DU KIT DE MODULES (jouabilité + cohérence, cf. docs/level-module-kit.md) ────

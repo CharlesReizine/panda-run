@@ -500,12 +500,11 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const L = Math.max(4, Math.floor(w * 0.22))
       const cornW = 5
       p.platforms.push({ x: 0, alt: low, w: L }) // corniche basse d'accès
-      p.waters.push({ x: L, w: 2, kind: 'cascade', bankAlt: top }) // colonne de cascade (remontée fun + chute mortelle au fond)
-      const ladX = L + 2
-      p.platforms.push({ x: ladX, alt: low, w: 1 }) // jetée (pied d'échelle), sautée par-dessus la colonne
-      p.ladders.push({ x: ladX, topAlt: top + 2, h: top - low + 2 }) // échelle parallèle (accès garanti à la corniche haute)
-      const topX = ladX + 1
-      p.platforms.push({ x: topX, alt: top, w: cornW }) // corniche haute (palier à topAlt-2, sortie de cascade)
+      p.waters.push({ x: L, w: 4, kind: 'cascade', bankAlt: top }) // colonne LARGE (2×) : on la GRIMPE (chute mortelle au fond)
+      // plus d'échelle parallèle (retour joueur) : la corniche haute est JOINTIVE au bord droit de la
+      // colonne, on émerge dessus en grimpant la cascade (connecteur vertical, cf. level-validator).
+      const topX = L + 4
+      p.platforms.push({ x: topX, alt: top, w: cornW }) // corniche haute (sortie de cascade)
       p.props.push({ kind: 'coffre', x: topX + 2, alt: top + 1 }) // coffre POSÉ sur la corniche (1 rangée au-dessus)
       const downStart = topX + cornW
       if (w - downStart >= 1) p.platforms.push(...ramp(downStart, w - downStart, top, exitAlt)) // redescente vers la sortie
@@ -876,11 +875,9 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const L = Math.max(4, Math.floor(w * 0.22))
       const cornW = 5
       p.platforms.push({ x: 0, alt: low, w: L }) // corniche basse collée à gauche du rideau
-      p.waters.push({ x: L, w: 2, kind: 'cascade', bankAlt: top })
-      const ladX = L + 2
-      p.platforms.push({ x: ladX, alt: low, w: 1 }) // jetée (pied d'échelle) collée à droite du rideau
-      p.ladders.push({ x: ladX, topAlt: top + 2, h: top - low + 2 }) // échelle parallèle (accès garanti)
-      const topX = ladX + 1
+      p.waters.push({ x: L, w: 4, kind: 'cascade', bankAlt: top }) // rideau LARGE (2×) : on GRIMPE la colonne
+      // corniche de sortie JOINTIVE au bord droit du rideau (on émerge en grimpant, plus d'échelle)
+      const topX = L + 4
       p.platforms.push({ x: topX, alt: top, w: cornW })
       p.props.push({ kind: 'coffre', x: topX + 2, alt: top + 1 })
       const downStart = topX + cornW
@@ -1165,11 +1162,9 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // haute. Une rampe de paliers garantit l'accès à la corniche (reachable), la cascade = le raccourci.
       const top = bankAlt + cascadeRise(rng) // cascade HAUTE (≥ 4× le panda)
       const colX = rbx + 2
-      p.waters.push({ x: colX, w: 2, kind: 'cascade', bankAlt: top })
-      const ladX = colX + 2
-      p.platforms.push({ x: ladX, alt: bankAlt, w: 1 }) // jetée (pied d'échelle)
-      p.ladders.push({ x: ladX, topAlt: top + 2, h: top - bankAlt + 2 }) // échelle parallèle (accès garanti à la corniche)
-      const cornX = ladX + 1
+      p.waters.push({ x: colX, w: 4, kind: 'cascade', bankAlt: top }) // colonne LARGE (2×) : on la GRIMPE
+      // corniche JOINTIVE au bord droit de la colonne (émergence de la grimpe), plus d'échelle parallèle
+      const cornX = colX + 4
       const cw = Math.max(3, Math.min(5, w - cornX))
       p.platforms.push({ x: cornX, alt: top, w: cw })
       const downStart = cornX + cw
@@ -1479,14 +1474,10 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // CASCADE remontable à la FIN du lac : ≥ 4× le panda vers le plateau
       const top = bankAlt + cascadeRise(rng)
       const colX = rbx + 2
-      p.waters.push({ x: colX, w: 2, kind: 'cascade', bankAlt: top }) // colonne remontable (chute mortelle au fond)
-      // ÉCHELLE parallèle (accès garanti au plateau, la rampe ne tient plus sur une cascade si haute)
-      const ladX = colX + 2
+      p.waters.push({ x: colX, w: 4, kind: 'cascade', bankAlt: top }) // colonne LARGE (2×) remontable (chute mortelle au fond)
+      // plus d'échelle : on GRIMPE la cascade jusqu'au plateau, JOINTIF au bord droit de la colonne
       const cornW = 5
-      p.platforms.push({ x: ladX, alt: bankAlt, w: 1 }) // jetée (pied d'échelle)
-      p.ladders.push({ x: ladX, topAlt: top + 2, h: top - bankAlt + 2 })
-      // PLATEAU EN HAUT (large, sortie du module) jusqu'au bord droit
-      const platX = ladX + 1
+      const platX = colX + 4
       p.platforms.push({ x: platX, alt: top, w: Math.max(cornW, w - platX) })
       placeBirds(top + 2)
       p.exitAlt = top
