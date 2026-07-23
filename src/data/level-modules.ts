@@ -1878,6 +1878,27 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     if (piece.exit) exit = { x: x0 + piece.exit.x, y: row(piece.exit.alt) }
   }
 
+  // ANTI-ROCHE (règle user : AUCUN monstre DANS la pierre — « impossible ») : si le CORPS d'un spawn
+  // (la rangée juste au-dessus de ses pieds) chevauche une dalle de roche, on le DÉCALE horizontalement
+  // vers la colonne la PLUS PROCHE libre de roche. À défaut de place propre dans la fenêtre, on le RETIRE
+  // (jamais de mob enfermé dans la pierre, quelle que soit la dalle). Filet en amont du déclustering.
+  const bodyInRock = (x: number, feet: number) =>
+    rockBands.some((r) => x >= r.x && x < r.x + r.w && feet - 1 >= r.y && feet - 1 < r.y + r.h)
+  const cleanedSpawns: LevelDef['spawns'] = []
+  for (const s of spawns) {
+    const feet = s.y ?? groundRow
+    if (!bodyInRock(s.x, feet)) { cleanedSpawns.push(s); continue }
+    let nx: number | null = null
+    for (let d = 1; d <= 10 && nx === null; d++) {
+      for (const cand of [s.x - d, s.x + d]) {
+        if (cand >= 1 && cand < totalWidth - 1 && !bodyInRock(cand, feet)) { nx = cand; break }
+      }
+    }
+    if (nx !== null) cleanedSpawns.push({ ...s, x: nx })
+  }
+  spawns.length = 0
+  spawns.push(...cleanedSpawns)
+
   // quelques décorations au sol (herbe/champignon selon le biome) réparties sur la largeur
   const decoKind = opts.biome === 'foret' || opts.biome === 'jungle' ? 'champignon' : 'herbe'
   for (const f of [0.18, 0.45, 0.72]) props.push({ kind: decoKind, x: Math.round(totalWidth * f) })

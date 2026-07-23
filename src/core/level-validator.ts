@@ -269,12 +269,12 @@ export function oversizedGaps(level: LevelDef): GapProblem[] {
 // une dalle (sommet de la dalle = rangée des pieds) reste valide : la roche est alors SOUS les pieds.
 export function monstersInRock(level: LevelDef): SpawnProblem[] {
   const groundRow = groundRowFor(level.heightTiles)
-  const solids = (level.rockBands ?? []).filter((r) => r.solid)
+  const rocks = level.rockBands ?? [] // TOUTE dalle de roche (il n'y a pas de « pierre décorative » : la pierre est de la pierre)
   const out: SpawnProblem[] = []
   for (const s of level.spawns) {
     const feet = s.y ?? groundRow
     const body = feet - 1 // rangée du corps, juste au-dessus des pieds
-    if (solids.some((r) => s.x >= r.x && s.x < r.x + r.w && body >= r.y && body < r.y + r.h)) {
+    if (rocks.some((r) => s.x >= r.x && s.x < r.x + r.w && body >= r.y && body < r.y + r.h)) {
       out.push({ monsterId: s.monsterId, x: s.x, y: feet, reason: 'enfermé-dans-la-roche' })
     }
   }
