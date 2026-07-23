@@ -1358,7 +1358,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.waters.push({ x, w: 2, kind: 'cascade', bankAlt: T }); p.gaps.push({ x, w: 2 })
       const caveX = x + 2
       const floorW = Math.max(bank, w - caveX)
-      p.platforms.push({ x: caveX, alt: T, w: floorW }) // PLANCHER de la grotte EN HAUT (borde la cascade) + passage
+      p.platforms.push({ x: caveX, alt: T, w: floorW, solid: true }) // PLANCHER SOLIDE de la grotte EN HAUT (on ne tombe pas à travers) + passage
       // PLAFOND DE ROCHE sur la partie gauche (contre la cascade) = la grotte ; dégagement CAVE_CLEARANCE
       const roofW = Math.min(floorW, 5)
       p.rocks.push({ x: caveX, altBot: T + CAVE_CLEARANCE, altTop: T + CAVE_CLEARANCE + CAVE_CEILING_THICK, w: roofW, solid: true })
@@ -1874,6 +1874,11 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     if (piece.start) start = { x: x0 + piece.start.x, y: row(piece.start.alt) }
     if (piece.exit) exit = { x: x0 + piece.exit.x, y: row(piece.exit.alt) }
   }
+
+  // TOUTE LA PIERRE EST SOLIDE (règle user : « y a pas de pierre décoratives ? » — on ne traverse
+  // JAMAIS la pierre, ni en marchant, ni en tombant, ni les monstres). On force donc la collision sur
+  // CHAQUE dalle de roche (fini les remplissages de mesa « décoratifs » traversables).
+  for (const r of rockBands) r.solid = true
 
   // ANTI-ROCHE (règle user : AUCUN monstre DANS la pierre — « impossible ») : si le CORPS d'un spawn
   // (la rangée juste au-dessus de ses pieds) chevauche une dalle de roche, on le DÉCALE horizontalement
