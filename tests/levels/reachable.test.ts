@@ -660,13 +660,16 @@ describe('R168 — niveaux plus longs, échelle-descente piégée, cascades vari
     }
   })
 
-  it('CASCADE → GROTTE SOUS-MARINE : bassin marine + toit de roche solide + cascade + coffre au fond', () => {
+  it('CASCADE → GROTTE : cascade remontable + grotte gardée par de la ROCHE SOLIDE au-dessus ET en-dessous + coffre', () => {
     const id = levelsWith('cascade-grotte')[0]!
     const lvl = LEVELS[id]!
-    expect((lvl.hazards ?? []).some((h) => h.kind === 'water' && h.water === 'basin')).toBe(true)
+    // cascade remontable (seul accès à la grotte) + coffre au fond
     expect((lvl.hazards ?? []).some((h) => h.kind === 'water' && h.water === 'cascade')).toBe(true)
-    expect((lvl.rockBands ?? []).some((r) => r.solid)).toBe(true)
     expect((lvl.props ?? []).some((p) => p.kind === 'coffre')).toBe(true)
+    // DEUX pans de roche SOLIDE (plafond au-dessus + falaise en-dessous) → la grotte n'est atteignable
+    // qu'en grimpant la cascade (rien de traversable : la pierre est pleine).
+    expect((lvl.rockBands ?? []).filter((r) => r.solid).length, `${id}: il faut de la roche solide dessus ET dessous`).toBeGreaterThanOrEqual(2)
+    playable(id)
   })
 
   it('CASCADE LARGE : rideau large (≥5 colonnes) qui alimente un bassin, SANS trou mortel sous la chute', () => {

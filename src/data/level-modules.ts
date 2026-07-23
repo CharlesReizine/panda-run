@@ -1346,35 +1346,26 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
 
     // ─── CASCADE → GROTTE SOUS-MARINE : le rideau tombe (lucarne) dans un bassin sous toit de roche ──
     case 'cascade-grotte': {
-      const bankAlt = entryAlt + 2
-      const rampW = 3
-      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt)) // berge gauche → surface du lac
-      const wx = rampW
-      const bw = Math.max(10, w - 2 * rampW)
-      p.waters.push({ x: wx, w: bw, kind: basinKind, bankAlt }) // BASSIN marine (grotte inondée)
-      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + bw - 3 }) // coffre au fond, sous le toit
-      // CASCADE qui tombe par une LUCARNE du toit dans le lac (bottomAlt = surface → pas de vide mortel)
-      const casX = wx
-      const roofBot = bankAlt + CAVE_CLEARANCE // dégagement de saut sous le toit
-      const roofTop = roofBot + CAVE_CEILING_THICK
-      const casTop = roofTop + 3 // source de la cascade AU-DESSUS du toit
-      p.waters.push({ x: casX, w: 2, kind: 'cascade', bankAlt: casTop, bottomAlt: bankAlt })
-      // TOIT DE ROCHE au-dessus de la surface du lac, AVEC UNE LUCARNE (casX..casX+1) par où tombe la cascade.
-      // Deux pans nets de part et d'autre de la lucarne (dégagement de saut ≥ CAVE_CLEARANCE sous chacun).
-      if (casX - wx > 0) p.rocks.push({ x: wx, altBot: roofBot, altTop: roofTop, w: casX - wx, solid: true })
-      const rrx = casX + 2
-      if (wx + bw - rrx > 0) p.rocks.push({ x: rrx, altBot: roofBot, altTop: roofTop, w: wx + bw - rrx, solid: true })
-      // berge droite à niveau + sortie
-      const rbx = wx + bw
-      const flatW = Math.min(bank, Math.max(1, w - rbx))
-      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
-      const downX = rbx + flatW
-      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, exitAlt))
-      if (groundMobs.length) {
-        const nAqua = Math.max(1, Math.min(3, Math.round((bw * bankAlt) / 80)))
-        spread(bw, nAqua).forEach((ax, i) => p.spawns.push({ monsterId: groundMobs[i % groundMobs.length]!, x: wx + ax }))
-      }
-      p.exitAlt = exitAlt
+      // CASCADE → GROTTE (spec user) : une CASCADE remontable, et À SA DROITE une GROTTE creusée dans la
+      // ROCHE PLEINE — roche SOLIDE au-DESSUS (plafond) et en-DESSOUS (falaise jusqu'au sol). La SEULE
+      // façon d'atteindre la grotte est de GRIMPER la cascade et d'enjamber sur son plancher. Coffre au fond.
+      const A = Math.max(entryAlt, 2)
+      const T = A + cascadeRise(rng) // sommet de la cascade = niveau du plancher de la grotte (≥ MIN_CASCADE_TILES)
+      let x = 0
+      p.platforms.push({ x, alt: A, w: bank }); x += bank // berge d'accès (on bondit dans la cascade)
+      p.waters.push({ x, w: 2, kind: 'cascade', bankAlt: T, bottomAlt: A }) // CASCADE remontable A → T (repose sur la berge)
+      const caveX = x + 2
+      const floorW = Math.max(bank, w - caveX) // plancher de la grotte, jusqu'au bord (= la sortie, au niveau T)
+      p.platforms.push({ x: caveX, alt: T, w: floorW }) // PLANCHER de la grotte (borde la cascade → atteignable en grimpant)
+      // ROCHE PLEINE SOUS le plancher (falaise du sol jusqu'à T) → aucun accès par en bas
+      if (T - 1 >= 0) p.rocks.push({ x: caveX, altBot: 0, altTop: T - 1, w: floorW, solid: true })
+      // PLAFOND DE ROCHE au-dessus de la partie GAUCHE (contre la cascade) → la « grotte » proprement dite ;
+      // dégagement CAVE_CLEARANCE pour y marcher (≥ saut confortable, cf. validateur de plafond).
+      const roofW = Math.min(floorW, 6)
+      p.rocks.push({ x: caveX, altBot: T + CAVE_CLEARANCE, altTop: T + CAVE_CLEARANCE + CAVE_CEILING_THICK, w: roofW, solid: true })
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + 1 }) // coffre AU FOND de la grotte (sous le toit)
+      placeBirds(T + CAVE_CLEARANCE + 4)
+      p.exitAlt = T
       break
     }
 
