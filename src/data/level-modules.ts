@@ -1619,33 +1619,31 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     }
 
     case 'lacs-cascade-montee': {
-      // ESCALIER DE LACS — PIERRE FINE + CASCADE SUPERPOSÉES À LA SÉPARATION (retour user : « un ensemble
-      // continu d'eau lac↔cascade, et à la séparation entre 2 niveaux on superpose une TRÈS FINE colonne
-      // de pierre ET une cascade — visuellement hyper satisfaisant »). Chaque palier = un LAC plat, et à
-      // sa droite une SÉPARATION d'UNE tuile : la PAROI (pierre visible, rendue devant l'eau) montée
-      // jusqu'au palier supérieur, avec une CASCADE FINE d'1 tuile PILE sur cette colonne (l'eau jaillit
-      // du lac supérieur, dévale la lèvre rocheuse et retombe dans le lac inférieur). On grimpe la
-      // cascade pour émerger dans le lac suivant, de plus en plus haut. Berge gauche ouverte partout
-      // (pas de pierre parasite) : seule pierre = les fines colonnes de séparation + les 2 rives.
-      const POOL = 5 // largeur d'un lac ; séparation = 1 tuile (paroi + cascade superposées)
+      // ESCALIER DE LACS — 100 % EAU CONTINUE, SANS AUCUN MUR (retour user : « même les murs tu peux les
+      // supprimer avec tes cascades, c'est propre ! »). Un SEUL ensemble d'eau : des lacs JOINTIFS aux
+      // parois internes TOUTES ouvertes (openSide 'both') dont la surface monte en marches, chaque marche
+      // = une CASCADE FINE d'1 tuile qui déverse le lac supérieur dans l'inférieur. Chaque lac s'étend
+      // SOUS sa cascade (l'eau descend jusqu'au sol → rien ne flotte). Zéro pierre au milieu ; seules
+      // surfaces solides = les 2 rives d'entrée/sortie (là où l'on marche). On grimpe les cascades pour
+      // remonter de lac en lac (le validateur modélise cascades remontables + lacs traversables à la nage).
+      const POOL = 5 // largeur d'un lac ; la cascade fine (1 tuile) occupe la tuile suivante
       let alt = Math.max(2, entryAlt)
       let x = 0
       let placedCoffre = false
       p.platforms.push({ x, alt, w: bank }); x += bank // RIVE d'accès (gauche)
       while (x + POOL + 1 <= w - bank) {
         const top = alt + cascadeRise(rng)
-        // LAC plat : bord GAUCHE ouvert (aucune pierre parasite), bord DROIT = la fine paroi de séparation
-        p.waters.push({ x, w: POOL, kind: basinKind, bankAlt: alt, openSide: 'left' })
+        // LAC : parois internes OUVERTES (eau continue), s'étend SOUS la cascade (colonne x+POOL comprise)
+        p.waters.push({ x, w: POOL + 1, kind: basinKind, bankAlt: alt, openSide: 'both' })
         if (basinKind !== 'lave' && !placedCoffre) { p.props.push({ kind: 'coffre', x: x + 1 }); placedCoffre = true }
-        // CASCADE FINE (1 tuile) PILE sur la colonne de la paroi droite → pierre + eau superposées :
-        // au-dessus de la surface du lac = rideau d'eau ; en dessous = la paroi de pierre (aucun vide).
+        // CASCADE FINE (1 tuile) = la marche d'eau : pied dans CE lac, sommet dans le lac suivant
         p.waters.push({ x: x + POOL, w: 1, kind: 'cascade', bankAlt: top, bottomAlt: alt })
         x += POOL + 1
         alt = top
       }
-      // LAC FINAL (sommet), bord droit fermé = rive de sortie à son niveau
+      // LAC FINAL (sommet), parois ouvertes ; la rive de sortie borde sa surface (au même niveau)
       const fw = Math.max(POOL, w - x - bank)
-      p.waters.push({ x, w: fw, kind: basinKind, bankAlt: alt, openSide: 'left' })
+      p.waters.push({ x, w: fw, kind: basinKind, bankAlt: alt, openSide: 'both' })
       x += fw
       p.platforms.push({ x, alt, w: Math.max(1, w - x) }) // RIVE de sortie (droite)
       placeBirds(alt + 3)

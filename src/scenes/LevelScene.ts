@@ -1452,6 +1452,13 @@ export class LevelScene extends Phaser.Scene {
     return this.waterRects.some((r) => r.contains(xPx, yPx)) && !this.cascadeRects.some((r) => r.contains(xPx, yPx))
   }
 
+  // Rectangle du plan d'eau MARINE contenant ce point (hors cascade) — sert à contenir les mobs
+  // aquatiques dans leur cuve (ils nagent vers le joueur mais ne sortent JAMAIS de l'eau).
+  waterRectAt(xPx: number, yPx: number): Phaser.Geom.Rectangle | undefined {
+    if (this.cascadeRects.some((c) => c.contains(xPx, yPx))) return undefined
+    return this.waterRects.find((r) => r.contains(xPx, yPx))
+  }
+
   // Y a-t-il une SURFACE SOLIDE (plateforme, pont, ou sol non troué) dont le dessus est ~au niveau
   // de footYPx à la colonne xPx ? Utilisé par la patrouille des monstres pour la détection de rebord
   // (demi-tour avant de tomber). Lecture pure de la géométrie statique du niveau.

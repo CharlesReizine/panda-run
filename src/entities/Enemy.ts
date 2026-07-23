@@ -176,7 +176,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // PLUS `checkCollision.none = true` : ce drapeau excluait l'oiseau de TOUS les overlaps Arcade
     // (cf. World.collideSpriteVsGroup) → il était intouchable par les tirs du joueur et ne touchait
     // jamais le joueur. Sans lui, l'overlap projectiles↔ennemis le touche enfin (notamment en piqué).
-    if (def.aerial) {
+    if (def.aerial || def.aquatic) {
+      // aérien = vole ; aquatique = FLOTTE (pas de chute vers le fond) → il nage vers le joueur au
+      // lieu de couler passivement au fond de la cuve (retour user : « jamais vu de mob marin attaquer »).
       (this.body as Phaser.Physics.Arcade.Body).setAllowGravity(false)
     }
     // borne tout ennemi dans l'arène : les bornes du monde physique valent (0..widthPx). Sans ça,
@@ -535,6 +537,37 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   // NOYADE : si un monstre terrestre (ni aquatique ni volant ni boss) est immergé dans une eau
+  // IA AQUATIQUE : le mob nage. AGGRO (joueur proche ET DANS la même cuve d'eau) → il fonce vers lui
+  // en X et Y (menace réelle) ; sinon il PATROUILLE en douceur autour de son point d'apparition, à sa
+  // profondeur. Dans TOUS les cas il est CLAMPÉ dans son rectangle d'eau → jamais de « poisson volant ».
+  private aquaticUpdate(t: number, dist: number, player: { x: number; y: number }) {
+    const speed = this.monster.speed
+    const rect = this.levelScene.waterRectAt(this.x, this.y)
+    if (!rect) { this.setVelocity(0, 0); return } // hors d'eau (ne devrait pas arriver) : on se fige, pas de dérive en l'air
+    const inset = 10
+    const aggro = dist < AGGRO_RANGE && this.levelScene.isMarineWater(player.x, player.y) && rect.contains(player.x, player.y)
+    if (aggro) {
+      const tx = Phaser.Math.Clamp(player.x, rect.left + inset, rect.right - inset)
+      const ty = Phaser.Math.Clamp(player.y, rect.top + inset, rect.bottom - inset)
+      const ang = Math.atan2(ty - this.y, tx - this.x)
+      const rush = this.monster.behavior === 'charge' ? 1.7 : 1.15 // requin/kraken foncent plus vite
+      this.setVelocity(Math.cos(ang) * speed * rush, Math.sin(ang) * speed * rush)
+      if (this.monster.behavior === 'projectile' && t > this.nextActionAt) { // méduse : tire aussi
+        this.fireProjectile()
+        this.nextActionAt = t + SHOOT_COOLDOWN * this.cadenceMul()
+      }
+    } else {
+      // patrouille : légère dérive horizontale + maintien de la profondeur d'origine
+      const driftX = Math.cos(t / 900) * speed * 0.5
+      const vy = Phaser.Math.Clamp((this.homeY - this.y) * 2, -speed, speed)
+      this.setVelocity(driftX, vy)
+    }
+    // CLAMP DUR aux bords de la cuve : au bord et poussant vers l'extérieur → composante annulée.
+    const b = this.body as Phaser.Physics.Arcade.Body
+    if ((this.x <= rect.left + inset && b.velocity.x < 0) || (this.x >= rect.right - inset && b.velocity.x > 0)) b.setVelocityX(0)
+    if ((this.y <= rect.top + inset && b.velocity.y < 0) || (this.y >= rect.bottom - inset && b.velocity.y > 0)) b.setVelocityY(0)
+  }
+
   // marine profonde, il perd des PV par ticks réguliers (chemin de dégâts standard) jusqu'à mourir.
   // Renvoie true si le monstre est mort ce tick (détruit) → l'appelant coupe le reste du preUpdate.
   private checkDrown(d: number): boolean {
@@ -614,6 +647,17 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       if (rooted) this.setVelocity(0, 0)
       else if (feared) { this.setVelocity(-dir * this.monster.speed * FEAR_SPEED_MULT, 0) }
       else this.flyUpdate(t, dist, dir, player)
+      this.applySlowToVelocity()
+      this.updateVisuals(t)
+      return
+    }
+
+    // CRÉATURE AQUATIQUE : IA de NAGE dédiée (nage vers le joueur quand il entre dans l'eau, patrouille
+    // sinon), STRICTEMENT contenue dans sa cuve → elle ne sort jamais de l'eau. Court-circuite l'arbre terrestre.
+    if (this.monster.aquatic) {
+      if (rooted) this.setVelocity(0, 0)
+      else if (feared) this.setVelocity(-dir * this.monster.speed * FEAR_SPEED_MULT, 0)
+      else this.aquaticUpdate(t, dist, player)
       this.applySlowToVelocity()
       this.updateVisuals(t)
       return
