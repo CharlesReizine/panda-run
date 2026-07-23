@@ -7,7 +7,7 @@ import type { LevelScene } from './LevelScene'
 
 const BAR_W = 200
 const SLOT_SIZE = 50
-const SLOT_Y = 38
+const SLOT_Y = 54 // abaissé pour laisser la place au titre « Pouvoirs » au-dessus des 4 cases
 // Barre de skills DÉCALÉE VERS LA GAUCHE : les slots empiétaient sur le bouton PAUSE (⏸ à ~908).
 // Le 4e slot (i=3) se termine désormais à ~841px, bien à gauche de PAUSE.
 const SLOT_X0 = 636
@@ -32,6 +32,9 @@ export class UIScene extends Phaser.Scene {
   // badge « points à dépenser » : pastille dorée pulsante collée au panneau de vie
   private spBadge!: Phaser.GameObjects.Container
   private spBadgeText!: Phaser.GameObjects.Text
+  private skillsBtn!: Phaser.GameObjects.Rectangle
+  private skillsBtnText!: Phaser.GameObjects.Text
+  private skillsBtnBlink?: Phaser.Tweens.Tween
 
   // clé de la scène de jeu qui a lancé ce HUD ('Level' par défaut, 'Training' en entraînement) :
   // on branche barres/énergie et pauses dessus. `training` masque les overlays inadaptés (pause,
@@ -127,7 +130,11 @@ export class UIScene extends Phaser.Scene {
       })
     }
 
-    // Haut-droite : les 4 slots de skills côte à côte, décalés à GAUCHE du bouton PAUSE (SLOT_X0)
+    // Haut-droite : les 4 slots de skills côte à côte, décalés à GAUCHE du bouton PAUSE (SLOT_X0).
+    // Titre « POUVOIRS » centré au-dessus des 4 cases.
+    this.add.text(SLOT_X0 + 1.5 * 60, SLOT_Y - SLOT_SIZE / 2 - 20, 'POUVOIRS', {
+      fontSize: '13px', color: '#ffd54f', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3,
+    }).setOrigin(0.5)
     for (let i = 0; i < 4; i++) {
       const x = SLOT_X0 + i * 60
       // Zone tactile ÉLARGIE au-delà du visuel (60×66 vs 50×50) pour toucher plus facilement au
@@ -150,7 +157,8 @@ export class UIScene extends Phaser.Scene {
     const skillsBtn = this.add.rectangle(116, 90, 138, 24, 0x37474f, 0.9)
       .setStrokeStyle(1, 0xffffff, 0.55)
       .setInteractive(new Phaser.Geom.Rectangle(-11, -13, 160, 50), Phaser.Geom.Rectangle.Contains)
-    this.add.text(116, 90, '⚙ Compétences', { fontSize: '12px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
+    this.skillsBtn = skillsBtn
+    this.skillsBtnText = this.add.text(116, 90, '⚙ Compétences', { fontSize: '12px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
     skillsBtn.on('pointerdown', () => { this.pressFx(skillsBtn); this.openSkillMenu() })
 
     // Bas-droite : contrôles saut / attaque. Zone tactile TRÈS ÉLARGIE au-delà du disque visuel pour
@@ -243,8 +251,19 @@ export class UIScene extends Phaser.Scene {
   private updateSkillPointBadge() {
     const p = getPlayer()
     const n = p.skillPoints
-    this.spBadge.setVisible(n > 0)
-    if (n > 0) this.spBadgeText.setText(`⚠ ${n} compétence${n > 1 ? 's' : ''} !`)
+    this.spBadge.setVisible(false) // plus de pastille jaune SÉPARÉE (retour user)
+    // À la place : le BOUTON « Compétences » devient JAUNE + CLIGNOTANT tant qu'il reste des points.
+    if (n > 0) {
+      this.skillsBtn.setFillStyle(0xffca28, 0.97).setStrokeStyle(2, 0x7a4f00, 1)
+      this.skillsBtnText.setColor('#3a2600').setText(`⚙ Compétences (${n})`)
+      if (!this.skillsBtnBlink) {
+        this.skillsBtnBlink = this.tweens.add({ targets: [this.skillsBtn, this.skillsBtnText], alpha: 0.45, duration: 480, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+      }
+    } else {
+      this.skillsBtnBlink?.stop(); this.skillsBtnBlink = undefined
+      this.skillsBtn.setAlpha(1).setFillStyle(0x37474f, 0.9).setStrokeStyle(1, 0xffffff, 0.55)
+      this.skillsBtnText.setAlpha(1).setColor('#ffffff').setText('⚙ Compétences')
+    }
   }
 
   // pulse visuel au tap pour que chaque bouton réponde sous le doigt

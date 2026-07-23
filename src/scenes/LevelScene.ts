@@ -124,6 +124,7 @@ export class LevelScene extends Phaser.Scene {
   private activeDamageNumbers = 0
   private passiveHealAccum = 0 // PV de régén passive cumulés, affichés en chiffre vert par paquets
   private passiveHealFlushAt = 0
+  private stompCdUntil = 0 // anti multi-stomp : un seul coup de saut-sur-la-tête par courte fenêtre
   private dashUntil = 0
   private dashCooldownUntil = 0
   private nextBasicAttackAt = 0
@@ -617,7 +618,13 @@ export class LevelScene extends Phaser.Scene {
       const pb = this.player.body as Phaser.Physics.Arcade.Body
       const eb = en.body as Phaser.Physics.Arcade.Body
       const stomping = pb.velocity.y > 60 && !pb.blocked.down && pb.bottom <= eb.top + eb.height * 0.5
-      if (stomping) { this.stompEnemy(en); return }
+      if (stomping) {
+        // SAUT SUR LA TÊTE : dégâts d'attaque de base au monstre (une fois), MAIS on NE REBONDIT PAS
+        // (retour user : le rebond rendait le joueur intouchable/immortel) → on CONTINUE de tomber à
+        // travers le monstre jusqu'au sol. Tant qu'on est en phase de stomp, on ne subit pas le contact.
+        if (this.time.now > this.stompCdUntil) { this.stompEnemy(en); this.stompCdUntil = this.time.now + 400 }
+        return
+      }
       this.hitPlayer(en.monster.atk, en.x)
     })
     this.physics.add.overlap(this.player, this.enemyProjectiles, (_p, proj) => {
@@ -3645,7 +3652,7 @@ export class LevelScene extends Phaser.Scene {
     if (this.player.isFlaming()) e.applyBurn(atk * 0.35, 3000)
     audio.playSfx('hit')
     this.impactFx(e.x, e.y - 8, 0xffffff)
-    ;(this.player.body as Phaser.Physics.Arcade.Body).setVelocityY(-360) // rebond
+    // PAS de rebond (retour user) : le joueur continue de tomber à travers le monstre jusqu'au sol.
   }
 
   // effet "level up" façon RO : rayons dorés + anneau + texte sur le perso
