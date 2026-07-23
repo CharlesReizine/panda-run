@@ -119,6 +119,12 @@ export type ModuleKind =
   // tombe dans un petit bassin (atterrissage sûr + coffre). Passerelles plates de part et d'autre pour
   // s'élancer et sauter par-dessus les rideaux latéraux (rater = chute mortelle).
   | 'cascade-w'
+  // CASCADE SAUT DE L'ANGE : on grimpe une cascade très haute jusqu'à un perchoir (panneau flèche bas),
+  // puis plongeon à l'aveugle dans un bassin en contrebas (coffre au fond).
+  | 'cascade-saut-ange'
+  // CASCADE LARGE + PIERRE : cascade très large au-dessus du vide (chute mortelle), grosse pierre rigide
+  // à mi-hauteur qui force à gérer montée/descente pour rester dans l'eau.
+  | 'cascade-large-pierre'
   // ─── R171 — VARIÉTÉ + NOUVEAUX MOTIFS (retours playtest) ───────────────────────────────────────
   // LAC → CASCADE → PLATEAU : un bout de LAC marine horizontal, puis à sa FIN une CASCADE remontable
   // qu'on remonte sur ~3-4 sauts de hauteur pour arriver sur un PLATEAU en HAUT (sortie haute). Une
@@ -1487,6 +1493,49 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       break
     }
 
+    // ─── CASCADE SAUT DE L'ANGE : on GRIMPE une cascade TRÈS HAUTE jusqu'à un perchoir, panneau flèche
+    // vers le bas, puis PLONGEON à l'aveugle dans un BASSIN en contrebas (coffre au fond) ──────────────
+    case 'cascade-saut-ange': {
+      const A = Math.max(entryAlt, 2)
+      const T = A + cascadeRise(rng) + 2 // perchoir TRÈS haut
+      let x = 0
+      p.platforms.push({ x, alt: A, w: bank }); x += bank // berge basse d'accès (on saute dans la cascade)
+      p.waters.push({ x, w: 4, kind: 'cascade', bankAlt: T, bottomAlt: A }) // cascade HAUTE grimpable (repose au sol, pas de vide)
+      const perchX = x + 4 // perchoir JOINTIF au bord droit de la colonne
+      p.platforms.push({ x: perchX, alt: T, w: 3 }) // perchoir en surplomb
+      p.signs.push({ x: perchX + 1, alt: T + 1 }) // PANNEAU flèche vers le bas → « saute ici »
+      const basinX = perchX + 3
+      const basinW = Math.max(5, w - basinX - 2)
+      p.waters.push({ x: basinX, w: basinW, kind: basinKind, bankAlt: A }) // BASSIN d'atterrissage (visible en contrebas)
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: basinX + Math.floor(basinW / 2) })
+      const rbx = basinX + basinW
+      p.platforms.push({ x: rbx, alt: A, w: Math.max(1, w - rbx) }) // berge droite / sortie
+      placeBirds(T + 2)
+      p.exitAlt = A
+      break
+    }
+
+    // ─── CASCADE LARGE + PIERRE À MI-HAUTEUR : cascade TRÈS LARGE au-dessus du VIDE (chute mortelle),
+    // une grosse PIERRE RIGIDE à mi-hauteur oblige à gérer la montée/descente pour rester dans l'eau ──
+    case 'cascade-large-pierre': {
+      const A = Math.max(entryAlt, 2)
+      const T = A + cascadeRise(rng) + 3 // très haut
+      const M = A + Math.floor((T - A) / 2) // mi-hauteur (obstacle)
+      const casW = 6 // cascade TRÈS LARGE
+      let x = 0
+      p.platforms.push({ x, alt: A, w: bank }); x += bank // berge basse d'accès (gauche)
+      p.waters.push({ x, w: casW, kind: 'cascade', bankAlt: T }) // cascade LARGE au-dessus du VIDE (chute = mort)
+      p.platforms.push({ x: x + 2, alt: M, w: 2, solid: true }) // GROSSE PIERRE rigide à mi-hauteur (on la contourne)
+      const topX = x + casW // corniche haute JOINTIVE au bord droit (émergence de la grimpe)
+      p.platforms.push({ x: topX, alt: T, w: bank })
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: topX + 1, alt: T + 1 })
+      x = topX + bank
+      if (w - x > 0) p.platforms.push(...ramp(x, w - x, T, exitAlt))
+      placeBirds(T + 2)
+      p.exitAlt = exitAlt
+      break
+    }
+
     // ─── LAC → CASCADE → PLATEAU : lac horizontal, puis cascade remontable vers un plateau EN HAUT ──
     case 'lac-cascade-plateau': {
       // Un bout de LAC marine HORIZONTAL (coffre au fond), puis à sa FIN une CASCADE remontable qu'on
@@ -1863,6 +1912,8 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'cascade-trouee': { tier: 4, family: 'tension', entry: 'milieu', exit: 'milieu', width: [18, 28], below: 'vide', above: 'air', water: true },
   'cascade-cul-de-sac': { tier: 3, family: 'risque', entry: 'bas', exit: 'haut', width: [20, 30], below: 'marine', above: 'air', chest: true, water: true },
   'cascade-w': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [16, 26], below: 'vide', above: 'air', chest: true, water: true },
+  'cascade-saut-ange': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [18, 28], below: 'marine', above: 'air', chest: true, water: true },
+  'cascade-large-pierre': { tier: 4, family: 'risque', entry: 'bas', exit: 'haut', width: [16, 24], below: 'vide', above: 'air', chest: true, water: true },
   // R171 — LAC → CASCADE → PLATEAU (lac horizontal + cascade remontable vers un plateau haut)
   'lac-cascade-plateau': { tier: 2, family: 'risque', entry: 'bas', exit: 'haut', width: [22, 32], below: 'marine', above: 'air', chest: true, water: true },
   // R171 — ESCALIER À GRANDS PAS (marches espacées, saut franc) — motif VERTICAL/traversée sec

@@ -162,13 +162,18 @@ export class LevelScene extends Phaser.Scene {
   // MODE ENTRAÎNEMENT (TrainingScene) : quand vrai, le joueur ne subit aucun dégât (hitPlayer no-op),
   // aucune porte de sortie n'est posée, et le HUD est lancé en mode entraînement. Faux en jeu normal.
   protected training = false
+  // MODE TEST DE NIVEAUX (LevelTestScene) : on charge un VRAI niveau mais le joueur est INVINCIBLE
+  // (aucun dégât, aucune chute mortelle) pour se balader et inspecter la géométrie. Retour au sélecteur
+  // via un bouton dédié ou en atteignant la sortie. N'écrit rien dans la sauvegarde.
+  protected testMode = false
 
   // clé de scène paramétrable : 'Level' en jeu normal, 'Training' pour la scène d'entraînement qui
   // hérite de toute la machinerie (sol, joueur, skills, HUD) sans dupliquer le code.
   constructor(key = 'Level') { super(key) }
 
-  init(data: { levelId: string; fromNode?: string; targetNode?: string; dir?: 'forward' | 'backward' }) {
+  init(data: { levelId: string; fromNode?: string; targetNode?: string; dir?: 'forward' | 'backward'; test?: boolean }) {
     this.levelDef = LEVELS[data.levelId]!
+    this.testMode = data.test ?? false
     // fromNode/dir absents (ancienne save, accès direct) : entrée par défaut gauche→droite
     this.fromNode = data.fromNode ?? null
     this.targetNode = data.targetNode ?? null
@@ -686,6 +691,14 @@ export class LevelScene extends Phaser.Scene {
 
     this.add.text(480, 8, this.levelDef.name, { fontSize: '15px', color: '#ffffff' }).setOrigin(0.5, 0).setScrollFactor(0)
 
+    // MODE TEST : bandeau « invincible » + bouton retour au sélecteur (balade libre pour inspecter).
+    if (this.testMode) {
+      this.add.text(480, 28, '🧪 TEST — invincible', { fontSize: '12px', color: '#80cbc4' }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(30)
+      this.add.text(12, 40, '← Niveaux', { fontSize: '16px', color: '#ffffff', backgroundColor: '#455a64', padding: { x: 10, y: 5 } })
+        .setScrollFactor(0).setDepth(30).setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => { audio.playSfx('ui-tap'); this.scene.stop('UI'); this.scene.start('LevelTest') })
+    }
+
     // le HUD est lancé sur la clé de CETTE scène ('Level' ou 'Training') + le drapeau training,
     // pour que barres/énergie se branchent sur la bonne scène et masquent les overlays inadaptés.
     this.scene.launch('UI', { levelKey: this.scene.key, training: this.training })
@@ -1194,6 +1207,8 @@ export class LevelScene extends Phaser.Scene {
 
   completeLevel() {
     if (this.player.hp <= 0) return
+    // MODE TEST : atteindre la sortie renvoie au sélecteur de niveaux (aucune progression/sauvegarde).
+    if (this.testMode) { this.scene.start('LevelTest'); return }
     // niveau terminé : PV + énergie remis au maximum (on entame le niveau suivant plein).
     // Un nouveau Player est instancié à chaque niveau (déjà plein), c'est la garantie explicite.
     this.player.restoreFull()
@@ -1231,8 +1246,8 @@ export class LevelScene extends Phaser.Scene {
   }
 
   hitPlayer(rawAtk: number, attackerX?: number) {
-    // ENTRAÎNEMENT : le joueur ne subit AUCUN dégât (dummy + corbeaux frappent pour 0) → imperdable.
-    if (this.training) return
+    // ENTRAÎNEMENT / TEST DE NIVEAUX : le joueur ne subit AUCUN dégât → imperdable (balade).
+    if (this.training || this.testMode) return
     // God mode DEV (émulateur/tests physiques) : le joueur ne perd jamais de PV. Inoffensif
     // en prod — window.__pandaGodMode est absent (donc falsy) par défaut.
     if ((globalThis as { __pandaGodMode?: boolean }).__pandaGodMode) return
@@ -1398,6 +1413,7 @@ export class LevelScene extends Phaser.Scene {
   // un tick de noyade : perte de PV régulière passant par le chemin de dégâts standard. Respecte
   // le god mode (émulateur/tests → aucune perte) et déclenche le K.O. / checkpoint comme un coup.
   private drownTick(amount: number) {
+    if (this.testMode) return
     if ((globalThis as { __pandaGodMode?: boolean }).__pandaGodMode) return
     if (this.player.hp <= 0) return
     this.showDamageNumber(this.player.x, this.player.y - 44, amount, true) // chiffre ROUGE (noyade/lave)
@@ -1446,6 +1462,7 @@ export class LevelScene extends Phaser.Scene {
   // JAMAIS : on se pose sur la plateforme bien avant d'atteindre le fond. Toute mort (dont celle-ci)
   // passe désormais par l'écran de game over ; « Réessayer » recommence le niveau AU DÉBUT.
   private checkPitDeath() {
+    if (this.testMode) return // balade invincible : pas de chute mortelle
     if ((globalThis as { __pandaGodMode?: boolean }).__pandaGodMode) return
     if (this.player.hp <= 0) return
     const body = this.player.body as Phaser.Physics.Arcade.Body

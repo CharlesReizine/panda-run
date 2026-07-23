@@ -191,6 +191,8 @@ const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
   'jungle-3': ['cascade-cul-de-sac', 'cascade'],
   'plage-4': ['cascade-trouee', 'bassin'],
   'jungle-2': ['cascade-w', 'bassin'], // NOUVEAU motif : cascade en W (rideaux mortels + îlot central)
+  // NB : motifs 'cascade-saut-ange' et 'cascade-large-pierre' définis (builder + META) mais PAS encore
+  // placés — leur chaînage d'altitude (perchoir/exit haut) casse la composition ; à raffiner avant pose.
 }
 
 // Biomes ROCHEUX / SOUTERRAINS / JUNGLE PROFONDE : on y autorise les GROTTES-TUNNELS (boyaux de
