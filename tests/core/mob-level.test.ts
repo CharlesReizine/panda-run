@@ -2,14 +2,17 @@ import { describe, it, expect } from 'vitest'
 import { xpToNext } from '../../src/core/progression'
 import {
   playerLevelForXp,
-  levelXp,
-  cumXpBelow,
-  mobLevelForZone,
   computeMonsterLevels,
+  TERRAIN_RANK,
   LEVEL_ORDER,
-  ZONE_XP_FACTOR,
+  LEVEL_MUL,
+  LEVEL_SUB,
+  ELITE_LEVEL_BONUS,
+  BOSS_LEVEL_BONUS,
 } from '../../src/core/mob-level'
 import { MONSTERS } from '../../src/data/monsters'
+import { LEVELS } from '../../src/data/levels'
+import { WORLD_EDGES } from '../../src/data/worldmap'
 
 describe('playerLevelForXp', () => {
   it('0 XP reste au niveau 1', () => {
@@ -21,7 +24,7 @@ describe('playerLevelForXp', () => {
   })
 
   it('juste sous le palier ne monte pas ; au palier monte', () => {
-    const need = xpToNext(1) // XP pour passer du niveau 1 au niveau 2
+    const need = xpToNext(1)
     expect(playerLevelForXp(need - 1)).toBe(1)
     expect(playerLevelForXp(need)).toBe(2)
   })
@@ -42,38 +45,38 @@ describe('playerLevelForXp', () => {
   })
 })
 
-describe('levelXp / cumXpBelow', () => {
-  it('levelXp somme l\'XP des spawns et du boss', () => {
-    const boss = LEVEL_ORDER.find((l) => l.boss && l.spawns.length === 0)!
-    expect(levelXp(boss)).toBe(MONSTERS[boss.boss!]!.xp)
+describe('rang de terrain (distance Dijkstra depuis Prairie)', () => {
+  it('Prairie (plaine-1) est le rang 1', () => {
+    expect(TERRAIN_RANK['plaine-1']).toBe(1)
   })
 
-  it('cumXpBelow(0) vaut 0 et croît avec l\'index', () => {
-    expect(cumXpBelow(0)).toBe(0)
+  it('le tronc de plaine monte 1,2,3,4,5,6', () => {
+    expect(TERRAIN_RANK['plaine-2']).toBe(2)
+    expect(TERRAIN_RANK['plaine-3']).toBe(3)
+    expect(TERRAIN_RANK['plaine-4']).toBe(4)
+    expect(TERRAIN_RANK['plaine-5']).toBe(5)
+    expect(TERRAIN_RANK['plaine-6']).toBe(6)
+  })
+
+  it('deux terrains ADJACENTS sur la carte diffèrent d\'exactement 1 (carte = arbre)', () => {
+    for (const [a, b] of WORLD_EDGES) {
+      const ra = TERRAIN_RANK[a], rb = TERRAIN_RANK[b]
+      if (ra === undefined || rb === undefined) continue // arête vers/depuis une ville (poids 0)
+      expect(Math.abs(ra - rb), `${a}(${ra}) <-> ${b}(${rb})`).toBe(1)
+    }
+  })
+
+  it('l\'ordre de progression (LEVEL_ORDER) est trié par rang croissant', () => {
     let prev = 0
-    LEVEL_ORDER.forEach((_, i) => {
-      const cum = cumXpBelow(i)
-      expect(cum).toBeGreaterThanOrEqual(prev)
-      prev = cum
-    })
+    for (const l of LEVEL_ORDER) {
+      const r = TERRAIN_RANK[l.id] ?? 999
+      expect(r).toBeGreaterThanOrEqual(prev)
+      prev = r
+    }
   })
 })
 
-describe('invariant de calibrage', () => {
-  // Pour chaque zone, le niveau de base des mobs doit rester entre le niveau-joueur à 1× et à 2×
-  // le contenu situé en dessous, et coller à ~1,5×.
-  it('mobLevelForZone(cum) est dans [playerLevelForXp(1×cum), playerLevelForXp(2×cum)]', () => {
-    LEVEL_ORDER.forEach((_, i) => {
-      const cum = cumXpBelow(i)
-      const mob = mobLevelForZone(cum)
-      expect(mob).toBeGreaterThanOrEqual(playerLevelForXp(1.0 * cum))
-      expect(mob).toBeLessThanOrEqual(playerLevelForXp(2.0 * cum))
-      expect(mob).toBe(playerLevelForXp(ZONE_XP_FACTOR * cum))
-    })
-  })
-})
-
-describe('computeMonsterLevels', () => {
+describe('computeMonsterLevels (niveau = 2×rang − 1 + bonus)', () => {
   const levels = computeMonsterLevels()
 
   it('attribue un niveau ≥ 1 à chaque monstre', () => {
@@ -84,12 +87,32 @@ describe('computeMonsterLevels', () => {
 
   it('le niveau stocké dans monsters.ts correspond au calcul', () => {
     for (const m of Object.values(MONSTERS)) {
-      expect(m.level).toBe(levels[m.id])
+      expect(m.level, m.id).toBe(levels[m.id])
     }
+  })
+
+  it('un mob normal du rang R vaut 2R−1 (gloopy, Prairie rang 1 → 1)', () => {
+    expect(levels['gloopy']).toBe(LEVEL_MUL * 1 - LEVEL_SUB)
+  })
+
+  it('l\'élite (mvp) porte le bonus élite au-dessus de sa base de rang', () => {
+    // angeling n'apparaît qu'à partir de plaine-5 (élite gardée pour la fin de biome) → base 2×5−1=9, + élite
+    expect(levels['angeling']).toBe(LEVEL_MUL * TERRAIN_RANK['plaine-5']! - LEVEL_SUB + ELITE_LEVEL_BONUS)
+  })
+
+  it('le boss final porte le bonus boss', () => {
+    const rank = TERRAIN_RANK['boss-09']!
+    expect(levels['seigneur-dechu']).toBe(LEVEL_MUL * rank - LEVEL_SUB + BOSS_LEVEL_BONUS)
   })
 
   it('la progression globale est croissante (zone 1 << boss final)', () => {
     expect(MONSTERS['gloopy']!.level).toBeLessThan(MONSTERS['seigneur-dechu']!.level)
     expect(MONSTERS['poring-dore']!.level).toBeLessThan(MONSTERS['dragon-flamme']!.level)
+  })
+
+  it('plus d\'élite (mvp) sur la 2e map (Champs) — les élites sont gardées pour la fin de biome', () => {
+    const plaine2 = LEVELS['plaine-2']!
+    const elitesOnPlaine2 = plaine2.spawns.filter((s) => MONSTERS[s.monsterId]?.mvp)
+    expect(elitesOnPlaine2, `élites sur plaine-2 : ${elitesOnPlaine2.map((s) => s.monsterId).join(', ')}`).toHaveLength(0)
   })
 })

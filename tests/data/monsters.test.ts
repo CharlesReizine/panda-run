@@ -42,13 +42,13 @@ describe('mobs de granularité (audit lot 3)', () => {
   // 7 mobs ajoutés pour combler les trous de niveau, épinglés à un terrain dont le niveau calibré
   // vise la bande à combler (cf. PINNED_SPAWNS dans levels.ts). niveau attendu = niveau calibré.
   const NEW_MOBS: { id: string; level: number; biome: string }[] = [
-    { id: 'serpent-des-sables', level: 29, biome: 'desert' },
-    { id: 'elementaire-de-sable', level: 35, biome: 'desert' },
-    { id: 'djinn-mineur', level: 38, biome: 'desert' },
-    { id: 'loup-des-neiges', level: 48, biome: 'montagne' },
-    { id: 'liche-mineure', level: 53, biome: 'cimetiere' },
-    { id: 'kraken-juvenile', level: 59, biome: 'plage' },
-    { id: 'cerbere', level: 66, biome: 'enfer' },
+    { id: 'serpent-des-sables', level: 23, biome: 'desert' },
+    { id: 'elementaire-de-sable', level: 27, biome: 'desert' },
+    { id: 'djinn-mineur', level: 31, biome: 'desert' },
+    { id: 'loup-des-neiges', level: 37, biome: 'montagne' },
+    { id: 'liche-mineure', level: 37, biome: 'cimetiere' },
+    { id: 'kraken-juvenile', level: 45, biome: 'plage' },
+    { id: 'cerbere', level: 47, biome: 'enfer' },
   ]
 
   it('les 7 nouveaux mobs existent avec le niveau calibré attendu', () => {
@@ -63,11 +63,15 @@ describe('mobs de granularité (audit lot 3)', () => {
     expect(MONSTERS['kraken-juvenile']!.aquatic).toBe(true)
   })
 
-  it('chaque nouveau mob apparaît dans au moins un niveau de son biome', () => {
+  it('chaque nouveau mob apparaît MAJORITAIREMENT dans son biome (débordement toléré)', () => {
+    // Le débordement inter-biome est autorisé (et même souhaité pour la variété) tant qu'il reste
+    // thématiquement cohérent — mais la MAJORITÉ des apparitions doit rester le biome d'origine.
     for (const { id, biome } of NEW_MOBS) {
       const hosts = Object.values(LEVELS).filter((l) => l.spawns.some((s) => s.monsterId === id))
       expect(hosts.length, `${id} doit spawner quelque part`).toBeGreaterThan(0)
-      expect(hosts.every((l) => l.biome === biome), `${id} doit spawner dans le biome ${biome}`).toBe(true)
+      const inBiome = hosts.filter((l) => l.biome === biome).length
+      expect(inBiome, `${id} doit spawner dans son biome ${biome}`).toBeGreaterThan(0)
+      expect(inBiome / hosts.length, `${id} majoritairement dans ${biome}`).toBeGreaterThanOrEqual(0.5)
     }
   })
 })

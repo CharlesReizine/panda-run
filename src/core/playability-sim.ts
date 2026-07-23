@@ -15,7 +15,7 @@ import { LEVELS, type LevelDef } from '../data/levels'
 import { MONSTERS } from '../data/monsters'
 import { WORLD_NODES } from '../data/worldmap'
 import { physicalDamage } from './combat'
-import { cumXpBelow, LEVEL_ORDER, playerLevelForXp } from './mob-level'
+import { LEVEL_ORDER, playerLevelForXp } from './mob-level'
 import { playerXpForMobLevel } from './progression'
 import { computeStats } from './stats'
 import { newPlayer, type PlayerState } from './player-state'
@@ -41,9 +41,12 @@ function levelIdOfNode(nodeId: string): string | undefined {
   return n.levelId
 }
 
-// Niveau attendu à l'entrée du niveau d'index donné dans l'ordre de progression.
+// Niveau attendu à l'entrée du niveau d'index donné dans l'ordre de progression = niveau « juste à
+// l'heure » d'un joueur ayant clear UNE FOIS (mult 1) tous les terrains précédents (ordre Dijkstra).
+// Auto-cohérent avec la vraie récompense joueur (playerXpForMobLevel), et non plus dérivé de l'ancien
+// champ de calibration MonsterDef.xp.
 function expectedLevelForIndex(index: number): number {
-  return playerLevelForXp(cumXpBelow(index))
+  return playerLevelForXp(cumRewardBelow(index))
 }
 
 // Niveau ATTENDU du joueur à l'entrée d'un nœud (id de nœud carte OU id de niveau).

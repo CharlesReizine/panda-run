@@ -113,7 +113,9 @@ const WATER_THREATS = ['requin', 'meduse', 'piranha']
 // Les VARIANTES GÉANTES (<base>-geant) sont posées dans un biome PLUS AVANCÉ que leur base → niveau
 // calibré supérieur (le niveau dérive du 1er biome où le monstre apparaît, cf. mob-level).
 const POOLS: Record<string, BiomePool> = {
-  plaine: { tier: 1, ground: ['gloopy', 'fabre', 'angeling', 'lapin-bondissant', 'mandragore', 'poporing', 'louveteau', 'willow', 'ronce-cracheuse'], birds: ['corbeau'], mvp: 'poring-dore' },
+  // angeling (élite, mvp) placé TARD dans le pool (index 5) → n'apparaît qu'à partir de plaine-5, jamais
+  // sur plaine-2 (retour joueur : « pas d'élite dès la 2e map »). Les élites sortent en fin de biome.
+  plaine: { tier: 1, ground: ['gloopy', 'fabre', 'lapin-bondissant', 'mandragore', 'poporing', 'angeling', 'louveteau', 'willow', 'ronce-cracheuse'], birds: ['corbeau'], mvp: 'poring-dore' },
   foret: { tier: 2, ground: ['louveteau', 'willow', 'poporing', 'mandragore', 'ronce-cracheuse', 'rocker', 'singe-grimpeur', 'ours-brun', 'gloopy-geant', 'fabre-geant'], birds: ['corbeau'], mvp: 'poring-dore' },
   desert: { tier: 2, ground: ['scorpion', 'fourmi-geante', 'scarabee-cornu', 'momie', 'vautour', 'orc-guerrier', 'zombie', 'mini-baphomet'], birds: ['faucon'], aquatic: WATER_THREATS, mvp: 'orc-seigneur' },
   jungle: { tier: 3, ground: ['willow', 'frelon-geant', 'flora-vorace', 'singe-grimpeur', 'ours-brun', 'ronce-cracheuse', 'scorpion-geant'], birds: ['ara'], aquatic: WATER_THREATS },
@@ -247,6 +249,12 @@ const LATE_DESERT_GROUND: Record<string, string[]> = {
 const rotate = <T>(arr: T[], by: number): T[] => (arr.length ? arr.map((_, i) => arr[(i + by) % arr.length]!) : arr)
 
 // Un niveau de terrain : biome + rang (1-based) dans le biome → composeLevel calibré.
+// Rang le plus élevé atteint par chaque biome (nombre de terrains de sa séquence). Sert à ne poser
+// l'élite (mvp) que sur le dernier / avant-dernier terrain du biome (cf. useMvp).
+const BIOME_MAX_RANK: Record<string, number> = {
+  plaine: 7, foret: 7, desert: 11, cave: 1, jungle: 5, montagne: 3, cimetiere: 2, plage: 4, carriere: 1, enfer: 7,
+}
+
 function terrain(id: string, name: string, biome: string, rank: number): LevelDef {
   const pool = POOLS[biome]!
   const idx = rank - 1
@@ -272,8 +280,10 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   const early = biome === 'plaine' || (biome === 'foret' && rank <= 2)
   const composeCap: Tier = early ? ((biome === 'plaine' && rank === 1 ? 2 : 3) as Tier) : pool.tier
   const featureFloor = early ? (biome === 'plaine' && rank === 1 ? 3 : 4) : 0
-  // MVP posé seulement sur un niveau tardif du biome (dernier ou avant-dernier terrain)
-  const useMvp = pool.mvp && rank >= 2
+  // MVP (élite) posé UNIQUEMENT sur le dernier ou avant-dernier terrain du biome — jamais tôt (retour
+  // joueur : « pourquoi un élite dès la 2e map ? »). Pour un biome court (1-2 terrains, déjà late-game
+  // dans la progression) le seuil retombe à son 1er terrain, ce qui reste tardif globalement.
+  const useMvp = pool.mvp && rank >= (BIOME_MAX_RANK[biome] ?? 2) - 1
   // ITEM 1 — GROTTE DE DÉPART souterraine : sur le 1er terrain des biomes rocheux (hors enfer, où l'eau
   // n'a pas de sens), le spawn est une grotte fermée avec un bassin immergé à franchir à la nage.
   const caveStart = STONY_BIOMES.has(biome) && biome !== 'enfer' && rank === 1

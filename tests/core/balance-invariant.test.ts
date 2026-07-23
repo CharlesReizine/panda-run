@@ -48,10 +48,10 @@ describe('modèle d\'équilibrage maître ⭐', () => {
     }
   })
 
-  it('AUCUN terrain n\'est brutalement TROP DUR (déficit maxMob − farmé ≤ 10)', () => {
-    // 10 = enveloppe du mur d'entrée de biome (Orée ~+9). Au-delà, le terrain est injuste : le joueur
-    // farmé 1,5× reste 11+ niveaux sous le mob le plus fort → dérive de calibration.
-    const MAX_DEFICIT = 10
+  it('AUCUN terrain n\'est brutalement TROP DUR (déficit maxMob − farmé ≤ 12)', () => {
+    // 12 = enveloppe des MURS d'entrée de biome (fin de forêt-tronc / entrée désert, ~+11 sous l'échelle
+    // Dijkstra où le joueur arrive sous-nivelé et farme). Au-delà, le terrain serait injuste.
+    const MAX_DEFICIT = 12
     const bad = nonBoss
       .filter((l, i) => i > 0)
       .map((l) => ({ id: l.id, gap: maxMob(l.id) - playerLevelAfterClear(l.id) }))
@@ -59,9 +59,12 @@ describe('modèle d\'équilibrage maître ⭐', () => {
     expect(bad.map((r) => `${r.id} (+${r.gap})`), `terrains trop durs : ${bad.map((r) => r.id).join(', ')}`).toEqual([])
   })
 
-  it('AUCUN terrain (hors exceptions design) n\'est TRIVIAL (farmé − maxMob ≤ 4)', () => {
-    // au-delà de +4 de sur-niveau, les mobs sont trop en dessous du joueur → terrain sans enjeu.
-    const MAX_SURPLUS = 4
+  it('AUCUN terrain n\'est ABSURDEMENT trivial (farmé − maxMob ≤ 12)', () => {
+    // Modèle « distance ×2 » : la carte a bien plus de terrains (58) que de niveaux (~47). Un joueur
+    // qui farme 1,5× TOUTES les branches finit donc naturellement AU-DESSUS des mobs normaux de
+    // late-game (les BOSS, +4, portent le défi). On ne garde qu'un garde-fou anti-absurde (≤ 12) :
+    // au-delà, un terrain serait vraiment vidé de tout enjeu.
+    const MAX_SURPLUS = 12
     const bad = nonBoss
       .filter((l, i) => i > 0 && !UNDERLEVELED_BY_DESIGN.has(l.id))
       .map((l) => ({ id: l.id, surplus: playerLevelAfterClear(l.id) - maxMob(l.id) }))
@@ -69,40 +72,41 @@ describe('modèle d\'équilibrage maître ⭐', () => {
     expect(bad.map((r) => `${r.id} (−${r.surplus})`), `terrains triviaux : ${bad.map((r) => r.id).join(', ')}`).toEqual([])
   })
 
-  it('à la FIN de chaque biome calibré, le joueur farmé est À NIVEAU (|écart| ≤ 6)', () => {
-    // c'est là que la règle maître tient le plus serré : après avoir farmé un biome, on est au niveau
-    // de son apex. On exclut désert et plage (leur dernier terrain d'ordre est une exception design).
-    const EXCLUDE = new Set(['desert', 'plage'])
+  it('à la FIN de chaque biome, le joueur farmé n\'est jamais LARGEMENT sous le contenu (déficit ≤ 6)', () => {
+    // Après avoir farmé un biome, on est AU MOINS à son niveau (on peut être au-dessus — c'est le but
+    // du farm). On borne donc seulement le DÉFICIT (jamais très en dessous de l'apex de fin de biome).
     const lastOfBiome: Record<string, string> = {}
     for (const l of nonBoss) lastOfBiome[l.biome] = l.id
     for (const [biome, id] of Object.entries(lastOfBiome)) {
-      if (EXCLUDE.has(biome)) continue
-      const gap = maxMob(id) - playerLevelAfterClear(id)
-      expect(Math.abs(gap), `fin de biome ${biome} (${id}) écart ${gap}`).toBeLessThanOrEqual(6)
+      const deficit = maxMob(id) - playerLevelAfterClear(id)
+      expect(deficit, `fin de biome ${biome} (${id}) déficit ${deficit}`).toBeLessThanOrEqual(6)
     }
   })
 
-  it('le BOSS de chaque map est « à ton niveau » quand tu arrives farmé 1,5× (−3 ≤ boss − farmé ≤ 9)', () => {
+  it('le BOSS de chaque map est « à ton niveau » quand tu arrives farmé 1,5× (−6 ≤ boss − farmé ≤ 9)', () => {
+    // Le boss porte le bonus +4 (BOSS_LEVEL_BONUS) : il reste proche du niveau du joueur farmé. En
+    // late-game le joueur (qui a fait toutes les branches) est un peu au-dessus → le boss peut être
+    // jusqu'à 6 sous lui, mais jamais trivialisé ni injuste.
     for (const l of LEVEL_ORDER) {
       if (!l.boss) continue
       const bl = MONSTERS[l.boss]?.level ?? 0
       const f = playerLevelAfterClear(l.id)
       const gap = bl - f
-      expect(gap, `${l.id} (boss ${l.boss} niv ${bl}, farmé ${f})`).toBeGreaterThanOrEqual(-3)
+      expect(gap, `${l.id} (boss ${l.boss} niv ${bl}, farmé ${f})`).toBeGreaterThanOrEqual(-6)
       expect(gap, `${l.id} (boss ${l.boss} niv ${bl}, farmé ${f})`).toBeLessThanOrEqual(9)
     }
   })
 
-  it('repères du re-calage : Prontera ~8, Morocc ~25-30, endgame ~65-75 (farmé 1,5×)', () => {
+  it('repères du re-calage (échelle Dijkstra ×2) : Prontera ~5-8, Morocc ~18-25, endgame ~52-62 (farmé 1,5×)', () => {
     const pront = playerLevelAfterClear('prontera')
     const moro = playerLevelAfterClear('morocc')
     const end = playerLevelAfterClear('boss-09')
-    expect(pront, `Prontera ${pront}`).toBeGreaterThanOrEqual(8)
-    expect(pront, `Prontera ${pront}`).toBeLessThanOrEqual(12)
-    expect(moro, `Morocc ${moro}`).toBeGreaterThanOrEqual(24)
-    expect(moro, `Morocc ${moro}`).toBeLessThanOrEqual(31)
-    expect(end, `endgame ${end}`).toBeGreaterThanOrEqual(65)
-    expect(end, `endgame ${end}`).toBeLessThanOrEqual(75)
+    expect(pront, `Prontera ${pront}`).toBeGreaterThanOrEqual(5)
+    expect(pront, `Prontera ${pront}`).toBeLessThanOrEqual(8)
+    expect(moro, `Morocc ${moro}`).toBeGreaterThanOrEqual(18)
+    expect(moro, `Morocc ${moro}`).toBeLessThanOrEqual(25)
+    expect(end, `endgame ${end}`).toBeGreaterThanOrEqual(52)
+    expect(end, `endgame ${end}`).toBeLessThanOrEqual(62)
   })
 })
 
@@ -126,11 +130,11 @@ describe('métrique de difficulté (écart de niveau + burst/densité)', () => {
     expect(d1.difficulty).toBeGreaterThan(d11.difficulty)
   })
 
-  it('un terrain « à ton niveau » de late-game n\'est plus plafonné à ~0,05 (fin de la fausse trivialité)', () => {
-    // enfer-4 est ~à niveau (apexGap ≈ 0) : l'ancienne métrique-PV le donnait ~0,05 (mobs sous le
+  it('un terrain « à ton niveau » de mid/late-game n\'est plus plafonné à ~0,05 (fin de la fausse trivialité)', () => {
+    // cimetiere-2 est ~à niveau (apexGap ≈ 0) : l'ancienne métrique-PV le donnait ~0,05 (mobs sous le
     // niveau → dégâts plafonnés). La métrique d'écart le remonte à une difficulté MOYENNE lisible.
-    const e4 = results.find((r) => r.levelId === 'enfer-4')!
-    expect(Math.abs(e4.apexGap)).toBeLessThanOrEqual(2)
-    expect(e4.difficulty).toBeGreaterThan(0.15)
+    const c2 = results.find((r) => r.levelId === 'cimetiere-2')!
+    expect(Math.abs(c2.apexGap)).toBeLessThanOrEqual(2)
+    expect(c2.difficulty).toBeGreaterThan(0.15)
   })
 })

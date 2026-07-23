@@ -19,8 +19,8 @@ export const STAT_POINTS_PER_LEVEL = 2 // points de stat gagnés à chaque nivea
 // cf. xp-curve.test). Réglé par MOB_XP_BASE / MOB_XP_EXP (exposant baissé 1,3→1,25 + base relevée
 // 16→20 : relève l'early/mid pour rapprocher le joueur du niveau des mobs sans faire déborder le
 // late-game au-delà de ~75).
-export const MOB_XP_BASE = 20     // XP d'un mob de niveau 1
-export const MOB_XP_EXP = 1.25    // exposant de la courbe puissance (niveau^exp)
+export const MOB_XP_BASE = 14     // XP d'un mob de niveau 1
+export const MOB_XP_EXP = 1.3     // exposant de la courbe puissance (niveau^exp)
 
 // XP accordée au joueur pour un monstre de niveau `level` (arrondi entier, ≥ 1).
 export function playerXpForMobLevel(level: number): number {

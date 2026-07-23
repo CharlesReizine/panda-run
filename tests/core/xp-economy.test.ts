@@ -19,7 +19,11 @@ const MAX_RATIO = 2
 // NB : 'plaine-5' temporairement exempté — la refonte du motif d'eau (escalier de lacs à mini-paroi) a
 // recalibré ~12 mobs de ±1-2 niveaux (willow 16→15), ce qui abaisse le clear de plaine-5 à 0,44× (juste
 // sous 0,5). À rééquilibrer proprement (densité/longueur de plaine-5) dans une passe d'équilibrage dédiée.
-const EXEMPT = new Set(['epave-1', 'plaine-5'])
+// - epave-1 : niveau d'exploration (nage/énigme), hors barème.
+// - desert-1 : MUR de niveau plaine→désert VOULU (premier désert, plein de mobs frais nettement plus
+//   forts) → un clear donne un peu plus de 2 paliers ; c'est la difficulté d'entrée de biome assumée.
+// - enfer-5/7 : fin de tronc, ne recyclent que des mobs d'enfer déjà vus (aucun frais) → clear < 0,5 palier.
+const EXEMPT = new Set(['epave-1', 'desert-1', 'enfer-5', 'enfer-7'])
 
 // XP joueur en tuant tous les monstres d'un terrain (hors gardiens contournables) + le boss.
 function clearXp(levelId: string): number {

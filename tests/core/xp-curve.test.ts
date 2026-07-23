@@ -35,24 +35,23 @@ const TO_PRONTERA = ['plaine-1', 'plaine-2', 'plaine-3', 'plaine-4', 'plaine-5']
 const TO_MOROCC = [...TO_PRONTERA, 'plaine-6', 'foret-1', 'plaine-7', 'foret-7', 'desert-1', 'desert-2', 'desert-3']
 
 describe('repères de progression (playthrough tronc principal)', () => {
-  it('PRONTERA (fin de plaine) ≈ niveau 7-8', () => {
+  it('PRONTERA (fin de plaine) ≈ niveau 4-6', () => {
+    // Échelle « distance Dijkstra ×2 » (cf. mob-level.ts) : la plaine est le rang 1-6, on arrive à
+    // Prontera vers le niveau 5 en tuant une fois le tronc.
     const lvl = playerLevelForXp(trunkReward(TO_PRONTERA))
-    expect(lvl).toBeGreaterThanOrEqual(6)
-    expect(lvl).toBeLessThanOrEqual(9)
+    expect(lvl).toBeGreaterThanOrEqual(4)
+    expect(lvl).toBeLessThanOrEqual(6)
   })
 
-  it('MOROCC (fin de désert) ≈ niveau 20-28', () => {
-    // Re-calibré après le déclustering (build R186) : supprimer les nuées d'oiseaux/grappes du TRONC
-    // (plaine surtout) baisse l'XP cumulée absolue → repère MOROCC ~21 (avant ~25). La COURBE est
-    // conservée (Prontera ~7-8 inchangé, désert toujours un mur ; cf. test suivant).
+  it('MOROCC (fin de désert accessible) ≈ niveau 15-20', () => {
     const lvl = playerLevelForXp(trunkReward(TO_MOROCC))
-    expect(lvl).toBeGreaterThanOrEqual(19)
-    expect(lvl).toBeLessThanOrEqual(28)
+    expect(lvl).toBeGreaterThanOrEqual(15)
+    expect(lvl).toBeLessThanOrEqual(20)
   })
 
   it('le passage plaine→désert est un MUR de niveau (gros saut) qui force à farmer', () => {
     const pront = playerLevelForXp(trunkReward(TO_PRONTERA))
     const moro = playerLevelForXp(trunkReward(TO_MOROCC))
-    expect(moro - pront).toBeGreaterThanOrEqual(12)
+    expect(moro - pront).toBeGreaterThanOrEqual(10)
   })
 })
