@@ -83,7 +83,7 @@ import {
   overStackedColumns, unlevelWaterBanks, deadEndSurfaces, suspendedWaterBanks,
   unreachablePlatforms, laddersToNowhere, unreachableLadders, unreachableChests,
   oversizedGaps, oversizedLadders, monstersOffSurface, startExitProblems, caveCeilingClearance,
-  longEmptyFlats,
+  longEmptyFlats, monstersInRock,
 } from '../core/level-validator'
 import { MONSTERS } from './monsters'
 
@@ -369,7 +369,7 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
     && unreachablePlatforms(l).length === 0 && laddersToNowhere(l).length === 0
     && unreachableLadders(l).length === 0 && unreachableChests(l).length === 0
     && oversizedGaps(l).length === 0 && oversizedLadders(l).length === 0
-    && monstersOffSurface(l, isAerial).length === 0
+    && monstersOffSurface(l, isAerial).length === 0 && monstersInRock(l).length === 0
     && startExitProblems(l).length === 0 && caveCeilingClearance(l).length === 0
     && longEmptyFlats(l, maxFlat).length === 0
   const salts = [`${id}-${ending}`, ...Array.from({ length: 80 }, (_, i) => `${id}-${ending}-${i}`)]

@@ -18,6 +18,7 @@ import {
   caveCeilingClearance,
   shortCascades,
   longEmptyFlats,
+  monstersInRock,
 } from '../../src/core/level-validator'
 import { MAX_LADDER_TILES, groundRowFor } from '../../src/core/platforming'
 import { MIN_CASCADE_TILES } from '../../src/data/level-modules'
@@ -65,6 +66,11 @@ describe('atteignabilité physique de chaque niveau', () => {
     it(`${level.id} — coffres sur plateforme atteignable`, () => {
       const bad = unreachableChests(level)
       expect(bad, `${level.id}: coffres injoignables → ${JSON.stringify(bad)}`).toEqual([])
+    })
+
+    it(`${level.id} — aucun monstre enfermé dans la roche`, () => {
+      const bad = monstersInRock(level)
+      expect(bad, `${level.id}: monstres dans la roche (zone inaccessible) → ${JSON.stringify(bad)}`).toEqual([])
     })
 
     it(`${level.id} — trous franchissables au saut simple`, () => {

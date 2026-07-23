@@ -263,6 +263,24 @@ export function oversizedGaps(level: LevelDef): GapProblem[] {
   return (level.gaps ?? []).filter((g) => g.w * TILE > max && !underCascade(g)).map((g) => ({ x: g.x, w: g.w }))
 }
 
+// MONSTRE EMPRISONNÉ DANS LA ROCHE (retour user : « aucun monstre ne doit être dans de la roche, cette
+// zone n'est pas accessible »). Un spawn dont le CORPS (la rangée juste au-dessus des pieds) tombe dans
+// une dalle de roche SOLIDE est enterré → injouable (on ne peut ni l'atteindre ni le tuer). Se poser SUR
+// une dalle (sommet de la dalle = rangée des pieds) reste valide : la roche est alors SOUS les pieds.
+export function monstersInRock(level: LevelDef): SpawnProblem[] {
+  const groundRow = groundRowFor(level.heightTiles)
+  const solids = (level.rockBands ?? []).filter((r) => r.solid)
+  const out: SpawnProblem[] = []
+  for (const s of level.spawns) {
+    const feet = s.y ?? groundRow
+    const body = feet - 1 // rangée du corps, juste au-dessus des pieds
+    if (solids.some((r) => s.x >= r.x && s.x < r.x + r.w && body >= r.y && body < r.y + r.h)) {
+      out.push({ monsterId: s.monsterId, x: s.x, y: feet, reason: 'enfermé-dans-la-roche' })
+    }
+  }
+  return out
+}
+
 // ─── VALIDATEURS DU KIT DE MODULES (jouabilité + cohérence, cf. docs/level-module-kit.md) ────
 
 export interface TierProblem { x: number; tiers: number }
