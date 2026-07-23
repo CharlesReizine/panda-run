@@ -1367,7 +1367,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
         const roofW = Math.min(floorW, 5)
         p.rocks.push({ x: caveX, altBot: T + CAVE_CLEARANCE, altTop: A - 1, w: roofW, solid: true }) // plafond (sous le passage haut)
         p.platforms.push({ x: caveX, alt: A, w: floorW, solid: true }) // PASSAGE HAUT (à A, au-dessus de la grotte) + sortie
-        if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + 1 }) // TRÉSOR dans la grotte (en bas)
+        if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + 1, alt: T + 1 }) // TRÉSOR sur le PLANCHER de la grotte (en bas)
         if (guard) p.spawns.push({ monsterId: guard, x: caveX + 2, alt: T })
         placeBirds(A + 3)
         p.exitAlt = A
@@ -1381,7 +1381,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
         p.platforms.push({ x: caveX, alt: T, w: floorW, solid: true }) // plancher SOLIDE de la grotte (en haut) + passage
         const roofW = Math.min(floorW, 5)
         p.rocks.push({ x: caveX, altBot: T + CAVE_CLEARANCE, altTop: T + CAVE_CLEARANCE + CAVE_CEILING_THICK, w: roofW, solid: true })
-        if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + 1 }) // TRÉSOR dans la grotte
+        if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + 1, alt: T + 1 }) // TRÉSOR sur le PLANCHER de la grotte
         if (guard) p.spawns.push({ monsterId: guard, x: caveX + 2, alt: T })
         placeBirds(T + 2)
         p.exitAlt = T
@@ -1919,23 +1919,28 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   spawns.length = 0
   spawns.push(...cleanedSpawns)
 
-  // quelques décorations au sol (herbe/champignon selon le biome) réparties sur la largeur
+  // DÉCO AU SOL (herbe/champignon) POSÉE SUR LA VRAIE SURFACE (retour user : « des champignons DANS la
+  // roche »). Le sol du terrain ONDULE (bosses de roche au-dessus de groundRow) : poser la déco à
+  // groundRow l'enterrait dans la bosse. On la pose donc PILE sur le sommet de roche/plateforme de sa
+  // colonne (surface marchable), jamais dedans. On saute les colonnes surplombées par un PLAFOND bas.
   const decoKind = opts.biome === 'foret' || opts.biome === 'jungle' ? 'champignon' : 'herbe'
-  for (const f of [0.18, 0.45, 0.72]) props.push({ kind: decoKind, x: Math.round(totalWidth * f) })
-
-  // DÉCO HORS DE LA ROCHE (retour user : « des champignons et autres déco DANS la roche ») : on décale
-  // toute déco (hors coffre) dont la case chevauche une dalle → jamais d'élément planté dans la pierre.
-  const inRockAt = (x: number, r: number) => rockBands.some((rb) => x >= rb.x && x < rb.x + rb.w && r >= rb.y && r < rb.y + rb.h)
-  for (const pr of props) {
-    if (pr.kind === 'coffre') continue // les coffres sont posés sur des surfaces valides (cf. unreachableChests)
-    const r = pr.y ?? groundRow
-    if (!inRockAt(pr.x, r) && !inRockAt(pr.x, r - 1)) continue
-    for (let d = 1; d <= 14; d++) {
-      let done = false
-      for (const nx of [pr.x - d, pr.x + d]) {
-        if (nx >= 1 && nx < totalWidth - 1 && !inRockAt(nx, r) && !inRockAt(nx, r - 1)) { pr.x = nx; done = true; break }
+  const rockTopAt = (x: number): number => { // rangée du DESSUS de la roche/plateforme la plus haute à x (sinon sol)
+    let top = groundRow
+    for (const rb of rockBands) if (x >= rb.x && x < rb.x + rb.w) top = Math.min(top, rb.y)
+    for (const pl of platforms) if (x >= pl.x && x < pl.x + pl.w) top = Math.min(top, pl.y)
+    return top
+  }
+  const coveredByRock = (x: number, surfTop: number): boolean => // une dalle juste AU-DESSUS de la surface ? (grotte/plafond → pas de déco)
+    rockBands.some((rb) => x >= rb.x && x < rb.x + rb.w && rb.y < surfTop && rb.y + rb.h >= surfTop - 1)
+  for (const f of [0.18, 0.45, 0.72]) {
+    const x0 = Math.round(totalWidth * f)
+    let placed = false
+    for (let d = 0; d <= 20 && !placed; d++) {
+      for (const x of d === 0 ? [x0] : [x0 - d, x0 + d]) {
+        if (x < 1 || x >= totalWidth - 1) continue
+        const surf = rockTopAt(x)
+        if (!coveredByRock(x, surf)) { props.push({ kind: decoKind, x, y: surf }); placed = true; break }
       }
-      if (done) break
     }
   }
 
