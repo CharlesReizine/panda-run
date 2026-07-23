@@ -415,10 +415,6 @@ export class LevelScene extends Phaser.Scene {
     // PAROIS RIGIDES des bassins : corps statiques (un par paroi) qu'on ne traverse PAS en
     // marchant. Collision avec le joueur ET les ennemis. La nage se fait EN DESCENDANT par le HAUT.
     const basinWalls = this.physics.add.staticGroup()
-    // PAROIS DE CUVE DE LAVE : séparées des parois marine — le JOUEUR s'y cogne (on ne clippe pas dans
-    // la lave), alors que les parois de BASSIN marine le laissent PASSER (retour user : « on doit pouvoir
-    // traverser les murs d'eau, qu'on vienne d'une cascade, d'un bassin ou du terrain »).
-    const lavaWalls = this.physics.add.staticGroup()
     for (const hz of this.levelDef.hazards ?? []) {
       if (hz.kind === 'spikes') {
         // FLAMMES AU SOL (ex-pics) : `hz.top` = rangée de la surface qui les porte (dessus d'une
@@ -511,7 +507,7 @@ export class LevelScene extends Phaser.Scene {
           this.add.tileSprite(wx * TILE, topPx, TILE, heightPx, 'basin-wall').setOrigin(0, 0).setDepth(-2)
           const collideTopPx = (waterTop + 1) * TILE
           const collideH = (waterBottom + 1) * TILE - collideTopPx
-          this.addStaticBand(lavaWalls, wx * TILE, collideTopPx, TILE, collideH) // cuve de lave : SOLIDE pour le joueur
+          this.addStaticBand(basinWalls, wx * TILE, collideTopPx, TILE, collideH)
         }
         // bulles de lave qui montent et crèvent en surface (déterministes, animées en boucle)
         const nb = Math.max(3, Math.round(wPx / 40))
@@ -559,12 +555,12 @@ export class LevelScene extends Phaser.Scene {
         this.addFish(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))
       }
     }
-    // Le JOUEUR ne se cogne QU'aux cuves de LAVE (on ne clippe pas dans la lave). Les parois de BASSIN
-    // marine le LAISSENT PASSER (nage/marche/attaques libres : retour user). Les ennemis TERRESTRES, eux,
-    // butent sur les deux (ils ne se jettent pas dans l'eau/la lave — les aquatiques ont leur propre IA).
-    this.physics.add.collider(this.player, lavaWalls)
+    // PIERRE = SOLIDE dans TOUS les sens (retour user : « les murs ne sont pas traversables, sinon c'est
+    // pas bien »). Le joueur ET les ennemis butent sur les parois de bassin/lave. (Les PONTS, eux, restent
+    // franchissables par le bas au saut — ce sont des oneWayPlatforms, gérés à part.) Le jeu reste jouable :
+    // l'escalier de lacs n'a PAS de paroi interne (openSide), donc rien n'y bloque la traversée.
+    this.physics.add.collider(this.player, basinWalls)
     this.physics.add.collider(this.enemies, basinWalls, undefined, groundedEnemy)
-    this.physics.add.collider(this.enemies, lavaWalls, undefined, groundedEnemy)
 
     this.addAirPockets()
 
