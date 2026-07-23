@@ -1781,6 +1781,18 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
   if (m.fillBelow === 'sol' || m.fillBelow === 'marine' || m.fillBelow === 'cascade' || m.fillBelow === 'lave') {
     addPedestals(p, w)
   }
+
+  // PANNEAU « descends ! » au-dessus des PUITS/BASSINS à COFFRE DE FOND (retour user) : une petite flèche
+  // vers le bas au bord du puits donne envie d'y plonger chercher le trésor. On ne le pose que sur un
+  // bassin MARINE contenant un coffre AU FOND (prop coffre SANS alt, x dans le bassin) et si aucun
+  // panneau n'est déjà là (plongeoir). Purement décoratif (même canal que le plongeoir).
+  for (const wat of p.waters) {
+    if (wat.kind !== 'marine') continue
+    const bottomChest = p.props.find((pr) => pr.kind === 'coffre' && pr.alt === undefined && pr.x >= wat.x && pr.x < wat.x + wat.w)
+    if (!bottomChest) continue
+    if (p.signs.some((s) => Math.abs(s.x - bottomChest.x) <= 2)) continue
+    p.signs.push({ x: bottomChest.x, alt: wat.bankAlt + 2 })
+  }
   return p
 }
 
