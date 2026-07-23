@@ -210,6 +210,102 @@ export function unreachablePlatforms(level: LevelDef): Plat[] {
   return nodes.slice(0, nPlat).filter((_, i) => !reachable.has(i))
 }
 
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// ATTEIGNABILITÉ STRICTE — modèle qui prend en compte les MURS DE ROCHE PLEINE.
+//
+// Différence avec computeReach : le SOL n'est PAS une bande pleine largeur. Un mur de roche solide qui
+// monte du sol le DÉCOUPE en segments (on ne marche pas à travers). Les DESSUS de roche pleine sont des
+// surfaces marchables (on peut sauter dessus si assez bas). Segments de sol et dessus de roche sont des
+// NŒUDS à part entière → toute la propagation existante (sauts, échelles, échelles-lianes, cascades,
+// lacs) fonctionne telle quelle. Une plateforme (ou la sortie) devient injoignable si un mur trop haut
+// l'isole SANS pont / échelle / cascade pour le contourner (ex. desert-9 : saut infranchissable).
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+export interface StrictReach { badPlats: Plat[]; exitReached: boolean }
+
+export function strictReach(level: LevelDef): StrictReach {
+  const groundRow = groundRowFor(level.heightTiles)
+  const W = level.widthTiles
+  const rocks = (level.rockBands ?? []).filter((r) => r.solid)
+
+  // 1) colonnes de sol BLOQUÉES par un mur (dalle qui occupe le corps du joueur au niveau du sol)
+  const blocked = new Array<boolean>(W).fill(false)
+  for (const r of rocks) {
+    if (r.y <= groundRow - 1 && r.y + r.h - 1 >= groundRow - 1) {
+      for (let x = Math.max(0, r.x); x < Math.min(W, r.x + r.w); x++) blocked[x] = true
+    }
+  }
+  const groundSegs: Plat[] = []
+  for (let x = 0, s = -1; x <= W; x++) {
+    if (x < W && !blocked[x]) { if (s < 0) s = x }
+    else if (s >= 0) { groundSegs.push({ x: s, y: groundRow, w: x - s }); s = -1 }
+  }
+  // 2) dessus de roche pleine RELEVÉS (au-dessus du sol) = surfaces marchables
+  const rockTops: Plat[] = rocks.filter((r) => r.y < groundRow).map((r) => ({ x: r.x, y: r.y, w: r.w }))
+
+  // 3) tous les nœuds marchables : plateformes de gameplay EN TÊTE (pour le report), puis relais
+  const platforms = level.platforms.map((p) => ({ x: p.x, y: p.y, w: p.w }))
+  const bridges = (level.bridges ?? []).map((b) => ({ x: b.x, y: b.y, w: b.w }))
+  const nPlat = platforms.length
+  const nodes: Plat[] = [...platforms, ...bridges, ...groundSegs, ...rockTops]
+  const ladders = (level.ladders ?? []) as Ladder[]
+  const hung = ladders.filter((l) => l.hung)
+  const cascades = cascadeColumns(level)
+  const lakes = basins(level)
+
+  const reachable = new Set<number>()
+  const reachLad = new Set<number>()
+  const reachLake = new Set<number>()
+
+  // seed : le nœud (segment de sol ou plateforme) qui porte le point de départ
+  const start = level.start ?? { x: 0, y: groundRow }
+  nodes.forEach((n, i) => {
+    if (start.x >= n.x - 1 && start.x <= n.x + n.w + 1 && Math.abs(n.y - start.y) <= 1) reachable.add(i)
+  })
+  if (reachable.size === 0) { // départ en l'air : rattache au segment de sol sous le start
+    const gi = nodes.findIndex((n) => n.y === groundRow && start.x >= n.x && start.x <= n.x + n.w)
+    if (gi >= 0) reachable.add(gi)
+  }
+
+  const footMeetsReachable = (l: Ladder) => nodes.some((p, i) => reachable.has(i) && footMeets(l, p))
+  const cascadeFootOk = (c: Cascade) =>
+    cascadeFootReachable(c, nodes, reachable) || lakes.some((b, bi) => reachLake.has(bi) && cascadeFootInBasin(c, b))
+
+  let changed = true
+  while (changed) {
+    changed = false
+    const surfaces = [...reachable].map((j) => nodes[j]!)
+    for (let i = 0; i < nodes.length; i++) {
+      if (reachable.has(i)) continue
+      const b = nodes[i]!
+      if (surfaces.some((a) => canReach(a.y, b, hgap(a, b)))) { reachable.add(i); changed = true; continue }
+      if (ladders.some((l) => !l.hung && isLadderTop(b, l) && footMeetsReachable(l))) { reachable.add(i); changed = true; continue }
+      if (cascades.some((c) => isCascadeTop(b, c) && cascadeFootOk(c))) { reachable.add(i); changed = true; continue }
+      if (hung.some((l, li) => reachLad.has(li) && hungTopReaches(l, b))) { reachable.add(i); changed = true; continue }
+      if (lakes.some((lk, li) => reachLake.has(li) && bordersBasinSurface(b, lk))) { reachable.add(i); changed = true }
+    }
+    for (let li = 0; li < hung.length; li++) {
+      if (reachLad.has(li)) continue
+      const l = hung[li]!
+      if (surfaces.some((a) => footMeets(l, a))) { reachLad.add(li); changed = true; continue }
+      if (hung.some((o, oi) => reachLad.has(oi) && hungTransfer(o, l))) { reachLad.add(li); changed = true }
+    }
+    for (let li = 0; li < lakes.length; li++) {
+      if (reachLake.has(li)) continue
+      const lk = lakes[li]!
+      if (nodes.some((p, i) => reachable.has(i) && bordersBasinSurface(p, lk))) { reachLake.add(li); changed = true; continue }
+      if (cascades.some((c) => cascadeFootOk(c) && cascadeIntoBasin(c, lk))) { reachLake.add(li); changed = true }
+    }
+  }
+
+  const badPlats = platforms.filter((_, i) => !reachable.has(i))
+  const exit = level.exit ?? { x: W - 1, y: groundRow }
+  const exitReached = [...reachable].some((j) => {
+    const n = nodes[j]!
+    return exit.x >= n.x - 2 && exit.x <= n.x + n.w + 2 && Math.abs(n.y - exit.y) <= 2
+  })
+  return { badPlats, exitReached }
+}
+
 // Échelles « vers le vide » : sommet sans plateforme posable (a) ou pied qui ne rejoint ni
 // le sol ni une plateforme (b).
 export function laddersToNowhere(level: LevelDef): LadderProblem[] {
