@@ -39,13 +39,13 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'double-tir': { color: 0xd7a86e, glyph: 'arrow2' },
   'piege': { color: 0xffca28, glyph: 'trap' },
   'fleche-enflammee': { color: 0xff7043, glyph: 'firearrow' },
-  'fleche-explosive': { color: 0xff8a65, glyph: 'exploarrow' },
+  'fleche-explosive': { color: 0xff8a65, glyph: 'grenade' },
   'pluie-de-fleches': { color: 0xa5d6a7, glyph: 'rain' },
-  'tir-charge': { color: 0xffb74d, glyph: 'arrow' },
-  'fleche-autoguidee': { color: 0x64ffda, glyph: 'arrow2' },
+  'tir-charge': { color: 0xffb74d, glyph: 'bowdraw' },
+  'fleche-autoguidee': { color: 0x64ffda, glyph: 'homingarrow' },
   'oeil-de-lynx': { color: 0x69f0ae, glyph: 'eye' },
   'reflexes-felins': { color: 0x80deea, glyph: 'swift' },
-  'fleche-de-bambou': { color: 0x9ccc65, glyph: 'arrow' },
+  'fleche-de-bambou': { color: 0x9ccc65, glyph: 'bambooarrow' },
   'salve-ultime': { color: 0xffd54f, glyph: 'rain' },
   'rugissement-panda': { color: 0xffb300, glyph: 'roar' },
   'soin-majeur': { color: 0x66bb6a, glyph: 'heart' },
@@ -69,12 +69,12 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'tempete-foudroyante': { color: 0x82b1ff, glyph: 'bolt' },
   'blizzard': { color: 0x4dd0e1, glyph: 'snow' },
   // Chasseur
-  'fleche-mortelle': { color: 0x448aff, glyph: 'arrow' },
-  'nuee-de-fleches': { color: 0xa5d6a7, glyph: 'rain' },
-  'tir-du-faucon': { color: 0xffb74d, glyph: 'boomarrow' },
+  'fleche-mortelle': { color: 0x448aff, glyph: 'deatharrow' },
+  'nuee-de-fleches': { color: 0xa5d6a7, glyph: 'volley' },
+  'tir-du-faucon': { color: 0xffb74d, glyph: 'talon' },
   'mitraillette': { color: 0xa89968, glyph: 'gatling' },
-  'blitz-faucon': { color: 0xffb74d, glyph: 'arrow2' },
-  'fleche-grappin': { color: 0x80cbc4, glyph: 'arrow2' },
+  'blitz-faucon': { color: 0xffb74d, glyph: 'talon' },
+  'fleche-grappin': { color: 0x80cbc4, glyph: 'grapple' },
 }
 
 type ClassId = 'novice' | 'swordsman' | 'mage' | 'archer' | 'chevalier' | 'sorcier' | 'chasseur'
@@ -1953,6 +1953,50 @@ export class PreloadScene extends Phaser.Scene {
         g.lineStyle(2, c).strokeCircle(cx, cy, 11)
         g.fillStyle(c).fillCircle(cx, cy, 3) // canon central
         for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; g.fillCircle(cx + Math.cos(a) * 7, cy + Math.sin(a) * 7, 2.2) } // canons périphériques
+        break
+      case 'grenade': // GRENADE : corps ovoïde + cuillère/goupille en haut + étincelle
+        g.fillStyle(c).fillEllipse(cx, cy + 4, 15, 17)
+        g.fillStyle(0x6d4c41).fillRect(cx - 3, cy - 7, 6, 4) // bouchon
+        g.lineStyle(2, 0x9e9e9e).beginPath(); g.moveTo(cx + 3, cy - 6); g.lineTo(cx + 8, cy - 9); g.strokePath() // cuillère
+        g.fillStyle(0xffca28).fillCircle(cx + 9, cy - 10, 2).fillCircle(cx + 11, cy - 13, 1.4) // étincelle
+        break
+      case 'talon': { // FAUCON en piqué : 3 serres griffues + fentes de vitesse
+        g.lineStyle(3, c); for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(cx + i * 5, 10); g.lineTo(cx + i * 5 + 3, 26); g.strokePath() }
+        g.fillStyle(c); for (let i = -1; i <= 1; i++) g.fillTriangle(cx + i * 5 + 3, 26, cx + i * 5 + 6, 24, cx + i * 5 + 5, 30) // griffes
+        g.lineStyle(1, c, 0.5).beginPath(); g.moveTo(cx - 10, 6); g.lineTo(cx - 6, 12); g.moveTo(cx + 10, 6); g.lineTo(cx + 6, 12); g.strokePath()
+        break
+      }
+      case 'homingarrow': // flèche AUTOGUIDÉE : flèche + traînée courbe pointillée
+        g.lineStyle(3, c).beginPath(); g.moveTo(14, 26); g.lineTo(27, 13); g.strokePath()
+        g.fillStyle(c).fillTriangle(30, 10, 22, 12, 26, 19) // pointe
+        g.fillStyle(c, 0.6); for (let i = 0; i < 4; i++) { const t = i / 4; g.fillCircle(6 + t * 8, 30 - Math.sin(t * Math.PI) * 8, 1.6) } // traînée courbe
+        break
+      case 'deatharrow': // flèche MORTELLE : flèche + petit crâne à la pointe
+        g.lineStyle(3, c).beginPath(); g.moveTo(6, 28); g.lineTo(20, 14); g.strokePath()
+        g.fillStyle(0xeceff1).fillCircle(25, 11, 5) // crâne
+        g.fillStyle(0x263238).fillCircle(23, 10, 1.3).fillCircle(27, 10, 1.3).fillRect(24, 13, 3, 2)
+        break
+      case 'bowdraw': // TIR CHARGÉ : arc bandé, flèche encochée
+        g.lineStyle(3, c).beginPath(); g.arc(14, cy, 12, Phaser.Math.DegToRad(-70), Phaser.Math.DegToRad(70), false); g.strokePath() // arc
+        g.lineStyle(1.5, 0xcfd8dc).beginPath(); g.moveTo(18, cy - 11); g.lineTo(14, cy); g.lineTo(18, cy + 11); g.strokePath() // corde
+        g.lineStyle(2, c).beginPath(); g.moveTo(14, cy); g.lineTo(30, cy); g.strokePath() // flèche
+        g.fillStyle(c).fillTriangle(30, cy - 3, 30, cy + 3, 34, cy)
+        break
+      case 'volley': // NUÉE : éventail de 3 flèches divergentes
+        g.lineStyle(2, c); g.fillStyle(c)
+        for (const ang of [-28, 0, 28]) { const r = Phaser.Math.DegToRad(ang); const ex = cx + Math.cos(r) * 13, ey = cy - 6 + Math.sin(r) * 13
+          g.beginPath(); g.moveTo(cx - Math.cos(r) * 10, cy - 6 - Math.sin(r) * 10); g.lineTo(ex, ey); g.strokePath()
+          g.fillTriangle(ex, ey, ex - Math.cos(r) * 4 - Math.sin(r) * 3, ey - Math.sin(r) * 4 + Math.cos(r) * 3, ex - Math.cos(r) * 4 + Math.sin(r) * 3, ey - Math.sin(r) * 4 - Math.cos(r) * 3) }
+        break
+      case 'grapple': // GRAPPIN : flèche + crochet + ligne
+        g.lineStyle(3, c).beginPath(); g.moveTo(8, 30); g.lineTo(22, 16); g.strokePath()
+        g.lineStyle(2, c).beginPath(); g.arc(25, 13, 4, Phaser.Math.DegToRad(0), Phaser.Math.DegToRad(270), false); g.strokePath() // crochet
+        g.lineStyle(1, c, 0.5).beginPath(); g.moveTo(8, 30); g.lineTo(6, 24); g.lineTo(9, 20); g.strokePath() // ligne
+        break
+      case 'bambooarrow': // flèche de BAMBOU : hampe verte segmentée
+        g.lineStyle(4, 0x8bc34a).beginPath(); g.moveTo(8, 30); g.lineTo(24, 14); g.strokePath()
+        g.lineStyle(1, 0x33691e); for (let i = 1; i < 4; i++) { const t = i / 4; g.beginPath(); g.moveTo(8 + t * 16 - 1, 30 - t * 16 - 1); g.lineTo(8 + t * 16 + 1, 30 - t * 16 + 1); g.strokePath() } // nœuds
+        g.fillStyle(0x9ccc65).fillTriangle(28, 10, 20, 13, 24, 19)
         break
       case 'trap': // piège à mâchoires : deux demi-cercles dentés
         g.lineStyle(3, c).beginPath(); g.arc(cx, cy, 12, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340), false); g.strokePath()
