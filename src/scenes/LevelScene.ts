@@ -389,7 +389,33 @@ export class LevelScene extends Phaser.Scene {
     this.physics.add.collider(this.pickups, oneWay)
     this.physics.add.overlap(this.player, this.pickups, (_p, pk) => this.collectPickup(pk as Phaser.Physics.Arcade.Sprite))
 
-    for (const s of this.levelDef.spawns) {
+    // AU PLUS 8 ESPÈCES DISTINCTES à l'écran (retour user : « pas plus de 8 mobs différents, trop »).
+    // On NE recalibre RIEN (les niveaux de monsters.ts restent) : c'est un remappage AU SPAWN — si le
+    // terrain a >8 espèces, on retire des espèces de niveau INTERMÉDIAIRE et on les remplace par l'espèce
+    // du niveau juste EN DESSOUS déjà présente (jamais les extrêmes ni l'élite). Purement runtime.
+    const cappedSpawns = ((): LevelDef['spawns'] => {
+      const ids = [...new Set(this.levelDef.spawns.map((s) => s.monsterId))]
+      if (ids.length <= 8) return this.levelDef.spawns
+      const lvl = (id: string) => MONSTERS[id]?.level ?? 0
+      const kept = ids.slice().sort((a, b) => lvl(a) - lvl(b))
+      const remap = new Map(kept.map((id) => [id, id]))
+      while (kept.length > 8) {
+        let best = -1, bestGap = Infinity
+        for (let i = 1; i < kept.length - 1; i++) {
+          const id = kept[i]!
+          if (MONSTERS[id]?.mvp || id.startsWith('gardien-')) continue // jamais l'élite / le gardien
+          const gap = lvl(id) - lvl(kept[i - 1]!)
+          if (gap < bestGap) { bestGap = gap; best = i }
+        }
+        if (best < 0) break // il ne reste que des extrêmes/élites → on s'arrête
+        const drop = kept[best]!, lower = kept[best - 1]!
+        for (const [k, v] of remap) if (v === drop) remap.set(k, lower)
+        kept.splice(best, 1)
+      }
+      return this.levelDef.spawns.map((s) => ({ ...s, monsterId: remap.get(s.monsterId) ?? s.monsterId }))
+    })()
+
+    for (const s of cappedSpawns) {
       // s.y présent → monstre posé sur une corniche en hauteur (pieds sur son dessus) ; sinon au sol.
       const yTile = s.y ?? this.groundRow
       // On fait APPARAÎTRE le monstre AU-DESSUS de la surface (il retombe et se cale dessus). Les mobs
@@ -430,6 +456,22 @@ export class LevelScene extends Phaser.Scene {
     // PAROIS RIGIDES des bassins : corps statiques (un par paroi) qu'on ne traverse PAS en
     // marchant. Collision avec le joueur ET les ennemis. La nage se fait EN DESCENDANT par le HAUT.
     const basinWalls = this.physics.add.staticGroup()
+    // ÉLARGISSEMENT ×2 des flammes, CLAMPÉ : ×2 en largeur souhaité, mais on garde TOUJOURS ≥2 tuiles
+    // de sol libre entre deux murs de flammes voisins de la même surface (retour user : « toujours la
+    // place de sauter entre deux ») — clamp au milieu ± gap. Étendue [l,r] px par flamme (cf. test flame-walls).
+    const flameExt = new Map<NonNullable<LevelDef['hazards']>[number], { l: number; r: number }>()
+    {
+      const GAP = 2 * TILE
+      const flames = (this.levelDef.hazards ?? []).filter((h) => h.kind === 'spikes').sort((a, b) => a.x - b.x)
+      flames.forEach((h, k) => {
+        const baseL = h.x * TILE, baseR = (h.x + h.w) * TILE, half = (h.w * TILE) / 2
+        let l = baseL - half, r = baseR + half
+        const prev = flames[k - 1], next = flames[k + 1]
+        if (prev && (prev.top ?? -1) === (h.top ?? -1)) l = Math.max(l, ((prev.x + prev.w) * TILE + baseL) / 2 + GAP / 2)
+        if (next && (next.top ?? -1) === (h.top ?? -1)) r = Math.min(r, (baseR + next.x * TILE) / 2 - GAP / 2)
+        flameExt.set(h, { l: Math.min(l, baseL), r: Math.max(r, baseR) })
+      })
+    }
     for (const hz of this.levelDef.hazards ?? []) {
       if (hz.kind === 'spikes') {
         // FLAMMES AU SOL (ex-pics) : `hz.top` = rangée de la surface qui les porte (dessus d'une
@@ -437,9 +479,12 @@ export class LevelScene extends Phaser.Scene {
         // ('fx-mur-de-flamme'), ancrée en bas sur la surface, avec une légère respiration + ondulation
         // pour qu'elle « bouge un peu ». Dégâts = brûlure continue (updateFlames), JAMAIS de one-shot.
         const surfaceTopPx = hz.top !== undefined ? hz.top * TILE : groundTopPx
-        const fwPx = hz.w * TILE
+        // LARGEUR ×2 (image ET zone de dégâts, retour user) via l'étendue CLAMPÉE (garde ≥2 tuiles
+        // libres entre deux flammes). Déformation de l'image assumée.
+        const ext = flameExt.get(hz)!
+        const fwPx = ext.r - ext.l
         const fhPx = Math.round(TILE * 1.9) // hauteur de la nappe de feu (~2 tuiles, comme les ex-pics)
-        const cxPx = hz.x * TILE + fwPx / 2
+        const cxPx = (ext.l + ext.r) / 2
         if (this.textures.exists('fx-mur-de-flamme')) {
           // l'art fx-mur-de-flamme a du VIDE sous les flammes (flammes ~centrées) → on ENFONCE l'ancrage
           // bas de 0,3·hauteur SOUS la surface pour que les flammes retombent PILE sur le sol (même
@@ -455,7 +500,7 @@ export class LevelScene extends Phaser.Scene {
         }
         // zone de brûlure : couvre la nappe de feu posée sur la surface (le centre/les pieds du panda
         // qui marche dedans y tombent) → tick de dégâts continu tant qu'on y reste (updateFlames).
-        this.flameRects.push(new Phaser.Geom.Rectangle(hz.x * TILE, surfaceTopPx - fhPx, fwPx, fhPx + 4))
+        this.flameRects.push(new Phaser.Geom.Rectangle(cxPx - fwPx / 2, surfaceTopPx - fhPx, fwPx, fhPx + 4))
         continue
       }
       // EAU. top = rangée de surface, h = profondeur (rangées). Sans top/h → ancienne bande près du
