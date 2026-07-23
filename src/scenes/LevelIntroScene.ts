@@ -73,6 +73,23 @@ export class LevelIntroScene extends Phaser.Scene {
     this.intro = data
   }
 
+  // Icône d'un butin (aperçu de carte) : texture à afficher + teinte éventuelle. Objet illustré →
+  // item-<id> ; chapeau sans illustration → cosmetic-<id> (procédural) ; matériau → material-drop
+  // teinté de sa couleur ; repli générique item-drop.
+  private dropIconInfo(d: DropEntry): { texture: string; tint?: number } {
+    if (d.kind === 'gold') return { texture: 'coin' }
+    if (d.kind === 'potion') return { texture: 'potion-drop' }
+    if (d.kind === 'item') {
+      const id = d.itemId
+      if (id && this.textures.exists(`item-${id}`)) return { texture: `item-${id}` }
+      const item = id ? ITEMS[id] : undefined
+      if (id && item?.slot === 'hat' && this.textures.exists(`cosmetic-${id}`)) return { texture: `cosmetic-${id}` }
+      return { texture: 'item-drop' }
+    }
+    const mat = d.materialId ? MATERIALS[d.materialId] : undefined
+    return { texture: 'material-drop', tint: mat?.color }
+  }
+
   create() {
     const level = LEVELS[this.intro.levelId]
     this.add.rectangle(480, 270, 960, 540, 0x10151f, 1)
@@ -143,10 +160,17 @@ export class LevelIntroScene extends Phaser.Scene {
       } else {
         const shown = notable.slice(0, maxLines)
         shown.forEach((d) => {
-          const { label, color, chance } = dropLine(d)
-          this.add.circle(listLeft + 3, y + 6, 3, color)
-          this.add.text(listLeft + 12, y, label, { fontSize: '11px', color: css(color), wordWrap: { width: cardW - 60 } }).setOrigin(0, 0)
-          this.add.text(cx + cardW / 2 - 10, y, chance, { fontSize: '10px', color: '#ffd54f' }).setOrigin(1, 0)
+          const { color, chance } = dropLine(d)
+          // AFFICHAGE PAR IMAGE (retour joueur : « affiche directement les images ») : on montre
+          // l'icône de l'objet/matériau au lieu de son nom. Objet illustré → item-<id> ; chapeau sans
+          // illustration → cosmetic-<id> (procédural) ; matériau → pastille material-drop teintée ;
+          // repli générique item-drop. Un liseré de rareté encadre l'icône, la chance reste à droite.
+          const info = this.dropIconInfo(d)
+          const size = Math.min(22, lineH - 2)
+          this.add.rectangle(listLeft + 2, y + 1, size + 2, size + 2, color, 0.28).setOrigin(0, 0)
+          const img = this.add.image(listLeft + 3, y + 2, info.texture).setOrigin(0, 0).setDisplaySize(size, size)
+          if (info.tint !== undefined) img.setTint(info.tint)
+          this.add.text(cx + cardW / 2 - 10, y + size / 2, chance, { fontSize: '11px', color: '#ffd54f' }).setOrigin(1, 0.5)
           y += lineH
         })
         const hidden = notable.length - shown.length

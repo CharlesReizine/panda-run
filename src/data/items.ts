@@ -41,7 +41,7 @@ const list: ItemDef[] = [
   { id: 'ruban', name: 'Ruban', slot: 'hat', bonus: { maxHp: 3 }, rarity: 'commun', description: 'Un simple ruban coquet qui remonte un peu le moral.' },
   { id: 'sakkat', name: 'Sakkat', slot: 'hat', bonus: { maxHp: 8 }, rarity: 'commun', description: 'Un chapeau de paille tressé qui protège du soleil des longues routes.' },
   { id: 'chapeau-poring', name: 'Chapeau Poring', slot: 'hat', bonus: { maxHp: 5 }, rarity: 'commun', description: 'Un bonnet en forme de Poring tout rond : adorable et réconfortant.' },
-  { id: 'ailes-angeling', name: "Ailes d'Angeling", slot: 'hat', bonus: { maxHp: 15 }, rarity: 'rare', description: 'Une paire de petites ailes angéliques qui insufflent un souffle de vie.' },
+  { id: 'ailes-angeling', name: "Ailes d'Angeling", slot: 'hat', bonus: { maxHp: 15 }, rarity: 'epique', description: 'Une paire de petites ailes angéliques qui insufflent un souffle de vie. Butin signature de l\'Angeling élite.' },
   { id: 'couronne-royale', name: 'Couronne royale', slot: 'hat', bonus: { atk: 4, def: 4 }, rarity: 'epique', description: 'La couronne d\'un roi oublié : elle impose le respect et aiguise le port.' },
   { id: 'bonnet-champi', name: 'Bonnet champignon', slot: 'hat', bonus: { def: 3 }, rarity: 'commun', description: 'Un chapeau-champignon moelleux qui amortit les coups sur le crâne.' },
   { id: 'casque-orc', name: 'Casque orc', slot: 'hat', bonus: { def: 6 }, rarity: 'rare', description: 'Un heaume brut arraché à un guerrier orc : lourd mais robuste.' },
