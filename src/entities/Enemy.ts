@@ -68,6 +68,11 @@ const CHARGE_WINDUP_MS = 260
 // GABARIT 'grand' (ours, golem) : facteur d'agrandissement du rendu ET de la hitbox (le corps Arcade
 // suit la scale du sprite en Phaser 4, cf. Body.update → width = sourceWidth × scaleX).
 const GRAND_SCALE = 1.55
+// GABARIT 'petit' (variante MINI) : rendu+hitbox réduits (même art de base via artFrom, niveau calibré
+// plus bas). Assez petit pour se lire « mini » sans devenir minuscule/injouable.
+const PETIT_SCALE = 0.62
+// facteur d'échelle du gabarit d'un monstre (rendu ET hitbox, la scale du corps suit le sprite)
+const sizeScale = (size?: string): number => (size === 'grand' ? GRAND_SCALE : size === 'petit' ? PETIT_SCALE : 1)
 // ÉLITE (MVP) : cadence du SKILL SIGNATURE unique — onde de choc télégraphiée (colosses) ou salve en
 // éventail (lanceurs). Les mobs normaux n'en ont pas ; les boss (3 skills) sont un chantier à part.
 const ELITE_SKILL_COOLDOWN = 6000
@@ -180,12 +185,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.setCollideWorldBounds(true)
     // GABARIT : les 'grand' (ours, golem) sont agrandis AVANT le calcul de hitbox — le corps Arcade
     // reprend la scale du sprite (Phaser 4), donc la hitbox grossit avec le rendu.
-    this.baseScale = def.size === 'grand' ? GRAND_SCALE : 1
+    this.baseScale = sizeScale(def.size)
     // TEXTURE réutilisée brute (non bakée, ex. fish-piranha) : normalise l'échelle à ~46px (taille
     // standard d'un mob) pour que le sprite ne s'affiche pas à sa résolution native (souvent énorme).
     if (def.tex && scene.textures.exists(def.tex)) {
       const src = scene.textures.get(def.tex).getSourceImage() as { width?: number }
-      if (src.width && src.width > 0) this.baseScale = (46 / src.width) * (def.size === 'grand' ? GRAND_SCALE : 1)
+      if (src.width && src.width > 0) this.baseScale = (46 / src.width) * sizeScale(def.size)
     }
     if (this.baseScale !== 1) this.setScale(this.baseScale)
     // hitbox = la créature seule (la texture a de la marge : ombre au sol + place au-dessus),

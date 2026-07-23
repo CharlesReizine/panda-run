@@ -164,6 +164,9 @@ export interface MonsterDef {
   aquatic?: boolean
   // GABARIT physique du monstre : 'grand' = rendu et hitbox agrandis (GRAND_SCALE dans Enemy),
   // silhouette imposante (ours, golem). Absent → 'normal' (rétrocompat exacte).
-  size?: 'normal' | 'grand'
+  // GABARIT physique : 'grand' = rendu+hitbox agrandis (ours, golem) ; 'petit' = rendu+hitbox
+  // RÉDUITS (variante MINI d'une bête, réutilise l'art de base via artFrom, calibrée à un niveau
+  // INFÉRIEUR) ; absent → 'normal'. Sert à mailler finement l'échelle de difficulté.
+  size?: 'normal' | 'grand' | 'petit'
   drops: DropEntry[]
 }
