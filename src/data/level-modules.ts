@@ -1346,28 +1346,46 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
 
     // ─── CASCADE → GROTTE SOUS-MARINE : le rideau tombe (lucarne) dans un bassin sous toit de roche ──
     case 'cascade-grotte': {
-      // CASCADE + GROTTE EN HAUT (spec user) : une CASCADE HAUTE au-dessus du VIDE (la descendre = MORT,
-      // « le bas du niveau »). On la GRIMPE pour monter à une GROTTE perchée EN HAUT (donc à un niveau
-      // DIFFÉRENT de la plateforme d'entrée — pas ennuyeux) : plancher + PLAFOND DE ROCHE (vraie grotte)
-      // avec un TRÉSOR dedans, puis le passage continue. Roche solide → rien de traversable.
-      const A = Math.max(entryAlt, 2)   // plateforme d'ENTRÉE (en bas)
-      const T = A + cascadeRise(rng)    // GROTTE + passage (en haut) — cascade ≥ MIN_CASCADE_TILES
+      // CASCADE + GROTTE à un niveau DIFFÉRENT de l'entrée (spec user). Deux variantes selon la place :
+      //  • assez de place EN BAS → GROTTE EN BAS : on ENTRE EN HAUT (plateforme de départ PLUS HAUTE que
+      //    la grotte), on DESCEND la cascade dans la grotte (trésor), le passage continue en haut ;
+      //  • sinon → GROTTE EN HAUT : cascade au-dessus du VIDE (bas du niveau), on la GRIMPE vers la grotte.
+      // Roche SOLIDE tout autour (plancher, plafond, socle jusqu'au sol) → rien de traversable.
+      const rise = cascadeRise(rng)
+      const A = Math.max(entryAlt, 2)
+      const guard = groundMobs.find((id) => !MONSTERS[id]?.aquatic && !MONSTERS[id]?.aerial) // gardien terrestre si dispo
       let x = 0
-      p.platforms.push({ x, alt: A, w: bank }); x += bank // berge d'accès BASSE (on bondit dans la cascade)
-      // CASCADE au-dessus du VIDE (bas du niveau) : y tomber = mort ; on la GRIMPE pour atteindre la grotte
-      p.waters.push({ x, w: 2, kind: 'cascade', bankAlt: T }); p.gaps.push({ x, w: 2 })
-      const caveX = x + 2
-      const floorW = Math.max(bank, w - caveX)
-      p.platforms.push({ x: caveX, alt: T, w: floorW, solid: true }) // PLANCHER SOLIDE de la grotte EN HAUT (on ne tombe pas à travers) + passage
-      // PLAFOND DE ROCHE sur la partie gauche (contre la cascade) = la grotte ; dégagement CAVE_CLEARANCE
-      const roofW = Math.min(floorW, 5)
-      p.rocks.push({ x: caveX, altBot: T + CAVE_CLEARANCE, altTop: T + CAVE_CLEARANCE + CAVE_CEILING_THICK, w: roofW, solid: true })
-      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + 1 }) // TRÉSOR dans la grotte
-      // gardien TERRESTRE si dispo (jamais d'aquatique figé)
-      const guard = groundMobs.find((id) => !MONSTERS[id]?.aquatic && !MONSTERS[id]?.aerial)
-      if (guard) p.spawns.push({ monsterId: guard, x: caveX + 2, alt: T })
-      placeBirds(T + 2)
-      p.exitAlt = T
+      if (A - rise >= 2) {
+        // GROTTE EN BAS — plateforme d'ENTRÉE (A) PLUS HAUTE que la grotte (T)
+        const T = A - rise
+        p.platforms.push({ x, alt: A, w: bank }); x += bank // berge d'ENTRÉE (en haut)
+        p.waters.push({ x, w: 2, kind: 'cascade', bankAlt: A, bottomAlt: T }) // cascade qui DESCEND dans la grotte
+        const caveX = x + 2
+        const floorW = Math.max(bank, w - caveX)
+        p.platforms.push({ x: caveX, alt: T, w: floorW, solid: true }) // plancher SOLIDE de la grotte (en bas)
+        if (T - 1 >= 0) p.rocks.push({ x: caveX, altBot: 0, altTop: T - 1, w: floorW, solid: true }) // socle jusqu'au SOL
+        const roofW = Math.min(floorW, 5)
+        p.rocks.push({ x: caveX, altBot: T + CAVE_CLEARANCE, altTop: A - 1, w: roofW, solid: true }) // plafond (sous le passage haut)
+        p.platforms.push({ x: caveX, alt: A, w: floorW, solid: true }) // PASSAGE HAUT (à A, au-dessus de la grotte) + sortie
+        if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + 1 }) // TRÉSOR dans la grotte (en bas)
+        if (guard) p.spawns.push({ monsterId: guard, x: caveX + 2, alt: T })
+        placeBirds(A + 3)
+        p.exitAlt = A
+      } else {
+        // GROTTE EN HAUT — cascade au-dessus du VIDE, on grimpe
+        const T = A + rise
+        p.platforms.push({ x, alt: A, w: bank }); x += bank // berge d'accès BASSE
+        p.waters.push({ x, w: 2, kind: 'cascade', bankAlt: T }); p.gaps.push({ x, w: 2 }) // cascade au-dessus du VIDE
+        const caveX = x + 2
+        const floorW = Math.max(bank, w - caveX)
+        p.platforms.push({ x: caveX, alt: T, w: floorW, solid: true }) // plancher SOLIDE de la grotte (en haut) + passage
+        const roofW = Math.min(floorW, 5)
+        p.rocks.push({ x: caveX, altBot: T + CAVE_CLEARANCE, altTop: T + CAVE_CLEARANCE + CAVE_CEILING_THICK, w: roofW, solid: true })
+        if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + 1 }) // TRÉSOR dans la grotte
+        if (guard) p.spawns.push({ monsterId: guard, x: caveX + 2, alt: T })
+        placeBirds(T + 2)
+        p.exitAlt = T
+      }
       break
     }
 
@@ -1904,6 +1922,22 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   // quelques décorations au sol (herbe/champignon selon le biome) réparties sur la largeur
   const decoKind = opts.biome === 'foret' || opts.biome === 'jungle' ? 'champignon' : 'herbe'
   for (const f of [0.18, 0.45, 0.72]) props.push({ kind: decoKind, x: Math.round(totalWidth * f) })
+
+  // DÉCO HORS DE LA ROCHE (retour user : « des champignons et autres déco DANS la roche ») : on décale
+  // toute déco (hors coffre) dont la case chevauche une dalle → jamais d'élément planté dans la pierre.
+  const inRockAt = (x: number, r: number) => rockBands.some((rb) => x >= rb.x && x < rb.x + rb.w && r >= rb.y && r < rb.y + rb.h)
+  for (const pr of props) {
+    if (pr.kind === 'coffre') continue // les coffres sont posés sur des surfaces valides (cf. unreachableChests)
+    const r = pr.y ?? groundRow
+    if (!inRockAt(pr.x, r) && !inRockAt(pr.x, r - 1)) continue
+    for (let d = 1; d <= 14; d++) {
+      let done = false
+      for (const nx of [pr.x - d, pr.x + d]) {
+        if (nx >= 1 && nx < totalWidth - 1 && !inRockAt(nx, r) && !inRockAt(nx, r - 1)) { pr.x = nx; done = true; break }
+      }
+      if (done) break
+    }
+  }
 
   // DÉPART SÛR (marge globale) : aucun spawn — terrestre OU aérien — n'est laissé à moins de
   // SAFE_SPAWN_TILES tuiles du x de départ. Couvre les monstres des modules voisins et les oiseaux
