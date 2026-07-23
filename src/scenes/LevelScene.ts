@@ -415,6 +415,10 @@ export class LevelScene extends Phaser.Scene {
     // PAROIS RIGIDES des bassins : corps statiques (un par paroi) qu'on ne traverse PAS en
     // marchant. Collision avec le joueur ET les ennemis. La nage se fait EN DESCENDANT par le HAUT.
     const basinWalls = this.physics.add.staticGroup()
+    // PAROIS DE CUVE DE LAVE : séparées des parois marine — le JOUEUR s'y cogne (on ne clippe pas dans
+    // la lave), alors que les parois de BASSIN marine le laissent PASSER (retour user : « on doit pouvoir
+    // traverser les murs d'eau, qu'on vienne d'une cascade, d'un bassin ou du terrain »).
+    const lavaWalls = this.physics.add.staticGroup()
     for (const hz of this.levelDef.hazards ?? []) {
       if (hz.kind === 'spikes') {
         // FLAMMES AU SOL (ex-pics) : `hz.top` = rangée de la surface qui les porte (dessus d'une
@@ -507,7 +511,7 @@ export class LevelScene extends Phaser.Scene {
           this.add.tileSprite(wx * TILE, topPx, TILE, heightPx, 'basin-wall').setOrigin(0, 0).setDepth(-2)
           const collideTopPx = (waterTop + 1) * TILE
           const collideH = (waterBottom + 1) * TILE - collideTopPx
-          this.addStaticBand(basinWalls, wx * TILE, collideTopPx, TILE, collideH)
+          this.addStaticBand(lavaWalls, wx * TILE, collideTopPx, TILE, collideH) // cuve de lave : SOLIDE pour le joueur
         }
         // bulles de lave qui montent et crèvent en surface (déterministes, animées en boucle)
         const nb = Math.max(3, Math.round(wPx / 40))
@@ -555,8 +559,12 @@ export class LevelScene extends Phaser.Scene {
         this.addFish(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))
       }
     }
-    this.physics.add.collider(this.player, basinWalls)
+    // Le JOUEUR ne se cogne QU'aux cuves de LAVE (on ne clippe pas dans la lave). Les parois de BASSIN
+    // marine le LAISSENT PASSER (nage/marche/attaques libres : retour user). Les ennemis TERRESTRES, eux,
+    // butent sur les deux (ils ne se jettent pas dans l'eau/la lave — les aquatiques ont leur propre IA).
+    this.physics.add.collider(this.player, lavaWalls)
     this.physics.add.collider(this.enemies, basinWalls, undefined, groundedEnemy)
+    this.physics.add.collider(this.enemies, lavaWalls, undefined, groundedEnemy)
 
     this.addAirPockets()
 
