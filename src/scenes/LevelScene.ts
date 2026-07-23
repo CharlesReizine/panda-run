@@ -1087,13 +1087,13 @@ export class LevelScene extends Phaser.Scene {
     const doorH = 210
     const doorBottom = doorRow * TILE + (exitDef ? 6 : 20)
     const doorY = doorBottom - doorH / 2
-    // halo lumineux pulsant DERRIÈRE la porte : aura blanc/jaune attirante (alpha + échelle)
+    // halo magique pulsant DERRIÈRE le portail : aura violette/blanche attirante (alpha + échelle)
     const glow = this.add.image(doorX, doorY - 4, 'exit-glow')
-      .setDepth(-1).setBlendMode(Phaser.BlendModes.ADD).setTint(0xfff3c0).setAlpha(0.5).setScale(1.2)
-    this.tweens.add({ targets: glow, alpha: 0.85, scale: 1.55, duration: 950, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
-    // la porte elle-même ; le corps d'overlap reste la texture entière → le joueur déclenche
-    // completeLevel dès qu'il l'atteint (comportement conservé, simplement une plus grande cible)
+      .setDepth(-1).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.45).setScale(1.1)
+    this.tweens.add({ targets: glow, alpha: 0.8, scale: 1.4, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+    // le PORTAIL : vortex qui « respire » (léger étirement) pour un rendu vivant/magique.
     const exit = this.physics.add.staticImage(doorX, doorY, 'exit')
+    this.tweens.add({ targets: exit, scaleX: 1.06, scaleY: 0.97, duration: 1300, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
     this.physics.add.overlap(this.player, exit, () => this.completeLevel())
   }
 

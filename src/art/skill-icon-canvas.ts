@@ -316,6 +316,73 @@ function materialGlyph(ctx: CanvasRenderingContext2D, id: string, color: number)
   }
 }
 
+// ── PORTAIL DE SORTIE ────────────────────────────────────────────────────────────────────────
+// Portail MAGIQUE à la place de la porte de pierre encadrée (retour user : « pas sexy, le cadre rend
+// bizarre sur la map »). Vortex vertical en amande (vesica) légèrement asymétrique — « forme chelou »
+// — énergie violet→cyan→cœur blanc, spirale interne + liseré ondulé lumineux + étincelles. Fond
+// transparent (pas de cadre) → se pose naturellement sur n'importe quel terrain.
+export const EXIT_W = 140, EXIT_H = 210
+export function renderExitPortal(): HTMLCanvasElement {
+  const canvas = document.createElement('canvas')
+  canvas.width = EXIT_W * S; canvas.height = EXIT_H * S
+  const ctx = canvas.getContext('2d')!
+  ctx.scale(S, S)
+  const cx = 70, cy = 100, wx = 46, hy = 92
+  // chemin du vortex (amande asymétrique — bombé à droite, plus pincé à gauche)
+  const path = (sx: number) => {
+    ctx.beginPath(); ctx.moveTo(cx, cy - hy * sx)
+    ctx.bezierCurveTo(cx + wx * sx * 1.15, cy - hy * 0.5 * sx, cx + wx * sx, cy + hy * 0.55 * sx, cx, cy + hy * sx)
+    ctx.bezierCurveTo(cx - wx * sx * 0.9, cy + hy * 0.5 * sx, cx - wx * sx * 0.95, cy - hy * 0.55 * sx, cx, cy - hy * sx)
+    ctx.closePath()
+  }
+  // aura externe diffuse
+  const aura = ctx.createRadialGradient(cx, cy, 8, cx, cy, hy)
+  aura.addColorStop(0, 'rgba(186,104,200,0.55)'); aura.addColorStop(0.6, 'rgba(126,87,194,0.25)'); aura.addColorStop(1, 'rgba(126,87,194,0)')
+  path(1.18); ctx.fillStyle = aura; ctx.fill()
+  // corps du vortex : cœur blanc → cyan → violet → pourpre profond
+  const body = ctx.createRadialGradient(cx - 6, cy - 8, 4, cx, cy, hy)
+  body.addColorStop(0, '#ffffff'); body.addColorStop(0.28, '#b3e5fc'); body.addColorStop(0.55, '#9575cd'); body.addColorStop(0.82, '#5e35b1'); body.addColorStop(1, '#311b92')
+  path(1); ctx.fillStyle = body; ctx.fill()
+  // spirale interne (bras d'énergie qui tournent vers le cœur)
+  ctx.save(); path(0.98); ctx.clip()
+  ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 3; ctx.lineCap = 'round'
+  for (let arm = 0; arm < 3; arm++) {
+    ctx.beginPath()
+    for (let t = 0; t <= 1; t += 0.05) {
+      const a = arm * (Math.PI * 2 / 3) + t * Math.PI * 2.3
+      const r = (1 - t) * hy * 0.82
+      const x = cx + Math.cos(a) * r * 0.5, y = cy + Math.sin(a) * r
+      t === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
+    }
+    ctx.stroke()
+  }
+  ctx.restore()
+  // cœur éclatant
+  const core = ctx.createRadialGradient(cx - 4, cy - 6, 1, cx, cy - 2, 22)
+  core.addColorStop(0, 'rgba(255,255,255,0.95)'); core.addColorStop(1, 'rgba(255,255,255,0)')
+  ctx.beginPath(); ctx.ellipse(cx, cy - 2, 16, 26, 0, 0, Math.PI * 2); ctx.fillStyle = core; ctx.fill()
+  // liseré ondulé lumineux (le bord du portail vibre)
+  ctx.save(); ctx.shadowColor = 'rgba(206,147,216,0.95)'; ctx.shadowBlur = 8
+  ctx.strokeStyle = '#e1bee7'; ctx.lineWidth = 3; path(1.02); ctx.stroke()
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1.4; ctx.shadowBlur = 0; path(0.99); ctx.stroke(); ctx.restore()
+  // étincelles qui montent
+  for (const [sx, sy, r] of [[cx - 10, cy + 40, 2.4], [cx + 14, cy - 30, 2], [cx - 4, cy - 60, 2.6], [cx + 8, cy + 66, 2], [cx + 2, cy - 6, 3]] as const) {
+    ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill()
+  }
+  return canvas
+}
+
+// halo radial doux (teinté + pulsé en scène)
+export function renderExitGlow(): HTMLCanvasElement {
+  const W = 220, H = 300
+  const canvas = document.createElement('canvas'); canvas.width = W * S; canvas.height = H * S
+  const ctx = canvas.getContext('2d')!; ctx.scale(S, S)
+  const g = ctx.createRadialGradient(W / 2, H / 2, 6, W / 2, H / 2, H / 2)
+  g.addColorStop(0, 'rgba(255,255,255,0.9)'); g.addColorStop(0.4, 'rgba(206,147,216,0.5)'); g.addColorStop(1, 'rgba(126,87,194,0)')
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(W / 2, H / 2, W / 2, H / 2, 0, 0, Math.PI * 2); ctx.fill()
+  return canvas
+}
+
 export function renderMaterialIcon(color: number, id: string): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
   canvas.width = MAT * S; canvas.height = MAT * S

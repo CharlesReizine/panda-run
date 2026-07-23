@@ -7,7 +7,7 @@ import { LEVELS } from '../data/levels'
 import type { MonsterDef, WeaponType } from '../core/types'
 import { stripBorderBackground } from '../core/image-strip'
 import { PANDA_TEX, PANDA_HEAD_ANCHORS } from '../entities/player-body'
-import { renderSkillIcon, renderMaterialIcon } from '../art/skill-icon-canvas'
+import { renderSkillIcon, renderMaterialIcon, renderExitPortal, renderExitGlow } from '../art/skill-icon-canvas'
 import { MATERIALS } from '../data/materials'
 
 // icône par skill : couleur + glyphe
@@ -2492,34 +2492,11 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0x4e342e).fillCircle(3, 6, 1).fillCircle(29, 6, 1); g.generateTexture('bridge', 32, 12); g.clear()
     // sortie : GRANDE porte-portail lumineux (≈ 2× la hauteur du panda). Arc de pierre + cœur
     // de lumière blanc→jaune. Le halo pulsant est ajouté en scène (createExit) par-dessus 'exit-glow'.
-    {
-      const EW = 140, EH = 210, cx = 70, archY = 74, Ro = 62, Ri = 46, baseY = 198
-      // cadre de pierre (arrière) : arc plein + corps
-      g.fillStyle(0x37474f).fillCircle(cx, archY, Ro).fillRect(cx - Ro, archY, Ro * 2, baseY - archY)
-      g.fillStyle(0x546e7a).fillCircle(cx, archY, Ro - 5).fillRect(cx - Ro + 5, archY, (Ro - 5) * 2, baseY - archY)
-      g.fillStyle(0x78909c).fillCircle(cx, archY, Ro - 9).fillRect(cx - Ro + 9, archY, (Ro - 9) * 2, baseY - archY) // biseau clair
-      // cœur de lumière : arc blanc en haut, corps dégradé blanc→jaune vers le bas
-      g.fillStyle(0xffffff).fillCircle(cx, archY, Ri)
-      g.fillGradientStyle(0xffffff, 0xffffff, 0xffd54f, 0xffe082, 1).fillRect(cx - Ri, archY, Ri * 2, baseY - archY)
-      // colonne lumineuse centrale plus intense (appel du regard)
-      g.fillStyle(0xffffff, 0.55).fillEllipse(cx, (archY + baseY) / 2, Ri * 0.9, (baseY - archY) * 0.95)
-      g.fillStyle(0xfffde7, 0.9).fillEllipse(cx, (archY + baseY) / 2 - 6, Ri * 0.5, (baseY - archY) * 0.85)
-      // clé de voûte + pommeaux décoratifs
-      g.fillStyle(0xcfd8dc).fillCircle(cx, archY - Ro + 8, 7)
-      g.fillStyle(0xffd54f).fillCircle(cx, archY - Ro + 8, 4)
-      // étincelles blanches qui montent dans la lumière
-      g.fillStyle(0xffffff, 0.9)
-      g.fillCircle(cx - 12, archY + 30, 2.5).fillCircle(cx + 16, archY + 70, 2).fillCircle(cx - 6, archY + 100, 3).fillCircle(cx + 8, baseY - 30, 2.2)
-      // socle de pierre au sol (la porte repose dessus)
-      g.fillStyle(0x263238).fillRoundedRect(cx - Ro - 6, baseY - 4, (Ro + 6) * 2, 16, 4)
-      g.fillStyle(0x455a64).fillRoundedRect(cx - Ro - 2, baseY - 2, (Ro + 2) * 2, 8, 3)
-      g.generateTexture('exit', EW, EH); g.clear()
-      // halo doux (dégradé radial simulé par ellipses concentriques) — teinté + pulsé en scène
-      for (let i = 14; i >= 1; i--) {
-        g.fillStyle(0xffffff, 0.05).fillEllipse(110, 130, (220 * i) / 14, (260 * i) / 14)
-      }
-      g.generateTexture('exit-glow', 220, 260); g.clear()
-    }
+    // PORTAIL MAGIQUE (vortex vectoriel, cf. art/skill-icon-canvas) au lieu de la porte de pierre.
+    if (this.textures.exists('exit')) this.textures.remove('exit')
+    this.textures.addCanvas('exit', renderExitPortal())
+    if (this.textures.exists('exit-glow')) this.textures.remove('exit-glow')
+    this.textures.addCanvas('exit-glow', renderExitGlow())
     // icônes de boutons
     // épée (icône d'attaque claire) : lame acier diagonale + garde dorée + manche brun
     g.fillStyle(0xdfe6ee).fillTriangle(11, 22, 25, 5, 28, 8).fillTriangle(11, 22, 14, 25, 28, 8)
