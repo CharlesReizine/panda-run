@@ -39,7 +39,7 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'double-tir': { color: 0xd7a86e, glyph: 'arrow2' },
   'piege': { color: 0xffca28, glyph: 'trap' },
   'fleche-enflammee': { color: 0xff7043, glyph: 'firearrow' },
-  'fleche-explosive': { color: 0xff8a65, glyph: 'boomarrow' },
+  'fleche-explosive': { color: 0xff8a65, glyph: 'exploarrow' },
   'pluie-de-fleches': { color: 0xa5d6a7, glyph: 'rain' },
   'tir-charge': { color: 0xffb74d, glyph: 'arrow' },
   'fleche-autoguidee': { color: 0x64ffda, glyph: 'arrow2' },
@@ -72,7 +72,7 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'fleche-mortelle': { color: 0x448aff, glyph: 'arrow' },
   'nuee-de-fleches': { color: 0xa5d6a7, glyph: 'rain' },
   'tir-du-faucon': { color: 0xffb74d, glyph: 'boomarrow' },
-  'mitraillette': { color: 0xffca28, glyph: 'quickshot' },
+  'mitraillette': { color: 0xa89968, glyph: 'gatling' },
   'blitz-faucon': { color: 0xffb74d, glyph: 'arrow2' },
   'fleche-grappin': { color: 0x80cbc4, glyph: 'arrow2' },
 }
@@ -1940,6 +1940,19 @@ export class PreloadScene extends Phaser.Scene {
         g.lineStyle(2, c).beginPath(); g.arc(cx, 24, 13, Phaser.Math.DegToRad(190), Phaser.Math.DegToRad(350), false); g.strokePath()
         g.fillStyle(0xffe082).fillCircle(cx + 13, 26, 4)
         for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; g.fillStyle(c).fillCircle(cx + 13 + Math.cos(a) * 8, 26 + Math.sin(a) * 8, 1.6) }
+        break
+      case 'exploarrow': { // FLÈCHE explosive : une vraie flèche + petite déflagration à la pointe (pas une grenade)
+        g.lineStyle(3, c).beginPath(); g.moveTo(8, 30); g.lineTo(22, 16); g.strokePath() // hampe
+        g.fillStyle(c).fillTriangle(27, 11, 19, 14, 23, 21) // pointe
+        g.lineStyle(2, c).beginPath(); g.moveTo(8, 30); g.lineTo(5, 26); g.moveTo(8, 30); g.lineTo(12, 33); g.strokePath() // empennage
+        g.lineStyle(2, 0xffca28) // déflagration = rayons courts à la pointe
+        for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; g.beginPath(); g.moveTo(26 + Math.cos(a) * 3, 12 + Math.sin(a) * 3); g.lineTo(26 + Math.cos(a) * 7, 12 + Math.sin(a) * 7); g.strokePath() }
+        break
+      }
+      case 'gatling': // MITRAILLETTE : vue de face d'une gatling (cercle de canons) — SYMÉTRIQUE, teinte mate
+        g.lineStyle(2, c).strokeCircle(cx, cy, 11)
+        g.fillStyle(c).fillCircle(cx, cy, 3) // canon central
+        for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; g.fillCircle(cx + Math.cos(a) * 7, cy + Math.sin(a) * 7, 2.2) } // canons périphériques
         break
       case 'trap': // piège à mâchoires : deux demi-cercles dentés
         g.lineStyle(3, c).beginPath(); g.arc(cx, cy, 12, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340), false); g.strokePath()
