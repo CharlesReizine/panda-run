@@ -11,7 +11,7 @@ import { PANDA_TEX, PANDA_HEAD_ANCHORS } from '../entities/player-body'
 // icône par skill : couleur + glyphe
 const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'calin-brutal': { color: 0xff9ab0, glyph: 'paw' },
-  'bambou-jete': { color: 0x9ccc65, glyph: 'bamboo' },
+  'bambou-jete': { color: 0x9ccc65, glyph: 'bamboothrow' },
   'taillade': { color: 0xcfd8dc, glyph: 'sword' },
   'estoc-rapide': { color: 0xe0e0e0, glyph: 'thrust' },
   'tourbillon': { color: 0x90caf9, glyph: 'tornado' },
@@ -44,7 +44,10 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'tir-charge': { color: 0xffb74d, glyph: 'bowdraw' },
   'fleche-autoguidee': { color: 0x64ffda, glyph: 'homingarrow' },
   'oeil-de-lynx': { color: 0x69f0ae, glyph: 'eye' },
-  'reflexes-felins': { color: 0x80deea, glyph: 'swift' },
+  'reflexes-felins': { color: 0x80deea, glyph: 'reflex' },
+  'course-rapide': { color: 0x69f0ae, glyph: 'swift' }, // vitesse : reprend l'ancien glyphe « swift » (chevrons de course)
+  'bond-du-chasseur': { color: 0x9ccc65, glyph: 'leap' },
+  'frappe-doublee': { color: 0xffd54f, glyph: 'doublestrike' },
   'fleche-de-bambou': { color: 0x9ccc65, glyph: 'bambooarrow' },
   'salve-ultime': { color: 0xffd54f, glyph: 'rain' },
   'rugissement-panda': { color: 0xffb300, glyph: 'roar' },
@@ -65,15 +68,15 @@ const SKILL_ICONS: Record<string, { color: number; glyph: string }> = {
   'cataclysme': { color: 0xff5252, glyph: 'meteors' },
   'faille-du-neant': { color: 0x7e57c2, glyph: 'ray' },
   'benediction-du-panda': { color: 0x81c784, glyph: 'heart' },
-  'lance-flammes': { color: 0xff7043, glyph: 'fireball' },
+  'lance-flammes': { color: 0xff5722, glyph: 'flamethrower' },
   'tempete-foudroyante': { color: 0x82b1ff, glyph: 'bolt' },
-  'blizzard': { color: 0x4dd0e1, glyph: 'snow' },
+  'blizzard': { color: 0x4dd0e1, glyph: 'blizzard' },
   // Chasseur
   'fleche-mortelle': { color: 0x448aff, glyph: 'deatharrow' },
   'nuee-de-fleches': { color: 0xa5d6a7, glyph: 'volley' },
   'tir-du-faucon': { color: 0xffb74d, glyph: 'talon' },
   'mitraillette': { color: 0xa89968, glyph: 'gatling' },
-  'blitz-faucon': { color: 0xffb74d, glyph: 'talon' },
+  'blitz-faucon': { color: 0xffa726, glyph: 'talonblitz' },
   'fleche-grappin': { color: 0x80cbc4, glyph: 'grapple' },
 }
 
@@ -1954,11 +1957,47 @@ export class PreloadScene extends Phaser.Scene {
         g.fillStyle(c).fillCircle(cx, cy, 3) // canon central
         for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; g.fillCircle(cx + Math.cos(a) * 7, cy + Math.sin(a) * 7, 2.2) } // canons périphériques
         break
-      case 'grenade': // GRENADE : corps ovoïde + cuillère/goupille en haut + étincelle
-        g.fillStyle(c).fillEllipse(cx, cy + 4, 15, 17)
-        g.fillStyle(0x6d4c41).fillRect(cx - 3, cy - 7, 6, 4) // bouchon
-        g.lineStyle(2, 0x9e9e9e).beginPath(); g.moveTo(cx + 3, cy - 6); g.lineTo(cx + 8, cy - 9); g.strokePath() // cuillère
-        g.fillStyle(0xffca28).fillCircle(cx + 9, cy - 10, 2).fillCircle(cx + 11, cy - 13, 1.4) // étincelle
+      case 'grenade': { // vraie GRENADE ananas : corps olive quadrillé + capsule métal + cuillère + goupille
+        g.fillStyle(0x556b2f).fillCircle(cx, cy + 5, 9) // corps olive rond
+        g.lineStyle(1, 0x33450f) // quadrillage « ananas »
+        for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(cx - 7, cy + 5 + i * 4); g.lineTo(cx + 7, cy + 5 + i * 4); g.strokePath(); g.beginPath(); g.moveTo(cx + i * 4, cy - 3); g.lineTo(cx + i * 4, cy + 13); g.strokePath() }
+        g.fillStyle(0x9e9e9e).fillRect(cx - 4, cy - 7, 8, 4) // capsule métallique
+        g.lineStyle(2, 0xbdbdbd).beginPath(); g.moveTo(cx - 4, cy - 6); g.lineTo(cx - 11, cy - 9); g.strokePath() // cuillère
+        g.lineStyle(1.5, 0xffca28).strokeCircle(cx - 12, cy - 10, 2.5) // goupille (anneau)
+        break
+      }
+      case 'leap': // BOND DU CHASSEUR : trajectoire en arc + chevron d'élan
+        g.lineStyle(2, c, 0.55).beginPath(); g.arc(cx, cy + 12, 13, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(340), false); g.strokePath()
+        g.lineStyle(3, c).beginPath(); g.moveTo(cx - 6, cy + 2); g.lineTo(cx, cy - 9); g.lineTo(cx + 6, cy + 2); g.strokePath() // chevron montant
+        g.fillStyle(c).fillCircle(cx + 12, cy - 3, 2) // point d'arrivée
+        break
+      case 'doublestrike': // FRAPPE DOUBLÉE : deux entailles parallèles lumineuses
+        g.lineStyle(3, c).beginPath(); g.moveTo(9, 27); g.lineTo(25, 9); g.strokePath()
+        g.beginPath(); g.moveTo(15, 31); g.lineTo(31, 13); g.strokePath()
+        g.fillStyle(0xffffff, 0.85).fillCircle(25, 9, 1.6).fillCircle(31, 13, 1.6)
+        break
+      case 'reflex': // RÉFLEXES FÉLINS : œil de chat (pupille FENDUE verticale) — distinct de l'œil rond du lynx
+        g.lineStyle(2, c).strokeEllipse(cx, cy, 13, 9)
+        g.fillStyle(0xffee58).fillEllipse(cx, cy, 10, 6) // iris
+        g.fillStyle(0x1b1b1b).fillEllipse(cx, cy, 2, 6) // pupille fendue (chat)
+        break
+      case 'bamboothrow': // BAMBOU JETÉ : bambou en flèche lancé en CLOCHE (on comprend que ça se jette)
+        g.lineStyle(2, c, 0.5).beginPath(); g.arc(cx, cy + 11, 13, Phaser.Math.DegToRad(200), Phaser.Math.DegToRad(345), false); g.strokePath() // arc de lancer
+        g.lineStyle(4, 0x8bc34a).beginPath(); g.moveTo(cx + 4, cy - 4); g.lineTo(cx + 13, cy - 11); g.strokePath() // bâton
+        g.fillStyle(0x9ccc65).fillTriangle(cx + 17, cy - 14, cx + 11, cy - 10, cx + 14, cy - 7) // pointe (flèche)
+        break
+      case 'flamethrower': // LANCE-FLAMMES : buse + CÔNE de flammes (pas une boule)
+        g.fillStyle(0x607d8b).fillRect(7, cy - 3, 8, 6) // buse
+        g.fillStyle(0xff7043).fillTriangle(15, cy - 8, 15, cy + 8, 34, cy) // cône de feu externe
+        g.fillStyle(0xffca28).fillTriangle(16, cy - 4, 16, cy + 4, 28, cy) // cœur clair
+        break
+      case 'blizzard': // BLIZZARD : tempête TOURBILLONNANTE (spirales + flocons dispersés) — vs flocon simple
+        g.lineStyle(2, c, 0.85); for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(cx, cy, 5 + i * 4, Phaser.Math.DegToRad(20), Phaser.Math.DegToRad(210), false); g.strokePath() }
+        g.fillStyle(0xffffff); { const pts: [number, number][] = [[-8, -6], [7, -4], [-5, 7], [9, 6], [0, -9]]; for (const [ax, ay] of pts) g.fillCircle(cx + ax, cy + ay, 1.8) }
+        break
+      case 'talonblitz': // ASSAUT DU FAUCON : serres + impacts MULTIPLES (coups répétés) — distinct du piqué simple
+        g.lineStyle(3, c); for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(cx + i * 4 - 3, 8); g.lineTo(cx + i * 4, 20); g.strokePath() }
+        { const pts: [number, number][] = [[cx + 7, 24], [cx + 12, 17], [cx + 10, 29]]; for (const [sx, sy] of pts) { g.fillStyle(0xfff59d).fillCircle(sx, sy, 2.4); g.fillStyle(0xff8a65).fillCircle(sx, sy, 1) } }
         break
       case 'talon': { // FAUCON en piqué : 3 serres griffues + fentes de vitesse
         g.lineStyle(3, c); for (let i = -1; i <= 1; i++) { g.beginPath(); g.moveTo(cx + i * 5, 10); g.lineTo(cx + i * 5 + 3, 26); g.strokePath() }
