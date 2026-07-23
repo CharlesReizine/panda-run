@@ -128,6 +128,9 @@ export type ModuleKind =
   // ÉCHELLES-LIANES : échelles hautes plantées sur des SOCLES de PIERRE RIGIDE, on grimpe puis on SAUTE
   // d'un socle au suivant (escalier ascendant en quinconce).
   | 'echelles-lianes'
+  // ÉCHELLES ZIGZAG : échelles suspendues « en T » dont on bondit alternativement à GAUCHE puis à DROITE
+  // en montant (chevron/zigzag), dans une bande verticale étroite.
+  | 'echelles-zigzag'
   // ESCALIER DE LACS MONTANT : on REMONTE des cascades pour émerger de lac en lac, de plus en plus haut.
   | 'lacs-cascade-montee'
   // ESCALIER DE LACS DESCENDANT : on grimpe à un lac perché, d'où l'eau se déverse de lac en lac vers le bas.
@@ -1584,31 +1587,61 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       break
     }
 
-    // ─── ESCALIER TOUT EN EAU : une suite de LACS reliés DIRECTEMENT par des CASCADES remontables, SANS
-    // aucune berge ni pierre entre les paliers (retour user : « plus joli sans terre au milieu »). On
-    // nage dans un lac, on GRIMPE la cascade qui en jaillit, on émerge dans le lac suivant plus haut, etc.
+    // ─── ÉCHELLES ZIGZAG « gauche-droite-gauche » (retour user) : mêmes échelles suspendues « en T »,
+    // mais on BONDIT alternativement à GAUCHE puis à DROITE en montant → un chevron/zigzag serré dans une
+    // bande verticale étroite (2 colonnes). Plus nerveux que la pente régulière des echelles-lianes. ────
+    case 'echelles-zigzag': {
+      const floor = Math.max(1, entryAlt)
+      const H = LADDER_H
+      const DX = 4      // écart entre les 2 colonnes (saut diagonal ≤ HUNG_JUMP_COLS)
+      const STEP = 6    // gain d'altitude par échelle : > (H+2)/2 → deux échelles d'une même colonne ne se chevauchent JAMAIS
+      const xL = bank, xR = bank + DX
+      p.platforms.push({ x: 0, alt: floor, w: bank }) // corniche d'ACCÈS (on bondit sur la 1re échelle, à gauche)
+      const N = 3 // gauche, droite, gauche
+      let lastX = xL, lastTop = floor + 2 + H
+      for (let i = 0; i < N; i++) {
+        const lx = i % 2 === 0 ? xL : xR // GAUCHE, DROITE, GAUCHE, DROITE… → zigzag
+        const footAlt = floor + 2 + i * STEP
+        const isLast = i === N - 1
+        const h = isLast ? Math.min(MAX_LADDER_TILES, H + 3) : H // dernière plus HAUTE (sortie franche)
+        const topAlt = footAlt + h
+        p.ladders.push({ x: lx, topAlt, h, hung: true })
+        p.rocks.push({ x: lx - 1, altBot: topAlt + 1, altTop: topAlt + 2, w: 3, solid: true }) // pierre de coiffe (⊤)
+        lastX = lx; lastTop = topAlt
+      }
+      // sortie proche de la dernière échelle, un peu en contrebas (enjambée sûre)
+      const zExitX = lastX + 2
+      const zExitAlt = lastTop - 3
+      p.platforms.push({ x: zExitX, alt: zExitAlt, w: Math.max(bank, w - zExitX) })
+      placeBirds(zExitAlt + 3)
+      p.exitAlt = zExitAlt
+      break
+    }
+
+    // ─── ESCALIER DE LACS : chaque palier = une cascade LARGE remontable dont l'eau PLONGE dans un LAC
+    // situé DIRECTEMENT dessous (jusqu'au sol), puis un perchoir en haut qui sert de berge au palier
+    // suivant. On monte ainsi de lac en lac (version validée par le user : « cascade-lac TB »). ─────────
     case 'lacs-cascade-montee': {
-      // Rien que de l'eau au milieu : le pied de chaque cascade PLONGE dans le lac du palier, son sommet
-      // DÉBOUCHE dans le lac suivant (le validateur modélise ces lacs comme régions atteignables — on y
-      // entre par une rive, on en ressort à la nage / en grimpant la cascade). Seules surfaces solides :
-      // la RIVE d'accès (bas-gauche) et la RIVE de sortie (haut-droite). Rater = on retombe dans un lac.
-      let alt = Math.max(2, entryAlt)
+      let alt = Math.max(1, entryAlt)
       let x = 0
       let placedCoffre = false
-      const LW = 3, CW = 3 // largeur d'un lac / d'une colonne de cascade
-      p.platforms.push({ x, alt, w: bank }); x += bank // RIVE d'accès (on plonge dans le 1er lac)
-      while (x + LW + CW + LW <= w - bank) {
-        p.waters.push({ x, w: LW, kind: basinKind, bankAlt: alt }) // LAC du palier
+      p.platforms.push({ x, alt, w: 2 }); x += 2 // berge d'accès BASSE (borde la 1re cascade)
+      const casW = 4 // colonne LARGE ; palier = lac+cascade (4) + perchoir (4) = 8
+      while (x + 8 <= w - 1) {
+        const top = alt + cascadeRise(rng)
+        // LAC directement SOUS la cascade (2 tuiles, bord droit SOUS le rideau → pas de berge à ce bord,
+        // donc surface non signalée « débordante ») : la colonne d'eau claire y PLONGE (jusqu'au sol).
+        p.waters.push({ x, w: 2, kind: basinKind, bankAlt: alt })
+        // CASCADE remontable qui TOMBE dans ce lac (bottomAlt = surface du lac)
+        p.waters.push({ x, w: casW, kind: 'cascade', bankAlt: top, bottomAlt: alt })
         if (basinKind !== 'lave' && !placedCoffre) { p.props.push({ kind: 'coffre', x: x + 1 }); placedCoffre = true }
-        const top = alt + cascadeRise(rng) // dénivelée ≥ MIN_CASCADE_TILES (vraie montée à la nage/escalade)
-        // CASCADE entre deux lacs : pied dans CE lac (bottomAlt = sa surface), sommet dans le lac suivant
-        p.waters.push({ x: x + LW, w: CW, kind: 'cascade', bankAlt: top, bottomAlt: alt })
-        x += LW + CW
+        const px = x + casW
+        p.platforms.push({ x: px, alt: top, w: 4 }) // perchoir d'ÉMERGENCE (borde la cascade) = berge du palier suivant
+        x = px + 4
         alt = top
       }
-      p.waters.push({ x, w: LW, kind: basinKind, bankAlt: alt }); x += LW // dernier lac (perché)
-      p.platforms.push({ x, alt, w: Math.max(bank, w - x) }) // RIVE de SORTIE (borde le dernier lac)
-      placeBirds(alt + 3)
+      p.platforms.push({ x, alt, w: Math.max(1, w - x) }) // plateau de SORTIE (haut), jusqu'au bord
+      placeBirds(alt + 2)
       p.exitAlt = alt
       break
     }
@@ -2025,6 +2058,7 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'cascade-saut-ange': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [18, 28], below: 'marine', above: 'air', chest: true, water: true },
   'cascade-large-pierre': { tier: 4, family: 'risque', entry: 'bas', exit: 'haut', width: [16, 24], below: 'vide', above: 'air', chest: true, water: true },
   'echelles-lianes': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [16, 26], below: 'sol', above: 'air', ladder: true, forcedOnly: true },
+  'echelles-zigzag': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [12, 20], below: 'sol', above: 'air', ladder: true, forcedOnly: true },
   'lacs-cascade-montee': { tier: 3, family: 'risque', entry: 'bas', exit: 'haut', width: [18, 30], below: 'marine', above: 'air', chest: true, water: true, forcedOnly: true },
   'lacs-cascade-descente': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [20, 30], below: 'marine', above: 'air', chest: true, water: true, forcedOnly: true },
   // R171 — LAC → CASCADE → PLATEAU (lac horizontal + cascade remontable vers un plateau haut)

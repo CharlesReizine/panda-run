@@ -203,6 +203,8 @@ const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
 const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
   'cave-1': ['echelles-lianes'], // (il n'existe qu'UNE cave — l'ancien 'cave-2' ne ciblait aucun niveau : les échelles n'apparaissaient jamais)
   'cimetiere-1': ['echelles-lianes'],
+  'cimetiere-2': ['echelles-zigzag'], // variante zigzag gauche-droite-gauche
+
   'foret-5': ['lacs-cascade-montee'],
   'montagne-2': ['lacs-cascade-montee'],
   // NB : 'lacs-cascade-descente' (chute pure de lac en lac) NON placé — non validable (le validateur ne
