@@ -383,7 +383,13 @@ export class LevelScene extends Phaser.Scene {
     for (const s of this.levelDef.spawns) {
       // s.y présent → monstre posé sur une corniche en hauteur (pieds sur son dessus) ; sinon au sol.
       const yTile = s.y ?? this.groundRow
-      this.enemies.add(new Enemy(this, s.x * TILE, yTile * TILE - 40, MONSTERS[s.monsterId]!))
+      // On fait APPARAÎTRE le monstre AU-DESSUS de la surface (il retombe et se cale dessus). Les mobs
+      // GÉANTS ('grand', ×1,55) sont bien plus HAUTS : avec l'offset fixe de 40px, leurs pieds naissaient
+      // SOUS le sol → coincés dedans (retour user : « ours rentré dans le sol, peut plus bouger »). On
+      // relève donc l'offset selon le gabarit → jamais d'apparition enfoncée dans la roche/le sol.
+      const def = MONSTERS[s.monsterId]!
+      const off = def.size === 'grand' ? 84 : def.size === 'petit' ? 30 : 40
+      this.enemies.add(new Enemy(this, s.x * TILE, yTile * TILE - off, def))
     }
 
     // le groupe applique ses defaults (allowGravity: true, immovable: false) à chaque ajout et
@@ -820,14 +826,29 @@ export class LevelScene extends Phaser.Scene {
     // le décor jouable), épinglé à la caméra (scrollFactor 0 = ciel « à l'infini », parallaxe cohérente).
     this.addSkyAmbience()
 
-    // décors posés au sol pour remplir l'espace (défilent avec le monde, derrière le joueur)
+    // décors posés au sol pour remplir l'espace (défilent avec le monde, derrière le joueur). Ils sont
+    // posés sur la VRAIE SURFACE de leur colonne (sommet de roche/plateforme, sinon le sol du monde) et
+    // JAMAIS dans l'eau : sur les niveaux où le jeu est en hauteur, les poser au sol du monde les faisait
+    // « voler en bas » dans le vide (retour user). Origine bas → l'arbre pousse depuis la surface.
     const widthPx = this.levelDef.widthTiles * TILE
-    const groundY = this.groundRow * TILE
     const decoKey = `deco-${this.levelDef.biome}`
+    const surfacePxAt = (xPx: number): number => {
+      const tx = Math.floor(xPx / TILE)
+      let topRow = this.groundRow
+      for (const r of this.levelDef.rockBands ?? []) if (tx >= r.x && tx < r.x + r.w) topRow = Math.min(topRow, r.y)
+      for (const p of this.levelDef.platforms) if (tx >= p.x && tx < p.x + p.w) topRow = Math.min(topRow, p.y)
+      return topRow === this.groundRow ? topRow * TILE + TILE / 2 : topRow * TILE // sol du monde vs sommet de dalle
+    }
+    const inWaterCol = (xPx: number): boolean => {
+      const tx = Math.floor(xPx / TILE)
+      return (this.levelDef.hazards ?? []).some((h) => h.kind === 'water' && tx >= h.x && tx < h.x + h.w)
+    }
     if (this.textures.exists(decoKey)) {
       for (let x = 160; x < widthPx - 80; x += 250) {
         const jitter = ((x * 37) % 70) - 35 // pseudo-aléa déterministe
-        this.add.image(x + jitter, groundY + 4, decoKey).setOrigin(0.5, 1).setDepth(-5)
+        const xx = x + jitter
+        if (inWaterCol(xx)) continue // pas d'arbre planté dans l'eau
+        this.add.image(xx, surfacePxAt(xx) + 4, decoKey).setOrigin(0.5, 1).setDepth(-5)
       }
     }
   }
