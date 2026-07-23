@@ -194,6 +194,9 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       const src = scene.textures.get(def.tex).getSourceImage() as { width?: number }
       if (src.width && src.width > 0) this.baseScale = (46 / src.width) * sizeScale(def.size)
     }
+    // ANGELING RÉTRÉCI (retour user : « il se coince entre le sol et une passerelle ») : −22 % sur le
+    // rendu ET la hitbox (le corps Arcade suit la scale) → il passe sous les ponts. Niveau inchangé.
+    if (def.id === 'angeling') this.baseScale *= 0.78
     if (this.baseScale !== 1) this.setScale(this.baseScale)
     // hitbox = la créature seule (la texture a de la marge : ombre au sol + place au-dessus),
     // pour qu'elle repose au sol au même niveau que le panda
@@ -477,7 +480,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.scene.time.delayedCall((k + 1) * 80, () => this.fireSpreadShot(spread))
       }
     } else {
-      this.levelScene.enemyGroundSpell(player.x, Math.round(this.monster.atk * 1.2))
+      this.levelScene.enemyGroundSpell(player.x, Math.round(this.monster.atk * 1.2), player.y)
     }
   }
 
@@ -707,7 +710,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         else this.setVelocityX(0)
         // sort de zone télégraphié sous le joueur
         if (t > this.nextActionAt) {
-          this.levelScene.enemyGroundSpell(player.x, this.monster.atk)
+          this.levelScene.enemyGroundSpell(player.x, this.monster.atk, player.y)
           this.nextActionAt = t + CAST_COOLDOWN * this.cadenceMul()
         }
         // + projectile occasionnel pour harceler pendant le rechargement du sort

@@ -1123,8 +1123,11 @@ export class LevelScene extends Phaser.Scene {
 
   // sort de zone télégraphié posé au sol : marqueur qui se remplit ~600 ms, puis dégâts
   // de zone (onde de choc) touchant le joueur s'il est encore dans le cercle
-  enemyGroundSpell(targetX: number, damage: number) {
-    const groundY = this.groundRow * TILE - 10
+  enemyGroundSpell(targetX: number, damage: number, targetY?: number) {
+    // le marqueur se pose SOUS LE JOUEUR (là où il est vraiment, sol OU plateforme). Avant il était
+    // scotché à la rangée de sol du monde → sur une plateforme, le cercle violet tombait tout en bas et
+    // ne touchait JAMAIS (retour user : « son attaque violette n'est jamais sur moi »).
+    const groundY = targetY ?? this.groundRow * TILE - 10
     const radius = 58
     const marker = this.add.graphics().setDepth(4)
     const draw = (fill: number) => {
