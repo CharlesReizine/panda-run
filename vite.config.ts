@@ -8,12 +8,36 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: false, // on gère l'enregistrement nous-mêmes dans main.ts
       workbox: {
-        // JEU JOUABLE HORS CONNEXION (retour user : « je prends l'avion, je veux y jouer »). Sans ça, le
-        // glob par défaut ne pré-cache que js/css/html (7 fichiers) → en mode avion les images/sons ne
-        // chargent pas. On pré-cache TOUS les assets (art ~173 Mo + audio) : premier lancement sur wifi
-        // télécharge tout, ensuite 100 % offline. maximumFileSize relevé (le plus gros PNG ~1,83 Mo).
-        globPatterns: ['**/*.{js,css,html,ico,png,jpg,jpeg,svg,webp,mp3,wav,ogg,json,woff,woff2}'],
+        // JEU JOUABLE HORS CONNEXION — stratégie HYBRIDE (fiable sur iPhone). Pré-cacher les ~173 Mo d'art
+        // d'un coup à l'install faisait ÉCHOUER le service worker sur iOS (install trop longue/coupée →
+        // le SW n'activait jamais son cache → en ligne OK mais hors ligne RIEN). À la place :
+        //  1) PRÉCACHE LÉGER = seulement le cœur de l'app (js/css/html/manifest/icônes) → install instantanée
+        //     et garantie → l'app se lance en standalone même hors ligne.
+        //  2) RUNTIME CacheFirst = images (png/jpg) et sons (mp3…) mis en cache AU FIL du jeu : tout ce
+        //     qui a été chargé une fois en ligne est ensuite dispo hors ligne (ex. dans l'avion).
+        globPatterns: ['**/*.{js,css,html,ico,svg,webmanifest}', 'icon-*.png'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        navigateFallback: 'index.html',
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }: { url: URL }) => /\.(?:png|jpg|jpeg|webp|gif|svg)$/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'panda-art',
+              expiration: { maxEntries: 600, maxAgeSeconds: 60 * 60 * 24 * 90 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: ({ url }: { url: URL }) => /\.(?:mp3|wav|ogg)$/.test(url.pathname),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'panda-audio',
+              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 90 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
       manifest: {
         name: 'Panda-Run',
