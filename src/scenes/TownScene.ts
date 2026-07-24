@@ -118,15 +118,15 @@ const BUILDING_NAME: Record<BuildingKind, string> = {
 // Prontera — bourg européen médiéval : quatre boutiques disposées en carré autour d'une grande
 // place pavée, château + maisons à colombage en fond, bannières bleu-sarcelle, arbres, fontaine.
 const THEME_EUROPEEN: ThemeConfig = {
-  worldW: 1440, worldH: 860,
+  worldW: 1024, worldH: 1024, // map carrée (town-prontera-bg 1024²) → aucune déformation
   buildings: [
-    { id: 'potions', name: BUILDING_NAME.potions, x: 300, y: 300, w: 152, h: 100 },
-    { id: 'vetements', name: BUILDING_NAME.vetements, x: 1140, y: 300, w: 152, h: 100 },
-    { id: 'forge', name: BUILDING_NAME.forge, x: 300, y: 660, w: 152, h: 100 },
-    { id: 'armes', name: BUILDING_NAME.armes, x: 1140, y: 660, w: 152, h: 100 },
+    { id: 'potions', name: BUILDING_NAME.potions, x: 260, y: 300, w: 152, h: 100 },
+    { id: 'vetements', name: BUILDING_NAME.vetements, x: 764, y: 300, w: 152, h: 100 },
+    { id: 'forge', name: BUILDING_NAME.forge, x: 260, y: 720, w: 152, h: 100 },
+    { id: 'armes', name: BUILDING_NAME.armes, x: 764, y: 720, w: 152, h: 100 },
   ],
-  questDoor: { x: 720, y: 600 },
-  playerStart: { x: 720, y: 760 },
+  questDoor: { x: 512, y: 690 },
+  playerStart: { x: 512, y: 880 },
   subtitle: 'Cité royale',
   groundTop: 0x93c25a, groundBottom: 0x6fa03e,
   plaza: 0xbcb3a2, plazaLine: 0x8d8577,
@@ -138,15 +138,15 @@ const THEME_EUROPEEN: ThemeConfig = {
 // Morroc — cité marocaine du désert : souk aux boutiques dispersées en biais, palais à dôme et
 // arches en fond, palmiers, lanternes suspendues, auvents à rayures, sol d'adobe ocre.
 const THEME_MAROCAIN: ThemeConfig = {
-  worldW: 1440, worldH: 860,
+  worldW: 1024, worldH: 1024, // map carrée (town-morroc-bg 1024²) → aucune déformation
   buildings: [
-    { id: 'potions', name: BUILDING_NAME.potions, x: 250, y: 340, w: 152, h: 100 },
-    { id: 'armes', name: BUILDING_NAME.armes, x: 480, y: 250, w: 152, h: 100 },
-    { id: 'vetements', name: BUILDING_NAME.vetements, x: 1010, y: 320, w: 152, h: 100 },
-    { id: 'forge', name: BUILDING_NAME.forge, x: 760, y: 690, w: 152, h: 100 },
+    { id: 'potions', name: BUILDING_NAME.potions, x: 220, y: 340, w: 152, h: 100 },
+    { id: 'armes', name: BUILDING_NAME.armes, x: 360, y: 300, w: 152, h: 100 },
+    { id: 'vetements', name: BUILDING_NAME.vetements, x: 760, y: 360, w: 152, h: 100 },
+    { id: 'forge', name: BUILDING_NAME.forge, x: 560, y: 720, w: 152, h: 100 },
   ],
-  questDoor: { x: 330, y: 660 },
-  playerStart: { x: 620, y: 780 },
+  questDoor: { x: 250, y: 700 },
+  playerStart: { x: 500, y: 900 },
   subtitle: 'Cité des sables',
   groundTop: 0xe6c27c, groundBottom: 0xcaa257,
   plaza: 0xd9a86a, plazaLine: 0xa9743b,
@@ -194,6 +194,7 @@ export class TownScene extends Phaser.Scene {
   private feedback?: Phaser.GameObjects.Text
   private questMarker?: Phaser.GameObjects.Text // « ❗ »/« ❓ » flottant au-dessus du garde (rafraîchi)
   private questDoorXY = { x: 0, y: 0 }
+  private grid?: Phaser.GameObjects.Container // grille de repérage A-L × 1-7 (placement des NPC/boutiques)
   private townId = 'prontera'
   private cfg: ThemeConfig = THEME_EUROPEEN
   private spots: TownSpot[] = []
@@ -316,6 +317,13 @@ export class TownScene extends Phaser.Scene {
     this.input.addPointer(1)
     this.joystick = new TopDownJoystick(this, new Phaser.Geom.Rectangle(0, 80, 480, 460))
 
+    // grille de repérage (aide au placement : le user dicte « boutique en C3 ») + bouton pour la basculer
+    this.buildPlacementGrid(cfg)
+    const gridBtn = this.add.text(20, 22, '⊞ Grille', {
+      fontSize: '16px', color: '#ffffff', backgroundColor: '#00000088', padding: { x: 8, y: 5 },
+    }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(36).setInteractive({ useHandCursor: true })
+    gridBtn.on('pointerdown', () => { this.grid?.setVisible(!this.grid.visible) })
+
     this.events.once('shutdown', () => {
       this.panel?.destroy()
       this.interactBtn?.destroy()
@@ -349,6 +357,28 @@ export class TownScene extends Phaser.Scene {
   // ville se suffit à elle-même (retour user). Méthode conservée en no-op pour ne pas toucher au flux de
   // create() ; les helpers de dessin restent définis mais ne sont plus appelés.
   private drawThemeDecor(_theme: TownTheme, _cfg: ThemeConfig) {}
+
+  // GRILLE DE REPÉRAGE façon bataille navale : 12 colonnes (A-L) × 7 lignes (1-7) posées sur la map, en
+  // coordonnées MONDE (une case = un endroit fixe). Masquée par défaut, basculée par le bouton « ⊞ Grille ».
+  // Sert à ce que le user dicte les positions (« herboristerie en C3 ») ; je convertis la case en x/y.
+  private buildPlacementGrid(cfg: ThemeConfig) {
+    const cols = 12, rows = 7
+    const cw = cfg.worldW / cols, ch = cfg.worldH / rows
+    const cont = this.add.container(0, 0).setDepth(40)
+    const g = this.add.graphics()
+    g.lineStyle(2, 0xffffff, 0.55)
+    for (let c = 0; c <= cols; c++) g.lineBetween(c * cw, 0, c * cw, cfg.worldH)
+    for (let r = 0; r <= rows; r++) g.lineBetween(0, r * ch, cfg.worldW, r * ch)
+    cont.add(g)
+    for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) {
+      const label = `${String.fromCharCode(65 + c)}${r + 1}`
+      cont.add(this.add.text(c * cw + cw / 2, r * ch + ch / 2, label, {
+        fontSize: '20px', color: '#ffee58', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4,
+      }).setOrigin(0.5))
+    }
+    cont.setVisible(false)
+    this.grid = cont
+  }
 
   private placeDecor(key: string, x: number, baseY: number, width: number) {
     if (!this.textures.exists(key)) return
