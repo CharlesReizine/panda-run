@@ -18,6 +18,12 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,svg,webmanifest}', 'icon-*.png'],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         navigateFallback: 'index.html',
+        // clientsClaim : le SW prend le CONTRÔLE de la page dès sa 1re activation (pas seulement au
+        // reload suivant). Sans ça, ajouter à l'écran d'accueil juste après la 1re visite donnait un
+        // clip SANS SW contrôlant → lancement hors-ligne KO (« désactiver le mode avion »). Avec, la
+        // coquille (index.html) est servie depuis le cache dès l'install → l'app se lance en avion.
+        clientsClaim: true,
+        skipWaiting: true,
         runtimeCaching: [
           {
             urlPattern: ({ url }: { url: URL }) => /\.(?:png|jpg|jpeg|webp|gif|svg)$/.test(url.pathname),

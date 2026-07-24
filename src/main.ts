@@ -136,10 +136,16 @@ if (game) {
     // Onglet en arrière-plan : RAF est throttlé par le navigateur → faux positif, on ignore.
     if (document.visibilityState !== 'visible') return
     const idle = performance.now() - lastBeat
-    if (idle > 3000 && !freezeReported) {
+    const active = g.scene.getScenes(true).map((s) => s.scene.key)
+    // Pendant le CHARGEMENT (Boot/Preload), décoder des centaines d'assets sur mobile — surtout
+    // pendant une ROTATION d'écran (iOS suspend le RAF le temps de la bascule) — peut bloquer le
+    // thread principal plusieurs secondes SANS que le jeu soit réellement mort. On relâche donc le
+    // seuil dans ces phases (sinon faux positif « Jeu figé » au lancement). Vrai gel encore attrapé (15 s).
+    const loading = active.some((k) => k === 'Boot' || k === 'Preload')
+    const threshold = loading ? 15000 : 3000
+    if (idle > threshold && !freezeReported) {
       freezeReported = true // on n'émet qu'une fois par épisode de gel (pas de spam)
-      const active = g.scene.getScenes(true).map((s) => s.scene.key).join(', ') || '(aucune)'
-      const msg = `Boucle figée depuis ${Math.round(idle)}ms — dernière scène active : ${active}`
+      const msg = `Boucle figée depuis ${Math.round(idle)}ms — dernière scène active : ${active.join(', ') || '(aucune)'}`
       logEvent('error', 'freeze', msg)
       showErrorOverlay('Jeu figé', msg)
     }
