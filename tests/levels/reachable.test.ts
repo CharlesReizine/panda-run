@@ -818,10 +818,10 @@ describe('R180 — cascades remontables assez hautes (≥ 4× le panda)', () => 
     expect(b[0]!.climb).toBe(3)
   })
 
-  it('cascade synthétique assez HAUTE (berge à 9 rangées sous le sommet) → acceptée', () => {
+  it('cascade synthétique assez HAUTE (berge à 13 rangées sous le sommet) → acceptée', () => {
     const ok: LevelDef = {
       id: 'synth-cascade-haute', name: 't', biome: 'plaine', widthTiles: 30, spawns: [],
-      platforms: [{ x: 0, y: 16, w: 5 }], // berge 9 rangées sous le sommet → climb 9 ≥ 8
+      platforms: [{ x: 0, y: 20, w: 5 }], // berge 13 rangées sous le sommet → climb 13 ≥ MIN_CASCADE_TILES
       hazards: [{ kind: 'water', x: 5, w: 2, top: 7, h: 20, water: 'cascade' }],
     }
     expect(shortCascades(ok, MIN_CASCADE_TILES)).toEqual([])

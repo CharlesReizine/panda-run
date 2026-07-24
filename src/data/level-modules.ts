@@ -198,13 +198,15 @@ function mulberry32(a: number) {
 
 const SIMPLE_JUMP_ROWS = 3 // marche maximale garantie au saut simple (rise ≈ 96px < 130px)
 
-// Hauteur MINIMALE d'une cascade remontable, en rangées : AU MOINS 4× la taille du panda
-// (PANDA_BODY.h ≈ 62px ≈ 2 tuiles → 8 rangées). En-deçà, la cascade se franchit presque d'un saut
-// (maxJumpTiles ≈ 4) → une montée « chiante » sans intérêt (retour joueur R180). On l'impose à la
-// génération de TOUS les motifs de cascade et on la verrouille par test (shortCascades).
-export const MIN_CASCADE_TILES = 8 // 4 × ~2 tuiles (PANDA_BODY.h 62px / TILE 32px, arrondi)
-// dénivelée déterministe d'une cascade : au moins MIN_CASCADE_TILES, +0..1 rangée de variété.
-const cascadeRise = (rng: () => number) => MIN_CASCADE_TILES + Math.floor(rng() * 2)
+// Hauteur MINIMALE d'une cascade remontable, en rangées. Retour joueur (R268) : « les cascades sont
+// trop courtes, plus hautes ». On passe de 8 (≈ 4× le panda) à 12 (≈ 6× le panda) : des chutes
+// nettement plus imposantes, jamais franchissables au saut (maxJumpTiles ≈ 4). La grille du niveau
+// s'agrandit dynamiquement en hauteur ; l'atteignabilité reste garantie (cascade remontable) et
+// verrouillée par test (shortCascades + reachable-strict). NB : plus haut (≈16) casse la silhouette
+// « pas de tour » (≤ 3 paliers empilés) sur desert-3/plage-1 → 12 est le max sûr sans playtest.
+export const MIN_CASCADE_TILES = 12 // 6 × ~2 tuiles (PANDA_BODY.h 62px / TILE 32px)
+// dénivelée déterministe d'une cascade : au moins MIN_CASCADE_TILES, +0..2 rangées de variété.
+const cascadeRise = (rng: () => number) => MIN_CASCADE_TILES + Math.floor(rng() * 3)
 
 // ─── Représentation intermédiaire en espace ALTITUDE (converti en rows à la fin) ────────────
 interface Piece {
