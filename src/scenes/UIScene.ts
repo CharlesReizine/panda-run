@@ -287,6 +287,11 @@ export class UIScene extends Phaser.Scene {
 
   // notif de passage de niveau : grosse, sous le panneau de HUD (haut-gauche), façon RO
   private onLevelUp(level: number) {
+    this.updateSkillPointBadge()
+    // ONBOARDING : au TOUT PREMIER passage de niveau (Nv 2), le joueur débloque son 1er point de
+    // compétence (il démarre sans aucune compétence). On ouvre un petit panneau explicatif au lieu du
+    // simple bandeau — le moment idéal pour apprendre le système. Ensuite, bandeau classique.
+    if (level === 2 && !this.training) { this.showFirstSkillOnboarding(); return }
     const bg = this.add.rectangle(14, 118, 372, 28, 0xffb300, 0.95).setOrigin(0)
     const txt = this.add.text(24, 122, `⭐ NIVEAU ${level} !  +1 compétence · +2 stats`, {
       fontSize: '15px', color: '#3a2600', fontStyle: 'bold',
@@ -294,7 +299,41 @@ export class UIScene extends Phaser.Scene {
     bg.setScale(0.2, 1)
     this.tweens.add({ targets: bg, scaleX: 1, duration: 200, ease: 'Back.out' })
     this.tweens.add({ targets: [bg, txt], alpha: 0, delay: 2200, duration: 700, onComplete: () => { bg.destroy(); txt.destroy() } })
-    this.updateSkillPointBadge()
+  }
+
+  // Panneau d'onboarding « ta première compétence » (Nv 2). Gèle le niveau le temps de la lecture ;
+  // deux issues : ouvrir le menu Compétences, ou reprendre. Dessiné DANS l'UI (donc on ne met en
+  // pause QUE la scène de niveau — sinon les boutons du panneau ne répondraient plus).
+  private showFirstSkillOnboarding() {
+    audio.playSfx('level-up')
+    this.freezeLevelForOverlay()
+    this.scene.pause(this.levelKey)
+    const panel = this.add.container(0, 0).setDepth(2000)
+    const backdrop = this.add.rectangle(480, 270, 960, 540, 0x000000, 0.78).setInteractive()
+    const card = this.add.rectangle(480, 262, 640, 320, 0x102a3a, 0.99).setStrokeStyle(3, 0x4fc3f7, 0.95)
+    const title = this.add.text(480, 138, '⭐ Niveau 2 — ta première compétence !', {
+      fontSize: '24px', color: '#ffd54f', fontStyle: 'bold',
+    }).setOrigin(0.5)
+    const body = this.add.text(480, 258,
+      'À chaque niveau tu gagnes un POINT DE COMPÉTENCE.\n\n' +
+      'Tu viens d\'en gagner ton premier ! Ouvre ⚙ Compétences pour\n' +
+      'APPRENDRE une compétence, puis ÉQUIPE-la dans un slot 1-4.\n\n' +
+      'En jeu : touche le slot (ou tape 1-4 au clavier) pour la lancer.', {
+      fontSize: '16px', color: '#e8f4fb', align: 'center', lineSpacing: 4,
+    }).setOrigin(0.5)
+    const close = () => { panel.destroy(); if (this.scene.isPaused(this.levelKey)) this.scene.resume(this.levelKey) }
+    const mkBtn = (x: number, w: number, fill: number, label: string, txtColor: string, onTap: () => void) => {
+      const b = this.add.rectangle(x, 388, w, 48, fill, 0.98).setStrokeStyle(2, 0xffffff, 0.5).setInteractive({ useHandCursor: true })
+      const t = this.add.text(x, 388, label, { fontSize: '17px', color: txtColor, fontStyle: 'bold' }).setOrigin(0.5)
+      b.on('pointerdown', () => { audio.playSfx('ui-tap'); this.pressFx(b); onTap() })
+      panel.add([b, t])
+    }
+    panel.add([backdrop, card, title, body])
+    mkBtn(378, 264, 0xffca28, '⚙ Voir mes compétences', '#3a2600', () => { panel.destroy(); this.openSkillMenu() })
+    mkBtn(636, 176, 0x37474f, 'Plus tard', '#ffffff', close)
+    card.setScale(0.7); title.setAlpha(0); body.setAlpha(0)
+    this.tweens.add({ targets: card, scale: 1, duration: 220, ease: 'Back.out' })
+    this.tweens.add({ targets: [title, body], alpha: 1, duration: 260, delay: 120 })
   }
 
   refresh() {

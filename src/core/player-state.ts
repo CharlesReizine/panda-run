@@ -52,8 +52,10 @@ export function newPlayer(name: string): PlayerState {
     skillPoints: 0,
     statPoints: 0,
     allocated: { str: 0, agi: 0, int: 0 },
-    skillLevels: { 'calin-brutal': 1 },
-    equippedSkills: ['calin-brutal', null, null, null],
+    // Aucune compétence au départ (onboarding) : le joueur en débloque une au 1er passage de niveau
+    // (niveau 2 → +1 point de compétence + panneau explicatif, cf. UIScene.onLevelUp).
+    skillLevels: {},
+    equippedSkills: [null, null, null, null],
     gold: 0,
     potions: 1,
     inventory: [],
