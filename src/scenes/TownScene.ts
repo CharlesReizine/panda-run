@@ -272,12 +272,15 @@ export class TownScene extends Phaser.Scene {
       this.add.text(b.x, bottom - dispH - 4, b.name, {
         fontSize: '14px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 3,
       }).setOrigin(0.5, 1)
-      // boutiquier PNJ décoratif planté devant la façade (aucune collision). Rendu par-dessus.
-      this.placeNpc(SHOP_NPC[b.id], b.x, bottom + 34, 96)
+      // boutiquier PNJ décoratif, AGRANDI et DÉCALÉ vers le CENTRE de la place pour ne plus se
+      // superposer à la façade (retour user). Aucune collision, rendu par-dessus.
+      const toCx = cfg.worldW / 2 - b.x, toCy = cfg.worldH / 2 - bottom
+      const cd = Math.hypot(toCx, toCy) || 1, off = 112
+      this.placeNpc(SHOP_NPC[b.id], b.x + (toCx / cd) * off, bottom + 20 + (toCy / cd) * off, 132)
     }
 
     // PNJ de quête : le garde (panda à la lance), planté devant sa zone. Décor uniquement.
-    this.placeNpc('npc-garde', cfg.questDoor.x, cfg.questDoor.y + 66, 120)
+    this.placeNpc('npc-garde', cfg.questDoor.x, cfg.questDoor.y + 66, 156)
     this.add.text(cfg.questDoor.x, cfg.questDoor.y - 58, QUEST_CHAIN[0]!.npcName, {
       fontSize: '14px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 3,
     }).setOrigin(0.5)
@@ -308,6 +311,7 @@ export class TownScene extends Phaser.Scene {
     this.player.setCollideWorldBounds(true)
     // hitbox recentrée dans le cadre élargi PANDA_TEX (w 96) : (96-34)/2 = 31
     this.player.setSize(34, 40).setOffset(31, 46)
+    this.player.setScale(1.35) // panda plus gros dans les villes (retour user « grossir les persos »)
     this.player.setDepth(5)
     this.player.play(`panda-${p.classId}-idle`)
     this.physics.add.collider(this.player, wallsGroup)
