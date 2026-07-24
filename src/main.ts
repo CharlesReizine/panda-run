@@ -103,6 +103,12 @@ window.visualViewport?.addEventListener('resize', fitViewport)
 window.visualViewport?.addEventListener('scroll', fitViewport)
 window.addEventListener('resize', () => setTimeout(fitViewport, 150))
 window.addEventListener('orientationchange', () => setTimeout(fitViewport, 300))
+// iOS Safari : la barre d'URL se rétracte APRÈS le chargement → la 1re mesure de hauteur est trop
+// grande et le jeu sort du visible (bas coupé, « auto-scale » foireux vu sur iPhone 12 mini). On
+// re-mesure donc plusieurs fois après le boot, au 'load', et à chaque 'pageshow' (reprise PWA/bfcache).
+window.addEventListener('load', fitViewport)
+window.addEventListener('pageshow', fitViewport)
+for (const d of [80, 250, 600, 1200, 2500]) setTimeout(fitViewport, d)
 fitViewport()
 
 if (game) {
