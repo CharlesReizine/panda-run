@@ -96,8 +96,11 @@ describe('computeMonsterLevels (niveau = 2×rang − 1 + bonus)', () => {
   })
 
   it('l\'élite (mvp) porte le bonus élite au-dessus de sa base de rang', () => {
-    // angeling n'apparaît qu'à partir de plaine-5 (élite gardée pour la fin de biome) → base 2×5−1=9, + élite
-    expect(levels['angeling']).toBe(LEVEL_MUL * TERRAIN_RANK['plaine-5']! - LEVEL_SUB + ELITE_LEVEL_BONUS)
+    // angeling = base (2×rang de sa 1re apparition − 1) + bonus élite, quel que soit le rang exact.
+    const angelingRank = Math.min(...Object.values(LEVELS)
+      .filter((l) => l.spawns.some((s) => s.monsterId === 'angeling'))
+      .map((l) => TERRAIN_RANK[l.id] ?? 999))
+    expect(levels['angeling']).toBe(LEVEL_MUL * angelingRank - LEVEL_SUB + ELITE_LEVEL_BONUS)
   })
 
   it('le boss final porte le bonus boss', () => {

@@ -20,12 +20,18 @@ import { WORLD_NODES } from '../../src/data/worldmap'
 
 const isGardien = (id: string) => id.startsWith('gardien-')
 
-// mob le plus fort d'un terrain (spawns hors gardiens + boss éventuel).
-function maxMob(levelId: string): number {
+// mob le plus fort d'un terrain (spawns hors gardiens + boss éventuel). `normalOnly` exclut EN PLUS
+// les variantes GÉANTES (size 'grand', +5) : ce sont des rencontres bonus délibérément AU-DESSUS du
+// niveau du terrain (épice), pas la cible de calibrage « à ton niveau » — on les ignore pour juger si
+// le joueur farmé est à niveau à la fin d'un biome.
+function maxMob(levelId: string, normalOnly = false): number {
   const l = LEVELS[levelId]
   if (!l) return 0
   let mx = 0
-  for (const s of l.spawns) { const m = MONSTERS[s.monsterId]; if (m && !isGardien(s.monsterId)) mx = Math.max(mx, m.level) }
+  for (const s of l.spawns) {
+    const m = MONSTERS[s.monsterId]
+    if (m && !isGardien(s.monsterId) && !(normalOnly && m.size === 'grand')) mx = Math.max(mx, m.level)
+  }
   if (l.boss) { const b = MONSTERS[l.boss]; if (b) mx = Math.max(mx, b.level) }
   return mx
 }
@@ -78,7 +84,7 @@ describe('modèle d\'équilibrage maître ⭐', () => {
     const lastOfBiome: Record<string, string> = {}
     for (const l of nonBoss) lastOfBiome[l.biome] = l.id
     for (const [biome, id] of Object.entries(lastOfBiome)) {
-      const deficit = maxMob(id) - playerLevelAfterClear(id)
+      const deficit = maxMob(id, true) - playerLevelAfterClear(id) // hors géants (épice au-dessus)
       expect(deficit, `fin de biome ${biome} (${id}) déficit ${deficit}`).toBeLessThanOrEqual(6)
     }
   })

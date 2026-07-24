@@ -115,11 +115,11 @@ const WATER_THREATS = ['requin', 'meduse', 'piranha']
 const POOLS: Record<string, BiomePool> = {
   // angeling (élite, mvp) placé TARD dans le pool (index 5) → n'apparaît qu'à partir de plaine-5, jamais
   // sur plaine-2 (retour joueur : « pas d'élite dès la 2e map »). Les élites sortent en fin de biome.
-  plaine: { tier: 1, ground: ['gloopy', 'fabre', 'lapin-bondissant', 'mandragore', 'poporing', 'angeling', 'louveteau', 'willow', 'ronce-cracheuse'], birds: ['corbeau'], mvp: 'poring-dore' },
+  plaine: { tier: 1, ground: ['gloopy', 'fabre', 'gloopy-mini', 'lapin-bondissant', 'mandragore', 'poporing', 'angeling', 'louveteau', 'willow', 'ronce-cracheuse'], birds: ['corbeau'], mvp: 'poring-dore' },
   foret: { tier: 2, ground: ['louveteau', 'willow', 'poporing', 'mandragore', 'ronce-cracheuse', 'rocker', 'singe-grimpeur', 'ours-brun', 'gloopy-geant', 'fabre-geant'], birds: ['corbeau'], mvp: 'poring-dore' },
-  desert: { tier: 2, ground: ['scorpion', 'fourmi-geante', 'scarabee-cornu', 'momie', 'vautour', 'orc-guerrier', 'zombie', 'mini-baphomet'], birds: ['faucon'], aquatic: WATER_THREATS, mvp: 'orc-seigneur' },
-  jungle: { tier: 3, ground: ['willow', 'frelon-geant', 'flora-vorace', 'singe-grimpeur', 'ours-brun', 'ronce-cracheuse', 'scorpion-geant'], birds: ['ara'], aquatic: WATER_THREATS },
-  cave: { tier: 3, ground: ['chauve-souris', 'squelette', 'fantome', 'gobelin-mineur', 'fourmi-geante', 'mage-noir', 'golem-de-pierre'], birds: ['corbeau'], aquatic: WATER_THREATS },
+  desert: { tier: 2, ground: ['scorpion', 'scorpion-mini', 'fourmi-geante', 'scarabee-cornu', 'momie', 'vautour', 'orc-guerrier', 'zombie', 'mini-baphomet'], birds: ['faucon'], aquatic: WATER_THREATS, mvp: 'orc-seigneur' },
+  jungle: { tier: 3, ground: ['willow', 'frelon-geant', 'flora-vorace', 'flora-geante', 'singe-grimpeur', 'ours-brun', 'ronce-cracheuse', 'scorpion-geant'], birds: ['ara'], aquatic: WATER_THREATS },
+  cave: { tier: 3, ground: ['chauve-souris', 'chauve-souris-geante', 'squelette', 'fantome', 'gobelin-mineur', 'gobelin-mini', 'fourmi-geante', 'mage-noir', 'golem-de-pierre'], birds: ['corbeau'], aquatic: WATER_THREATS },
   montagne: { tier: 3, ground: ['harpie', 'ours-brun', 'yeti', 'louveteau', 'singe-geant'], birds: ['faucon'], aquatic: WATER_THREATS },
   cimetiere: { tier: 4, ground: ['squelette', 'goule', 'totem-maudit', 'banshee', 'fantome', 'pretre-goule', 'momie-geante', 'squelette-geant', 'goule-geante'], birds: ['harfang-spectral'], aquatic: WATER_THREATS, mvp: 'spectre-ancien' },
   plage: { tier: 3, ground: ['crabe-geant', 'harpie'], birds: ['ara'], aquatic: ['meduse', 'crabe-geant', 'requin', 'piranha'], mvp: 'roi-crabe' },
