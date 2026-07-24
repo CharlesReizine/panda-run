@@ -334,48 +334,21 @@ export class TownScene extends Phaser.Scene {
   // ————— Sol et décor procéduraux, teintés au thème (villes visuellement distinctes dès maintenant) —————
 
   private drawGround(cfg: ThemeConfig) {
-    const g = this.add.graphics().setDepth(-10)
-    const bands = 18
-    for (let i = 0; i < bands; i++) {
-      const col = lerpColor(cfg.groundTop, cfg.groundBottom, i / (bands - 1))
-      g.fillStyle(col, 1).fillRect(0, (cfg.worldH / bands) * i, cfg.worldW, cfg.worldH / bands + 1)
-    }
-    // grande place centrale carrelée (pavés européens / adobe marocain selon la palette)
-    const px = cfg.worldW / 2, py = cfg.worldH / 2
-    const pw = cfg.worldW - 260, ph = cfg.worldH - 300
-    g.fillStyle(cfg.plaza, 1).fillRoundedRect(px - pw / 2, py - ph / 2, pw, ph, 28)
-    g.lineStyle(2, cfg.plazaLine, 0.55)
-    for (let x = px - pw / 2; x <= px + pw / 2; x += 64) g.lineBetween(x, py - ph / 2, x, py + ph / 2)
-    for (let y = py - ph / 2; y <= py + ph / 2; y += 64) g.lineBetween(px - pw / 2, y, px + pw / 2, y)
-    g.lineStyle(4, cfg.plazaLine, 0.8).strokeRoundedRect(px - pw / 2, py - ph / 2, pw, ph, 28)
+    // Fond = la « map » de la ville affichée PLEIN CADRE (image), sans plus aucun décor procédural
+    // dessiné par-dessus (retour user : « les dessins que tu rajoutes, c'est un peu dégueu »). On ne
+    // garde que les boutiques + PNJ posés sur cette map. bg thématisé par ville si présent, sinon générique.
+    const themedBg = `town-${this.townId}-bg`
+    const key = this.textures.exists(themedBg) ? themedBg : 'town-bg'
+    const bg = this.add.image(cfg.worldW / 2, cfg.worldH / 2, key).setDepth(-10)
+    bg.setDisplaySize(cfg.worldW, cfg.worldH)
+    // Pour la cité des sables (Morroc), on réchauffe la map générique (verte) vers l'ocre du désert.
+    if (cfg.buildingTint !== 0xffffff) bg.setTint(cfg.buildingTint)
   }
 
-  private drawThemeDecor(theme: TownTheme, cfg: ThemeConfig) {
-    const g = this.add.graphics().setDepth(-5)
-    if (theme === 'europeen') {
-      // château + maisons à colombage en fond
-      this.placeDecor('town-chateau', cfg.worldW / 2, 250, 300)
-      this.placeDecor('town-maison', cfg.worldW / 2 - 330, 210, 150)
-      this.placeDecor('town-maison', cfg.worldW / 2 + 330, 210, 150)
-      // fontaine au centre de la place
-      const fx = cfg.worldW / 2, fy = cfg.worldH / 2 + 20
-      g.fillStyle(0x9e9e9e, 1).fillCircle(fx, fy, 44)
-      g.fillStyle(0x4fc3f7, 1).fillCircle(fx, fy, 32)
-      g.fillStyle(0xbdbdbd, 1).fillCircle(fx, fy, 12)
-      // bannières bleu-sarcelle plantées aux abords de la place + arbres en périphérie
-      for (const [bx, by] of [[300, 470], [1140, 470], [560, 700], [880, 700]] as const) this.drawBanner(g, bx, by, cfg.accent)
-      for (const [tx, ty] of [[150, 780], [1290, 780], [150, 470], [1290, 470], [720, 800]] as const) this.drawTree(g, tx, ty)
-    } else {
-      // palais à dôme + arches en fond (centre-haut laissé libre par la disposition du souk)
-      this.drawPalace(g, cfg.worldW / 2, 220)
-      // palmiers dispersés
-      for (const [tx, ty] of [[150, 780], [1300, 760], [180, 500], [1280, 500], [470, 800], [900, 500]] as const) this.drawPalm(g, tx, ty)
-      // lanternes suspendues (halo chaud) en haut de la place
-      for (const lx of [560, 720, 880, 1040]) this.drawLantern(g, lx, 380)
-      // auvents à rayures du souk au-dessus des boutiques
-      for (const [ax, ay] of [[250, 288], [480, 198], [1010, 268], [760, 638]] as const) this.drawAwning(g, ax, ay, cfg.accent)
-    }
-  }
+  // Décors procéduraux (fontaines, arbres, palmiers, bannières, auvents, pavés…) RETIRÉS : la map de la
+  // ville se suffit à elle-même (retour user). Méthode conservée en no-op pour ne pas toucher au flux de
+  // create() ; les helpers de dessin restent définis mais ne sont plus appelés.
+  private drawThemeDecor(_theme: TownTheme, _cfg: ThemeConfig) {}
 
   private placeDecor(key: string, x: number, baseY: number, width: number) {
     if (!this.textures.exists(key)) return
