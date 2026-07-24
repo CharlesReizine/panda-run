@@ -25,14 +25,26 @@ describe('statsForLevel', () => {
     }
   })
 
-  it('le rôle ne fait que REDISTRIBUER la puissance : écart borné (≤ 20%) autour de la courbe du niveau', () => {
+  it('le rôle de COMBAT ne fait que REDISTRIBUER la puissance : écart borné (≤ 20%) autour du niveau', () => {
     // La puissance globale est pilotée par le NIVEAU ; le rôle la répartit entre PV/ATK/DÉF sans la
     // créer. On borne donc l'écart entre le rôle le plus « puissant » et le plus « faible » d'un même
-    // niveau → deux mobs de même niveau restent comparables (pas de tank 3× un frêle du même niveau).
+    // niveau → deux mobs de même niveau restent comparables (pas de tank 3× un rôle voisin du même niveau).
+    // EXCEPTION : 'frele' est le tier CHAIR À CANON assumé (porings/slimes inoffensifs, cf. baisse ATK
+    // demandée) — délibérément SOUS la courbe, testé à part juste en dessous.
+    const combatRoles = ROLES.filter((r) => r !== 'frele')
     for (let L = 1; L <= 78; L++) {
       let lo = Infinity, hi = 0
-      for (const role of ROLES) { const s = statsForLevel(L, role); const p = statPower(s.hp, s.atk, s.def); lo = Math.min(lo, p); hi = Math.max(hi, p) }
+      for (const role of combatRoles) { const s = statsForLevel(L, role); const p = statPower(s.hp, s.atk, s.def); lo = Math.min(lo, p); hi = Math.max(hi, p) }
       expect(hi / lo, `L${L}`).toBeLessThanOrEqual(1.2)
+    }
+  })
+
+  it('le rôle « frele » est le tier le plus faible mais pas dérisoire (55–90 % de la courbe normale)', () => {
+    for (let L = 1; L <= 78; L++) {
+      const f = statsForLevel(L, 'frele'); const n = statsForLevel(L, 'normal')
+      const ratio = statPower(f.hp, f.atk, f.def) / statPower(n.hp, n.atk, n.def)
+      expect(ratio, `L${L} frele/normal`).toBeLessThanOrEqual(0.9)
+      expect(ratio, `L${L} frele/normal`).toBeGreaterThanOrEqual(0.55)
     }
   })
 

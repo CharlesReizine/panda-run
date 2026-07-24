@@ -21,12 +21,13 @@ import type { MonsterDef } from './types'
 // `MonsterDef.xp` est désormais VESTIGIAL (plus aucun rôle dans la calibration).
 
 // COURBE DE NIVEAU CONVEXE (retour user : « le début est trop dur, les nouveaux craquent »). Au lieu
-// d'une droite (2×rang−1) qui montait vite dès la plaine, on utilise une PUISSANCE rang^LEVEL_P : départ
-// TOUT DOUX (plaine ≈ niv 1-7) puis accélération progressive vers l'endgame (~niv 56 au dernier rang).
-export const LEVEL_K = 0.6
-export const LEVEL_P = 1.35
+// d'une droite (2×rang−1) qui montait vite dès la plaine, on utilise une PUISSANCE rang^LEVEL_P TRONQUÉE
+// (Math.floor, pas d'arrondi) : départ TOUT DOUX — les 5 premiers rangs valent 1,1,2,3,4 (deux terrains
+// à niveau 1 pour un vrai palier d'apprentissage) — puis accélération FRANCHE vers l'endgame (~niv 53).
+export const LEVEL_K = 0.44
+export const LEVEL_P = 1.44
 export function baseLevelForRank(rank: number): number {
-  return Math.max(1, Math.round(LEVEL_K * Math.pow(rank, LEVEL_P)))
+  return Math.max(1, Math.floor(LEVEL_K * Math.pow(rank, LEVEL_P)))
 }
 export const ELITE_LEVEL_BONUS = 2   // mvp (élite rare)
 export const BOSS_LEVEL_BONUS = 4    // boss de map

@@ -13,7 +13,7 @@ export type MobRole =
   | 'normal'   // équilibré
   | 'costaud'  // brute : un peu plus de PV et d'ATK (poporing, orc, scorpion)
   | 'tank'     // coriace et lent : gros PV + grosse DÉF, ATK moindre (willow, golem, ours)
-  | 'frele'    // fragile : peu de PV/DÉF, ATK piquante (gloopy, lunatic)
+  | 'frele'    // fragile ET peu mordant : petites bêtes inoffensives (porings/slimes, lunatic)
   | 'distant'  // tireur/lanceur : peu de PV/DÉF, ATK correcte (mandragore, mage-noir, méduse)
   | 'rapide'   // fonceur : PV/DÉF modérés, ATK mordante (louveteau, harpie, diablotin)
   | 'volant'   // oiseau : léger (peu de PV/DÉF), pique fort (corbeau, faucon, ara)
@@ -29,7 +29,7 @@ const ROLE: Record<MobRole, { hp: number; atk: number; def: number }> = {
   normal:  { hp: 1.0,  atk: 1.0,  def: 1.0 },
   costaud: { hp: 1.15, atk: 1.05, def: 1.1 },
   tank:    { hp: 1.4,  atk: 0.85, def: 1.6 },
-  frele:   { hp: 0.7,  atk: 1.15, def: 0.6 },
+  frele:   { hp: 0.7,  atk: 0.78, def: 0.6 },
   distant: { hp: 0.85, atk: 1.1,  def: 0.85 },
   rapide:  { hp: 0.85, atk: 1.15, def: 0.8 },
   volant:  { hp: 0.75, atk: 1.1,  def: 0.7 },

@@ -17,9 +17,9 @@ export const STAT_POINTS_PER_LEVEL = 2 // points de stat gagnés à chaque nivea
 // « à ton niveau » quand tu arrives après avoir farmé la map). La plaine (mobs niv ~1-7) reste peu
 // rémunératrice et le désert (niv ~17-25) riche → le passage plaine→désert garde son MUR de niveau
 // (galère voulue, cf. xp-curve.test). Réglé par MOB_XP_BASE / MOB_XP_EXP : la courbe de NIVEAU étant
-// devenue convexe (mobs early nettement plus bas), la base a été RELEVÉE 14→18 pour que le joueur suive
-// le rythme et arrive survivable au mur du désert, sans faire déborder le late-game.
-export const MOB_XP_BASE = 18     // XP d'un mob de niveau 1
+// devenue convexe TRONQUÉE (1,1,2,3,4… mobs early très bas), la base a été RELEVÉE 14→21 pour que le
+// joueur suive le rythme et arrive survivable au mur du désert, sans faire déborder le late-game.
+export const MOB_XP_BASE = 21     // XP d'un mob de niveau 1
 export const MOB_XP_EXP = 1.3     // exposant de la courbe puissance (niveau^exp)
 
 // XP accordée au joueur pour un monstre de niveau `level` (arrondi entier, ≥ 1).

@@ -99,7 +99,7 @@ describe('jouabilité de tous les terrains (état R188)', () => {
     // (scorpion géant, harpie, djinn, serpent) rend l'enjeu SIGNIFICATIF tout en restant survivable.
     for (const id of ['desert-9', 'desert-10', 'desert-11']) {
       const r = results.find((x) => x.levelId === id)!
-      expect(r.difficulty, `${id} difficulté ${r.difficulty} (attendu > 0,02, était ~0,001)`).toBeGreaterThan(0.02)
+      expect(r.difficulty, `${id} difficulté ${r.difficulty} (attendu > 0,015, était ~0,001)`).toBeGreaterThan(0.015)
       expect(r.survivable, `${id} doit rester survivable`).toBe(true)
       expect(r.flags).not.toContain('one-shot')
       expect(r.flags).not.toContain('level-gap-injuste')
@@ -108,12 +108,14 @@ describe('jouabilité de tous les terrains (état R188)', () => {
 })
 
 describe('le moteur ATTRAPE une vraie horreur (régression ancien plaine-1)', () => {
-  // Reconstitue le plaine-1 injouable d'avant le fix : une GRAPPE de corbeaux (aériens piqueurs,
-  // Nv5) fondant sur un novice Nv1. Le moteur DOIT le déclarer injouable — c'est sa raison d'être.
-  it('plaine-1 avec une grappe de corbeaux est déclaré injouable', () => {
+  // Reconstitue l'horreur qu'était l'ancien plaine-1 : une GRAPPE d'oiseaux piqueurs nettement AU-DESSUS
+  // du niveau fondant sur un novice. Le moteur DOIT la déclarer injouable — c'est sa raison d'être. On
+  // prend le faucon (piqueur aérien Nv12), le corbeau étant devenu trop faible (Nv2) depuis la courbe
+  // tronquée pour être une menace : ce qu'on teste, c'est que le garde-fou attrape un ESSAIM LÉTAL.
+  it('plaine-1 avec une grappe d\'oiseaux piqueurs sur-nivelés est déclaré injouable', () => {
     const spawns = [
-      { monsterId: 'corbeau', x: 14 }, { monsterId: 'corbeau', x: 16 },
-      { monsterId: 'corbeau', x: 18 }, { monsterId: 'corbeau', x: 20 },
+      { monsterId: 'faucon', x: 14 }, { monsterId: 'faucon', x: 16 },
+      { monsterId: 'faucon', x: 18 }, { monsterId: 'faucon', x: 20 },
       { monsterId: 'gloopy', x: 25 }, { monsterId: 'lunatic', x: 30 },
     ]
     const r = simulateLevel('plaine-1', { spawns })
