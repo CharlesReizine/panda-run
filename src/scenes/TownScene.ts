@@ -119,14 +119,14 @@ const BUILDING_NAME: Record<BuildingKind, string> = {
 // place pavée, château + maisons à colombage en fond, bannières bleu-sarcelle, arbres, fontaine.
 const THEME_EUROPEEN: ThemeConfig = {
   worldW: 1024, worldH: 1024, // map carrée (town-prontera-bg 1024²) → aucune déformation
-  buildings: [
-    { id: 'potions', name: BUILDING_NAME.potions, x: 260, y: 300, w: 152, h: 100 },
-    { id: 'vetements', name: BUILDING_NAME.vetements, x: 764, y: 300, w: 152, h: 100 },
-    { id: 'forge', name: BUILDING_NAME.forge, x: 260, y: 720, w: 152, h: 100 },
-    { id: 'armes', name: BUILDING_NAME.armes, x: 764, y: 720, w: 152, h: 100 },
+  buildings: [ // positions dictées par le user via l'outil de placement (monde 1024²)
+    { id: 'potions', name: BUILDING_NAME.potions, x: 182, y: 255, w: 152, h: 100 },
+    { id: 'vetements', name: BUILDING_NAME.vetements, x: 836, y: 253, w: 152, h: 100 },
+    { id: 'forge', name: BUILDING_NAME.forge, x: 132, y: 787, w: 152, h: 100 },
+    { id: 'armes', name: BUILDING_NAME.armes, x: 878, y: 803, w: 152, h: 100 },
   ],
-  questDoor: { x: 512, y: 690 },
-  playerStart: { x: 512, y: 880 },
+  questDoor: { x: 531, y: 644 },
+  playerStart: { x: 528, y: 143 },
   subtitle: 'Cité royale',
   groundTop: 0x93c25a, groundBottom: 0x6fa03e,
   plaza: 0xbcb3a2, plazaLine: 0x8d8577,
@@ -139,14 +139,14 @@ const THEME_EUROPEEN: ThemeConfig = {
 // arches en fond, palmiers, lanternes suspendues, auvents à rayures, sol d'adobe ocre.
 const THEME_MAROCAIN: ThemeConfig = {
   worldW: 1024, worldH: 1024, // map carrée (town-morroc-bg 1024²) → aucune déformation
-  buildings: [
-    { id: 'potions', name: BUILDING_NAME.potions, x: 220, y: 340, w: 152, h: 100 },
-    { id: 'armes', name: BUILDING_NAME.armes, x: 360, y: 300, w: 152, h: 100 },
-    { id: 'vetements', name: BUILDING_NAME.vetements, x: 760, y: 360, w: 152, h: 100 },
-    { id: 'forge', name: BUILDING_NAME.forge, x: 560, y: 720, w: 152, h: 100 },
+  buildings: [ // positions dictées par le user via l'outil de placement (monde 1024²)
+    { id: 'potions', name: BUILDING_NAME.potions, x: 177, y: 298, w: 152, h: 100 },
+    { id: 'armes', name: BUILDING_NAME.armes, x: 886, y: 281, w: 152, h: 100 },
+    { id: 'vetements', name: BUILDING_NAME.vetements, x: 116, y: 849, w: 152, h: 100 },
+    { id: 'forge', name: BUILDING_NAME.forge, x: 888, y: 845, w: 152, h: 100 },
   ],
-  questDoor: { x: 250, y: 700 },
-  playerStart: { x: 500, y: 900 },
+  questDoor: { x: 512, y: 620 },
+  playerStart: { x: 518, y: 962 },
   subtitle: 'Cité des sables',
   groundTop: 0xe6c27c, groundBottom: 0xcaa257,
   plaza: 0xd9a86a, plazaLine: 0xa9743b,
