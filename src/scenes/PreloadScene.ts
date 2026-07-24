@@ -91,6 +91,33 @@ export class PreloadScene extends Phaser.Scene {
   constructor() { super('Preload') }
 
   preload() {
+    const cx = 480, cy = 270
+    this.cameras.main.setBackgroundColor('#101820')
+    this.add.text(cx, cy - 35, '🐼 Panda Run', {
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: '26px',
+      color: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5)
+
+    const loadingTxt = this.add.text(cx, cy + 10, 'Chargement du contenu en cours…', {
+      fontFamily: 'system-ui, sans-serif',
+      fontSize: '17px',
+      color: '#a5d6a7'
+    }).setOrigin(0.5)
+
+    const barW = 300, barH = 14
+    const bgBar = this.add.graphics()
+    bgBar.fillStyle(0x223344, 0.8).fillRoundedRect(cx - barW / 2, cy + 38, barW, barH, 7)
+    const fillBar = this.add.graphics()
+
+    this.load.on('progress', (val: number) => {
+      fillBar.clear()
+      fillBar.fillStyle(0x66bb6a, 1)
+      if (val > 0) fillBar.fillRoundedRect(cx - barW / 2, cy + 38, Math.max(14, barW * val), barH, 7)
+      loadingTxt.setText(`Chargement du contenu en cours… (${Math.round(val * 100)}%)`)
+    })
+
     this.load.image('splash', 'art/splash.png')
     // pièce d'or illustrée (optionnelle) : si art/coin.png existe, elle remplace la pièce procédurale
     this.load.image('art-coin', 'art/coin.png')

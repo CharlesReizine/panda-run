@@ -159,6 +159,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private spinFlip = false
   private spinTimer: Phaser.Time.TimerEvent | null = null
   private hatImage: Phaser.GameObjects.Image | null = null
+  private hatScale = 1
   private weaponImage: Phaser.GameObjects.Image | null = null
   // true quand l'arme AFFICHÉE est une grosse épée (lame portée par un épéiste) : masquée au repos,
   // révélée le temps d'un coup / tourbillon. Calculé à chaque refreshWeapon selon l'arme équipée.
@@ -224,7 +225,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // elle existe (retour user : « porté, c'est pas l'image de l'objet, c'est un vieux SVG »), sinon on
     // retombe sur le dessin cosmetic-<id>.
     const tex = hatId && this.scene.textures.exists(`item-${hatId}`) ? `item-${hatId}` : hatId ? `cosmetic-${hatId}` : null
-    this.hatImage = tex ? this.scene.add.image(this.x, this.y + HAT_OFFSET_Y, tex).setDepth(this.depth + 1) : null
+    if (!tex) {
+      this.hatImage = null
+      this.hatScale = 1
+      return
+    }
+    const frame = this.scene.textures.getFrame(tex)
+    const maxDim = frame ? Math.max(frame.width, frame.height) : 40
+    // Cible : environ 38px de dimension max pour reposer naturellement sur la tête
+    this.hatScale = maxDim > 0 ? 38 / maxDim : 1
+    this.hatImage = this.scene.add.image(this.x, this.y + HAT_OFFSET_Y, tex).setDepth(this.depth + 1)
   }
 
   // (ré)affiche l'arme ÉQUIPÉE en overlay dans la patte avant (le panda illustré a les mains vides).
@@ -311,7 +321,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.hatImage.setPosition(this.x + ox * cos - oy * sin, this.y + ox * sin + oy * cos)
       this.hatImage.setFlipX(flip === -1)
       this.hatImage.setRotation(this.rotation)
-      this.hatImage.setScale(this.scaleX, this.scaleY)
+      this.hatImage.setScale(this.hatScale * Math.abs(this.scaleX), this.hatScale * Math.abs(this.scaleY))
     }
     if (this.weaponImage) {
       // décalage avant propre à la classe (bâton du mage/sorcier poussé nettement devant le panda)

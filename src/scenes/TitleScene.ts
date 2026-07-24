@@ -4,7 +4,7 @@ import { newPlayer, type PlayerState } from '../core/player-state'
 import { setPlayer } from '../state'
 import { audio } from '../audio/audio-engine'
 import { showLogsOverlay } from '../ui/error-overlay'
-import { clearLogs } from '../core/logger'
+import { clearLogs, logEvent } from '../core/logger'
 
 export class TitleScene extends Phaser.Scene {
   constructor() { super('Title') }
@@ -45,7 +45,7 @@ export class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: logo, scale: 1.03, yoyo: true, repeat: -1, duration: 1800, ease: 'Sine.inOut' })
 
     // repère de version : dis-moi ce numéro pour qu'on sache si tu vois bien la dernière build
-    this.add.text(10, 8, 'build R271', { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
+    this.add.text(10, 8, 'build R272', { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
 
     // accès aux logs sur mobile (pas de console sur iPhone) : « Logs » ouvre l'overlay DOM,
     // « Vider » réinitialise le ring buffer + localStorage.
@@ -90,13 +90,19 @@ export class TitleScene extends Phaser.Scene {
     dl.on('pointerdown', async () => {
       if (dling) return
       dling = true
-      paintDl(0x01579b)
-      dlTxt.setText('⏳ Téléchargement en cours…')
-      await this.downloadOffline(dlStatus)
-      dlTxt.setText('📥 Re-télécharger')
-      paintDl(0x0277bd)
-      dling = false
-      this.showInstallHelp()
+      try {
+        paintDl(0x01579b)
+        dlTxt.setText('⏳ Téléchargement en cours…')
+        await this.downloadOffline(dlStatus)
+        this.showInstallHelp()
+      } catch (e) {
+        logEvent('error', 'download-btn', e instanceof Error ? e.message : String(e))
+        dlStatus.setColor('#ffab91').setText(`Erreur : ${e instanceof Error ? e.message : String(e)}`)
+      } finally {
+        dlTxt.setText('📥 Re-télécharger')
+        paintDl(0x0277bd)
+        dling = false
+      }
     })
 
     // bouton stylé : cadre arrondi + effets hover/press, la logique passe par onTap
@@ -175,23 +181,29 @@ export class TitleScene extends Phaser.Scene {
   private async downloadOffline(status: Phaser.GameObjects.Text) {
     try {
       const res = await fetch('asset-manifest.json', { cache: 'reload' })
+      if (!res.ok) throw new Error(`manifest HTTP ${res.status}`)
       const list = (await res.json()) as string[]
       const total = list.length
       let done = 0
+      let failed = 0
       status.setColor('#e1f5fe').setText(`0 / ${total}`)
       const queue = list.slice()
       const worker = async () => {
         while (queue.length) {
           const url = queue.shift()!
-          try { const r = await fetch(url); await r.blob() } catch { /* best-effort */ }
+          try { const r = await fetch(url); await r.blob() } catch { failed++ }
           done++
           if (done % 4 === 0 || done === total) status.setText(`${done} / ${total}`)
         }
       }
       await Promise.all(Array.from({ length: 6 }, () => worker()))
-      status.setColor('#a5d6a7').setText(`✓ ${total} fichiers en cache — prêt hors-ligne !`)
-    } catch {
-      status.setColor('#ffab91').setText('Échec — vérifie ta connexion et réessaie')
+      status.setColor(failed ? '#ffcc80' : '#a5d6a7')
+        .setText(failed ? `Fini avec ${failed} échec(s) sur ${total} — réessaie` : `✓ ${total} fichiers en cache — prêt hors-ligne !`)
+    } catch (e) {
+      // On MONTRE la vraie erreur dans la ligne de statut (iOS masque souvent en « Script error. »)
+      const msg = e instanceof Error ? e.message : String(e)
+      logEvent('error', 'download', msg)
+      status.setColor('#ffab91').setText(`Échec : ${msg}`)
     }
   }
 
