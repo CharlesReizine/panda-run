@@ -403,7 +403,10 @@ export class LevelScene extends Phaser.Scene {
         let best = -1, bestGap = Infinity
         for (let i = 1; i < kept.length - 1; i++) {
           const id = kept[i]!
-          if (MONSTERS[id]?.mvp || id.startsWith('gardien-')) continue // jamais l'élite / le gardien
+          const m = MONSTERS[id]
+          // on NE retire jamais : élite, gardien, ni les VARIANTES gros/petit (créatures spéciales qui
+          // font justement la variété voulue — retour user). On trime les mobs ordinaires intermédiaires.
+          if (m?.mvp || m?.size === 'grand' || m?.size === 'petit' || id.startsWith('gardien-')) continue
           const gap = lvl(id) - lvl(kept[i - 1]!)
           if (gap < bestGap) { bestGap = gap; best = i }
         }
