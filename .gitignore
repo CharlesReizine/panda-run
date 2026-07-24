@@ -9,3 +9,4 @@ scripts/_reach.test.mjs
 scripts/_dump.test.mjs
 
 scripts/_phase1.mjs
+public/asset-manifest.json

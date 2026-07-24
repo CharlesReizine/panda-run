@@ -45,7 +45,7 @@ export class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: logo, scale: 1.03, yoyo: true, repeat: -1, duration: 1800, ease: 'Sine.inOut' })
 
     // repère de version : dis-moi ce numéro pour qu'on sache si tu vois bien la dernière build
-    this.add.text(10, 8, 'build R269', { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
+    this.add.text(10, 8, 'build R270', { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
 
     // accès aux logs sur mobile (pas de console sur iPhone) : « Logs » ouvre l'overlay DOM,
     // « Vider » réinitialise le ring buffer + localStorage.
@@ -65,6 +65,38 @@ export class TitleScene extends Phaser.Scene {
     muteBtn.on('pointerdown', () => {
       audio.unlock()
       muteBtn.setText(audio.toggleMute() ? '🔇' : '🔊')
+    })
+
+    // ─── TÉLÉCHARGER L'APP (met TOUT en cache pour jouer hors connexion, ex. en avion) ───────────
+    const dlStatus = this.add.text(480, 214, '', { fontSize: '15px', color: '#e1f5fe', fontStyle: 'bold' })
+      .setOrigin(0.5).setShadow(0, 1, '#000000aa', 2)
+    const dl = this.add.container(480, 182)
+    const dlbg = this.add.graphics()
+    const dw = 380, dh = 46
+    const paintDl = (fill: number) => {
+      dlbg.clear()
+      dlbg.fillStyle(0x000000, 0.3).fillRoundedRect(-dw / 2, -dh / 2 + 3, dw, dh, 12)
+      dlbg.fillStyle(fill, 1).fillRoundedRect(-dw / 2, -dh / 2, dw, dh, 12)
+      dlbg.lineStyle(2, 0x81d4fa, 1).strokeRoundedRect(-dw / 2, -dh / 2, dw, dh, 12)
+    }
+    paintDl(0x0277bd)
+    const dlTxt = this.add.text(0, 0, '📥 Télécharger l\'app (hors-ligne)', { fontSize: '19px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
+    dlTxt.setShadow(0, 2, '#00000099', 3, false, true)
+    dl.add([dlbg, dlTxt])
+    dl.setSize(dw, dh).setInteractive({ useHandCursor: true })
+    dl.on('pointerover', () => paintDl(0x0288d1))
+    dl.on('pointerout', () => paintDl(0x0277bd))
+    let dling = false
+    dl.on('pointerdown', async () => {
+      if (dling) return
+      dling = true
+      paintDl(0x01579b)
+      dlTxt.setText('⏳ Téléchargement en cours…')
+      await this.downloadOffline(dlStatus)
+      dlTxt.setText('📥 Re-télécharger')
+      paintDl(0x0277bd)
+      dling = false
+      this.showInstallHelp()
     })
 
     // bouton stylé : cadre arrondi + effets hover/press, la logique passe par onTap
@@ -135,5 +167,55 @@ export class TitleScene extends Phaser.Scene {
           window.alert('Sauvegarde invalide')
         }
       })
+  }
+
+  // Télécharge TOUS les assets (art + audio) via le service worker → mis en cache CacheFirst, donc
+  // ensuite dispo hors ligne, y compris les terrains/mobs jamais vus. Best-effort, 6 en parallèle,
+  // progression affichée. À faire EN LIGNE une fois avant l'avion.
+  private async downloadOffline(status: Phaser.GameObjects.Text) {
+    try {
+      const res = await fetch('asset-manifest.json', { cache: 'reload' })
+      const list = (await res.json()) as string[]
+      const total = list.length
+      let done = 0
+      status.setColor('#e1f5fe').setText(`0 / ${total}`)
+      const queue = list.slice()
+      const worker = async () => {
+        while (queue.length) {
+          const url = queue.shift()!
+          try { const r = await fetch(url); await r.blob() } catch { /* best-effort */ }
+          done++
+          if (done % 4 === 0 || done === total) status.setText(`${done} / ${total}`)
+        }
+      }
+      await Promise.all(Array.from({ length: 6 }, () => worker()))
+      status.setColor('#a5d6a7').setText(`✓ ${total} fichiers en cache — prêt hors-ligne !`)
+    } catch {
+      status.setColor('#ffab91').setText('Échec — vérifie ta connexion et réessaie')
+    }
+  }
+
+  // Explique quoi faire APRÈS le téléchargement : installer en vraie app (Ajouter à l'écran d'accueil).
+  private showInstallHelp() {
+    const c = this.add.container(0, 0).setDepth(2000)
+    const backdrop = this.add.rectangle(480, 270, 960, 540, 0x000000, 0.82).setInteractive()
+    const card = this.add.rectangle(480, 270, 660, 390, 0x102a3a, 0.99).setStrokeStyle(3, 0x4fc3f7, 0.95)
+    const title = this.add.text(480, 112, '✓ Jeu téléchargé — installe l\'app', { fontSize: '23px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0.5)
+    const body = this.add.text(480, 266,
+      'Pour jouer hors connexion (avion) comme une vraie app :\n\n' +
+      '1.   Bouton PARTAGER de Safari  (carré + flèche ⬆)\n' +
+      '2.   « Sur l\'écran d\'accueil »   →   Ajouter\n' +
+      '3.   Lance Panda-Run depuis la nouvelle icône\n' +
+      '      (plein écran, sans barre Safari)\n\n' +
+      'Tout est déjà en cache : ça tourne en mode Avion,\n' +
+      'y compris les terrains et monstres jamais vus. 🛫', {
+      fontSize: '16px', color: '#e8f4fb', align: 'center', lineSpacing: 5,
+    }).setOrigin(0.5)
+    const okBtn = this.add.rectangle(480, 414, 210, 46, 0x00838f, 0.98).setStrokeStyle(2, 0xffffff, 0.5).setInteractive({ useHandCursor: true })
+    const okTxt = this.add.text(480, 414, 'Compris !', { fontSize: '17px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
+    c.add([backdrop, card, title, body, okBtn, okTxt])
+    const close = () => c.destroy()
+    okBtn.on('pointerdown', close)
+    backdrop.on('pointerdown', close)
   }
 }
