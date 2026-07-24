@@ -20,8 +20,14 @@ import type { MonsterDef } from './types'
 // calée pour que « clear un terrain ≈ un palier » (cf. tests/core/xp-economy). Le champ
 // `MonsterDef.xp` est désormais VESTIGIAL (plus aucun rôle dans la calibration).
 
-export const LEVEL_MUL = 2       // niveau de base = LEVEL_MUL × rang − LEVEL_SUB
-export const LEVEL_SUB = 1
+// COURBE DE NIVEAU CONVEXE (retour user : « le début est trop dur, les nouveaux craquent »). Au lieu
+// d'une droite (2×rang−1) qui montait vite dès la plaine, on utilise une PUISSANCE rang^LEVEL_P : départ
+// TOUT DOUX (plaine ≈ niv 1-7) puis accélération progressive vers l'endgame (~niv 56 au dernier rang).
+export const LEVEL_K = 0.6
+export const LEVEL_P = 1.35
+export function baseLevelForRank(rank: number): number {
+  return Math.max(1, Math.round(LEVEL_K * Math.pow(rank, LEVEL_P)))
+}
 export const ELITE_LEVEL_BONUS = 2   // mvp (élite rare)
 export const BOSS_LEVEL_BONUS = 4    // boss de map
 export const GARDIEN_LEVEL_BONUS = 8 // gardien : obstacle de très haut niveau posté en barrage
@@ -103,7 +109,7 @@ export function computeMonsterLevels(): Record<string, number> {
   for (const m of Object.values(MONSTERS)) {
     const r = FIRST_RANK[m.id]
     if (r === undefined) { result[m.id] = 1; continue }
-    let level = Math.max(1, LEVEL_MUL * r - LEVEL_SUB)
+    let level = baseLevelForRank(r)
     if (isGardien(m.id)) level += GARDIEN_LEVEL_BONUS
     else if (m.boss) level += BOSS_LEVEL_BONUS
     else if (m.mvp) level += ELITE_LEVEL_BONUS

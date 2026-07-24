@@ -42,13 +42,13 @@ describe('mobs de granularité (audit lot 3)', () => {
   // 7 mobs ajoutés pour combler les trous de niveau, épinglés à un terrain dont le niveau calibré
   // vise la bande à combler (cf. PINNED_SPAWNS dans levels.ts). niveau attendu = niveau calibré.
   const NEW_MOBS: { id: string; level: number; biome: string }[] = [
-    { id: 'serpent-des-sables', level: 23, biome: 'desert' },
-    { id: 'elementaire-de-sable', level: 27, biome: 'desert' },
-    { id: 'djinn-mineur', level: 31, biome: 'desert' },
-    { id: 'loup-des-neiges', level: 37, biome: 'montagne' },
-    { id: 'liche-mineure', level: 37, biome: 'cimetiere' },
-    { id: 'kraken-juvenile', level: 45, biome: 'plage' },
-    { id: 'cerbere', level: 47, biome: 'enfer' },
+    { id: 'serpent-des-sables', level: 17, biome: 'desert' },
+    { id: 'elementaire-de-sable', level: 21, biome: 'desert' },
+    { id: 'djinn-mineur', level: 25, biome: 'desert' },
+    { id: 'loup-des-neiges', level: 32, biome: 'montagne' },
+    { id: 'liche-mineure', level: 32, biome: 'cimetiere' },
+    { id: 'kraken-juvenile', level: 41, biome: 'plage' },
+    { id: 'cerbere', level: 44, biome: 'enfer' },
   ]
 
   it('les 7 nouveaux mobs existent avec le niveau calibré attendu', () => {

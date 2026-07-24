@@ -115,7 +115,7 @@ const WATER_THREATS = ['requin', 'meduse', 'piranha']
 const POOLS: Record<string, BiomePool> = {
   // angeling (élite, mvp) placé TARD dans le pool (index 5) → n'apparaît qu'à partir de plaine-5, jamais
   // sur plaine-2 (retour joueur : « pas d'élite dès la 2e map »). Les élites sortent en fin de biome.
-  plaine: { tier: 1, ground: ['gloopy', 'fabre', 'gloopy-mini', 'lapin-bondissant', 'mandragore', 'poporing', 'angeling', 'louveteau', 'willow', 'ronce-cracheuse'], birds: ['corbeau'], mvp: 'poring-dore' },
+  plaine: { tier: 1, ground: ['gloopy', 'fabre', 'lapin-bondissant', 'mandragore', 'gloopy-mini', 'poporing', 'angeling', 'louveteau', 'willow', 'ronce-cracheuse'], birds: ['corbeau'], mvp: 'poring-dore' },
   foret: { tier: 2, ground: ['louveteau', 'willow', 'poporing', 'mandragore', 'ronce-cracheuse', 'rocker', 'singe-grimpeur', 'ours-brun', 'gloopy-geant', 'fabre-geant'], birds: ['corbeau'], mvp: 'poring-dore' },
   desert: { tier: 2, ground: ['scorpion', 'scorpion-mini', 'fourmi-geante', 'scarabee-cornu', 'momie', 'vautour', 'orc-guerrier', 'zombie', 'mini-baphomet'], birds: ['faucon'], aquatic: WATER_THREATS, mvp: 'orc-seigneur' },
   jungle: { tier: 3, ground: ['willow', 'frelon-geant', 'flora-vorace', 'flora-geante', 'singe-grimpeur', 'ours-brun', 'ronce-cracheuse', 'scorpion-geant'], birds: ['ara'], aquatic: WATER_THREATS },
@@ -303,11 +303,18 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
     desert: 'ours-brun', jungle: 'scorpion', cave: 'scorpion', montagne: 'gobelin-mineur',
     cimetiere: 'squelette', carriere: 'squelette', enfer: 'gargouille',
   }
-  // plaine-1 = UNIQUEMENT des porings (gloopy) : premier terrain « école », le joueur apprend à jouer
-  // sur un seul mob de contact inoffensif (retour joueur : « niveau 1 trop dur, meurs sans arrêt »).
-  // La variété monte ensuite (2 espèces en plaine-2, etc.).
-  const distinctCap = biome === 'plaine' ? (rank === 1 ? 1 : Math.min(pool.ground.length, 1 + rank))
-    : (biome === 'foret' && rank <= 2) ? 4 + rank : pool.ground.length
+  // INTRODUCTION PROGRESSIVE DES ESPÈCES (retour user : « niveau 2 déjà trop de monstres différents » +
+  // « introduis progressivement les nouveaux monstres »). Chaque biome démarre avec PEU d'espèces et en
+  // ajoute ~1 par terrain, au lieu de déverser tout le pool d'entrée de biome :
+  //   • plaine : 1 (école, que des porings) puis 2, 3, 4… (montée très douce, le joueur apprend).
+  //   • autres biomes : 3 à l'entrée puis +1 par terrain (le mob de transition + oiseaux/eau s'ajoutent).
+  // Rampe qui ATTEINT tout le pool au DERNIER terrain du biome (sinon les espèces d'index élevé —
+  // dont des géants — n'apparaîtraient jamais → orphelines, niveau 1). Progressive : peu d'espèces à
+  // l'entrée, +~1 par terrain. plaine-1 reste à 1 (école, que des porings).
+  const maxR = BIOME_MAX_RANK[biome] ?? 6
+  const distinctCap = biome === 'plaine' && rank === 1
+    ? 1
+    : Math.min(pool.ground.length, Math.max(2, Math.round((pool.ground.length * rank) / maxR)))
   let groundPool = LATE_DESERT_GROUND[id]
     ?? (biome === 'plaine' ? pool.ground.slice(0, distinctCap) : rotate(pool.ground, idx).slice(0, distinctCap))
   const mix = TRANSITION_MIX[biome]
@@ -318,8 +325,10 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   // CHILL, on apprend à jouer sur des mobs de contact inoffensifs) ; plaine-2/3 = UN corbeau ISOLÉ max
   // par motif (jamais de nuée) ; plaine-4/5 = 2 ; ensuite densité pleine. À l'orée de forêt, cap modéré.
   // Ailleurs (undefined) → densité normale du biome.
+  // Oiseaux (piqueurs aériens, dégâts peu esquivables) : AUCUN sur les 2 premières plaines (retour user :
+  // trop dur au début) → ils n'arrivent qu'à partir de plaine-3. Ailleurs inchangé.
   const birdCap: number | undefined = biome === 'plaine'
-    ? (rank === 1 ? 0 : rank <= 3 ? 1 : rank <= 5 ? 2 : undefined)
+    ? (rank <= 2 ? 0 : rank <= 4 ? 1 : undefined)
     : (biome === 'foret' && rank <= 2) ? 2 : undefined
   const base = {
     id, name, biome,
@@ -592,10 +601,10 @@ function ensureRosterCoverage(levels: LevelDef[]): void {
 // Espacement ≥10 tuiles et marge de départ respectés (même logique que ensureRosterCoverage).
 // Déterministe (aucun Math.random).
 const PINNED_SPAWNS: Record<string, string[]> = {
-  'corbeau': ['plaine-2'],                           // ANCRE le corbeau tôt (1er vu = plaine-2 → Nv ~5,
-                                                     // stable) : sinon le placement RNG des oiseaux le
-                                                     // décale de terrain quand la géométrie change et
-                                                     // son niveau calibré saute (retour joueur : début doux)
+  'corbeau': ['plaine-3'],                           // ANCRE le corbeau (1er vu = plaine-3 → Nv 3, stable) :
+                                                     // AUCUN oiseau sur plaine-1/2 (piqueurs aériens, dégâts
+                                                     // peu esquivables → début injuste, retour joueur), et
+                                                     // sans pin le RNG le décalerait de terrain (niveau qui saute)
   'serpent-des-sables': ['desert-3', 'desert-4'],   // désert (bande ~30, transition plaine→désert)
   'elementaire-de-sable': ['desert-6', 'desert-7'], // milieu de désert (bande ~35)
   'djinn-mineur': ['desert-8'],                     // fin de désert (bande ~38)

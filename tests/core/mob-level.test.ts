@@ -5,8 +5,7 @@ import {
   computeMonsterLevels,
   TERRAIN_RANK,
   LEVEL_ORDER,
-  LEVEL_MUL,
-  LEVEL_SUB,
+  baseLevelForRank,
   ELITE_LEVEL_BONUS,
   BOSS_LEVEL_BONUS,
 } from '../../src/core/mob-level'
@@ -91,21 +90,30 @@ describe('computeMonsterLevels (niveau = 2×rang − 1 + bonus)', () => {
     }
   })
 
-  it('un mob normal du rang R vaut 2R−1 (gloopy, Prairie rang 1 → 1)', () => {
-    expect(levels['gloopy']).toBe(LEVEL_MUL * 1 - LEVEL_SUB)
+  it('un mob normal du rang R vaut baseLevelForRank(R) (gloopy, Prairie rang 1 → 1)', () => {
+    expect(levels['gloopy']).toBe(baseLevelForRank(1))
+  })
+
+  it('la courbe de base est CONVEXE (départ doux, ça accélère)', () => {
+    // Convexité au sens des TENDANCES (l'arrondi entier crée du jitter ±1 sur chaque pas isolé, donc on
+    // compare des fenêtres) : l'écart de 4 rangs en fin de courbe est bien plus grand qu'au début.
+    const win = (a: number) => baseLevelForRank(a + 4) - baseLevelForRank(a)
+    expect(win(20)).toBeGreaterThan(win(1) * 2) // l'accélération est nette
+    expect(baseLevelForRank(1)).toBe(1)
+    expect(baseLevelForRank(2)).toBeLessThanOrEqual(2) // début TRÈS doux (plaine-2 ≤ 2)
+    let prev = 0 // globalement non décroissante
+    for (let r = 1; r <= 28; r++) { expect(baseLevelForRank(r)).toBeGreaterThanOrEqual(prev); prev = baseLevelForRank(r) }
   })
 
   it('l\'élite (mvp) porte le bonus élite au-dessus de sa base de rang', () => {
-    // angeling = base (2×rang de sa 1re apparition − 1) + bonus élite, quel que soit le rang exact.
     const angelingRank = Math.min(...Object.values(LEVELS)
       .filter((l) => l.spawns.some((s) => s.monsterId === 'angeling'))
       .map((l) => TERRAIN_RANK[l.id] ?? 999))
-    expect(levels['angeling']).toBe(LEVEL_MUL * angelingRank - LEVEL_SUB + ELITE_LEVEL_BONUS)
+    expect(levels['angeling']).toBe(baseLevelForRank(angelingRank) + ELITE_LEVEL_BONUS)
   })
 
   it('le boss final porte le bonus boss', () => {
-    const rank = TERRAIN_RANK['boss-09']!
-    expect(levels['seigneur-dechu']).toBe(LEVEL_MUL * rank - LEVEL_SUB + BOSS_LEVEL_BONUS)
+    expect(levels['seigneur-dechu']).toBe(baseLevelForRank(TERRAIN_RANK['boss-09']!) + BOSS_LEVEL_BONUS)
   })
 
   it('la progression globale est croissante (zone 1 << boss final)', () => {

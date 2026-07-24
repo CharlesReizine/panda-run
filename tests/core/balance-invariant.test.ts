@@ -70,7 +70,10 @@ describe('modèle d\'équilibrage maître ⭐', () => {
     // qui farme 1,5× TOUTES les branches finit donc naturellement AU-DESSUS des mobs normaux de
     // late-game (les BOSS, +4, portent le défi). On ne garde qu'un garde-fou anti-absurde (≤ 12) :
     // au-delà, un terrain serait vraiment vidé de tout enjeu.
-    const MAX_SURPLUS = 12
+    // 13 : la courbe de NIVEAU convexe (mob-level.ts) écrase les niveaux de late-game, alors que la
+    // carte a bien plus de terrains (58) que de niveaux (~57) → un joueur qui farme 1,5× TOUTES les
+    // branches finit un cran PLUS au-dessus des mobs normaux tardifs qu'à l'échelle linéaire d'avant.
+    const MAX_SURPLUS = 13
     const bad = nonBoss
       .filter((l, i) => i > 0 && !UNDERLEVELED_BY_DESIGN.has(l.id))
       .map((l) => ({ id: l.id, surplus: playerLevelAfterClear(l.id) - maxMob(l.id) }))
@@ -98,7 +101,7 @@ describe('modèle d\'équilibrage maître ⭐', () => {
       const bl = MONSTERS[l.boss]?.level ?? 0
       const f = playerLevelAfterClear(l.id)
       const gap = bl - f
-      expect(gap, `${l.id} (boss ${l.boss} niv ${bl}, farmé ${f})`).toBeGreaterThanOrEqual(-6)
+      expect(gap, `${l.id} (boss ${l.boss} niv ${bl}, farmé ${f})`).toBeGreaterThanOrEqual(-7)
       expect(gap, `${l.id} (boss ${l.boss} niv ${bl}, farmé ${f})`).toBeLessThanOrEqual(9)
     }
   })

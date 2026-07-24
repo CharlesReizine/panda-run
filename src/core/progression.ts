@@ -12,14 +12,14 @@ export const STAT_POINTS_PER_LEVEL = 2 // points de stat gagnés à chaque nivea
 //
 // COURBE calée sur le MODÈLE D'ÉQUILIBRAGE MAÎTRE (cf. tests/core/balance-invariant.test.ts) : en
 // ayant clear ~1,5× les terrains précédents, le joueur arrive sur chaque terrain à un niveau PROCHE
-// du mob le plus fort qui l'attend (playerLevelAfterClear, playability-sim.ts). Repères 1,5× :
-// Prontera ~niv 8, Morocc ~niv 27-29, endgame ~niv 70 (le boss final est niv 75, « à ton niveau »
-// quand tu arrives après avoir farmé la map). La plaine (mobs niv ~1-15) reste peu rémunératrice et
-// le désert (niv ~27-35) riche → le passage plaine→désert garde son MUR de niveau (galère voulue,
-// cf. xp-curve.test). Réglé par MOB_XP_BASE / MOB_XP_EXP (exposant baissé 1,3→1,25 + base relevée
-// 16→20 : relève l'early/mid pour rapprocher le joueur du niveau des mobs sans faire déborder le
-// late-game au-delà de ~75).
-export const MOB_XP_BASE = 14     // XP d'un mob de niveau 1
+// du mob le plus fort qui l'attend (playerLevelAfterClear, playability-sim.ts). Repères 1,5× (échelle
+// CONVEXE, cf. mob-level.ts) : Prontera ~niv 5, Morocc ~niv 20, endgame ~niv 57 (le boss final niv ~56,
+// « à ton niveau » quand tu arrives après avoir farmé la map). La plaine (mobs niv ~1-7) reste peu
+// rémunératrice et le désert (niv ~17-25) riche → le passage plaine→désert garde son MUR de niveau
+// (galère voulue, cf. xp-curve.test). Réglé par MOB_XP_BASE / MOB_XP_EXP : la courbe de NIVEAU étant
+// devenue convexe (mobs early nettement plus bas), la base a été RELEVÉE 14→18 pour que le joueur suive
+// le rythme et arrive survivable au mur du désert, sans faire déborder le late-game.
+export const MOB_XP_BASE = 18     // XP d'un mob de niveau 1
 export const MOB_XP_EXP = 1.3     // exposant de la courbe puissance (niveau^exp)
 
 // XP accordée au joueur pour un monstre de niveau `level` (arrondi entier, ≥ 1).
