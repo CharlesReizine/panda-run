@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { newPlayer } from '../../src/core/player-state'
-import { serialize, deserialize, save, load } from '../../src/core/save'
+import { serialize, deserialize, deserializeStamped, save, load, loadStamped } from '../../src/core/save'
 import { START_NODE } from '../../src/data/worldmap'
 
 function fakeStorage(): Storage {
@@ -87,6 +87,36 @@ describe('save', () => {
     delete legacy.killsByMonster
     const loaded = deserialize(JSON.stringify({ version: 7, player: legacy }))
     expect(loaded.killsByMonster).toEqual({})
+  })
+
+  it('un fichier sans savedAt (écrit avant la synchro cloud) vaut 0 — toujours plus ancien que le cloud', () => {
+    const p = newPlayer('Panda')
+    const loaded = deserializeStamped(JSON.stringify({ version: 8, player: p }))
+    expect(loaded.savedAt).toBe(0)
+    expect(loaded.player).toEqual(p)
+  })
+
+  it('savedAt n\'a PAS bumpé la version : une build antérieure sait encore relire le fichier', () => {
+    // garde-fou anti-régression : si quelqu'un bumpe VERSION pour ce champ, une build encore en
+    // cache sur le téléphone traiterait la save comme inconnue → « j'ai perdu ma partie »
+    const written = JSON.parse(serialize(newPlayer('Panda'), 999)) as { version: number }
+    expect(written.version).toBe(8)
+  })
+
+  it('serialize horodate le fichier (horloge injectable)', () => {
+    const p = newPlayer('Panda')
+    expect(deserializeStamped(serialize(p, 1234)).savedAt).toBe(1234)
+  })
+
+  it('loadStamped rend l\'horodatage écrit par save', () => {
+    const s = fakeStorage()
+    const p = newPlayer('Panda')
+    save(p, s, 5678)
+    expect(loadStamped(s)).toEqual({ player: p, savedAt: 5678 })
+  })
+
+  it('loadStamped renvoie null sans sauvegarde', () => {
+    expect(loadStamped(fakeStorage())).toBeNull()
   })
 
   it('save/load via storage', () => {
