@@ -210,8 +210,14 @@ export class TownScene extends Phaser.Scene {
     return { node, theme }
   }
 
+  // Clés de texture chargées par preload() — mémorisées pour pouvoir les RENDRE au shutdown.
+  // Les maps et façades de ville pèsent ~52 Mo de VRAM (512² à 1024² × 4 octets) et ne servent
+  // qu'en ville : les garder résidentes après la visite alourdissait durablement le jeu.
+  private loadedKeys: string[] = []
+
   preload() {
     this.resolveTown()
+    this.loadedKeys = []
     this.load.image('town-bg', 'town/bg.png')
     // façades de secours + PNJ + décors (public/art/town-*.png)
     this.load.image('town-potion', 'art/town-potion.png')
@@ -228,6 +234,21 @@ export class TownScene extends Phaser.Scene {
       this.load.image(`town-${this.townId}-${b}`, `art/town-${this.townId}-${b}.png`)
     }
     this.load.image(`town-${this.townId}-bg`, `art/town-${this.townId}-bg.png`)
+
+    this.loadedKeys = [
+      'town-bg', 'town-potion', 'town-armes', 'town-vetements', 'town-forge', 'town-chateau', 'town-maison',
+      ...['potions', 'armes', 'vetements', 'forge'].map((b) => `town-${this.townId}-${b}`),
+      `town-${this.townId}-bg`,
+    ]
+  }
+
+  // Rend la VRAM des textures de ville en quittant. textures.remove détruit aussi la texture GL ;
+  // le fichier reste dans le cache du service worker → retour en ville instantané, hors connexion inclus.
+  private releaseTownTextures() {
+    for (const key of this.loadedKeys) {
+      if (this.textures.exists(key)) this.textures.remove(key)
+    }
+    this.loadedKeys = []
   }
 
   create() {
@@ -332,6 +353,7 @@ export class TownScene extends Phaser.Scene {
       this.panel?.destroy()
       this.interactBtn?.destroy()
       this.feedback?.destroy()
+      this.releaseTownTextures()
     })
   }
 

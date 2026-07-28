@@ -3,7 +3,6 @@ import { MONSTERS } from '../data/monsters'
 import { SKILLS } from '../data/skills'
 import { BIOMES } from '../data/biomes'
 import { ITEMS, rarityColor } from '../data/items'
-import { LEVELS } from '../data/levels'
 import type { MonsterDef, WeaponType } from '../core/types'
 import { stripBorderBackground } from '../core/image-strip'
 import { PANDA_TEX, PANDA_HEAD_ANCHORS } from '../entities/player-body'
@@ -53,22 +52,9 @@ const OY = 14 // décalage vertical : laisse de la place au-dessus de la tête p
 // FALLBACK si une texture d'art venait à manquer au chargement.
 const ART_MONSTERS = Object.keys(MONSTERS)
 
-// Terrains disposant d'une VRAIE illustration de fond dédiée (public/art/bg-<id>.png) — un décor
-// UNIQUE par niveau (nommé d'après le terrain). Les niveaux de BOSS retombent sur le fond de biome.
-const LEVELS_WITH_BG = new Set<string>([
-  'plaine-1', 'plaine-2', 'plaine-3', 'plaine-4', 'plaine-5', 'plaine-6', 'plaine-7',
-  'foret-1', 'foret-2', 'foret-3', 'foret-4', 'foret-5', 'foret-6', 'foret-7',
-  'desert-1', 'desert-2', 'desert-3', 'desert-4', 'desert-5', 'desert-6', 'desert-7', 'desert-8', 'desert-9', 'desert-10', 'desert-11',
-  'jungle-1', 'jungle-2', 'jungle-3', 'jungle-4', 'jungle-5',
-  'montagne-1', 'montagne-2', 'montagne-3',
-  'cimetiere-1', 'cimetiere-2',
-  'plage-1', 'plage-2', 'plage-3', 'plage-4',
-  'cave-1', 'carriere-1', 'epave-1',
-  'enfer-1', 'enfer-2', 'enfer-3', 'enfer-4', 'enfer-5', 'enfer-6', 'enfer-7',
-])
-
-// Tous les fonds de niveau sont désormais livrés en PNG → l'extension de chargement est .png.
-const BG_PNG = LEVELS_WITH_BG
+// Les fonds de terrain (bg-<id>) ne sont PLUS préchargés ici : 49 fonds × 4 Mo de VRAM = ~196 Mo
+// résidents pour un seul affiché à la fois. Ils sont chargés à la demande par LevelScene.preload()
+// et déchargés à son shutdown. Table partagée : src/data/level-backgrounds.ts.
 
 // POISSONS décoratifs des bassins : illustrations OPTIONNELLES (public/art/fish-<id>.png), chargées
 // en BEST-EFFORT. Elles seront générées par l'user ; tant qu'un fichier manque, le loader échoue
@@ -126,13 +112,7 @@ export class PreloadScene extends Phaser.Scene {
     for (const id of ART_MONSTERS) this.load.image(`art-${id}`, `art/art-${id}.png`)
     // fonds de biome illustrés (public/art/biome-<clé>.jpg), affichés par LevelScene en FALLBACK
     for (const id of Object.keys(BIOMES)) this.load.image(`biome-${id}`, `art/biome-${id}.jpg`)
-    // fonds PROPRES AU NIVEAU (public/art/bg-<levelId>.jpg) : un décor unique par terrain, affiché
-    // en PRIORITÉ par LevelScene.addBackground. On ne charge QUE ceux qui existent réellement sur
-    // disque (LEVELS_WITH_BG) ; tous les autres niveaux retombent proprement sur le fond de biome
-    // (biome-<clé>) — pas de requête 404 pour les terrains sans image dédiée.
-    for (const lvl of Object.values(LEVELS)) {
-      if (!lvl.boss && LEVELS_WITH_BG.has(lvl.id)) this.load.image(`bg-${lvl.id}`, `art/bg-${lvl.id}.${BG_PNG.has(lvl.id) ? 'png' : 'jpg'}`)
-    }
+    // (les fonds PROPRES AU NIVEAU bg-<levelId> sont chargés à la demande par LevelScene, cf. plus haut)
     // illustrations du panda joueur : 4 poses par classe (idle/course/saut/attaque).
     // Chargées ici puis « bakées » (rognées + mises à l'échelle + ancrées pieds au sol) en
     // textures panda-<classe>* par bakePandaClassFromArt ; repli sur le dessin procédural si absentes.

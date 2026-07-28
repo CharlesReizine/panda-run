@@ -27,6 +27,8 @@ import type { UIScene } from './UIScene'
 import { TILE, DEFAULT_HEIGHT_TILES, groundRowFor, GRAVITY, landsOnOneWayPlatform } from '../core/platforming'
 import { breathMaxMs, BREATH_BASE_MS } from '../core/breath'
 import { BIOMES } from '../data/biomes'
+import { bgKeyFor, bgPathFor } from '../data/level-backgrounds'
+import { logEvent } from '../core/logger'
 import { audio, type MusicTrack } from '../audio/audio-engine'
 
 // biomes → piste musicale ; 'carriere' n'a pas d'ambiance dédiée → repli sur 'montagne'
@@ -182,6 +184,21 @@ export class LevelScene extends Phaser.Scene {
     this.fromNode = data.fromNode ?? null
     this.targetNode = data.targetNode ?? null
     this.dir = data.dir ?? 'forward'
+  }
+
+  // Le fond du terrain est chargé ICI, à la demande, et déchargé au shutdown (cf. create()).
+  // Précharger les 49 fonds au boot coûtait ~196 Mo de VRAM résidents pour UN SEUL affiché à la
+  // fois (1024×1024 × 4 octets = 4 Mo par fond, non compressés) — moitié de l'empreinte mémoire
+  // qui faisait ramer le jeu de plus en plus sur iPhone. Passer par preload() (et non create())
+  // couvre TOUTES les entrées de terrain : carte du monde, « Réessayer » après une mort, mode test.
+  // Le fichier reste précaché par le service worker → hors connexion intact.
+  preload() {
+    const key = bgKeyFor(this.levelDef.id, !!this.levelDef.boss)
+    if (!key || this.textures.exists(key)) return
+    // un fond manquant ne doit JAMAIS bloquer l'entrée dans le terrain : addBackground retombe
+    // sur le fond de biome puis sur le décor procédural si la texture n'existe pas
+    this.load.once('loaderror', () => logEvent('warn', 'bg', `fond ${key} indisponible → repli biome`))
+    this.load.image(key, bgPathFor(this.levelDef.id))
   }
 
   create() {
@@ -808,6 +825,12 @@ export class LevelScene extends Phaser.Scene {
       this.hitStopTimer = null
       this.bossCtrl?.destroy()
       this.bossCtrl = null
+      // On REND la VRAM du fond de ce terrain (4 Mo) : textures.remove détruit aussi la texture GL.
+      // Sans ça les fonds s'empileraient au fil des terrains et on reviendrait au problème d'origine.
+      // Le fichier reste dans le cache du service worker → le rechargement au retour est instantané
+      // et fonctionne hors connexion.
+      const bgKey = bgKeyFor(this.levelDef.id, !!this.levelDef.boss)
+      if (bgKey && this.textures.exists(bgKey)) this.textures.remove(bgKey)
       this.scene.stop('UI')
     })
     this.game.events.emit('hud-refresh')
@@ -865,9 +888,11 @@ export class LevelScene extends Phaser.Scene {
     // décor unique, collé à son id, plutôt qu'un seul fond partagé par biome. FALLBACK sur le fond
     // de biome (biome-<clé>) quand le niveau n'a pas d'image dédiée (ex. niveaux de boss), puis sur
     // le décor procédural. Même mise à l'échelle « cover » dans les deux cas.
-    const levelKey = `bg-${this.levelDef.id}`
+    // même helper qu'au chargement (preload) et au déchargement (shutdown) : une seule source de
+    // vérité pour la clé du fond, sinon on cherche une texture qu'on n'a jamais chargée
+    const levelKey = bgKeyFor(this.levelDef.id, !!this.levelDef.boss)
     const biomeKey = `biome-${this.levelDef.biome}`
-    const bgKey = this.textures.exists(levelKey) ? levelKey : biomeKey
+    const bgKey = levelKey && this.textures.exists(levelKey) ? levelKey : biomeKey
     const hasBgArt = this.textures.exists(bgKey)
     if (hasBgArt) {
       const src = this.textures.get(bgKey).getSourceImage()
