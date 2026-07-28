@@ -1,5 +1,8 @@
 node_modules/
 dist/
+# config locale (Firebase & co.) — le modèle à remplir est dans .env.example
+.env
+.env.local
 scripts/_measure.mjs
 scripts/_verify.mjs
 
