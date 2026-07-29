@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// Sauvegardes de panda-run : un document par joueur, `saves/{uid}`.
+//
+// Un joueur ne peut lire et écrire QUE son propre document, et seulement authentifié. C'est ici que
+// se joue la sécurité — pas dans la confidentialité de la clé API, qui est publique par conception
+// dans une app web Firebase.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /saves/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+    // tout le reste est fermé
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

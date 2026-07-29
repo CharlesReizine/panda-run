@@ -11,6 +11,7 @@
     "deploy": "pnpm build && gh-pages -d dist"
   },
   "dependencies": {
+    "firebase": "^12.16.0",
     "phaser": "^4.2.1"
   },
   "devDependencies": {

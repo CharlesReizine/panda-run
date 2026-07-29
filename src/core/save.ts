@@ -69,8 +69,20 @@ export function deserialize(json: string): PlayerState {
   return pl
 }
 
+// Observateurs notifiés après CHAQUE sauvegarde locale. Un seul consommateur aujourd'hui : la
+// synchro cloud, qui pousse l'état en tâche de fond. Ce crochet existe pour ne PAS avoir à greffer
+// un appel cloud sur chacun des appels à save() dispersés dans le jeu (fin de terrain, achat,
+// level-up, réforge…) — un oubli y serait invisible et ferait silencieusement diverger le cloud.
+type SaveListener = (p: PlayerState, savedAt: number) => void
+const listeners: SaveListener[] = []
+
+export function onSaved(cb: SaveListener): void {
+  listeners.push(cb)
+}
+
 export function save(p: PlayerState, storage: Storage = localStorage, savedAt: number = Date.now()): void {
   storage.setItem(SAVE_KEY, serialize(p, savedAt))
+  for (const l of listeners) l(p, savedAt)
 }
 
 export function load(storage: Storage = localStorage): PlayerState | null {

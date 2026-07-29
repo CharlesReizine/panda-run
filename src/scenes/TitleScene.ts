@@ -5,6 +5,10 @@ import { setPlayer } from '../state'
 import { audio } from '../audio/audio-engine'
 import { showLogsOverlay } from '../ui/error-overlay'
 import { clearLogs, logEvent } from '../core/logger'
+import { BUILD } from '../core/build'
+import { cloudAvailable, signInWithGoogle, signOutCloud, onUser, type CloudUser } from '../cloud/auth'
+import { syncNow, adoptCloud, pushLocal, setAutoPushUser } from '../cloud/sync-service'
+import type { StampedSave } from '../core/save'
 
 export class TitleScene extends Phaser.Scene {
   constructor() { super('Title') }
@@ -45,7 +49,7 @@ export class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: logo, scale: 1.03, yoyo: true, repeat: -1, duration: 1800, ease: 'Sine.inOut' })
 
     // repère de version : dis-moi ce numéro pour qu'on sache si tu vois bien la dernière build
-    this.add.text(10, 8, 'build R274', { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
+    this.add.text(10, 8, `build ${BUILD}`, { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
 
     // accès aux logs sur mobile (pas de console sur iPhone) : « Logs » ouvre l'overlay DOM,
     // « Vider » réinitialise le ring buffer + localStorage.
@@ -173,6 +177,130 @@ export class TitleScene extends Phaser.Scene {
           window.alert('Sauvegarde invalide')
         }
       })
+
+    this.addCloudRow()
+  }
+
+  // ─── SAUVEGARDE CLOUD (connexion Google) ────────────────────────────────────────────────────
+  // Ligne d'état + bouton. Rien de bloquant : si le cloud n'est pas configuré (pas de .env), on
+  // n'affiche RIEN et le jeu reste exactement celui d'avant.
+  private addCloudRow() {
+    if (!cloudAvailable()) return
+
+    const status = this.add.text(480, 252, '', { fontSize: '15px', color: '#e1f5fe', fontStyle: 'bold', align: 'center', wordWrap: { width: 620 } })
+      .setOrigin(0.5).setShadow(0, 1, '#000000aa', 2)
+    const btn = this.add.text(480, 300, '', { fontSize: '18px', color: '#ffffff', fontStyle: 'bold', backgroundColor: '#1565c0', padding: { x: 14, y: 8 } })
+      .setOrigin(0.5).setShadow(0, 2, '#00000099', 3).setInteractive({ useHandCursor: true })
+
+    // Avertissement EXPLICITE quand la partie n'existe qu'en local : c'est tout l'intérêt de la
+    // fonctionnalité, et le joueur doit savoir qu'il joue sans filet.
+    const showSignedOut = () => {
+      status.setColor('#ffcc80').setText('⚠️ Sauvegarde locale uniquement — elle peut disparaître\n(cache vidé, réinstallation). Connecte-toi pour la mettre à l\'abri.')
+      btn.setText('☁️ Se connecter avec Google').setBackgroundColor('#1565c0')
+    }
+    const showSignedIn = (u: CloudUser) => {
+      status.setColor('#a5d6a7').setText(`☁️ Sauvegarde en ligne active — ${u.email ?? u.uid}`)
+      btn.setText('Se déconnecter').setBackgroundColor('#455a64')
+    }
+
+    let user: CloudUser | null = null
+    let busy = false
+    showSignedOut()
+
+    // La restauration de session est ASYNCHRONE : au premier affichage on ne sait pas encore si le
+    // joueur est connecté. onUser recale l'affichage dès que Firebase a tranché.
+    void onUser((u) => {
+      user = u
+      setAutoPushUser(u?.uid ?? null)
+      if (u) { showSignedIn(u); void this.runSync(u, status) } else showSignedOut()
+    })
+
+    btn.on('pointerdown', async () => {
+      if (busy) return
+      busy = true
+      try {
+        if (user) {
+          await signOutCloud()
+          user = null
+          setAutoPushUser(null)
+          showSignedOut()
+        } else {
+          status.setColor('#e1f5fe').setText('Connexion en cours…')
+          const u = await signInWithGoogle()
+          user = u
+          setAutoPushUser(u.uid)
+          showSignedIn(u)
+          await this.runSync(u, status)
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        logEvent('error', 'cloud-auth', msg)
+        status.setColor('#ffab91').setText(`Échec de connexion : ${msg}`)
+      } finally {
+        busy = false
+      }
+    })
+  }
+
+  // Applique la décision de synchro. Le seul cas non automatique — les deux côtés ont divergé — passe
+  // par un panneau de choix : on ne détruit JAMAIS une progression sans l'accord du joueur.
+  private async runSync(u: CloudUser, status: Phaser.GameObjects.Text) {
+    try {
+      const out = await syncNow(u.uid)
+      switch (out.action) {
+        case 'prendre-le-cloud':
+          status.setColor('#a5d6a7').setText('☁️ Partie du cloud récupérée')
+          this.scene.restart() // la save locale a changé → l'écran-titre doit se reconstruire
+          break
+        case 'pousser-le-local':
+        case 'garder-le-local':
+          status.setColor('#a5d6a7').setText(`☁️ Partie sauvegardée en ligne — ${u.email ?? u.uid}`)
+          break
+        case 'rien':
+          status.setColor('#a5d6a7').setText(`☁️ À jour — ${u.email ?? u.uid}`)
+          break
+        case 'demander':
+          this.askWhichSave(u, out.local!, out.cloud!)
+          break
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      logEvent('error', 'cloud-sync', msg)
+      status.setColor('#ffab91').setText(`Synchro impossible : ${msg}`)
+    }
+  }
+
+  private describe(s: StampedSave): string {
+    const d = s.savedAt ? new Date(s.savedAt).toLocaleString('fr-FR') : 'date inconnue'
+    return `Niveau ${s.player.level} · ${s.player.gold} or · ${s.player.completedLevels.length} terrains\n${d}`
+  }
+
+  // Panneau de choix : les deux appareils ont progressé depuis la dernière synchro, aucune des deux
+  // parties n'est « la bonne » — seul le joueur peut trancher.
+  private askWhichSave(u: CloudUser, local: StampedSave, cloud: StampedSave) {
+    const depth = 60
+    const items: Phaser.GameObjects.GameObject[] = []
+    items.push(this.add.rectangle(480, 270, 700, 380, 0x0d1b2a, 0.96).setDepth(depth).setStrokeStyle(2, 0xffd54f, 0.7))
+    items.push(this.add.text(480, 120, 'Deux parties différentes', { fontSize: '26px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0.5).setDepth(depth + 1))
+    items.push(this.add.text(480, 168, 'Tu as joué sur cet appareil ET ailleurs depuis la dernière\nsynchro. Laquelle veux-tu garder ? L\'autre sera écrasée.', { fontSize: '15px', color: '#e1f5fe', align: 'center' }).setOrigin(0.5).setDepth(depth + 1))
+
+    const choice = (y: number, label: string, s: StampedSave, color: number, onPick: () => void) => {
+      items.push(this.add.text(480, y, `${label}\n${this.describe(s)}`, {
+        fontSize: '16px', color: '#ffffff', fontStyle: 'bold', align: 'center',
+        backgroundColor: `#${color.toString(16).padStart(6, '0')}`, padding: { x: 16, y: 10 },
+      }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        for (const it of items) it.destroy()
+        onPick()
+      }))
+    }
+
+    choice(268, 'Garder celle de CET APPAREIL', local, 0x2e7d32, () => {
+      void pushLocal(u.uid, local).catch(() => { /* réseau : sera repoussé plus tard */ })
+    })
+    choice(392, 'Prendre celle du CLOUD', cloud, 0x1565c0, () => {
+      adoptCloud(cloud)
+      this.scene.restart()
+    })
   }
 
   // Télécharge TOUS les assets (art + audio) via le service worker → mis en cache CacheFirst, donc

@@ -1,0 +1,7 @@
+# Scripts post-install des dépendances de `firebase`, volontairement NON exécutés : ils ne servent
+# pas à un bundle navigateur (Firestore passe par WebChannel/REST côté web, pas par gRPC/protobuf
+# natif), et un script post-install en moins est une surface d'attaque en moins.
+# pnpm 11 exige un choix explicite, sinon `pnpm install` échoue (ERR_PNPM_IGNORED_BUILDS).
+allowBuilds:
+  '@firebase/util': false
+  protobufjs: false
