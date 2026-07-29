@@ -1,72 +1,61 @@
 <!doctype html>
 <html lang="fr">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Panda-Run" />
-    <link rel="apple-touch-icon" href="./icon-192.png" />
-    <title>Panda-Run</title>
-    <meta name="description" content="Panda-Run — un RPG plateforme kawaii style Ragnarok : explore 58 terrains, combats, monte en niveau, débloque classes et sorts." />
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="Panda-Run 🐼" />
-    <meta property="og:description" content="Un RPG plateforme kawaii : explore, combats, monte en niveau, débloque classes et sorts." />
-    <meta property="og:image" content="https://charlesreizine.github.io/panda-run/art/bg-share.png" />
-    <meta property="og:url" content="https://charlesreizine.github.io/panda-run/" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <style>
-      html, body { margin: 0; padding: 0; background: #000; overflow: hidden; }
-      html, body { position: fixed; inset: 0; width: 100%; height: 100%; }
-      /* #game : conteneur dont main.ts fixe la taille EXACTE de la zone visible
-         (window.visualViewport, qui exclut les barres Safari). Phaser (Scale.FIT)
-         insère le jeu dedans → il rentre toujours en entier, jamais coupé.
-         box-sizing:border-box + padding safe-area : sur un écran à encoche / barre
-         gestuelle (env(safe-area-inset-*) > 0) le jeu est repoussé hors de ces zones ;
-         sur un écran sans encoche tous les insets valent 0 → aucun effet, centrage intact. */
-      #game {
-        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-        box-sizing: border-box;
-        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-      }
-      canvas { display: block; }
-
-      /* Overlay « tourne ton téléphone » : le jeu est conçu en PAYSAGE (960×540). En
-         portrait il deviendrait minuscule → on masque tout et on invite à pivoter.
-         CSS pur, indépendant de Phaser : robuste sur tous les mobiles. */
-      #rotate {
-        display: none; /* paysage : masqué (défaut) */
-        position: fixed; inset: 0; z-index: 9999;
-        background: linear-gradient(160deg, #ffe1ec 0%, #ffd6a5 55%, #bde0fe 100%);
-        color: #5a3b2e;
-        text-align: center;
-        flex-direction: column; align-items: center; justify-content: center;
-        gap: 18px;
-        padding: calc(24px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
-        font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
-        -webkit-user-select: none; user-select: none;
-      }
-      #rotate .rotate-emoji { font-size: 84px; line-height: 1; animation: rotate-wobble 1.8s ease-in-out infinite; }
-      #rotate .rotate-title { font-size: 26px; font-weight: 800; letter-spacing: 0.3px; }
-      #rotate .rotate-sub { font-size: 16px; font-weight: 600; opacity: 0.75; max-width: 18em; }
-      @keyframes rotate-wobble {
-        0%, 100% { transform: rotate(-18deg); }
-        50% { transform: rotate(72deg); }
-      }
-      /* PORTRAIT uniquement : on affiche l'overlay (il recouvre le jeu). */
-      @media (orientation: portrait) {
-        #rotate { display: flex; }
-      }
-    </style>
-    <script type="module" crossorigin src="./assets/index-DLzLQguj.js"></script>
-  <link rel="manifest" href="./manifest.webmanifest"></head>
-  <body>
-    <div id="game"></div>
-    <div id="rotate" aria-hidden="true">
-      <div class="rotate-emoji">🔄</div>
-      <div class="rotate-title">🐼 Tourne ton téléphone</div>
-      <div class="rotate-sub">Panda-Run se joue en mode paysage. Mets ton téléphone à l'horizontale pour commencer&nbsp;!</div>
-    </div>
-  </body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panda-Run a déménagé</title>
+<style>
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: #0d1b2a; color: #e1f5fe; display: grid; place-items: center;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    text-align: center; padding: 24px;
+  }
+  h1 { color: #ffd54f; font-size: 1.6rem; margin: 0 0 12px; }
+  a.btn {
+    display: inline-block; margin-top: 20px; padding: 14px 26px; border-radius: 10px;
+    background: #2e7d32; color: #fff; font-weight: 700; text-decoration: none; font-size: 1.05rem;
+  }
+  p { line-height: 1.5; max-width: 34rem; }
+  small { opacity: .65; display: block; margin-top: 22px; }
+</style>
+</head>
+<body>
+  <main>
+    <h1>Panda-Run a déménagé 🐼</h1>
+    <p>Le jeu est désormais ici, avec la sauvegarde en ligne :</p>
+    <p><a class="btn" id="go" href="https://panda-run-reizine.web.app/">Jouer à Panda-Run</a></p>
+    <small id="state">Nettoyage de l'ancienne version…</small>
+  </main>
+<script>
+// Cette page remplace l'ancien déploiement gh-pages. Elle ne se contente PAS de rediriger : elle
+// DÉMONTE d'abord la PWA de cette origine.
+//
+// Pourquoi c'est indispensable : l'ancien service worker était configuré en clientsClaim +
+// skipWaiting et servait index.html depuis son cache. Sans désinscription, il continuerait à
+// afficher l'ancienne build (R274) et cette page ne serait jamais vue. On désinscrit donc tous les
+// service workers et on vide tous les caches AVANT de partir.
+//
+// À noter : la sauvegarde des joueurs vivait dans le localStorage de CETTE origine et ne peut pas
+// être transférée automatiquement (localStorage est cloisonné par origine). Choix assumé.
+(async () => {
+  const state = document.getElementById('state')
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations()
+      await Promise.all(regs.map((r) => r.unregister()))
+    }
+    if (window.caches) {
+      const keys = await caches.keys()
+      await Promise.all(keys.map((k) => caches.delete(k)))
+    }
+    state.textContent = 'Ancienne version désinstallée. Redirection…'
+  } catch (e) {
+    state.textContent = 'Redirection…'
+  }
+  // petit délai pour que le message soit lisible, et que la désinscription soit bien effective
+  setTimeout(() => { location.replace('https://panda-run-reizine.web.app/') }, 1200)
+})()
+</script>
+</body>
 </html>
