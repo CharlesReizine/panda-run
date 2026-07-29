@@ -3,6 +3,8 @@ dist/
 # config locale (Firebase & co.) — le modèle à remplir est dans .env.example
 .env
 .env.local
+# cache du CLI Firebase (empreintes de déploiement hosting)
+.firebase/
 scripts/_measure.mjs
 scripts/_verify.mjs
 
