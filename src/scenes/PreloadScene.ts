@@ -105,6 +105,10 @@ export class PreloadScene extends Phaser.Scene {
     })
 
     this.load.image('splash', 'art/splash.png')
+    // Logo « G » OFFICIEL de Google (developers.google.com/identity/images/g-logo.png), exigé par la
+    // charte Google Sign-In sur le bouton de connexion — et sans lui personne ne reconnaît le bouton.
+    // Asset téléchargé, PAS redessiné : un logo reproduit de mémoire est toujours faux.
+    this.load.image('google-g', 'art/google-g.png')
     // pièce d'or illustrée (optionnelle) : si art/coin.png existe, elle remplace la pièce procédurale
     this.load.image('art-coin', 'art/coin.png')
     // fond illustré de la carte du monde (vue du dessus fantasy), affiché par WorldMapScene

@@ -1,29 +1,20 @@
-// Génère DEUX artefacts, lancé avant chaque build (cf. package.json → "build") :
+// Génère src/data/art-dimensions.generated.ts : les dimensions de chaque image de public/art + les
+// plafonds de scripts/art-caps.mjs, pour que tests/perf/art-budget.test.ts puisse verrouiller le
+// budget de VRAM SANS lire le disque (les tests sont type-checkés par tsc et @types/node n'est pas
+// installé → aucun import de 'node:fs' n'est permis dans tests/).
 //
-// 1. public/asset-manifest.json : la liste de TOUS les assets (art + audio) que le bouton
-//    « Télécharger pour hors-ligne » (TitleScene) va précharger d'un coup dans le cache du SW.
-// 2. src/data/art-dimensions.generated.ts : les dimensions de chaque image + les plafonds de
-//    scripts/art-caps.mjs, pour que tests/perf/art-budget.test.ts puisse verrouiller le budget de
-//    VRAM SANS lire le disque (les tests sont type-checkés par tsc et @types/node n'est pas
-//    installé → aucun import de 'node:fs' n'est permis dans tests/).
-import { readdirSync, writeFileSync, statSync, readFileSync } from 'node:fs'
+// Lancé avant chaque build (cf. package.json → "build").
+//
+// Ce script générait aussi public/asset-manifest.json, la liste que le bouton « Télécharger l'app »
+// préchargeait pour jouer hors connexion. Fonctionnalité RETIRÉE (le user ne joue jamais sans
+// réseau) : il ne reste que les dimensions. Le cache runtime du service worker (CacheFirst sur
+// images/sons, cf. vite.config.ts) garde les assets au fil du jeu — c'est de la perf, plus une
+// garantie hors-ligne.
+import { readdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ART_CAPS, DEFAULT_CAP, BOOT_BUDGET_MB, capFor } from './art-caps.mjs'
 
 const PUB = 'public'
-const DIRS = ['art', 'audio']
-const list = []
-for (const d of DIRS) {
-  let entries = []
-  try { entries = readdirSync(join(PUB, d)) } catch { continue }
-  for (const f of entries) {
-    if (f.startsWith('.') || f.endsWith('.md')) continue
-    if (statSync(join(PUB, d, f)).isFile()) list.push(`${d}/${f}`)
-  }
-}
-list.sort()
-writeFileSync(join(PUB, 'asset-manifest.json'), JSON.stringify(list))
-console.log(`asset-manifest.json : ${list.length} assets listés`)
 
 // ─── Dimensions des images ───────────────────────────────────────────────────
 // Lecture des en-têtes seulement (pas de décodage) : PNG = IHDR à l'offset 16, JPEG = on scanne

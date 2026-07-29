@@ -174,6 +174,7 @@ export const ART_IMAGES: ArtImage[] = [
   { name: 'fx-mur-de-flamme.png', w: 256, h: 256 },
   { name: 'fx-tempete.png', w: 256, h: 256 },
   { name: 'fx-tir-faucon.png', w: 256, h: 256 },
+  { name: 'google-g.png', w: 200, h: 204 },
   { name: 'item-ailes-angeling.png', w: 128, h: 128 },
   { name: 'item-amulette-gemme.png', w: 128, h: 128 },
   { name: 'item-amulette-pharaon.png', w: 128, h: 128 },

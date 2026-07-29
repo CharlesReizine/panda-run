@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/gen-asset-manifest.mjs && tsc --noEmit && vite build",
+    "build": "node scripts/gen-art-dimensions.mjs && tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "emulator": "node scripts/emulator.mjs",

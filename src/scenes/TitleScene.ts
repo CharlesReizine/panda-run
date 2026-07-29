@@ -6,7 +6,7 @@ import { audio } from '../audio/audio-engine'
 import { showLogsOverlay } from '../ui/error-overlay'
 import { clearLogs, logEvent } from '../core/logger'
 import { BUILD } from '../core/build'
-import { cloudAvailable, signInWithGoogle, signOutCloud, onUser, type CloudUser } from '../cloud/auth'
+import { cloudAvailable, prewarm, authReady, signInPopup, signInRedirect, completeRedirect, signOutCloud, onUser, PopupRefusedError, type CloudUser } from '../cloud/auth'
 import { syncNow, adoptCloud, pushLocal, setAutoPushUser } from '../cloud/sync-service'
 import type { StampedSave } from '../core/save'
 
@@ -69,44 +69,6 @@ export class TitleScene extends Phaser.Scene {
     muteBtn.on('pointerdown', () => {
       audio.unlock()
       muteBtn.setText(audio.toggleMute() ? '🔇' : '🔊')
-    })
-
-    // ─── TÉLÉCHARGER L'APP (met TOUT en cache pour jouer hors connexion, ex. en avion) ───────────
-    const dlStatus = this.add.text(480, 214, '', { fontSize: '15px', color: '#e1f5fe', fontStyle: 'bold' })
-      .setOrigin(0.5).setShadow(0, 1, '#000000aa', 2)
-    const dl = this.add.container(480, 182)
-    const dlbg = this.add.graphics()
-    const dw = 380, dh = 46
-    const paintDl = (fill: number) => {
-      dlbg.clear()
-      dlbg.fillStyle(0x000000, 0.3).fillRoundedRect(-dw / 2, -dh / 2 + 3, dw, dh, 12)
-      dlbg.fillStyle(fill, 1).fillRoundedRect(-dw / 2, -dh / 2, dw, dh, 12)
-      dlbg.lineStyle(2, 0x81d4fa, 1).strokeRoundedRect(-dw / 2, -dh / 2, dw, dh, 12)
-    }
-    paintDl(0x0277bd)
-    const dlTxt = this.add.text(0, 0, '📥 Télécharger l\'app (hors-ligne)', { fontSize: '19px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
-    dlTxt.setShadow(0, 2, '#00000099', 3, false, true)
-    dl.add([dlbg, dlTxt])
-    dl.setSize(dw, dh).setInteractive({ useHandCursor: true })
-    dl.on('pointerover', () => paintDl(0x0288d1))
-    dl.on('pointerout', () => paintDl(0x0277bd))
-    let dling = false
-    dl.on('pointerdown', async () => {
-      if (dling) return
-      dling = true
-      try {
-        paintDl(0x01579b)
-        dlTxt.setText('⏳ Téléchargement en cours…')
-        await this.downloadOffline(dlStatus)
-        this.showInstallHelp()
-      } catch (e) {
-        logEvent('error', 'download-btn', e instanceof Error ? e.message : String(e))
-        dlStatus.setColor('#ffab91').setText(`Erreur : ${e instanceof Error ? e.message : String(e)}`)
-      } finally {
-        dlTxt.setText('📥 Re-télécharger')
-        paintDl(0x0277bd)
-        dling = false
-      }
     })
 
     // bouton stylé : cadre arrondi + effets hover/press, la logique passe par onTap
@@ -182,30 +144,61 @@ export class TitleScene extends Phaser.Scene {
   }
 
   // ─── SAUVEGARDE CLOUD (connexion Google) ────────────────────────────────────────────────────
-  // Ligne d'état + bouton. Rien de bloquant : si le cloud n'est pas configuré (pas de .env), on
-  // n'affiche RIEN et le jeu reste exactement celui d'avant.
+  // Ligne d'état + bouton à la charte Google. Rien de bloquant : si le cloud n'est pas configuré
+  // (pas de .env), on n'affiche RIEN et le jeu reste exactement celui d'avant.
   private addCloudRow() {
     if (!cloudAvailable()) return
 
-    const status = this.add.text(480, 252, '', { fontSize: '15px', color: '#e1f5fe', fontStyle: 'bold', align: 'center', wordWrap: { width: 620 } })
+    // ⚠️ ON PRÉCHARGE LE SDK TOUT DE SUITE. signInWithPopup doit être appelé synchronement dans le
+    // geste utilisateur : si le clic doit d'abord attendre l'import dynamique du SDK, le navigateur
+    // ne relie plus l'ouverture au clic et BLOQUE la popup (bug constaté en R275).
+    void prewarm()
+
+    const status = this.add.text(480, 236, '', { fontSize: '15px', color: '#e1f5fe', fontStyle: 'bold', align: 'center', wordWrap: { width: 640 } })
       .setOrigin(0.5).setShadow(0, 1, '#000000aa', 2)
-    const btn = this.add.text(480, 300, '', { fontSize: '18px', color: '#ffffff', fontStyle: 'bold', backgroundColor: '#1565c0', padding: { x: 14, y: 8 } })
-      .setOrigin(0.5).setShadow(0, 2, '#00000099', 3).setInteractive({ useHandCursor: true })
+
+    // Bouton « Se connecter avec Google » aux couleurs de la charte : fond blanc, texte #3c4043,
+    // bordure #dadce0, logo G officiel à gauche.
+    const btn = this.add.container(480, 300)
+    const bw = 330, bh = 50
+    const bg = this.add.graphics()
+    const paint = (fill: number) => {
+      bg.clear()
+      bg.fillStyle(0x000000, 0.3).fillRoundedRect(-bw / 2, -bh / 2 + 3, bw, bh, 6)
+      bg.fillStyle(fill, 1).fillRoundedRect(-bw / 2, -bh / 2, bw, bh, 6)
+      bg.lineStyle(1, 0xdadce0, 1).strokeRoundedRect(-bw / 2, -bh / 2, bw, bh, 6)
+    }
+    paint(0xffffff)
+    const logo = this.add.image(-bw / 2 + 30, 0, 'google-g').setDisplaySize(22, 22)
+    const label = this.add.text(6, 0, 'Se connecter avec Google', {
+      fontSize: '18px', color: '#3c4043', fontStyle: 'bold',
+    }).setOrigin(0.5)
+    btn.add([bg, logo, label])
+    btn.setSize(bw, bh).setInteractive({ useHandCursor: true })
+    btn.on('pointerover', () => paint(0xf7f8f8))
+    btn.on('pointerout', () => paint(0xffffff))
 
     // Avertissement EXPLICITE quand la partie n'existe qu'en local : c'est tout l'intérêt de la
     // fonctionnalité, et le joueur doit savoir qu'il joue sans filet.
     const showSignedOut = () => {
       status.setColor('#ffcc80').setText('⚠️ Sauvegarde locale uniquement — elle peut disparaître\n(cache vidé, réinstallation). Connecte-toi pour la mettre à l\'abri.')
-      btn.setText('☁️ Se connecter avec Google').setBackgroundColor('#1565c0')
+      logo.setVisible(true)
+      label.setText('Se connecter avec Google').setColor('#3c4043').setX(6)
+      paint(0xffffff)
     }
     const showSignedIn = (u: CloudUser) => {
       status.setColor('#a5d6a7').setText(`☁️ Sauvegarde en ligne active — ${u.email ?? u.uid}`)
-      btn.setText('Se déconnecter').setBackgroundColor('#455a64')
+      logo.setVisible(false)
+      label.setText('Se déconnecter').setColor('#ffffff').setX(0)
+      paint(0x455a64)
     }
 
     let user: CloudUser | null = null
     let busy = false
     showSignedOut()
+
+    // Un flux redirect entamé avant le rechargement se termine ici (repli quand la popup est refusée).
+    void completeRedirect().then((u) => { if (u) { user = u; setAutoPushUser(u.uid); showSignedIn(u); void this.runSync(u, status) } })
 
     // La restauration de session est ASYNCHRONE : au premier affichage on ne sait pas encore si le
     // joueur est connecté. onUser recale l'affichage dès que Firebase a tranché.
@@ -215,30 +208,58 @@ export class TitleScene extends Phaser.Scene {
       if (u) { showSignedIn(u); void this.runSync(u, status) } else showSignedOut()
     })
 
-    btn.on('pointerdown', async () => {
+    btn.on('pointerdown', () => {
       if (busy) return
       busy = true
-      try {
-        if (user) {
-          await signOutCloud()
-          user = null
-          setAutoPushUser(null)
-          showSignedOut()
-        } else {
+      void (async () => {
+        try {
+          if (user) {
+            await signOutCloud()
+            user = null
+            setAutoPushUser(null)
+            showSignedOut()
+            return
+          }
+          // Le SDK n'est pas encore prêt : impossible d'ouvrir une popup dans le geste, on part
+          // directement en redirect plutôt que de se faire bloquer.
+          if (!authReady()) {
+            status.setColor('#e1f5fe').setText('Redirection vers Google…')
+            await signInRedirect()
+            return
+          }
           status.setColor('#e1f5fe').setText('Connexion en cours…')
-          const u = await signInWithGoogle()
+          const u = await signInPopup()
           user = u
           setAutoPushUser(u.uid)
           showSignedIn(u)
           await this.runSync(u, status)
+        } catch (e) {
+          if (e instanceof PopupRefusedError) {
+            // la plateforme refuse les popups (cas possible en PWA iOS installée) → redirect
+            logEvent('warn', 'cloud-auth', `popup refusée (${e.code}) → redirect`)
+            status.setColor('#e1f5fe').setText('Popup bloquée — redirection vers Google…')
+            try {
+              await signInRedirect()
+              return
+            } catch (e2) {
+              const m2 = e2 instanceof Error ? e2.message : String(e2)
+              logEvent('error', 'cloud-auth', `redirect KO : ${m2}`)
+              status.setColor('#ffab91').setText(`Connexion impossible : ${m2}`)
+              return
+            }
+          }
+          const msg = e instanceof Error ? e.message : String(e)
+          // « popup-closed-by-user » = le joueur a fermé la fenêtre : ce n'est pas une erreur
+          if ((e as { code?: string }).code === 'auth/cancelled-popup-request' || (e as { code?: string }).code === 'auth/popup-closed-by-user') {
+            showSignedOut()
+            return
+          }
+          logEvent('error', 'cloud-auth', msg)
+          status.setColor('#ffab91').setText(`Échec de connexion : ${msg}`)
+        } finally {
+          busy = false
         }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        logEvent('error', 'cloud-auth', msg)
-        status.setColor('#ffab91').setText(`Échec de connexion : ${msg}`)
-      } finally {
-        busy = false
-      }
+      })()
     })
   }
 
@@ -303,59 +324,4 @@ export class TitleScene extends Phaser.Scene {
     })
   }
 
-  // Télécharge TOUS les assets (art + audio) via le service worker → mis en cache CacheFirst, donc
-  // ensuite dispo hors ligne, y compris les terrains/mobs jamais vus. Best-effort, 6 en parallèle,
-  // progression affichée. À faire EN LIGNE une fois avant l'avion.
-  private async downloadOffline(status: Phaser.GameObjects.Text) {
-    try {
-      const res = await fetch('asset-manifest.json', { cache: 'reload' })
-      if (!res.ok) throw new Error(`manifest HTTP ${res.status}`)
-      const list = (await res.json()) as string[]
-      const total = list.length
-      let done = 0
-      let failed = 0
-      status.setColor('#e1f5fe').setText(`0 / ${total}`)
-      const queue = list.slice()
-      const worker = async () => {
-        while (queue.length) {
-          const url = queue.shift()!
-          try { const r = await fetch(url); await r.blob() } catch { failed++ }
-          done++
-          if (done % 4 === 0 || done === total) status.setText(`${done} / ${total}`)
-        }
-      }
-      await Promise.all(Array.from({ length: 6 }, () => worker()))
-      status.setColor(failed ? '#ffcc80' : '#a5d6a7')
-        .setText(failed ? `Fini avec ${failed} échec(s) sur ${total} — réessaie` : `✓ ${total} fichiers en cache — prêt hors-ligne !`)
-    } catch (e) {
-      // On MONTRE la vraie erreur dans la ligne de statut (iOS masque souvent en « Script error. »)
-      const msg = e instanceof Error ? e.message : String(e)
-      logEvent('error', 'download', msg)
-      status.setColor('#ffab91').setText(`Échec : ${msg}`)
-    }
-  }
-
-  // Explique quoi faire APRÈS le téléchargement : installer en vraie app (Ajouter à l'écran d'accueil).
-  private showInstallHelp() {
-    const c = this.add.container(0, 0).setDepth(2000)
-    const backdrop = this.add.rectangle(480, 270, 960, 540, 0x000000, 0.82).setInteractive()
-    const card = this.add.rectangle(480, 270, 660, 390, 0x102a3a, 0.99).setStrokeStyle(3, 0x4fc3f7, 0.95)
-    const title = this.add.text(480, 112, '✓ Jeu téléchargé — installe l\'app', { fontSize: '23px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0.5)
-    const body = this.add.text(480, 266,
-      'Pour jouer hors connexion (avion) comme une vraie app :\n\n' +
-      '1.   Bouton PARTAGER de Safari  (carré + flèche ⬆)\n' +
-      '2.   « Sur l\'écran d\'accueil »   →   Ajouter\n' +
-      '3.   Lance Panda-Run depuis la nouvelle icône\n' +
-      '      (plein écran, sans barre Safari)\n\n' +
-      'Tout est déjà en cache : ça tourne en mode Avion,\n' +
-      'y compris les terrains et monstres jamais vus. 🛫', {
-      fontSize: '16px', color: '#e8f4fb', align: 'center', lineSpacing: 5,
-    }).setOrigin(0.5)
-    const okBtn = this.add.rectangle(480, 414, 210, 46, 0x00838f, 0.98).setStrokeStyle(2, 0xffffff, 0.5).setInteractive({ useHandCursor: true })
-    const okTxt = this.add.text(480, 414, 'Compris !', { fontSize: '17px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
-    c.add([backdrop, card, title, body, okBtn, okTxt])
-    const close = () => c.destroy()
-    okBtn.on('pointerdown', close)
-    backdrop.on('pointerdown', close)
-  }
 }
