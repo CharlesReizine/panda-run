@@ -8,7 +8,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "emulator": "node scripts/emulator.mjs",
-    "deploy": "pnpm build && gh-pages -d dist"
+    "deploy": "pnpm build && npx -y firebase-tools@latest deploy --only hosting --project panda-run-reizine",
+    "deploy:rules": "npx -y firebase-tools@latest deploy --only firestore:rules --project panda-run-reizine"
   },
   "dependencies": {
     "firebase": "^12.16.0",

@@ -1,7 +1,14 @@
 # Authent Google + sauvegarde cloud — design
 
-> Statut : **implémenté en R275, en attente du test sur appareil.**
-> Déployé pour test : https://panda-run-reizine.web.app
+> Statut : **implémenté (R275) puis corrigé (R276). En attente du seul test qui reste : la popup
+> Google depuis la PWA installée sur iPhone.**
+> En ligne : https://panda-run-reizine.web.app — le jeu a DÉMÉNAGÉ de gh-pages vers Firebase Hosting
+> le 2026-07-29 (une seule origine, et l'auth servie depuis le même domaine).
+>
+> Correctif notable après la 1re implémentation : `signInWithPopup` doit être appelé SYNCHRONEMENT
+> dans le geste utilisateur. Le faire précéder d'un `await import('firebase/auth')` fait bloquer la
+> popup par le navigateur — ce n'était pas une limite d'iOS mais l'import dynamique qui cassait la
+> chaîne du geste. D'où `prewarm()` : le SDK est résolu dès l'écran-titre.
 > Date : 2026-07-28. Contexte : le user perd ses sauvegardes (localStorage volatil : cache vidé,
 > réinstallation de la PWA, mode privé). Il veut pouvoir recharger sa partie depuis n'importe où.
 
@@ -19,11 +26,15 @@
 Le bouton « Télécharger l'app » et la sauvegarde cloud répondent à deux problèmes **orthogonaux** :
 
 - « Télécharger l'app » met les **ASSETS** dans le cache du service worker → jouer **sans réseau**.
-  Le précache automatique ne couvre que 16 entrées (~2 Mo) : tout l'art vient de ce bouton.
 - La sauvegarde cloud sécurise la **PROGRESSION** → et exige au contraire du **réseau**.
 
-Retirer le bouton parce que le cloud marche casserait le jeu hors connexion. Décision reportée,
-hors périmètre de cette spec.
+Retirer le bouton parce que le cloud marche aurait cassé le jeu hors connexion : les deux ne se
+remplacent pas.
+
+**ÉPILOGUE (R276)** : le bouton a bien été supprimé, mais pour une tout autre raison — le user ne joue
+jamais sans réseau. C'est le BESOIN hors-ligne qui a disparu, pas le problème qui a été résolu par le
+cloud. Le cache runtime du service worker (CacheFirst images/sons) est conservé, mais comme
+optimisation de chargement, sans aucune garantie hors connexion.
 
 ## Contrainte structurante : le jeu doit démarrer sans réseau
 
