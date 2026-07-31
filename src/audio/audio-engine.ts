@@ -14,7 +14,7 @@ const MUSIC_VOLUME = 0.35
 export type SfxName =
   | 'jump' | 'attack' | 'hit' | 'enemy-death' | 'coin' | 'potion' | 'skill'
   | 'level-up' | 'player-hit' | 'player-death' | 'boss-victory' | 'ui-tap' | 'buy'
-  | 'stomp' | 'player-burn' | 'elite' | 'npc-talk' | 'bubble'
+  | 'stomp' | 'player-burn' | 'elite' | 'npc-talk' | 'bubble' | 'coins'
 
 export type MusicTrack =
   | 'titre' | 'ville' | 'carte' | 'plaine' | 'foret' | 'desert' | 'cave'
@@ -96,6 +96,11 @@ class AudioEngine {
   // musique de fond : élément média HTML (robuste iOS), une seule piste pour tout le jeu
   private music: HTMLAudioElement | null = null
   private musicWanted = false // playMusic a été demandé au moins une fois
+  // Anti-doublon du clic d'interface. Deux sources peuvent le déclencher pour un même appui : le
+  // crochet global (ui/click-sound.ts) et les appels explicites restés dans certaines scènes. Sans
+  // ce garde-fou on entendrait un « tac-tac » sur ces boutons-là. Vaut aussi quand deux objets
+  // interactifs se recouvrent.
+  private lastUiTapAt = 0
 
   constructor() {
     // lecture de l'état muet — sans effet de bord audio (localStorage seulement)
@@ -264,6 +269,11 @@ class AudioEngine {
     if (!this.ensure() || !this.ctx) return
     if (this.ctx.state === 'suspended') void this.ctx.resume()
     const t = this.ctx.currentTime
+    if (name === 'ui-tap') {
+      const now = this.ctx.currentTime * 1000
+      if (now - this.lastUiTapAt < 60) return
+      this.lastUiTapAt = now
+    }
     switch (name) {
       case 'jump':
         this.tone('square', 320, t, 0.16, 0.5, 640)
@@ -359,6 +369,20 @@ class AudioEngine {
         this.tone('square', 784, t, 0.08, 0.4)
         this.tone('square', 1047, t + 0.08, 0.14, 0.4)
         break
+      // PIÈCES qui s'entrechoquent (achat / vente chez un marchand). 'buy' et 'coin' n'étaient que
+      // deux bips montants — ça sonnait « validation », pas « monnaie ». Plusieurs petits chocs
+      // métalliques aigus, aux hauteurs et aux instants VOLONTAIREMENT irréguliers : des pièces
+      // parfaitement régulières sonneraient comme un arpège, pas comme une poignée de piécettes.
+      case 'coins': {
+        const pitches = [1180, 1560, 1320, 1720, 1440]
+        const n = 4 + (Math.random() < 0.5 ? 0 : 1)
+        for (let i = 0; i < n; i++) {
+          const at = t + i * 0.045 + Math.random() * 0.02
+          this.tone('square', pitches[i % pitches.length]! * (0.94 + Math.random() * 0.12), at, 0.07, 0.26)
+          this.noise(at, 0.035, 0.1, 'highpass', 4200) // le « tsss » du métal
+        }
+        break
+      }
     }
   }
 

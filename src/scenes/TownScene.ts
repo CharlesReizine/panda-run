@@ -15,6 +15,7 @@ import { RECIPES } from '../data/recipes'
 import { audio } from '../audio/audio-engine'
 import { CX, CY, VIEW_H, VIEW_W } from '../core/viewport'
 import { spreadLabels } from './label-spread'
+import { installUiClickSound } from '../ui/click-sound'
 
 const TOWN_SPEED = 170
 const INTERACT_RADIUS = 70
@@ -265,6 +266,8 @@ export class TownScene extends Phaser.Scene {
   }
 
   create() {
+    // chaque bouton de cet écran sonne, sans avoir à l'annoter (cf. ui/click-sound.ts)
+    installUiClickSound(this)
     this.panel = undefined
     this.nearSpot = null
     const { node, theme } = this.resolveTown()
@@ -721,7 +724,7 @@ export class TownScene extends Phaser.Scene {
     c.add(buyBtn)
     buyBtn.on('pointerdown', () => {
       if (onBuy()) {
-        audio.playSfx('buy')
+        audio.playSfx('coins')
         onBought()
         this.flash(c, x, y - h / 2 - 4, 'Acheté !', '#66bb6a')
         buyBtn.setBackgroundColor('#66bb6a')
@@ -1106,7 +1109,7 @@ export class TownScene extends Phaser.Scene {
       if (craftable) {
         btn.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
           if (doCraft(p, recipe)) {
-            audio.playSfx('buy')
+            audio.playSfx('coins')
             save(p)
             render(`Forgé : ${item.name} !`, true)
           } else render('Ressources insuffisantes', false)
@@ -1232,7 +1235,7 @@ export class TownScene extends Phaser.Scene {
       c.add(btn)
       btn.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
         if (doReforge(p, id)) {
-          audio.playSfx('buy')
+          audio.playSfx('coins')
           save(p)
           render(`${item.name} réforgé au +${(p.upgrades[id] ?? 0)} !`, true)
         } else render(atMax ? 'Niveau max atteint' : 'Ressources insuffisantes', false)
@@ -1316,7 +1319,8 @@ export class TownScene extends Phaser.Scene {
       btn.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
         const value = sellValue(item)
         if (sellItem(p, invIndex)) {
-          audio.playSfx('buy')
+          audio.playSfx('coins') // la vente était MUETTE alors que l'achat sonnait
+          audio.playSfx('coins')
           save(p)
           render(`Vendu : ${item.name} (+${value} or)`, true)
         }

@@ -8,6 +8,7 @@ import { playerXpForMobLevel } from '../core/progression'
 import { SKILLS } from '../data/skills'
 import { BD, truncate } from './bestiary-layout'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
+import { installUiClickSound } from '../ui/click-sound'
 
 // Bestiaire — page en lecture seule listant tous les monstres, leurs stats et leur table de drop.
 // Aucune écriture dans la sauvegarde ni dans les données du jeu.
@@ -69,6 +70,8 @@ export class BestiaryScene extends Phaser.Scene {
   constructor() { super('Bestiary') }
 
   create() {
+    // chaque bouton de cet écran sonne, sans avoir à l'annoter (cf. ui/click-sound.ts)
+    installUiClickSound(this)
     // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
     // une seule ligne, aucune coordonnée à retoucher
     centerCamera(this)

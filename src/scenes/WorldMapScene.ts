@@ -6,6 +6,7 @@ import { save } from '../core/save'
 import { audio } from '../audio/audio-engine'
 import { isLevelSeen } from './LevelIntroScene'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
+import { installUiClickSound } from '../ui/click-sound'
 
 const NODE_COLORS = { town: 0xffd700, level: 0x66bb6a, boss: 0xef5350 } as const
 const LOCKED_COLOR = 0x555555
@@ -15,6 +16,8 @@ export class WorldMapScene extends Phaser.Scene {
   constructor() { super('WorldMap') }
 
   create() {
+    // chaque bouton de cet écran sonne, sans avoir à l'annoter (cf. ui/click-sound.ts)
+    installUiClickSound(this)
     // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
     // une seule ligne, aucune coordonnée à retoucher
     centerCamera(this)

@@ -7,6 +7,7 @@ import { canEquipItem, equipRestrictionMessage } from '../core/equip'
 import type { EquipSlot, Rarity } from '../core/types'
 import type { LevelScene } from './LevelScene'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
+import { installUiClickSound } from '../ui/click-sound'
 
 // ordre fixe chapeau → armure → arme → accessoire (partagé avec les boutiques)
 const SLOTS: EquipSlot[] = SLOT_ORDER
@@ -48,6 +49,8 @@ export class InventoryScene extends Phaser.Scene {
   }
 
   create() {
+    // chaque bouton de cet écran sonne, sans avoir à l'annoter (cf. ui/click-sound.ts)
+    installUiClickSound(this)
     // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
     // une seule ligne, aucune coordonnée à retoucher
     centerCamera(this)

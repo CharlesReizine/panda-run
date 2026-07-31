@@ -5,6 +5,7 @@ import { readActivePseudo, pseudoKey } from '../cloud/identity'
 import { CLASSES } from '../data/classes'
 import type { ClassId } from '../core/types'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
+import { installUiClickSound } from '../ui/click-sound'
 
 // Classement : tous les joueurs, triés par niveau. Lecture seule, publique.
 // Le tri et la limite sont faits par Firestore (cf. cloud/leaderboard.ts) : on ne télécharge jamais
@@ -19,6 +20,8 @@ export class LeaderboardScene extends Phaser.Scene {
   }
 
   create() {
+    // chaque bouton de cet écran sonne, sans avoir à l'annoter (cf. ui/click-sound.ts)
+    installUiClickSound(this)
     // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts)
     centerCamera(this)
     this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x0d1b2a, 0.97)

@@ -7,6 +7,7 @@ import { SKILLS } from '../data/skills'
 import { audio } from '../audio/audio-engine'
 import type { DropEntry, MonsterDef } from '../core/types'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
+import { installUiClickSound } from '../ui/click-sound'
 
 // Écran de présentation d'un NOUVEAU terrain : montré une seule fois par levelId (la première
 // entrée), il présente les monstres uniques du niveau et leurs loots notables avant de lancer
@@ -93,6 +94,8 @@ export class LevelIntroScene extends Phaser.Scene {
   }
 
   create() {
+    // chaque bouton de cet écran sonne, sans avoir à l'annoter (cf. ui/click-sound.ts)
+    installUiClickSound(this)
     // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
     // une seule ligne, aucune coordonnée à retoucher
     centerCamera(this)

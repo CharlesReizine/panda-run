@@ -10,6 +10,7 @@ import { getPlayer, setPlayer } from '../state'
 import type { ClassId } from '../core/types'
 import { audio } from '../audio/audio-engine'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
+import { installUiClickSound } from '../ui/click-sound'
 
 // PAGE D'ENTRAÎNEMENT : on incarne n'importe quelle classe (base + évolutions), MANA infini, TOUS
 // les skills débloqués au rang max. Un gros Poring-boss encaisse sans mourir et frappe pour 0, des
@@ -55,6 +56,8 @@ export class TrainingScene extends LevelScene {
   }
 
   create() {
+    // chaque bouton de cet écran sonne, sans avoir à l'annoter (cf. ui/click-sound.ts)
+    installUiClickSound(this)
     // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
     // une seule ligne, aucune coordonnée à retoucher
     centerCamera(this)

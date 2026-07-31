@@ -12,6 +12,7 @@ import { adoptCloud, setAutoPushKey } from '../cloud/sync-service'
 import { askPseudo } from '../ui/pseudo-prompt'
 import type { StampedSave } from '../core/save'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
+import { installUiClickSound } from '../ui/click-sound'
 
 // Écran-titre volontairement NU : quelques boutons, aucun texte explicatif.
 //
@@ -34,6 +35,8 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create() {
+    // chaque bouton de cet écran sonne, sans avoir à l'annoter (cf. ui/click-sound.ts)
+    installUiClickSound(this)
     // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts)
     centerCamera(this)
     // déblocage audio iOS/Safari : le contexte ne peut (re)démarrer que sur un geste utilisateur

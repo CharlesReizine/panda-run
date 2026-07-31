@@ -5,11 +5,14 @@ import { skillsOf, maxRankOf } from '../data/skills'
 import { MATERIALS } from '../data/materials'
 import { computeStats } from '../core/stats'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
+import { installUiClickSound } from '../ui/click-sound'
 
 export class MenuScene extends Phaser.Scene {
   constructor() { super('Menu') }
 
   create() {
+    // chaque bouton de cet écran sonne, sans avoir à l'annoter (cf. ui/click-sound.ts)
+    installUiClickSound(this)
     // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
     // une seule ligne, aucune coordonnée à retoucher
     centerCamera(this)

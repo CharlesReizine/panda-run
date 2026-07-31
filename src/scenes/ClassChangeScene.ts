@@ -6,6 +6,7 @@ import { getPlayer } from '../state'
 import { save } from '../core/save'
 import type { ClassId } from '../core/types'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
+import { installUiClickSound } from '../ui/click-sound'
 
 const CHOICES: ClassId[] = ['swordsman', 'mage', 'archer']
 
@@ -15,6 +16,8 @@ export class ClassChangeScene extends Phaser.Scene {
   constructor() { super('ClassChange') }
 
   create() {
+    // chaque bouton de cet écran sonne, sans avoir à l'annoter (cf. ui/click-sound.ts)
+    installUiClickSound(this)
     // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
     // une seule ligne, aucune coordonnée à retoucher
     centerCamera(this)

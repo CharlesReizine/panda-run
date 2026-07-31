@@ -9,6 +9,7 @@ import { CLASSES } from '../data/classes'
 import type { ClassId, SkillDef } from '../core/types'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 import { layoutSkillTree } from './skill-tree-layout'
+import { installUiClickSound } from '../ui/click-sound'
 
 // Gestion des compétences DIRECTEMENT en jeu (pas besoin de la carte).
 // Lancée par-dessus le niveau en pause ; à la fermeture, on reprend le jeu.
@@ -28,6 +29,8 @@ export class SkillEquipScene extends Phaser.Scene {
   }
 
   create() {
+    // chaque bouton de cet écran sonne, sans avoir à l'annoter (cf. ui/click-sound.ts)
+    installUiClickSound(this)
     // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
     // une seule ligne, aucune coordonnée à retoucher
     centerCamera(this)

@@ -1,6 +1,7 @@
 import Phaser from 'phaser'
 import { audio } from '../audio/audio-engine'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
+import { installUiClickSound } from '../ui/click-sound'
 
 // Menu de pause superposé au niveau gelé (Level + UI mis en pause par le bouton ⏸).
 // Deux vues : le menu principal et le sous-panneau « Réglages » (volume + muet).
@@ -10,6 +11,8 @@ export class PauseScene extends Phaser.Scene {
   constructor() { super('Pause') }
 
   create() {
+    // chaque bouton de cet écran sonne, sans avoir à l'annoter (cf. ui/click-sound.ts)
+    installUiClickSound(this)
     // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
     // une seule ligne, aucune coordonnée à retoucher
     centerCamera(this)
