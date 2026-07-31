@@ -335,8 +335,14 @@ export class LevelScene extends Phaser.Scene {
     // physique (tunneling) → on épaissit le corps (28px) sans toucher au rendu.
     for (const br of this.levelDef.bridges ?? []) {
       this.add.tileSprite(br.x * TILE, br.y * TILE, br.w * TILE, 12, 'bridge').setOrigin(0, 0).setDepth(-4)
-      // corps 28px (le visuel ne fait que 12px) : même emprise que l'ancien plank (top br.y*TILE-8)
-      this.addStaticBand(oneWay, br.x * TILE, br.y * TILE - 8, br.w * TILE, 28, true)
+      // Corps 28px alors que le visuel n'en fait que 12 : c'est l'anti-tunneling (à grande vitesse de
+      // chute, une tranche de 12px peut être franchie en un seul pas de physique). On épaissit donc
+      // vers le BAS, jamais vers le haut.
+      // ⚠️ CORRECTIF : le sommet était à `br.y * TILE - 8`, hérité d'un ancien visuel de planche posé
+      // 8px plus haut. Le joueur se tenait donc 8px AU-DESSUS de la planche dessinée (« le panda vole
+      // sur certaines plateformes »). `platformSurfaceAt` considérait déjà `b.y * TILE` comme la
+      // surface : la collision était la seule à mentir.
+      this.addStaticBand(oneWay, br.x * TILE, br.y * TILE, br.w * TILE, 28, true)
     }
     // BANDES DE ROCHE (plafond de tunnel + socle de départ) : dalles de pierre PLEINE rendues avec la
     // texture du biome, SANS collision (depth -5, derrière le joueur → il reste toujours visible ; le
@@ -1962,20 +1968,90 @@ export class LevelScene extends Phaser.Scene {
 
   // onde de choc de zone ; withShards ajoute une 2e onde plus rapide + des éclats
   // qui volent depuis le centre (utilisé pour les vrais sorts d'AoE, pas les petits effets)
+  // ONDE DE ZONE — le visuel PARTAGÉ par toutes les zones, auras et novas (13 appels).
+  //
+  // C'était une image d'anneau lisse qu'on agrandissait : un cercle parfait, propre et sans vie.
+  // On dessine désormais un POLYGONE IRRÉGULIER redessiné à chaque frame :
+  //   - `jag` donne une amplitude fixe par sommet → une silhouette DÉCHIRÉE, différente à chaque cast ;
+  //   - `wob` la fait ONDULER dans le temps → le contour respire au lieu d'être une forme figée
+  //     qu'on aurait juste zoomée ;
+  //   - deux couches concentriques qui tournent en sens opposé → de la profondeur, pas un trait plat.
+  // Le rayon reste CIRCULAIRE (pas d'ellipse) : c'est celui qui sert aux tests de portée, le visuel
+  // ne doit pas mentir sur la zone réellement touchée.
   private aoeRing(x: number, y: number, radius: number, color: number, withShards = false) {
-    const ring = this.add.image(x, y, 'ring').setTint(color).setDepth(5).setScale(0.2)
-    this.tweens.add({ targets: ring, scale: radius / 28, alpha: 0, duration: 350, onComplete: () => ring.destroy() })
-    if (withShards) {
-      const shock = this.add.image(x, y, 'ring').setTint(color).setDepth(5).setScale(0.08).setAlpha(0.7)
-      this.tweens.add({ targets: shock, scale: (radius / 28) * 1.35, alpha: 0, duration: 260, onComplete: () => shock.destroy() })
-      const shardCount = 8
-      for (let i = 0; i < shardCount; i++) {
-        const a = (i / shardCount) * Math.PI * 2
-        const dist = radius * Phaser.Math.FloatBetween(0.55, 1)
-        const shard = this.add.rectangle(x, y, 4, 4, color).setDepth(6).setRotation(a)
-        this.tweens.add({ targets: shard, x: x + Math.cos(a) * dist, y: y + Math.sin(a) * dist, alpha: 0, duration: 380, onComplete: () => shard.destroy() })
+    const SEG = 36
+    const jag = Array.from({ length: SEG }, () => Phaser.Math.FloatBetween(0.78, 1.2))
+    const spin = Phaser.Math.FloatBetween(-1.6, 1.6)
+    const g = this.add.graphics().setDepth(5).setBlendMode(Phaser.BlendModes.ADD)
+
+    const layers = [
+      { width: 6, alpha: 1, scale: 1, dir: 1 },
+      { width: 2.5, alpha: 0.6, scale: 0.82, dir: -1 },
+    ]
+    const draw = (t: number) => {
+      g.clear()
+      const fade = 1 - t * t // disparition douce en fin de course
+      for (const L of layers) {
+        g.lineStyle(L.width, color, L.alpha * fade)
+        g.beginPath()
+        for (let i = 0; i <= SEG; i++) {
+          const k = i % SEG
+          const a = (k / SEG) * Math.PI * 2 + spin * L.dir * t
+          const wob = 1 + Math.sin(k * 3 + t * 16) * 0.09
+          const rr = radius * t * L.scale * jag[k]! * wob
+          const px = x + Math.cos(a) * rr
+          const py = y + Math.sin(a) * rr
+          if (i === 0) g.moveTo(px, py); else g.lineTo(px, py)
+        }
+        g.closePath()
+        g.strokePath()
       }
     }
+
+    // On anime un objet nu plutôt qu'un compteur de tween : l'API des compteurs a changé entre
+    // versions de Phaser, lire une propriété d'objet marche partout.
+    const st = { t: 0.18 }
+    draw(st.t)
+    this.tweens.add({
+      targets: st, t: 1, duration: 430, ease: 'Cubic.out',
+      onUpdate: () => draw(st.t),
+      onComplete: () => g.destroy(),
+    })
+
+    if (withShards) {
+      const shardCount = 10
+      for (let i = 0; i < shardCount; i++) {
+        // angle BRUITÉ et taille variable : une couronne d'éclats régulière retombe dans le lisse
+        const a = ((i + Phaser.Math.FloatBetween(-0.3, 0.3)) / shardCount) * Math.PI * 2
+        const dist = radius * Phaser.Math.FloatBetween(0.6, 1.15)
+        const len = Phaser.Math.FloatBetween(5, 11)
+        const shard = this.add.rectangle(x, y, len, 3, color).setDepth(6).setRotation(a)
+          .setBlendMode(Phaser.BlendModes.ADD)
+        this.tweens.add({
+          targets: shard, x: x + Math.cos(a) * dist, y: y + Math.sin(a) * dist,
+          alpha: 0, duration: Phaser.Math.Between(300, 460), ease: 'Quad.out',
+          onComplete: () => shard.destroy(),
+        })
+      }
+    }
+  }
+
+  // Le panda CLIGNOTE dans la couleur du sort qu'il lance : le joueur voit que l'effet vient de LUI,
+  // et pas seulement qu'un cercle est apparu au sol.
+  private flashPlayer(color: number, blinks = 3, halfMs = 65) {
+    // les flammes pilotent déjà la teinte (rouge, cf. updateFlames) : on ne se dispute pas le sprite
+    if (this.flameTinted) return
+    const steps = blinks * 2 - 1
+    let n = 0
+    this.player.setTint(color)
+    this.time.addEvent({
+      delay: halfMs, repeat: steps - 1, callback: () => {
+        n++
+        if (n % 2 === 1) this.player.clearTint()
+        else this.player.setTint(color)
+        if (n >= steps) this.player.clearTint() // garantit qu'on ne reste JAMAIS teinté
+      },
+    })
   }
 
   // ===== Helpers FX réutilisables (généreux) — partagés par toutes les classes =====
@@ -2076,6 +2152,10 @@ export class LevelScene extends Phaser.Scene {
     const mult = skillDamageMult(skill, rank)
     // gros coup instantané : bref gel d'impact pour le punch (charge/dive/buff gèrent le leur)
     if (mult >= 2.5 && (skill.kind === 'melee' || skill.kind === 'aoe' || skill.kind === 'projectile')) this.hitStop(75)
+    // Ces sorts partent DU panda : on le fait clignoter dans la couleur du sort, pour qu'on voie que
+    // l'effet vient de lui et pas seulement qu'un cercle est apparu. Les 'zone' sont exclues à dessein
+    // (elles sortent en return plus haut, vers la visée : l'effet part du curseur, pas du panda).
+    if (skill.kind === 'aoe' || skill.kind === 'aura' || skill.kind === 'buff') this.flashPlayer(color)
     if (skill.kind === 'melee') {
       this.player.playAttack()
       if (skill.id === 'lame-ultime' || skill.id === 'epee-fantome') {
