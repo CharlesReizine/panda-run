@@ -130,13 +130,21 @@ describe('économie de boutique — le revenu du jeu est bien la référence', (
     for (const e of fancy) expect(e.price).toBeGreaterThan(arrival * 1.5)
   })
 
-  it('un légendaire coûte plus que la campagne entière clearée une fois', () => {
-    // « Hors de portée longtemps » se mesure : même en nettoyant les 58 terrains, l'or des terrains
-    // seuls ne paye pas un légendaire. Il faut y ajouter les quêtes, les reventes et du farm.
-    const whole = goldWholeGame()
-    const legendaries = allStock().filter((e) => rarityOf(e.itemId) === 'legendaire')
-    expect(legendaries.length).toBeGreaterThan(0)
-    for (const e of legendaries) expect(e.price).toBeGreaterThan(whole)
+  it('AUCUN légendaire n\'est en vente : l\'or n\'achète pas le haut du panier', () => {
+    // Ce test remplace « un légendaire coûte plus que la campagne entière ». Le prix prohibitif était une
+    // demi-mesure : 26 des 29 légendaires étaient quand même en vitrine, donc accumuler de l'or suffisait
+    // à tout obtenir et le farm comme la forge ne servaient à rien pour le haut du panier.
+    // Demande du user : « les plus stylés ça ne peut être que du craft TRÈS TRÈS dur, ou alors du
+    // farming ». Une règle binaire vaut mieux qu'un prix dissuasif : on ne peut plus la contourner.
+    const legendaires = allStock().filter((e) => rarityOf(e.itemId) === 'legendaire')
+    expect(legendaires.map((e) => e.itemId), 'légendaire(s) en vitrine').toEqual([])
+  })
+
+  it('le plus cher article de la vitrine reste hors de portée à l\'arrivée à Morocc', () => {
+    // Le plafond de la boutique est désormais l'ÉPIQUE. Il doit rester un objectif à son palier, sinon
+    // retirer les légendaires aurait juste rendu la vitrine entièrement achetable.
+    const cher = Math.max(...allStock().map((e) => e.price))
+    expect(cher).toBeGreaterThan(goldOnArrival('morocc') * 2)
   })
 })
 
@@ -158,10 +166,13 @@ describe('économie de boutique — la rareté pilote le prix', () => {
     }
   })
 
-  it('un légendaire vaut au moins 50 fois un commun', () => {
-    const commons = allStock().filter((e) => rarityOf(e.itemId) === 'commun').map((e) => e.price)
-    const legendaries = allStock().filter((e) => rarityOf(e.itemId) === 'legendaire').map((e) => e.price)
-    expect(Math.min(...legendaries)).toBeGreaterThanOrEqual(Math.max(...commons) * 50)
+  it('un épique vaut au moins 10 fois un commun', () => {
+    // Adapté au nouveau plafond : les légendaires ne sont plus en vente, l'épique est le haut de gamme
+    // de la vitrine. L'écart doit rester franc, sinon la rareté ne dit plus rien à la caisse.
+    const communs = allStock().filter((e) => rarityOf(e.itemId) === 'commun').map((e) => e.price)
+    const epiques = allStock().filter((e) => rarityOf(e.itemId) === 'epique').map((e) => e.price)
+    expect(epiques.length).toBeGreaterThan(0)
+    expect(Math.min(...epiques)).toBeGreaterThanOrEqual(Math.max(...communs) * 10)
   })
 
   it('le barème par rareté (repli des objets forgés) tombe DANS la bande de sa rareté', () => {

@@ -36,28 +36,10 @@ const COSMETIC_DRAWN = new Set([
 //
 // Régénérer l'état des lieux : `node scripts/art-manquant.mjs` → docs/art-a-generer.md
 const ART_A_GENERER = new Set([
-  'couteau-de-chasse', 'glaive-de-fer', 'rapiere', 'hache-de-guerre',
-  'epee-batarde', 'sabre-de-samourai', 'claymore', 'epee-du-croise',
-  'lame-du-neant', 'epee-du-jugement', 'fronde', 'arc-de-chasse',
-  'arc-en-if', 'arbalete-lourde', 'arc-de-glace', 'arc-du-faucon',
-  'arc-de-braise', 'arc-du-crepuscule', 'arc-des-etoiles', 'branche-tordue',
-  'baton-de-novice', 'baton-d-ebene', 'sceptre-de-jade', 'baton-de-tempete',
-  'sceptre-d-ombre', 'baton-des-marees', 'sceptre-du-chaos', 'baton-de-l-aube',
-  'tunique-de-lin', 'gilet-de-cuir', 'robe-d-apprenti', 'brigandine',
-  'manteau-de-voyageur', 'cuirasse-de-bronze', 'armure-d-ecailles', 'robe-de-mage',
-  'jaque-de-mailles', 'plastron-d-os', 'carapace-de-tortue', 'cotte-de-givre',
-  'justaucorps-d-ombre', 'harnois-de-fer', 'armure-de-lamelles', 'robe-arcanique',
-  'cuirasse-du-croise', 'armure-de-mithril', 'toge-du-sage', 'surcot-du-templier',
-  'cuirasse-de-magma', 'plastron-de-dragon', 'armure-d-obsidienne', 'robe-celeste',
-  'armure-du-valhalla', 'carapace-du-roi-scarabee', 'casquette-de-toile', 'foulard-de-pirate',
-  'cagoule-de-voleur', 'heaume-de-bronze', 'couronne-de-fleurs', 'masque-de-renard',
-  'casque-a-plumet', 'mitre-du-clerc', 'bandeau-du-moine', 'heaume-du-chevalier',
-  'chapeau-du-magicien', 'couronne-de-laurier', 'casque-de-dragon', 'couronne-du-roi-demon',
-  'anneau-de-cuivre', 'pendentif-de-bois', 'boucle-d-oreille', 'gant-de-toile',
-  'brassard-de-fer', 'collier-de-crocs', 'anneau-de-rubis', 'anneau-de-saphir',
-  'amulette-d-ambre', 'gants-de-combat', 'broche-d-argent', 'ceinture-de-force',
-  'talisman-d-os', 'anneau-du-mage', 'bracelet-de-mithril', 'pendentif-du-loup',
-  'oeil-de-basilic', 'amulette-de-l-aube', 'anneau-du-dragon', 'coeur-de-golem',
+  'casquette-de-toile', 'foulard-de-pirate', 'cagoule-de-voleur', 'heaume-de-bronze',
+  'couronne-de-fleurs', 'masque-de-renard', 'casque-a-plumet', 'mitre-du-clerc',
+  'bandeau-du-moine', 'heaume-du-chevalier', 'chapeau-du-magicien', 'couronne-de-laurier',
+  'casque-de-dragon', 'couronne-du-roi-demon', 'anneau-du-dragon', 'coeur-de-golem',
   'larme-d-etoile', 'sceau-des-anciens',
 ])
 

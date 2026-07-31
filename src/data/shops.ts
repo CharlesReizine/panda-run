@@ -47,6 +47,24 @@ export const POTION_PRICE = 20
 // deux à trois retours en plaine. Morocc (cité du désert, atteinte ~niveau 25) propose du matériel
 // MID : rares du haut de la bande + épiques (+ le haut de gamme légendaire), et PAS les objets de base
 // de Prontera. Extensible : ajouter une entrée par nouvelle ville.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// TROIS CANAUX D'ÉQUIPEMENT, TROIS RÔLES DISTINCTS — et aucun ne doit rendre les autres inutiles.
+//
+// Demande du user : « repense un peu le crafting et l'achat. En gros il faut qu'il y ait un intérêt à
+// chacun. Il doit y avoir un peu de tous les niveaux partout, et les plus stylés ça ne peut être que du
+// craft TRÈS TRÈS dur à faire, ou alors du farming. »
+//
+// Constat qui a motivé la refonte : 26 des 29 objets LÉGENDAIRES étaient simplement en vente. Le farm et
+// la forge ne servaient donc à rien pour le haut du panier — il suffisait d'accumuler de l'or.
+//
+//   BOUTIQUE  → fiable, immédiat, sans hasard, MAIS PLAFONNÉE : commun, rare et épique uniquement.
+//               C'est le canal qui garantit qu'on n'est jamais bloqué. Aucun légendaire, jamais.
+//   FORGE     → à niveau égal, meilleur que la boutique ; et c'est l'un des deux seuls accès aux
+//               légendaires, au prix de recettes très exigeantes (cf. data/recipes.ts).
+//   FARM      → les élites et les boss lâchent des légendaires signature (cf. data/monsters.ts).
+//
+// Verrouillé par tests/data/economie-canaux.test.ts : aucun légendaire en vitrine, et tout légendaire a
+// au moins une source (forge ou butin).
 export const SHOP_BY_TOWN: Record<string, TownStock> = {
   prontera: {
     // Armes EARLY : les trois archétypes (épée / arc / bâton) en commun, plus les rares d'entrée.
@@ -122,7 +140,6 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
       // il coûte plus que tout l'or de la campagne entière clearée une fois — on l'obtient bien plus
       // tôt en le faisant tomber de l'Angeling élite (2 %), la vitrine n'est que le lot de consolation
       // de celui qui n'a jamais eu la chance.
-      { itemId: 'ailes-angeling', price: 22000 },
       // ── Roster élargi. Tout chapeau au-delà du commun reste au-dessus d'1,5× le pécule d'arrivée : la
       //    parure est le premier objectif de farm, jamais un achat d'étape.
       { itemId: 'casquette-de-toile', price: 260 },
@@ -142,8 +159,6 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
       { itemId: 'arc-composite', price: 1600 },
       { itemId: 'epee-large', price: 1750 },
       { itemId: 'baton-runique', price: 2000 },
-      { itemId: 'masse-etoilee', price: 2050 },
-      { itemId: 'arbalete', price: 2200 },
       { itemId: 'griffe-royale', price: 5000 },
       { itemId: 'epee-cristal', price: 5800 },
       { itemId: 'arc-elfique', price: 6000 },
@@ -151,11 +166,6 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
       { itemId: 'sceptre-flamme', price: 7500 },
       // Légendaires : chacun vaut plus que la campagne entière clearée une fois. Ce sont des objectifs
       // de fin de partie, à atteindre en cumulant farm, quêtes et reventes — jamais un achat d'étape.
-      { itemId: 'faux-sombre', price: 28000 },
-      { itemId: 'arc-tempete', price: 26000 },
-      { itemId: 'lame-solaire', price: 32000 },
-      { itemId: 'katana-eclair', price: 30000 },
-      { itemId: 'baton-cosmique', price: 34000 },
       // ── Roster élargi : haut de la bande rare, épiques, et légendaires hors de prix.
       { itemId: 'rapiere', price: 1880 },
       { itemId: 'baton-d-ebene', price: 2060 },
@@ -164,20 +174,10 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
       { itemId: 'epee-batarde', price: 2210 },
       { itemId: 'sceptre-de-jade', price: 2250 },
       { itemId: 'arbalete-lourde', price: 2270 },
-      { itemId: 'baton-de-tempete', price: 2600 },
-      { itemId: 'sabre-de-samourai', price: 6460 },
-      { itemId: 'arc-du-faucon', price: 7080 },
       { itemId: 'epee-du-croise', price: 7360 },
-      { itemId: 'sceptre-d-ombre', price: 7490 },
       { itemId: 'arc-de-braise', price: 7520 },
       { itemId: 'claymore', price: 7710 },
       { itemId: 'baton-des-marees', price: 8800 },
-      { itemId: 'lame-du-neant', price: 28740 },
-      { itemId: 'epee-du-jugement', price: 29770 },
-      { itemId: 'arc-du-crepuscule', price: 30810 },
-      { itemId: 'sceptre-du-chaos', price: 31020 },
-      { itemId: 'arc-des-etoiles', price: 31120 },
-      { itemId: 'baton-de-l-aube', price: 39000 },
     ],
     armors: [
       { itemId: 'carapace-scarabee', price: 2400 },
@@ -195,25 +195,11 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
       { itemId: 'anneau-du-mage', price: 4890 },
       { itemId: 'pendentif-du-loup', price: 5020 },
       { itemId: 'bracelet-de-mithril', price: 5550 },
-      { itemId: 'amulette-de-l-aube', price: 5680 },
-      { itemId: 'robe-arcanique', price: 6300 },
-      { itemId: 'oeil-de-basilic', price: 6360 },
       { itemId: 'toge-du-sage', price: 6580 },
       { itemId: 'harnois-de-fer', price: 6740 },
       { itemId: 'armure-de-lamelles', price: 6770 },
       { itemId: 'surcot-du-templier', price: 6800 },
       { itemId: 'cuirasse-du-croise', price: 7550 },
-      { itemId: 'armure-de-mithril', price: 7890 },
-      { itemId: 'cuirasse-de-magma', price: 8020 },
-      { itemId: 'anneau-du-dragon', price: 22000 },
-      { itemId: 'coeur-de-golem', price: 28740 },
-      { itemId: 'robe-celeste', price: 31330 },
-      { itemId: 'sceau-des-anciens', price: 31430 },
-      { itemId: 'larme-d-etoile', price: 31850 },
-      { itemId: 'plastron-de-dragon', price: 32880 },
-      { itemId: 'armure-d-obsidienne', price: 33920 },
-      { itemId: 'armure-du-valhalla', price: 36510 },
-      { itemId: 'carapace-du-roi-scarabee', price: 38330 },
     ],
     hats: [
       { itemId: 'casque-croc', price: 5200 },
@@ -221,15 +207,8 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
       { itemId: 'aureole-sacree', price: 6200 },
       { itemId: 'diademe-fee', price: 6500 },
       { itemId: 'couronne-royale', price: 8000 },
-      { itemId: 'couronne-glace', price: 31000 },
-      { itemId: 'masque-demon', price: 36000 },
-      { itemId: 'corne-kaho', price: 38000 },
       // ── Roster élargi.
-      { itemId: 'chapeau-du-magicien', price: 4800 },
-      { itemId: 'heaume-du-chevalier', price: 5300 },
       { itemId: 'couronne-de-laurier', price: 5640 },
-      { itemId: 'casque-de-dragon', price: 23550 },
-      { itemId: 'couronne-du-roi-demon', price: 27290 },
     ],
   },
 }

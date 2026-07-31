@@ -88,11 +88,13 @@ const list: MonsterDef[] = [
   {
     id: 'orc-seigneur', name: 'Orc seigneur', lore: 'Chef de guerre couturé de cicatrices, il règne sur la horde par la seule force de ses poings.', color: 0x2f5a26, hp: 520, atk: 125, def: 32, xp: 4200, level: 32, speed: 55, behavior: 'charge', mvp: true,
     drops: [
+      // BUTIN SIGNATURE LÉGENDAIRE : seul accès en jeu à cet objet (hors forge) — 1,5 %
+      { kind: 'item', itemId: 'corne-kaho', chance: 0.015, min: 1, max: 1 },
       { kind: 'gold', chance: 1, min: 70, max: 130 },
       { kind: 'potion', chance: 0.5, min: 1, max: 1 },
       { kind: 'item', itemId: 'epee-fer-forgee', chance: 0.15, min: 1, max: 1 },
       { kind: 'item', itemId: 'casque-croc', chance: 0.1, min: 1, max: 1 },
-      { kind: 'item', itemId: 'lame-scorpion', chance: 0.05, min: 1, max: 1 },
+      { kind: 'item', itemId: 'lame-scorpion', chance: 0.02, min: 1, max: 1 },
     ],
   },
   {
@@ -101,7 +103,7 @@ const list: MonsterDef[] = [
       { kind: 'gold', chance: 1, min: 80, max: 140 },
       { kind: 'potion', chance: 0.5, min: 1, max: 1 },
       { kind: 'item', itemId: 'amulette-gemme', chance: 0.1, min: 1, max: 1 },
-      { kind: 'item', itemId: 'armure-carapace', chance: 0.05, min: 1, max: 1 },
+      { kind: 'item', itemId: 'armure-carapace', chance: 0.02, min: 1, max: 1 },
     ],
   },
   {
@@ -111,18 +113,20 @@ const list: MonsterDef[] = [
       { kind: 'potion', chance: 0.5, min: 1, max: 1 },
       { kind: 'item', itemId: 'griffe-royale', chance: 0.12, min: 1, max: 1 },
       { kind: 'item', itemId: 'amulette-pharaon', chance: 0.1, min: 1, max: 1 },
-      { kind: 'item', itemId: 'talisman-trefle', chance: 0.06, min: 1, max: 1 },
+      { kind: 'item', itemId: 'talisman-trefle', chance: 0.02, min: 1, max: 1 },
     ],
   },
   {
     id: 'dragon-flamme', name: 'Dragon de flamme', lore: 'Terreur écailleuse au souffle brûlant : majestueux, féroce, il ne laisse que des cendres.', color: 0xc62828, hp: 1450, atk: 235, def: 52, xp: 9500, level: 49, speed: 60, behavior: 'charge', mvp: true,
     drops: [
+      // BUTIN SIGNATURE LÉGENDAIRE : seul accès en jeu à cet objet (hors forge) — 1,5 %
+      { kind: 'item', itemId: 'lame-solaire', chance: 0.015, min: 1, max: 1 },
       { kind: 'gold', chance: 1, min: 180, max: 300 },
       { kind: 'potion', chance: 0.6, min: 1, max: 1 },
       { kind: 'item', itemId: 'baton-lumineux', chance: 0.1, min: 1, max: 1 },
       { kind: 'item', itemId: 'couronne-royale', chance: 0.1, min: 1, max: 1 },
-      { kind: 'item', itemId: 'lame-scorpion', chance: 0.08, min: 1, max: 1 },
-      { kind: 'item', itemId: 'armure-carapace', chance: 0.05, min: 1, max: 1 },
+      { kind: 'item', itemId: 'lame-scorpion', chance: 0.02, min: 1, max: 1 },
+      { kind: 'item', itemId: 'armure-carapace', chance: 0.02, min: 1, max: 1 },
     ],
   },
   // Boss
@@ -221,6 +225,8 @@ const list: MonsterDef[] = [
   {
     id: 'golem-ancien', name: 'Golem Ancien', lore: 'Titan de pierre gravé de runes oubliées : ses runes crachent des salves d\'éclats perçants et un déluge de pierres du ciel.', color: 0x78909c, hp: 7600, atk: 142, def: 50, xp: 13000, level: 39, speed: 55, behavior: 'projectile', boss: true, bossClass: 'archer', bossSummon: 'gobelin-mineur', size: 'grand',
     drops: [
+      // BUTIN SIGNATURE LÉGENDAIRE : seul accès en jeu à cet objet (hors forge) — 1,5 %
+      { kind: 'item', itemId: 'baton-cosmique', chance: 0.015, min: 1, max: 1 },
       { kind: 'gold', chance: 1, min: 280, max: 420 },
       { kind: 'item', itemId: 'carapace-scarabee', chance: 1, min: 1, max: 1 },
       { kind: 'item', itemId: 'griffe-royale', chance: 1, min: 1, max: 1 },
@@ -231,6 +237,8 @@ const list: MonsterDef[] = [
   {
     id: 'roi-liche', name: 'Roi Liche', lore: 'Seigneur mort-vivant au sceptre glacé, sorcier suprême : il déchaîne des novae nécrotiques et des salves d\'os hurlantes depuis son trône.', color: 0x4527a0, hp: 10500, atk: 176, def: 46, xp: 18000, level: 36, speed: 50, behavior: 'projectile', boss: true, bossClass: 'sorcier', bossSummon: 'squelette',
     drops: [
+      // BUTIN SIGNATURE LÉGENDAIRE : seul accès en jeu à cet objet (hors forge) — 1,5 %
+      { kind: 'item', itemId: 'faux-sombre', chance: 0.015, min: 1, max: 1 },
       { kind: 'gold', chance: 1, min: 350, max: 520 },
       { kind: 'item', itemId: 'griffe-royale', chance: 1, min: 1, max: 1 },
       { kind: 'item', itemId: 'amulette-pharaon', chance: 1, min: 1, max: 1 },
@@ -241,6 +249,10 @@ const list: MonsterDef[] = [
   {
     id: 'seigneur-dechu', name: 'Seigneur Déchu', lore: 'Maître ultime des enfers, ange tombé rongé de haine : il manie les meilleures armes de chaque classe — lame, feu, flèches et néant.', color: 0x8a1414, hp: 16500, atk: 205, def: 60, xp: 30000, level: 57, speed: 90, behavior: 'charge', boss: true, bossClass: 'chevalier', bossSummon: 'diablotin',
     drops: [
+      // BUTIN SIGNATURE LÉGENDAIRE : seul accès en jeu à cet objet (hors forge) — 1,5 %
+      { kind: 'item', itemId: 'katana-eclair', chance: 0.015, min: 1, max: 1 },
+      // BUTIN SIGNATURE LÉGENDAIRE : seul accès en jeu à cet objet (hors forge) — 1,5 %
+      { kind: 'item', itemId: 'masque-demon', chance: 0.015, min: 1, max: 1 },
       { kind: 'gold', chance: 1, min: 500, max: 800 },
       { kind: 'item', itemId: 'griffe-royale', chance: 1, min: 1, max: 1 },
       { kind: 'item', itemId: 'carapace-scarabee', chance: 1, min: 1, max: 1 },
@@ -270,17 +282,21 @@ const list: MonsterDef[] = [
   {
     id: 'boss-yeti', name: 'Yéti Géant', lore: 'Seigneur des cimes gelées, montagne de fourrure et de fureur : il fond sur sa proie d\'un bond qui fait trembler la neige et abat ses griffes comme des lames.', color: 0xdfe9ef, hp: 6600, atk: 152, def: 42, xp: 11500, level: 39, speed: 118, behavior: 'charge', boss: true, bossClass: 'swordsman', bossSummon: 'louveteau', size: 'grand',
     drops: [
+      // BUTIN SIGNATURE LÉGENDAIRE : seul accès en jeu à cet objet (hors forge) — 1,5 %
+      { kind: 'item', itemId: 'couronne-glace', chance: 0.015, min: 1, max: 1 },
       { kind: 'gold', chance: 1, min: 240, max: 360 },
       { kind: 'item', itemId: 'carapace-scarabee', chance: 1, min: 1, max: 1 },
       { kind: 'item', itemId: 'griffe-royale', chance: 0.4, min: 1, max: 1 },
-      { kind: 'item', itemId: 'armure-carapace', chance: 0.3, min: 1, max: 1 },
+      { kind: 'item', itemId: 'armure-carapace', chance: 0.03, min: 1, max: 1 },
     ],
   },
   {
     id: 'boss-crabe', name: 'Roi des Crabes', lore: 'Monarque cuirassé des récifs, blindage insolent et pinces tranchantes : il claque ses tenailles comme des cisailles et bondit de côté pour broyer l\'imprudent.', color: 0xd8431a, hp: 5600, atk: 142, def: 58, xp: 10200, level: 46, speed: 96, behavior: 'charge', boss: true, bossClass: 'swordsman', bossSummon: 'crabe-geant', size: 'grand',
     drops: [
+      // BUTIN SIGNATURE LÉGENDAIRE : seul accès en jeu à cet objet (hors forge) — 1,5 %
+      { kind: 'item', itemId: 'arc-tempete', chance: 0.015, min: 1, max: 1 },
       { kind: 'gold', chance: 1, min: 220, max: 340 },
-      { kind: 'item', itemId: 'armure-carapace', chance: 1, min: 1, max: 1 },
+      { kind: 'item', itemId: 'armure-carapace', chance: 0.03, min: 1, max: 1 },
       { kind: 'item', itemId: 'griffe-royale', chance: 0.4, min: 1, max: 1 },
       { kind: 'item', itemId: 'amulette-gemme', chance: 0.3, min: 1, max: 1 },
     ],
