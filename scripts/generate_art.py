@@ -12,9 +12,12 @@ Ce que le script fait, et pourquoi dans cet ordre :
  1. il lit le roster dans src/data/items.ts — SOURCE UNIQUE. Aucune liste d'objets recopiée ici : une
     liste en double finit désynchronisée du jeu, et on générerait de l'art pour des objets disparus ;
  2. il saute tout objet qui a déjà son PNG (idempotent : relancer ne regénère rien, sauf --force) ;
- 3. il demande l'image sur un fond MAGENTA UNI, puis détache l'objet en partant des bords. Imagen ne
-    sait pas sortir d'alpha ; un simple « remplace le magenta » troue l'objet dès qu'il contient du
-    rose, alors qu'un remplissage depuis les bords ne peut atteindre que le vrai fond ;
+ 3. il demande une image à FOND TRANSPARENT à Gemini, qui sait sortir un canal alpha. C'est ainsi que
+    les 48 illustrations déjà en place ont été faites : mesuré sur leurs pixels semi-transparents, elles
+    n'ont AUCUNE frange de couleur — donc aucun détourage par chroma-key n'a eu lieu, le modèle a rendu
+    l'alpha directement. Repli sur Imagen + détourage magenta seulement si Gemini n'est pas disponible :
+    et dans ce cas le détourage part des BORDS, parce qu'un « remplace le magenta » troue l'objet dès
+    qu'il contient du rose — et les épiques et légendaires en sont pleins ;
  4. il recadre sur le contenu et sort du 128×128 RGBA — le format EXACT des 48 illustrations existantes
     (vérifié), donc inutile de repasser shrink-art.mjs derrière pour les objets.
 
@@ -48,42 +51,85 @@ ART = RACINE / "public" / "art"
 ENV_DEFAUT = Path.home() / "pretto" / "apps" / "data-api" / ".env"
 PREFIXE_CRED = "VERTEXAI_B64_SERVICE_ACCOUNTS_PART"
 
-# Modèles essayés dans l'ordre : le premier qui répond gagne. Les identifiants de modèle Imagen
-# changent au fil des versions ; enchaîner évite de devoir corriger le script à chaque rotation.
-MODELES = ["imagen-4.0-generate-001", "imagen-3.0-generate-002", "imagegeneration@006"]
+# Modèles essayés DANS CET ORDRE, et l'ordre est le cœur du script.
+#
+# ⚠️ GEMINI D'ABORD, PARCE QU'IL REND UN CANAL ALPHA. Vérifié sur les 48 illustrations déjà en place :
+# leurs pixels semi-transparents ne portent AUCUNE frange magenta ni blanche (mesuré : 0 sur ~250 pixels
+# semi-transparents par image). Un détourage par chroma-key en laisse toujours ; il n'y a donc pas eu de
+# détourage — le modèle a sorti la transparence lui-même. Utiliser Imagen à la place obligerait à
+# détourer, et les nouveaux objets ne ressembleraient pas aux anciens sur les bords.
+#
+# Imagen reste en repli : si le modèle Gemini image n'est pas activé sur le projet, mieux vaut une
+# illustration détourée qu'aucune illustration. Le script dit lequel a servi.
+MODELES = [
+    ("gemini-2.5-flash-image", "generateContent", True),   # True = rend l'alpha
+    ("gemini-2.0-flash-exp", "generateContent", True),
+    ("imagen-4.0-generate-001", "predict", False),
+    ("imagen-3.0-generate-002", "predict", False),
+]
 REGION = "us-central1"
 
 TAILLE_FINALE = 128  # identique aux 48 illustrations déjà en place
 FOND = (255, 0, 255)  # magenta pur : absent de toute palette d'objet, donc détachable sans ambiguïté
 TOLERANCE = 60
 
-# ── STYLE : il doit coller aux illustrations existantes, sinon les nouveaux objets jureront dans la
-# même grille d'inventaire. Observé sur les PNG en place : aplats saturés, gros contour sombre, aucune
-# ombre portée, objet centré et cadré serré, lisible à 40 px.
+# ── STYLE : calé sur les 48 illustrations DÉJÀ EN PLACE, planche de contact à l'appui. Il doit coller,
+# sinon les nouveaux objets jureront dans la même grille d'inventaire.
+#
+# Ce qu'on lit sur les illustrations existantes : look AUTOCOLLANT façon kawaii — contour brun foncé épais
+# et régulier, aplats vifs mais tirant vers le pastel, ombrage cel très simple, minuscules reflets
+# blancs, aucune ombre portée, objet centré et cadré serré, lisible à 40 px.
+#
+# ⚠️ « three-quarter view » a été RETIRÉ du style commun. Les objets existants ne sont pas tous de
+# trois-quarts : les armes sont VERTICALES pointe en haut, les armures vues de FACE posées à plat. Le
+# cadrage est donc décidé par emplacement (CADRAGE_SLOT) et pas imposé globalement.
 STYLE = (
-    "2D game item icon, flat vector illustration, bold dark outline, bright saturated colors, "
-    "simple cel shading, no drop shadow, no text, no border, no frame, single object centered, "
-    "three-quarter view, cute stylized fantasy MMORPG inventory icon, highly readable at small size"
+    "2D game item icon, flat vector illustration, cute kawaii sticker look, thick even dark brown "
+    "outline, vivid slightly pastel palette, simple cel shading, tiny white specular highlights, "
+    "no drop shadow, no text, no border, no frame, no circular plate behind the object, "
+    "single object centered, stylized fantasy MMORPG inventory icon, highly readable at small size"
 )
-CADRE = (
+# Deux formulations de fond : transparent quand le modèle sait le faire, magenta uni sinon (il faudra
+# alors détourer). Le magenta est choisi parce qu'il n'apparaît dans aucune palette d'objet crédible.
+CADRE_ALPHA = (
+    "The object fills most of the frame. Fully transparent background (PNG alpha channel), "
+    "absolutely nothing else in the image, no background scenery, no shadow on the ground."
+)
+CADRE_MAGENTA = (
     "The object fills most of the frame. Plain uniform magenta background (#FF00FF), "
     "absolutely nothing else in the image."
 )
 
 # Formulation par emplacement : une armure doit être vue comme un vêtement posé à plat, une arme de
 # trois-quarts, un anneau de face. Sans ça Imagen livre des personnages qui PORTENT l'objet.
+# Formulation par emplacement — relevée sur les illustrations existantes, pas devinée :
+#  · armes : VERTICALES (ou très légèrement inclinées), pointe en haut, poignée en bas, entières ;
+#  · armures : le vêtement VIDE vu de face, posé à plat, comme un t-shirt étalé ;
+#  · chapeaux : le couvre-chef seul, vide, sans tête dedans ;
+#  · accessoires : le petit objet de face, grossi pour que ses détails se lisent à 40 px.
+# Sans cette précision, le modèle livre des personnages qui PORTENT l'objet, ou des armes couchées en
+# diagonale qui n'ont pas la même silhouette que les 30 armes déjà en place.
 CADRAGE_SLOT = {
-    "weapon": "The weapon alone, floating, diagonal, blade or limb pointing up-right.",
-    "armor": "The garment alone, laid flat and empty, front view, no body wearing it, no mannequin.",
-    "hat": "The headgear alone, empty, three-quarter view, no head wearing it, no face.",
-    "accessory": "The small trinket alone, front view, slightly enlarged so its details read.",
+    "weapon": (
+        "The weapon alone, standing vertically (or tilted only slightly), tip or top pointing up and "
+        "grip at the bottom, whole weapon visible from grip to tip."
+    ),
+    "armor": (
+        "The garment alone, empty, laid flat and seen from the front like a shirt spread out, "
+        "no body wearing it, no mannequin, no arms, no head."
+    ),
+    "hat": "The headgear alone, empty, seen from the front or three-quarter, no head wearing it, no face.",
+    "accessory": "The small trinket alone, seen from the front, enlarged so its details read at small size.",
 }
 
+# La rareté se lit à l'œil sur les illustrations existantes : les communs sont en matières simples, les
+# légendaires portent une lueur franche (lame solaire enflammée, trèfle qui rayonne). On reste toutefois
+# dans la gamme MIGNONNE du jeu — pas de rendu sombre et épique qui trancherait avec le reste.
 TEINTE_RARETE = {
-    "commun": "muted everyday materials, worn leather, plain iron, linen",
-    "rare": "polished metal with a blue-steel sheen and a small gemstone accent",
-    "epique": "ornate craftsmanship, purple and gold filigree, faint magical glow",
-    "legendaire": "legendary artifact, radiant golden and orange energy, glowing runes, aura of power",
+    "commun": "simple everyday materials, worn leather, plain iron, linen, wood",
+    "rare": "polished metal with a blue-steel sheen and one small bright gemstone",
+    "epique": "ornate craftsmanship, purple and gold filigree, gentle magical glow",
+    "legendaire": "legendary artifact with a clear warm glow, golden filigree, glowing runes, sparkles",
 }
 
 MOTIF_ITEM = re.compile(
@@ -135,7 +181,7 @@ def a_un_visuel(item, dessines: set) -> bool:
     return item["slot"] == "hat" and item["id"] in dessines
 
 
-def prompt_pour(item) -> str:
+def prompt_pour(item, alpha: bool = True) -> str:
     famille = {"sword": "sword or blade", "bow": "bow or crossbow", "staff": "magic staff or scepter"}
     quoi = item["name"]
     if item["slot"] == "weapon" and item["weaponType"]:
@@ -144,7 +190,7 @@ def prompt_pour(item) -> str:
         f"{quoi}. {item['description']} "
         f"{CADRAGE_SLOT.get(item['slot'], '')} "
         f"Material and mood: {TEINTE_RARETE.get(item['rarity'], '')}. "
-        f"{STYLE}. {CADRE}"
+        f"{STYLE}. {CADRE_ALPHA if alpha else CADRE_MAGENTA}"
     )
 
 
@@ -191,16 +237,50 @@ def charger_credentials(chemin_env: Path):
     return creds, sa.get("project_id")
 
 
-def detacher(png_bytes: bytes) -> "object":
-    """Enlève le fond magenta EN PARTANT DES BORDS, recadre sur l'objet, sort du 128×128 RGBA.
+def a_deja_de_l_alpha(im) -> bool:
+    """L'image porte-t-elle déjà un fond transparent utilisable ?
 
-    Le remplissage part des bords exprès : un « remplace tous les pixels magenta » perce l'objet dès
-    qu'il contient du rose ou du violet — et les objets épiques en sont pleins.
+    On regarde les QUATRE COINS, pas la présence d'un canal alpha : tout PNG converti en RGBA a un canal
+    alpha, plein à 255 s'il n'y avait pas de transparence. Ce sont les coins qui disent si le fond a été
+    évidé. On en exige au moins trois pour ne pas prendre un objet qui touche un bord pour un fond opaque.
+    """
+    w, h = im.size
+    px = im.load()
+    coins = [px[1, 1], px[w - 2, 1], px[1, h - 2], px[w - 2, h - 2]]
+    return sum(1 for c in coins if c[3] < 32) >= 3
+
+
+def finaliser(im):
+    """Recadre sur le contenu, centre dans un carré avec une petite marge, sort du 128×128 RGBA."""
+    from PIL import Image
+
+    boite = im.split()[-1].getbbox()
+    if boite:
+        im = im.crop(boite)
+    cote = max(im.size)
+    marge = max(2, cote // 16)
+    fond = Image.new("RGBA", (cote + marge * 2, cote + marge * 2), (0, 0, 0, 0))
+    fond.paste(im, ((fond.width - im.width) // 2, (fond.height - im.height) // 2), im)
+    return fond.resize((TAILLE_FINALE, TAILLE_FINALE), Image.LANCZOS)
+
+
+def detacher(png_bytes: bytes) -> "object":
+    """Prépare l'image pour public/art : 128×128 RGBA, objet centré, fond transparent.
+
+    ⚠️ ON NE DÉTOURE QUE SI C'EST NÉCESSAIRE. Quand le modèle a déjà rendu la transparence (Gemini), on
+    ne touche pas aux bords : passer un chroma-key par-dessus ne pourrait que grignoter l'anti-aliasing
+    de l'objet. Le détourage magenta ne sert qu'au repli Imagen.
+
+    Et quand il faut détourer, le remplissage part des BORDS : un « remplace tous les pixels magenta »
+    perce l'objet dès qu'il contient du rose ou du violet — et les épiques et légendaires en sont pleins.
     """
     from PIL import Image
     from collections import deque
 
     im = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
+    if a_deja_de_l_alpha(im):
+        return finaliser(im)
+
     w, h = im.size
     px = im.load()
 
@@ -226,46 +306,63 @@ def detacher(png_bytes: bytes) -> "object":
                 vus[ny * w + nx] = 1
                 file.append((nx, ny))
 
-    boite = im.split()[-1].getbbox()
-    if boite:
-        im = im.crop(boite)
-    # carré + petite marge, pour que tous les objets aient le même air dans la grille
-    cote = max(im.size)
-    marge = max(2, cote // 16)
-    fond = Image.new("RGBA", (cote + marge * 2, cote + marge * 2), (0, 0, 0, 0))
-    fond.paste(im, ((fond.width - im.width) // 2, (fond.height - im.height) // 2), im)
-    return fond.resize((TAILLE_FINALE, TAILLE_FINALE), Image.LANCZOS)
+    return finaliser(im)
 
 
-def generer(creds, project, prompt: str) -> bytes:
+def generer(creds, project, item) -> tuple:
+    """Renvoie (octets PNG, nom du modèle utilisé). Essaie les modèles dans l'ordre de MODELES."""
     import requests
 
     erreurs = []
-    for modele in MODELES:
+    for modele, methode, alpha in MODELES:
         url = (
             f"https://{REGION}-aiplatform.googleapis.com/v1/projects/{project}"
-            f"/locations/{REGION}/publishers/google/models/{modele}:predict"
+            f"/locations/{REGION}/publishers/google/models/{modele}:{methode}"
         )
-        r = requests.post(
-            url,
-            headers={"Authorization": f"Bearer {creds.token}", "Content-Type": "application/json"},
-            json={
+        prompt = prompt_pour(item, alpha=alpha)
+        if methode == "generateContent":
+            corps = {
+                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                "generationConfig": {"responseModalities": ["IMAGE"]},
+            }
+        else:
+            corps = {
                 "instances": [{"prompt": prompt}],
                 "parameters": {"sampleCount": 1, "aspectRatio": "1:1", "personGeneration": "dont_allow"},
-            },
-            timeout=180,
-        )
-        if r.status_code == 200:
-            preds = r.json().get("predictions") or []
-            if not preds:
-                erreurs.append(f"{modele}: réponse vide (filtre de sécurité ?)")
-                continue
-            b64 = preds[0].get("bytesBase64Encoded")
-            if not b64:
-                erreurs.append(f"{modele}: pas d'image dans la réponse")
-                continue
-            return base64.b64decode(b64)
-        erreurs.append(f"{modele}: HTTP {r.status_code} {r.text[:160]}")
+            }
+        try:
+            r = requests.post(
+                url,
+                headers={"Authorization": f"Bearer {creds.token}", "Content-Type": "application/json"},
+                json=corps,
+                timeout=180,
+            )
+        except Exception as e:  # noqa: BLE001
+            erreurs.append(f"{modele}: {e}")
+            continue
+        if r.status_code != 200:
+            erreurs.append(f"{modele}: HTTP {r.status_code} {r.text[:140]}")
+            continue
+
+        data = r.json()
+        b64 = None
+        if methode == "generateContent":
+            for cand in data.get("candidates") or []:
+                for part in (cand.get("content") or {}).get("parts") or []:
+                    inline = part.get("inlineData") or part.get("inline_data")
+                    if inline and inline.get("data"):
+                        b64 = inline["data"]
+                        break
+                if b64:
+                    break
+        else:
+            preds = data.get("predictions") or []
+            if preds:
+                b64 = preds[0].get("bytesBase64Encoded")
+        if not b64:
+            erreurs.append(f"{modele}: pas d'image dans la réponse (filtre de sécurité ?)")
+            continue
+        return base64.b64decode(b64), modele
     raise RuntimeError(" | ".join(erreurs))
 
 
@@ -307,29 +404,34 @@ def main():
         return
 
     if args.dry:
+        premier = MODELES[0]
+        print(f"(prompt tel qu'il partira vers {premier[0]})")
         for it in cibles:
-            print(f"\n── item-{it['id']}.png ──\n{prompt_pour(it)}")
+            print(f"\n── item-{it['id']}.png ──\n{prompt_pour(it, alpha=premier[2])}")
         return
 
     creds, project = charger_credentials(args.env)
     print(f"Projet Vertex : {project} · région {REGION}")
     ART.mkdir(parents=True, exist_ok=True)
 
-    ok, echecs = 0, []
+    ok, echecs, modeles_utilises = 0, [], {}
     for i, it in enumerate(cibles, 1):
         cible = ART / f"item-{it['id']}.png"
         print(f"[{i}/{len(cibles)}] {it['id']} … ", end="", flush=True)
         try:
-            brut = generer(creds, project, prompt_pour(it))
+            brut, modele = generer(creds, project, it)
             detacher(brut).save(cible)
             ok += 1
-            print("ok")
+            modeles_utilises[modele] = modeles_utilises.get(modele, 0) + 1
+            print(f"ok ({modele})")
         except Exception as e:  # noqa: BLE001
             echecs.append((it["id"], str(e)[:200]))
             print("ÉCHEC")
         time.sleep(0.4)  # on ne martèle pas l'API
 
     print(f"\n{ok} illustration(s) écrite(s) dans {ART.relative_to(RACINE)}")
+    for m, n in modeles_utilises.items():
+        print(f"   {n} via {m}")
     if echecs:
         print(f"{len(echecs)} échec(s) :")
         for iid, err in echecs:
