@@ -176,10 +176,11 @@ class AudioEngine {
    * l'eau et mets plus de bulles. »
    */
   setUnderwater(on: boolean) {
-    // 0,08 et pas 0,3 : à 30 % le user ne percevait AUCUNE différence. Sous l'eau, la musique doit
-    // quasiment disparaître — c'est ce qui donne la sensation d'immersion, et ce qui laisse enfin la
-    // place aux bulles.
-    const target = on ? 0.08 : 1
+    // 0,03 : la musique doit QUASIMENT DISPARAÎTRE sous l'eau. Les paliers précédents (0,3 puis 0,08)
+    // ont été jugés inaudibles — mais ce n'était pas qu'une question de valeur : iOS ignorait purement
+    // et simplement le réglage (cf. connectMusicGraph). Maintenant que le volume passe par un GainNode
+    // et fonctionne vraiment, on peut viser franchement bas et laisser toute la place aux bulles.
+    const target = on ? 0.03 : 1
     if (this.duck === target) return
     this.duck = target
     this.applyMusicLevel()
@@ -419,11 +420,12 @@ class AudioEngine {
         this.noise(t + 0.04, 0.14, 0.22, 'bandpass', 2600) // les éclaboussures, plus aiguës
         break
       case 'bubble':
-        // Volume RELEVÉ (0,3 → 0,55) et deux bulles au lieu d'une : le retour user était « sous l'eau
-        // j'entends aucun bruit ». Un blip de 0,13 s à faible gain passait sous la musique.
-        this.tone('sine', 240, t, 0.16, 0.55, 700)
-        this.tone('sine', 380, t + 0.11, 0.12, 0.34, 900)
-        this.noise(t + 0.1, 0.06, 0.12, 'highpass', 2000)
+        // « BLOP » : UNE bulle qui crève, pas deux. La montée rapide de hauteur fait tout le travail —
+        // c'est elle qu'on entend comme une bulle ; un son à hauteur fixe ferait « bip ». La version
+        // précédente empilait deux tons et un souffle, ce qui donnait un « bloub-bloub » brouillon là où
+        // le joueur demande un « blop » net espacé d'une demi-seconde.
+        this.tone('sine', 200, t, 0.12, 0.6, 760)
+        this.noise(t + 0.075, 0.035, 0.09, 'highpass', 2600) // le petit « tsss » de la surface qui cède
         break
       case 'player-death':
         this.tone('sawtooth', 300, t, 0.7, 0.45, 55)

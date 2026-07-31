@@ -54,7 +54,12 @@ const CHARGE_FULL_MS = 850
 const BREATH_RECHARGE_MULT = 3 // le souffle se recharge 3× plus vite qu'il ne se vide (retour surface = répit rapide)
 const DROWN_DPS = 4 // PV perdus par seconde une fois le souffle épuisé — adouci (rythme de noyade plus doux)
 const DROWN_TICK_MS = 300 // cadence des ticks de noyade : perte régulière, jamais d'un coup
-const BUBBLE_INTERVAL_MS = 170 // intervalle d'émission des bulles tant que la tête est sous l'eau
+// Cadence des bulles, VISUELLES ET SONORES à la fois (le son est joué dans emitBubble).
+// 170 ms donnait ~6 bulles par seconde : une mitraillette. Le joueur veut « blop… une demi-seconde…
+// blop ». On ralentit donc l'ÉMISSION elle-même plutôt que de brider seulement le son : brider le son
+// seul ferait réapparaître des bulles muettes, c'est-à-dire exactement le décalage qu'on venait de
+// corriger.
+const BUBBLE_INTERVAL_MS = 520
 // LAVE (enfer) : cuve de pierre incandescente, MORTELLE au contact. On ne nage pas dedans — le contact
 // inflige de gros dégâts continus (chemin de dégâts standard, cf. drownTick) → y tomber tue vite.
 const LAVA_DPS = 120 // PV perdus par seconde au contact de la lave (bien plus violent que la noyade)

@@ -7,6 +7,7 @@ import { audio } from '../audio/audio-engine'
 import { isLevelSeen } from './LevelIntroScene'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 import { installUiClickSound } from '../ui/click-sound'
+import { spreadLabels } from './label-spread'
 
 const NODE_COLORS = { town: 0xffd700, level: 0x66bb6a, boss: 0xef5350 } as const
 const LOCKED_COLOR = 0x555555
@@ -45,6 +46,9 @@ export class WorldMapScene extends Phaser.Scene {
 
     this.drawRoads(byId)
 
+    // Étiquettes de nœuds collectées pour être écartées APRÈS coup : deux nœuds voisins (Clairière /
+    // Sylve) voyaient leurs noms se croiser. Même module que les enseignes de ville.
+    const nodeLabels: Phaser.GameObjects.Text[] = []
     for (const n of WORLD_NODES) {
       const unlocked = isNodeUnlocked(n.id, p.completedLevels)
       const done = n.levelId ? p.completedLevels.includes(n.levelId) : false
@@ -85,18 +89,21 @@ export class WorldMapScene extends Phaser.Scene {
       // lointain non découvert reste anonyme sous le brouillard (retour joueur : « ce qui n'est pas
       // découvert ne doit pas être écrit »). Blanc + contour noir, au-dessus du brouillard, retour ligne.
       if (revealed.has(n.id)) {
-        this.add.text(n.x, n.y + radius + 5, n.name, {
+        nodeLabels.push(this.add.text(n.x, n.y + radius + 5, n.name, {
           fontSize: '11px', color: '#ffffff', fontStyle: isCurrent ? 'bold' : 'normal',
           align: 'center', wordWrap: { width: 96 },
           stroke: '#000000', strokeThickness: 3,
           backgroundColor: 'rgba(20,14,8,0.35)', padding: { x: 4, y: 2 },
-        }).setOrigin(0.5, 0).setDepth(7)
+        }).setOrigin(0.5, 0).setDepth(7))
       }
 
       if (done) {
-        this.add.text(n.x + radius - 4, n.y - radius + 2, '✓', {
+        // ⚠️ REMONTÉ AU-DESSUS du nœud. Posé à `n.y - radius + 2`, il empiétait sur l'étiquette du nom
+        // (dessinée juste sous le nœud, à `n.y + radius + 5`) quand le nom remontait — « Taillis » était
+        // barré par le ✓. On l'écarte franchement vers le haut-droit, hors de la colonne du libellé.
+        this.add.text(n.x + radius + 2, n.y - radius - 6, '✓', {
           fontSize: '14px', color: '#2e7d32', fontStyle: 'bold', backgroundColor: '#ffffff', padding: { x: 2, y: 0 },
-        }).setOrigin(0.5)
+        }).setOrigin(0.5).setDepth(9)
       }
 
       if (interactive) {
@@ -111,6 +118,14 @@ export class WorldMapScene extends Phaser.Scene {
     // brouillard de guerre INVERSÉ : voile sombre plein écran, percé autour de chaque nœud ANCRE
     // (fait/courant) d'un double cercle de révélation (intérieur net + anneau à 50 %). Dessiné APRÈS
     // les nœuds/labels pour teinter le lointain ; sous les boutons d'UI ci-dessous (depth supérieur).
+    // ANTI-CHEVAUCHEMENT : on remonte les noms qui se croisent. `spreadLabels` ne déplace JAMAIS en x
+    // — un nom doit rester au-dessus du nœud qu'il désigne, sinon il désignerait le voisin.
+    // Les étiquettes ont l'origine (0.5, 0) : leur `y` est le HAUT, alors que le module raisonne sur le
+    // BAS. On convertit dans les deux sens plutôt que d'adapter le module, qui est partagé et testé.
+    const boxes = nodeLabels.map((t) => ({ x: t.x, y: t.y + t.height, w: t.width, h: t.height }))
+    const dys = spreadLabels(boxes, 4, 2)
+    nodeLabels.forEach((t, i) => { t.y += dys[i]! })
+
     this.drawFog(anchors, revealed)
 
     // marqueur du panda sur le nœud courant
@@ -128,7 +143,9 @@ export class WorldMapScene extends Phaser.Scene {
 
     // pastille : points de skill à dépenser
     if (p.skillPoints > 0) {
-      const b = this.add.text(96, 488, `${p.skillPoints}`, { fontSize: '14px', color: '#ffffff', backgroundColor: '#e53935', padding: { x: 6, y: 3 } }).setOrigin(0.5).setDepth(20)
+      // ⚠️ DÉPLACÉE AU-DESSUS du bouton « Menu », pas dessus. À (96, 488) elle recouvrait le bouton
+      // (posé en 30,495 avec du remplissage) : on ne lisait ni le nombre ni « Menu ».
+      const b = this.add.text(40, 462, `${p.skillPoints}`, { fontSize: '14px', color: '#ffffff', backgroundColor: '#e53935', padding: { x: 6, y: 3 } }).setOrigin(0.5).setDepth(22)
       this.tweens.add({ targets: b, scale: 1.2, yoyo: true, repeat: -1, duration: 500 })
     }
 

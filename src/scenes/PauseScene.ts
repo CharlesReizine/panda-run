@@ -76,7 +76,11 @@ export class PauseScene extends Phaser.Scene {
     const barX = 380, barY = 235, barW = 200, barH = 20
     this.add.rectangle(barX, barY, barW, barH, 0x000000, 0.6).setOrigin(0, 0.5).setStrokeStyle(2, 0xffffff, 0.4)
     const fill = this.add.rectangle(barX + 2, barY, (barW - 4) * audio.getVolume(), barH - 6, 0x29b6f6).setOrigin(0, 0.5)
-    const pct = this.add.text(barX + barW + 20, barY, `${Math.round(audio.getVolume() * 100)}%`, { fontSize: '20px', color: '#ffffff' }).setOrigin(0, 0.5)
+    // ⚠️ ANCRÉ À DROITE, PAS À GAUCHE. Posé en origine (0, …) à barX+barW+20 = 600, « 100% » (4
+    // caractères, ~48 px) s'étendait jusqu'à 648 alors que le bouton « + » commence à 632 : le signe
+    // « % » passait dessous et le texte se lisait « 100 ». Ancré à droite juste avant le bouton, il ne
+    // peut plus le toucher, quelle que soit la longueur de la valeur.
+    const pct = this.add.text(626, barY, `${Math.round(audio.getVolume() * 100)}%`, { fontSize: '20px', color: '#ffffff' }).setOrigin(1, 0.5)
 
     const applyVolume = () => {
       fill.setDisplaySize((barW - 4) * audio.getVolume(), barH - 6)
@@ -89,7 +93,7 @@ export class PauseScene extends Phaser.Scene {
     }
 
     this.btn(300, barY, '−', 0x455a64, () => step(-0.1), 56)
-    this.btn(660, barY, '+', 0x455a64, () => step(0.1), 56)
+    this.btn(668, barY, '+', 0x455a64, () => step(0.1), 56) // décalé de 8 px : laisse la place au pourcentage
 
     // ---- Muet : bascule ----
     const muteBtn = this.btn(480, 320, audio.isMuted() ? 'Son : coupé 🔇' : 'Son : activé 🔊', 0x37474f, () => {

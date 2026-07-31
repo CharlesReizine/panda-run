@@ -666,10 +666,22 @@ export class TownScene extends Phaser.Scene {
 
   // pastille or joueur, en haut à droite du panneau — renvoie le texte pour le rafraîchir sans
   // reconstruire tout le panneau (évite de détruire un bouton en pleine animation d'achat)
-  private drawGoldBadge(c: Phaser.GameObjects.Container, x: number, y: number, gold: number): Phaser.GameObjects.Text {
-    c.add(this.add.rectangle(x, y, 108, 28, 0x1b0f0d, 0.85).setStrokeStyle(1, 0xffd700, 0.7))
-    c.add(this.add.image(x - 38, y, 'coin').setScale(1.4))
-    const txt = this.add.text(x - 16, y, `${gold} or`, { fontSize: '14px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0, 0.5)
+  // Pastille d'or. `rightX` = bord DROIT voulu (et non le centre) : c'est ce qui permet de degager la
+  // croix de fermeture a coup sur.
+  //
+  // ⚠️ LARGEUR ADAPTATIVE, ET C'EST LE CORRECTIF. La pastille etait figee a 108 px et centree trop a
+  // droite : avec 987654 or, le texte (76 px, plus la piece) debordait de 108 px et passait SOUS la
+  // croix ✕ — le mot « or » etait totalement cache et les chiffres coupes. On mesure donc le texte, on
+  // dimensionne la pastille dessus, et on l'ancre a droite avec une marge qui garantit qu'elle ne
+  // touche jamais la croix.
+  private drawGoldBadge(c: Phaser.GameObjects.Container, rightX: number, y: number, gold: number): Phaser.GameObjects.Text {
+    const txt = this.add.text(0, y, `${gold} or`, { fontSize: '14px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0, 0.5)
+    const COIN_W = 26, PAD = 10
+    const w = COIN_W + txt.width + PAD * 2
+    const left = rightX - w
+    c.add(this.add.rectangle(left, y, w, 28, 0x1b0f0d, 0.85).setOrigin(0, 0.5).setStrokeStyle(1, 0xffd700, 0.7))
+    c.add(this.add.image(left + PAD + COIN_W / 2 - 4, y, 'coin').setScale(1.4))
+    txt.setX(left + PAD + COIN_W)
     c.add(txt)
     return txt
   }
@@ -702,7 +714,14 @@ export class TownScene extends Phaser.Scene {
     }
     const nameTxt = this.add.text(x, y - h / 2 + 52, name, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: w - 12 } }).setOrigin(0.5, 0)
     c.add(nameTxt); parts.push(nameTxt)
-    if (sub) { const subTxt = this.add.text(x, y - h / 2 + 74, sub, { fontSize: '10px', color: '#90a4ae', align: 'center', wordWrap: { width: w - 12 } }).setOrigin(0.5, 0); c.add(subTxt); parts.push(subTxt) }
+    // ⚠️ POSÉ SOUS LA HAUTEUR RÉELLE DU NOM, pas à un y fixe. Le nom se replie sur 2 lignes quand il
+    // est long (« Plastron de feuilles ») : il occupait alors 52→84 alors que ce sous-titre était figé à
+    // 74, donc « def +4 / maxHp +20 » se retrouvait écrit PAR-DESSUS le nom.
+    if (sub) {
+      const subY = nameTxt.y + nameTxt.height + 4
+      const subTxt = this.add.text(x, subY, sub, { fontSize: '10px', color: '#90a4ae', align: 'center', wordWrap: { width: w - 12 } }).setOrigin(0.5, 0)
+      c.add(subTxt); parts.push(subTxt)
+    }
 
     // arme hors spécialité de la classe : carte grisée, achat bloqué, libellé de restriction clair
     // (« Réservé aux mages »…). Prioritaire sur « Possédé ».
@@ -753,7 +772,7 @@ export class TownScene extends Phaser.Scene {
     this.panel = c
     const top = this.drawPanelFrame(c, w, h, 'Herboristerie')
     const p = getPlayer()
-    const goldText = this.drawGoldBadge(c, CX + w / 2 - 70, top + 30, p.gold)
+    const goldText = this.drawGoldBadge(c, CX + w / 2 - 45, top + 30, p.gold)
     this.drawShopTabs(c, top, 'buy', 'Herboristerie', () => this.openPotionShop())
     const stockText = this.add.text(CX, top + 112, `Potions en réserve : ${p.potions}`, { fontSize: '14px', color: '#cfd8dc' }).setOrigin(0.5)
     c.add(stockText)
@@ -834,7 +853,7 @@ export class TownScene extends Phaser.Scene {
     this.panel = c
     const top = this.drawPanelFrame(c, w, h, title)
     const p = getPlayer()
-    const goldText = this.drawGoldBadge(c, CX + w / 2 - 70, top + 30, p.gold)
+    const goldText = this.drawGoldBadge(c, CX + w / 2 - 45, top + 30, p.gold)
     this.drawShopTabs(c, top, 'buy', title, () => this.openItemShop(kind, list, 0))
     const owned = this.ownedIds()
 
@@ -1055,7 +1074,7 @@ export class TownScene extends Phaser.Scene {
     const h = Math.min(500, headerH + rowsForH * rowH + footerH)
     const top = this.drawPanelFrame(c, w, h, 'Forge')
     const p = getPlayer()
-    this.drawGoldBadge(c, CX + w / 2 - 70, top + 30, p.gold)
+    this.drawGoldBadge(c, CX + w / 2 - 45, top + 30, p.gold)
     this.drawForgeTabs(c, top, 'craft')
 
     // récap des matériaux possédés
@@ -1164,7 +1183,7 @@ export class TownScene extends Phaser.Scene {
     const h = Math.min(500, headerH + rowsForH * rowH + footerH)
     const top = this.drawPanelFrame(c, w, h, 'Forge')
     const p = getPlayer()
-    this.drawGoldBadge(c, CX + w / 2 - 70, top + 30, p.gold)
+    this.drawGoldBadge(c, CX + w / 2 - 45, top + 30, p.gold)
     this.drawForgeTabs(c, top, 'reforge')
 
     const owned = Object.entries(p.materials).filter(([, q]) => q > 0)
@@ -1280,7 +1299,7 @@ export class TownScene extends Phaser.Scene {
     const rowsForH = pageCount > 1 ? rowsPerPage : Math.max(pageItems.length, 1)
     const h = Math.min(500, headerH + rowsForH * rowH + footerH)
     const top = this.drawPanelFrame(c, w, h, ctx?.title ?? 'Forge')
-    this.drawGoldBadge(c, CX + w / 2 - 70, top + 30, p.gold)
+    this.drawGoldBadge(c, CX + w / 2 - 45, top + 30, p.gold)
     if (ctx) this.drawShopTabs(c, top, 'sell', ctx.title, ctx.back)
     else this.drawForgeTabs(c, top, 'sell')
     c.add(this.add.text(CX, top + 104, 'Revends les objets de ton inventaire non équipé.', {
