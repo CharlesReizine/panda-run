@@ -23,6 +23,13 @@ export class TitleScene extends Phaser.Scene {
   constructor() { super('Title') }
 
   private status?: Phaser.GameObjects.Text
+  // Anti-réentrance : « Commencer » enchaîne des await (saisie du pseudo, réseau). Sans ce verrou, un
+  // second appui lance un deuxième flux ; le premier part sur une autre scène et le second se réveille
+  // ensuite pour écrire dans des objets DÉTRUITS → « null is not an object (this.data.drawImage) ».
+  // C'est le garde que la fusion des deux anciens boutons en un seul avait fait disparaître.
+  private busy = false
+  // Vrai dès qu'on a quitté cet écran : toute continuation asynchrone en vol doit se taire.
+  private left = false
 
   // Une sauvegarde corrompue ou d'une version future ferait planter load() ; on la traite comme
   // "pas de sauvegarde" plutôt que de bloquer le jeu au démarrage.
@@ -69,6 +76,9 @@ export class TitleScene extends Phaser.Scene {
       muteBtn.setText(audio.toggleMute() ? '🔇' : '🔊')
     })
 
+    this.busy = false
+    this.left = false
+    this.events.once('shutdown', () => { this.status = undefined })
     this.status = this.add.text(480, 496, '', { fontSize: '15px', color: '#e1f5fe', fontStyle: 'bold', align: 'center', wordWrap: { width: 700 } })
       .setOrigin(0.5).setShadow(0, 1, '#000000aa', 2)
 
@@ -87,7 +97,9 @@ export class TitleScene extends Phaser.Scene {
     // Chemin le plus rapide : la partie de cet appareil, sans réseau ni saisie.
     if (existing) {
       this.mkButton(y, `Continuer${active ? ` — ${active}` : ''}`, () => {
+        if (this.busy || this.left) return
         setPlayer(existing)
+        this.left = true
         this.scene.start('WorldMap')
       })
       y += step
@@ -99,17 +111,37 @@ export class TitleScene extends Phaser.Scene {
     this.mkButton(y, 'Commencer', () => void this.start())
     y += step
 
-    if (cloudAvailable()) this.mkButton(y, '🏆 Classement', () => this.scene.start('Leaderboard', { return: 'Title' }))
+    if (cloudAvailable()) {
+      this.mkButton(y, '🏆 Classement', () => {
+        if (this.busy || this.left) return // même verrou : ne pas quitter l'écran pendant un flux en cours
+        this.left = true
+        this.scene.start('Leaderboard', { return: 'Title' })
+      })
+    }
   }
 
+  // Écrit dans la ligne d'état SI elle est encore vivante. Un `await` peut se résoudre APRÈS un
+  // changement de scène : le Text est alors détruit, son canvas est null, et Phaser plante en voulant
+  // le redessiner. On ne suppose donc jamais qu'il est toujours là.
   private say(msg: string, color = '#e1f5fe') {
-    this.status?.setColor(color).setText(msg)
+    if (this.left || !this.status || !this.status.active || !this.scene.isActive()) return
+    this.status.setColor(color).setText(msg)
   }
 
   // COMMENCER — on demande le nom une seule fois, puis le jeu décide : une partie existe pour ce
   // nom → on la reprend en le signalant ; sinon → on la crée. AUCUN des deux chemins ne détruit
   // quoi que ce soit, donc rien à faire confirmer.
   private async start() {
+    if (this.busy || this.left) return
+    this.busy = true
+    try {
+      await this.startFlow()
+    } finally {
+      this.busy = false
+    }
+  }
+
+  private async startFlow() {
     const pseudo = await askPseudo(readActivePseudo() ?? '')
     if (pseudo === null) return
     const key = pseudoKey(pseudo)
@@ -142,6 +174,7 @@ export class TitleScene extends Phaser.Scene {
     save(p)
     writeActivePseudo(pseudo)
     setAutoPushKey(key)
+    this.left = true
     this.scene.start('LevelIntro', { levelId: 'plaine-1', fromNode: 'plaine-1', targetNode: 'plaine-1', dir: 'forward' })
   }
 
@@ -150,6 +183,7 @@ export class TitleScene extends Phaser.Scene {
     writeActivePseudo(pseudo)
     setAutoPushKey(key)
     setPlayer(cloud.player)
+    this.left = true
     this.scene.start('WorldMap')
   }
 
