@@ -101,6 +101,9 @@ class AudioEngine {
   // ce garde-fou on entendrait un « tac-tac » sur ces boutons-là. Vaut aussi quand deux objets
   // interactifs se recouvrent.
   private lastUiTapAt = 0
+  // Atténuation temporaire de la musique (sous l'eau). Multiplie le volume au lieu de le remplacer,
+  // pour ne jamais écraser le réglage utilisateur.
+  private duck = 1
 
   constructor() {
     // lecture de l'état muet — sans effet de bord audio (localStorage seulement)
@@ -150,6 +153,25 @@ class AudioEngine {
       return true
     } catch {
       return false
+    }
+  }
+
+  /**
+   * Baisse (ou rétablit) la musique de fond — utilisé sous l'eau.
+   *
+   * POURQUOI : les bulles restaient inaudibles même à gain relevé, parce qu'elles luttaient contre la
+   * musique dans la même bande. Baisser la MUSIQUE fait ressortir l'ambiance bien mieux que monter
+   * encore l'effet, qui finirait par saturer. Demande du user : « baisse le son quand je suis sous
+   * l'eau et mets plus de bulles. »
+   */
+  setUnderwater(on: boolean) {
+    const target = on ? 0.3 : 1
+    if (this.duck === target) return
+    this.duck = target
+    this.applyMusicState()
+    // le bus musique de la synthèse suit aussi, sinon seule la piste média serait atténuée
+    if (this.musicGain && this.ctx) {
+      this.musicGain.gain.setTargetAtTime(0.18 * target, this.ctx.currentTime, 0.15)
     }
   }
 
@@ -315,8 +337,11 @@ class AudioEngine {
         [523, 659, 784, 1047].forEach((f, i) => this.tone('square', f, t + i * 0.09, 0.16, 0.4))
         break
       case 'player-hit':
-        this.tone('sawtooth', 200, t, 0.16, 0.4, 80)
-        this.noise(t, 0.12, 0.3, 'bandpass', 700)
+        // Renforcé (retour user : « quand je me prends des coups ça fait pas assez de bruit »). Un
+        // impact SUBI doit dominer brièvement le mixage : c'est l'information la plus urgente du jeu.
+        this.tone('sawtooth', 190, t, 0.2, 0.72, 70)
+        this.noise(t, 0.16, 0.5, 'bandpass', 620)
+        this.tone('square', 95, t, 0.14, 0.4, 60) // sous-grave : le « coup dans le ventre »
         break
       // DÉGÂTS CONTINUS SUBIS (flammes, lave, noyade) : un souffle court et sourd, volontairement
       // PLUS DISCRET que 'player-hit'. Il se répète plusieurs fois par seconde tant qu'on cuit — un
@@ -422,7 +447,7 @@ class AudioEngine {
         this.music = el
       }
       if (!this.music) return
-      this.music.volume = MUSIC_VOLUME * this.volume
+      this.music.volume = MUSIC_VOLUME * this.volume * this.duck
       if (this.muted || !this.musicWanted) {
         this.music.pause()
       } else {

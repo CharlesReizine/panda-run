@@ -846,6 +846,7 @@ export class LevelScene extends Phaser.Scene {
       // Sans ça les fonds s'empileraient au fil des terrains et on reviendrait au problème d'origine.
       // Le fichier reste dans le cache du service worker → le rechargement au retour est instantané
       // et fonctionne hors connexion.
+      audio.setUnderwater(false) // sinon on quitterait le terrain avec la musique restée baissée
       const bgKey = bgKeyFor(this.levelDef.id, !!this.levelDef.boss)
       if (bgKey && this.textures.exists(bgKey)) this.textures.remove(bgKey)
       this.scene.stop('UI')
@@ -4215,12 +4216,14 @@ export class LevelScene extends Phaser.Scene {
   // VOLONTAIREMENT irregulier — des bulles a rythme metronomique sonnent comme une machine, pas comme
   // de l'eau.
   private underwaterAmbience() {
+    // la musique baisse SOUS L'EAU : c'est ce qui rend les bulles réellement audibles
+    audio.setUnderwater(this.player.inWater)
     if (!this.player.inWater) { this.bubbleSfxAt = 0; return }
     // bubbleSfxAt à 0 = on vient d'ENTRER dans l'eau → première bulle IMMÉDIATE, pour qu'on entende
     // tout de suite qu'on est sous l'eau au lieu d'attendre jusqu'à une seconde.
     if (this.bubbleSfxAt !== 0 && this.time.now < this.bubbleSfxAt) return
     audio.playSfx('bubble')
-    this.bubbleSfxAt = this.time.now + Phaser.Math.Between(420, 900)
+    this.bubbleSfxAt = this.time.now + Phaser.Math.Between(200, 480) // plus de bulles (demandé)
   }
 
   private eliteAmbience() {

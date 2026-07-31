@@ -80,15 +80,19 @@ export class LevelIntroScene extends Phaser.Scene {
   // item-<id> ; chapeau sans illustration → cosmetic-<id> (procédural) ; matériau → material-drop
   // teinté de sa couleur ; repli générique item-drop.
   private dropIconInfo(d: DropEntry): { texture: string; tint?: number } {
-    if (d.kind === 'gold') return { texture: 'coin' }
+    if (d.kind === 'gold') return { texture: this.textures.exists('art-coin') ? 'art-coin' : 'coin' }
     if (d.kind === 'potion') return { texture: 'potion-drop' }
     if (d.kind === 'item') {
       const id = d.itemId
       if (id && this.textures.exists(`item-${id}`)) return { texture: `item-${id}` }
-      const item = id ? ITEMS[id] : undefined
-      if (id && item?.slot === 'hat' && this.textures.exists(`cosmetic-${id}`)) return { texture: `cosmetic-${id}` }
+      if (id && this.textures.exists(`cosmetic-${id}`)) return { texture: `cosmetic-${id}` }
       return { texture: 'item-drop' }
     }
+    // ⚠️ LA VRAIE ICÔNE DE MATÉRIAU D'ABORD. Cet écran sautait directement à la pastille générique
+    // `material-drop` teintée alors que `material-<id>` est dessinée au chargement pour CHAQUE
+    // matériau (PreloadScene) — d'où les « vieux cercles de couleurs » signalés. Le bestiaire, lui,
+    // utilisait déjà la bonne clé : c'était une incohérence entre les deux écrans, pas un asset absent.
+    if (d.materialId && this.textures.exists(`material-${d.materialId}`)) return { texture: `material-${d.materialId}` }
     const mat = d.materialId ? MATERIALS[d.materialId] : undefined
     return { texture: 'material-drop', tint: mat?.color }
   }
@@ -164,31 +168,36 @@ export class LevelIntroScene extends Phaser.Scene {
       }
       this.add.text(cx, top + 66, m.name, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: cardW - 12 } }).setOrigin(0.5, 0)
 
-      // Butins notables : objets + matériaux (l'or/potions, communs à tous, sont omis).
-      const notable = m.drops.filter((d) => d.kind === 'item' || d.kind === 'material')
-      const listLeft = cx - cardW / 2 + 10
+      // BUTIN COMPLET, avec NOM et PROBA. Avant, l'or et les potions étaient OMIS (« communs à
+      // tous ») et seule l'icône + la chance s'affichaient, sans nom. Or leur probabilité DIFFÈRE
+      // d'un monstre à l'autre — retour user : « quand y a or et tout tu le mets, proba pour l'or,
+      // proba pour les potions, personne a le même ». On trie objets/matériaux d'abord (le butin
+      // rare, celui qu'on cherche), puis or et potions.
+      const rank = (d: DropEntry) => (d.kind === 'item' ? 0 : d.kind === 'material' ? 1 : d.kind === 'gold' ? 2 : 3)
+      const allDrops = [...m.drops].sort((a, b) => rank(a) - rank(b))
+      const listLeft = cx - cardW / 2 + 8
       let y = top + headerH
-      if (notable.length === 0) {
-        this.add.text(cx, y, 'Butin courant (or, potions)', { fontSize: '11px', color: '#78909c', fontStyle: 'italic', align: 'center', wordWrap: { width: cardW - 16 } }).setOrigin(0.5, 0)
-      } else {
-        const shown = notable.slice(0, maxLines)
-        shown.forEach((d) => {
-          const { color, chance } = dropLine(d)
-          // AFFICHAGE PAR IMAGE (retour joueur : « affiche directement les images ») : on montre
-          // l'icône de l'objet/matériau au lieu de son nom. Objet illustré → item-<id> ; chapeau sans
-          // illustration → cosmetic-<id> (procédural) ; matériau → pastille material-drop teintée ;
-          // repli générique item-drop. Un liseré de rareté encadre l'icône, la chance reste à droite.
-          const info = this.dropIconInfo(d)
-          const size = Math.min(22, lineH - 2)
-          this.add.rectangle(listLeft + 2, y + 1, size + 2, size + 2, color, 0.28).setOrigin(0, 0)
-          const img = this.add.image(listLeft + 3, y + 2, info.texture).setOrigin(0, 0).setDisplaySize(size, size)
-          if (info.tint !== undefined) img.setTint(info.tint)
-          this.add.text(cx + cardW / 2 - 10, y + size / 2, chance, { fontSize: '11px', color: '#ffd54f' }).setOrigin(1, 0.5)
-          y += lineH
-        })
-        const hidden = notable.length - shown.length
-        if (hidden > 0) this.add.text(listLeft + 12, y, `+${hidden} autre${hidden > 1 ? 's' : ''}…`, { fontSize: '10px', color: '#78909c' }).setOrigin(0, 0)
-      }
+      const shown = allDrops.slice(0, maxLines)
+      shown.forEach((d) => {
+        const { color, chance, label } = dropLine(d)
+        const info = this.dropIconInfo(d)
+        const size = Math.min(20, lineH - 2)
+        this.add.rectangle(listLeft, y + 1, size + 2, size + 2, color, 0.28).setOrigin(0, 0)
+        const img = this.add.image(listLeft + 1, y + 2, info.texture).setOrigin(0, 0).setDisplaySize(size, size)
+        if (info.tint !== undefined) img.setTint(info.tint)
+        // la proba est ancrée à DROITE, le nom occupe la place restante et se fait tronquer : ainsi la
+        // proba reste toujours lisible, quelle que soit la longueur du nom
+        const chanceTxt = this.add.text(cx + cardW / 2 - 8, y + size / 2, chance, {
+          fontSize: '10px', color: '#ffd54f', fontStyle: 'bold',
+        }).setOrigin(1, 0.5)
+        const nameW = cardW - 22 - size - chanceTxt.width
+        this.add.text(listLeft + size + 5, y + size / 2, label, {
+          fontSize: '10px', color: css(color), wordWrap: { width: Math.max(24, nameW) }, maxLines: 1,
+        }).setOrigin(0, 0.5)
+        y += lineH
+      })
+      const hidden = allDrops.length - shown.length
+      if (hidden > 0) this.add.text(listLeft, y, `+${hidden} autre${hidden > 1 ? 's' : ''}…`, { fontSize: '9px', color: '#78909c' }).setOrigin(0, 0)
 
       // COMPÉTENCES (seulement pour les mobs qui EN ONT : boss/élites) : rangée d'icônes skill + petit
       // nom dessous, en bas de la carte → contexte immédiat sur ce que fait le monstre.
