@@ -38,6 +38,9 @@ const SLOT_PASTILLE: Record<EquipSlot, { color: number; glyph: string }> = {
 // DROITE = l'équipement porté (4 slots). Cliquer un objet du stock l'équipe ; cliquer un slot
 // équipé le déséquipe. Ouvrable depuis la carte du monde (transition) ou en jeu (overlay).
 export class InventoryScene extends Phaser.Scene {
+  // page courante du stock. Sans pagination, tout objet au-delà de la capacité de l'écran serait
+  // définitivement inatteignable — le sac n'ayant aucune limite (cf. inventory-layout.ts).
+  private stockPage = 0
   private returnKey = 'WorldMap'
   private overlay = false // true = lancée par-dessus le jeu en pause (à reprendre à la fermeture)
   private dirty = false // un équipement a changé → rafraîchir le panda en jeu à la fermeture
@@ -114,17 +117,37 @@ export class InventoryScene extends Phaser.Scene {
       // On conserve l'index réel dans p.inventory pour l'équipement (splice).
       const entries = p.inventory.map((itemId, i) => ({ itemId, i }))
       const bySlot = (slot: EquipSlot) => entries.filter((e) => ITEMS[e.itemId]!.slot === slot)
-      const layout = layoutStock(SLOTS.map((slot) => ({ key: slot, count: bySlot(slot).length })))
+      const layout = layoutStock(SLOTS.map((slot) => ({ key: slot, count: bySlot(slot).length })), this.stockPage)
 
       for (const section of layout.sections) {
         const slot = section.key as EquipSlot
         this.add.text(stock.x + 14, section.headerY, SLOT_LABEL_PLURAL[slot], { fontSize: `${INV.sectionFont}px`, color: '#ffd54f', fontStyle: 'bold' })
-        bySlot(slot).slice(0, section.shown).forEach((e, gi) => this.drawStockCell(e, cellRect(section.gridY, gi)))
+        bySlot(slot).slice(section.from, section.from + section.shown)
+          .forEach((e, gi) => this.drawStockCell(e, cellRect(section.gridY, gi)))
       }
 
-      // le surplus est ANNONCÉ, jamais dessiné dans le vide : c'est la règle du dépôt depuis le bug
-      // du menu, et elle est d'autant plus nécessaire ici que le sac est sans limite
-      if (layout.hidden > 0) {
+      // PAGINEUR plutôt qu'un simple « +N autres ». Borner l'affichage suffisait à ne plus déborder,
+      // mais rendait les objets au-delà INATTEIGNABLES — on ne peut pas équiper ce qu'on ne peut pas
+      // toucher. Le sac étant sans limite (cf. inventory-layout), la pagination est la seule façon de
+      // garantir que tout objet ramassé reste accessible.
+      if (layout.pageCount > 1) {
+        const cy = layout.noticeY + 8
+        const arrow = (x: number, label: string, to: number, on: boolean) => {
+          const t = this.add.text(x, cy, label, {
+            fontSize: '18px', color: on ? '#ffffff' : '#546e7a', fontStyle: 'bold',
+            backgroundColor: on ? '#37474f' : '#1c262b', padding: { x: 10, y: 3 },
+          }).setOrigin(0.5)
+          if (on) t.setInteractive({ useHandCursor: true }).on('pointerdown', () => { this.stockPage = to; this.render() })
+        }
+        const mid = stock.x + stock.w / 2
+        arrow(mid - 62, '‹', layout.page - 1, layout.page > 0)
+        this.add.text(mid, cy, `${layout.page + 1}/${layout.pageCount}`, {
+          fontSize: '14px', color: '#ffd54f', fontStyle: 'bold',
+        }).setOrigin(0.5)
+        arrow(mid + 62, '›', layout.page + 1, layout.page < layout.pageCount - 1)
+      } else if (layout.hidden > 0) {
+        // il reste des objets masqués SANS page à eux : c'est un manque de place (une section n'a même
+        // pas pu être entamée), pas un problème de pagination. On l'annonce plutôt que de l'avaler.
         this.add.text(stock.x + stock.w / 2, layout.noticeY, `+${layout.hidden} autre${layout.hidden > 1 ? 's' : ''} en sac (équipe ou vends)`, {
           fontSize: `${INV.noticeFont}px`, color: '#ffab40', fontStyle: 'bold',
         }).setOrigin(0.5, 0)

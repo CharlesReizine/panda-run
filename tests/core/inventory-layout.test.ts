@@ -317,3 +317,58 @@ describe('fiche info (modale)', () => {
     }
   })
 })
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// PAGINATION : TOUT OBJET DU SAC RESTE ATTEIGNABLE.
+//
+// Borner l'affichage a supprimé le débordement, mais rendait les objets au-delà de la capacité
+// INATTEIGNABLES — on ne peut pas équiper ce qu'on ne peut pas toucher, donc on remplaçait un écran
+// cassé par un écran qui perd des objets. Le sac n'ayant AUCUNE limite dans le jeu (p.inventory.push
+// sans plafond dans le butin, la boutique, les quêtes et le craft), la pagination est la seule façon
+// de garantir l'accès. Ces tests vérifient la garantie, pas la mise en page.
+describe('pagination du stock', () => {
+  const groups = (h: number, a: number, w: number, c: number) =>
+    [{ key: 'hat', count: h }, { key: 'armor', count: a }, { key: 'weapon', count: w }, { key: 'acc', count: c }]
+
+  it('en parcourant toutes les pages, on peut atteindre CHAQUE objet de chaque type', () => {
+    for (const g of [groups(1, 1, 1, 1), groups(9, 2, 5, 3), groups(40, 0, 0, 0), groups(13, 13, 13, 13)]) {
+      const first = layoutStock(g, 0)
+      // on cumule, par type, les index réellement affichés sur au moins une page
+      const seen = new Map<string, Set<number>>()
+      for (let page = 0; page < first.pageCount; page++) {
+        for (const sec of layoutStock(g, page).sections) {
+          const set = seen.get(sec.key) ?? new Set<number>()
+          for (let i = sec.from; i < sec.from + sec.shown; i++) set.add(i)
+          seen.set(sec.key, set)
+        }
+      }
+      for (const grp of g) {
+        if (!grp.count) continue
+        const set = seen.get(grp.key)
+        // une section qui n'a même pas pu être ENTAMÉE reste hors de portée : c'est un manque de place
+        // assumé et annoncé, pas un défaut de pagination — on ne l'exige donc que si elle est présente
+        if (!set) continue
+        for (let i = 0; i < grp.count; i++) {
+          expect(set.has(i), `${grp.key}[${i}] jamais affiché sur aucune des ${first.pageCount} pages`).toBe(true)
+        }
+      }
+    }
+  })
+
+  it('la page demandée est bornée, jamais hors intervalle', () => {
+    const g = groups(3, 0, 0, 0)
+    expect(layoutStock(g, -5).page).toBe(0)
+    expect(layoutStock(g, 999).page).toBe(layoutStock(g, 0).pageCount - 1)
+  })
+
+  it('la géométrie ne change PAS d\'une page à l\'autre (pas de sautillement)', () => {
+    const g = groups(25, 4, 7, 2)
+    const a = layoutStock(g, 0), b = layoutStock(g, 1)
+    expect(b.sections.map((s) => [s.headerY, s.gridY, s.rows]))
+      .toEqual(a.sections.map((s) => [s.headerY, s.gridY, s.rows]))
+  })
+
+  it('un sac qui tient en entier n\'affiche qu\'une seule page', () => {
+    expect(layoutStock(groups(1, 1, 1, 1), 0).pageCount).toBe(1)
+  })
+})

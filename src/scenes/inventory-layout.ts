@@ -110,6 +110,8 @@ export const gridLimit = (): number => INV.bottom - noticeH()
 export interface StockSection {
   /** clé du groupe telle que fournie par l'appelant (l'emplacement d'équipement) */
   key: string
+  /** index du PREMIER objet de la section affiché sur cette page (pagination) */
+  from: number
   /** y de l'en-tête de section */
   headerY: number
   /** y de la première rangée de cases */
@@ -123,10 +125,14 @@ export interface StockSection {
 
 export interface StockLayout {
   sections: StockSection[]
-  /** total non dessiné, toutes sections confondues — DOIT être annoncé, jamais avalé */
+  /** total non dessiné SUR CETTE PAGE — DOIT être annoncé, jamais avalé */
   hidden: number
-  /** y de la ligne « +N autres » */
+  /** y de la ligne d'annonce / du pagineur */
   noticeY: number
+  /** nombre de pages nécessaires pour montrer TOUT le sac */
+  pageCount: number
+  /** page réellement affichée (bornée à [0, pageCount-1]) */
+  page: number
 }
 
 /**
@@ -145,7 +151,7 @@ export interface StockLayout {
  * entièrement. Une borne correcte qui empêche d'équiper son arme reste un écran cassé. Le tour de rôle
  * garantit qu'aucun type d'équipement ne peut être évincé par un autre.
  */
-export function layoutStock(groups: { key: string; count: number }[]): StockLayout {
+export function layoutStock(groups: { key: string; count: number }[], page = 0): StockLayout {
   const avail = gridLimit() - INV.top
   const hdr = sectionH()
   const present = groups.filter((g) => g.count > 0)
@@ -173,18 +179,32 @@ export function layoutStock(groups: { key: string; count: number }[]): StockLayo
     }
   }
 
+  // ── PAGINATION ──────────────────────────────────────────────────────────────────────────────
+  // Borner l'affichage suffit à ne plus déborder, mais rend les objets au-delà INATTEIGNABLES : on
+  // remplace un écran cassé par un écran qui cache des objets, ce qui n'est pas mieux quand on veut
+  // équiper son 17ᵉ objet. Chaque section défile donc par pages de SA propre capacité, et le nombre
+  // de pages est celui de la section la plus remplie — ainsi aucun objet du sac n'est hors de portée.
+  // (Le vrai correctif de fond serait un plafond de sac dans src/core, cf. l'en-tête de ce fichier.)
+  const capOf = (i: number) => rows[i]! * INV.cols
+  const pageCount = Math.max(1, ...kept.map((g, i) => Math.ceil(g.count / capOf(i))))
+  const pg = Math.min(Math.max(0, page), pageCount - 1)
+
   const sections: StockSection[] = []
+  // Les sections qu'on n'a même pas pu ENTAMER n'ont aucune page à elles : elles restent comptées
+  // comme masquées, sur toutes les pages. C'est un manque de PLACE, pas de pagination.
   let hidden = present.slice(k).reduce((n, g) => n + g.count, 0)
   let y = INV.top
   for (const [i, g] of kept.entries()) {
     const r = rows[i]!
-    const shown = Math.min(g.count, r * INV.cols)
-    sections.push({ key: g.key, headerY: y, gridY: y + hdr, rows: r, shown, hidden: g.count - shown })
+    const cap = capOf(i)
+    const from = Math.min(pg * cap, Math.max(0, g.count - 1))
+    const shown = Math.max(0, Math.min(cap, g.count - from))
+    sections.push({ key: g.key, from, headerY: y, gridY: y + hdr, rows: r, shown, hidden: g.count - shown })
     hidden += g.count - shown
     y += hdr + r * INV.cellH + INV.sectionGap
   }
 
-  return { sections, hidden, noticeY: gridLimit() }
+  return { sections, hidden, noticeY: gridLimit(), pageCount, page: pg }
 }
 
 /** Case n° `i` (0-based) d'une section dont la grille commence à `gridY`. */
