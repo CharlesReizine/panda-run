@@ -33,6 +33,7 @@ import { audio, type MusicTrack } from '../audio/audio-engine'
 import { CX, CY, VIEW_H, VIEW_W } from '../core/viewport'
 import { makeJag } from '../art/jagged-ring'
 import { CastBar } from '../entities/cast-bar'
+import { skillSfx } from '../audio/skill-sfx'
 
 // biomes → piste musicale ; 'carriere' n'a pas d'ambiance dédiée → repli sur 'montagne'
 const BIOME_TRACKS: Record<string, MusicTrack> = {
@@ -2186,7 +2187,11 @@ export class LevelScene extends Phaser.Scene {
     this.cooldowns.use(slot, this.time.now, skill.cooldownMs)
     // untilMs + durée totale → l'overlay de cooldown se dégrise horizontalement au fil de la recharge
     this.game.events.emit('skill-cooldown', slot, this.time.now + skill.cooldownMs, skill.cooldownMs)
-    audio.playSfx('skill')
+    // SON PAR FAMILLE DE SORT (feu / glace / foudre / arcane / soin / lame / flèche / buff), classé dans
+    // audio/skill-sfx.ts. Les 66 compétences jouaient le même bruit : on n'entendait pas la différence
+    // entre une boule de feu et un soin. Les quatre points de lancement (instantané, zone, maintien,
+    // relâche) passent tous par là — c'était le même 'skill' copié quatre fois.
+    audio.playSfx(skillSfx(skill))
     this.announceSkill(skill.name)
 
     const { maxHp } = this.player.stats
@@ -3063,7 +3068,7 @@ export class LevelScene extends Phaser.Scene {
     this.cooldowns.use(slot, this.time.now, skill.cooldownMs)
     // untilMs + durée totale → l'overlay de cooldown se dégrise horizontalement au fil de la recharge
     this.game.events.emit('skill-cooldown', slot, this.time.now + skill.cooldownMs, skill.cooldownMs)
-    audio.playSfx('skill')
+    audio.playSfx(skillSfx(skill))
     this.announceSkill(skill.name)
     const p = getPlayer()
     const rank = p.skillLevels[skill.id] ?? 1
@@ -3348,7 +3353,7 @@ export class LevelScene extends Phaser.Scene {
     const pointer = !byKey && this.input.activePointer.isDown ? this.input.activePointer : undefined
     const mode: 'channel' | 'charge' = skill.kind === 'channel' ? 'channel' : 'charge'
     this.held = { slot, skill, mode, key: byKey ? key : undefined, pointer, startedAt: now, nextTickAt: now, fx: [] }
-    audio.playSfx('skill')
+    audio.playSfx(skillSfx(skill))
     this.announceSkill(skill.name)
     if (mode === 'channel') this.updateHeld(now) // 1er tick immédiat (un tap = au moins une décharge)
     else {
@@ -3492,7 +3497,7 @@ export class LevelScene extends Phaser.Scene {
     if (!this.player.spendEnergy(skill.manaCost ?? energyCostOf(skill))) { this.announceSkill('Pas assez d\'énergie', 0x4dd0e1); return }
     this.cooldowns.use(h.slot, now, skill.cooldownMs)
     this.game.events.emit('skill-cooldown', h.slot, now + skill.cooldownMs, skill.cooldownMs)
-    audio.playSfx('skill')
+    audio.playSfx(skillSfx(skill))
     const p = getPlayer()
     const rank = p.skillLevels[skill.id] ?? 1
     const frac = Phaser.Math.Clamp((now - h.startedAt) / CHARGE_FULL_MS, 0, 1)

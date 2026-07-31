@@ -23,6 +23,8 @@
 // que c'est pas bon tu déploies pas ». Un test ne peut vérifier ça que si la disposition est calculable
 // SANS rendu : ces fonctions sont donc la source de vérité, et la scène ne fait que les peindre.
 
+import { charsPerLine } from './text-metrics'
+
 /** Zone utile de la fiche, dans l'espace de conception (0→960 × 0→540). */
 export const CARD = {
   left: 24,
@@ -41,6 +43,10 @@ export const BD = {
   splitX: 24 + 118 + 18,
   /** hauteur de la bande du haut (image / compétences) */
   topH: 168,
+  /** bande de PRÉSENTATION du monstre (caractère, habitat, dangerosité) — 3 lignes de 13 px */
+  loreH: 58,
+  loreFont: 13,
+  loreLines: 3,
   gap: 10,
   /** hauteur d'une ligne de compétence et d'une ligne de butin */
   skillRowH: 40,
@@ -65,11 +71,30 @@ export const skillsBox = (): Rect => ({
   x: BD.splitX + BD.gap, y: CARD.top + BD.headerH, w: CARD.right - BD.splitX - BD.gap, h: BD.topH,
 })
 
-/** Bande du butin : sous les deux quarts du haut, sur TOUTE la largeur. */
-export const lootBox = (): Rect => ({
+/**
+ * Bande de PRÉSENTATION : le paragraphe qui décrit le monstre (caractère, habitat, dangerosité).
+ *
+ * Demande du user : « rajoute un petit paragraphe pour chaque monstre qui le présente en disant ses
+ * caractéristiques, craintif joyeux colérique joueur, sa dangerosité, où il vit ». Le texte EXISTAIT
+ * déjà pour les 86 monstres (MonsterDef.lore) mais n'était affiché NULLE PART.
+ *
+ * Elle est prise sur la bande de butin, qui était largement surdimensionnée : le monstre le plus chargé
+ * du jeu a 6 butins, soit 2 rangées de 34 px, là où la bande en offrait 228.
+ */
+export const loreBox = (): Rect => ({
   x: CARD.left, y: CARD.top + BD.headerH + BD.topH + BD.gap,
-  w: CARD.right - CARD.left, h: CARD.bottom - (CARD.top + BD.headerH + BD.topH + BD.gap),
+  w: CARD.right - CARD.left, h: BD.loreH,
 })
+
+/** Bande du butin : sous la présentation, sur TOUTE la largeur. */
+export const lootBox = (): Rect => {
+  const y = CARD.top + BD.headerH + BD.topH + BD.gap + BD.loreH + BD.gap
+  return { x: CARD.left, y, w: CARD.right - CARD.left, h: CARD.bottom - y }
+}
+
+/** Nombre de caractères de présentation qui tiennent dans la bande, sans troncature. */
+export const loreCapacity = (): number =>
+  charsPerLine(loreBox().w, BD.loreFont) * BD.loreLines
 
 /** Nombre de colonnes de butin : le butin s'étale en largeur plutôt qu'en hauteur. */
 export const LOOT_COLS = 3

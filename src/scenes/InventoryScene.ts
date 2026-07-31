@@ -3,7 +3,7 @@ import { getPlayer } from '../state'
 import { save } from '../core/save'
 import { ITEMS, rarityColor, SLOT_ORDER, SLOT_LABEL_PLURAL } from '../data/items'
 import { upgradedBonus } from '../core/reforge'
-import { canEquipItem, equipRestrictionMessage } from '../core/equip'
+import { equipBlockReason, itemMinLevel } from '../core/equip'
 import type { EquipSlot, Rarity } from '../core/types'
 import type { LevelScene } from './LevelScene'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
@@ -90,6 +90,11 @@ export class InventoryScene extends Phaser.Scene {
     const item = ITEMS[itemId]!
     if (this.textures.exists(`item-${itemId}`)) { this.add.image(x, y, `item-${itemId}`).setDisplaySize(size, size); return }
     if (item.slot === 'hat' && this.textures.exists(`cosmetic-${itemId}`)) { this.add.image(x, y, `cosmetic-${itemId}`).setDisplaySize(size, size); return }
+    // ⚠️ UNE ARME SANS ILLUSTRATION A DÉJÀ UNE SILHOUETTE : `weapon-<id>` est dessinée au chargement pour
+    // CHAQUE arme (PreloadScene.bakeItemWeapons, forme par famille teintée par la rareté) — c'est ce que
+    // le panda porte à l'écran. On la réutilise ici au lieu de tomber sur la pastille de couleur, qui est
+    // exactement le « vieux cercle de couleur » reproché ailleurs.
+    if (item.slot === 'weapon' && this.textures.exists(`weapon-${itemId}`)) { this.add.image(x, y, `weapon-${itemId}`).setDisplaySize(size, size); return }
     const p = SLOT_PASTILLE[item.slot]
     this.add.circle(x, y, size / 2, p.color).setStrokeStyle(2, 0xffffff, 0.6)
     this.add.text(x, y, p.glyph, { fontSize: `${Math.round(size / 3.6)}px`, color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
@@ -235,8 +240,10 @@ export class InventoryScene extends Phaser.Scene {
   private equipSelected(sel: Selection) {
     const p = getPlayer()
     if (sel.invIndex === undefined) return
-    if (!canEquipItem(p.classId, sel.itemId)) {
-      this.notice = equipRestrictionMessage(p.classId, sel.itemId)
+    // une seule vérification pour les DEUX règles (classe et niveau minimum) : cf. equipBlockReason
+    const blocage = equipBlockReason(p.classId, p.level, sel.itemId)
+    if (blocage) {
+      this.notice = blocage
       this.render()
       return
     }
@@ -282,7 +289,14 @@ export class InventoryScene extends Phaser.Scene {
     // icône + nom + rareté
     this.itemIcon(sel.itemId, cx, L.icon.y + L.icon.h / 2, CARD.icon)
     this.add.text(cx, L.name.y, L.nameLines.join('\n'), { fontSize: `${CARD.nameFont}px`, color: this.css(color), fontStyle: 'bold', align: 'center' }).setOrigin(0.5, 0)
-    this.add.text(cx, L.rarity.y, `${RARITY_LABELS[item.rarity ?? 'commun']} · ${SLOT_LABELS[item.slot]}`, { fontSize: `${CARD.rarityFont}px`, color: this.css(color) }).setOrigin(0.5, 0)
+    // Ligne rareté · emplacement · NIVEAU REQUIS. Le niveau est écrit ici et pas seulement au refus
+    // d'équipement : sinon on ne comprend « Niveau 24 requis » qu'après avoir essayé. En ROUGE quand on
+    // ne l'a pas encore, pour que ce soit lisible d'un coup d'œil dans le stock.
+    const lvlMin = itemMinLevel(sel.itemId)
+    const tropBas = getPlayer().level < lvlMin
+    this.add.text(cx, L.rarity.y, `${RARITY_LABELS[item.rarity ?? 'commun']} · ${SLOT_LABELS[item.slot]} · Nv ${lvlMin}`, {
+      fontSize: `${CARD.rarityFont}px`, color: tropBas ? '#ff8a80' : this.css(color),
+    }).setOrigin(0.5, 0)
 
     // description
     this.add.text(cx, L.desc.y, L.descLines.join('\n'), { fontSize: `${CARD.descFont}px`, color: '#cfd8dc', align: 'center', fontStyle: 'italic' }).setOrigin(0.5, 0)

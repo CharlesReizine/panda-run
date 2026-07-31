@@ -103,6 +103,11 @@ export interface ItemDef {
   slot: EquipSlot
   bonus: Partial<Pick<StatBlock, 'atk' | 'def' | 'maxHp'>>
   rarity?: Rarity // défaut 'commun' si absent
+  // ⚠️ PAS DE CHAMP `minLevel` ICI, ET C'EST VOLONTAIRE. Le niveau minimum pour porter un objet est
+  // CALCULÉ depuis `bonus` (core/item-level.ts) : « niveau min par équipement selon les perfs ». Une
+  // valeur écrite à la main à côté des stats dérive dès qu'on retouche les stats, sans que rien ne le
+  // signale — et calée sur la rareté elle mentait déjà (des Ailes d'Angeling légendaires à +15 PV
+  // exigeaient le niveau 38 pour un bonus de début de partie).
   description?: string // phrase courte et thématique (fiche info de l'inventaire)
   // Famille d'arme (uniquement pour slot 'weapon') : pilote la silhouette affichée et la restriction
   // d'équipement par classe. Absente sur les objets non-weapon.

@@ -8,7 +8,7 @@ import { acceptQuest, refreshQuestProgress, claimQuest, currentChainQuest } from
 import { POTION_PRICE, getTownStock, QUEST_CHAIN, type QuestDef, type ShopItemDef } from '../data/shops'
 import { WORLD_NODES } from '../data/worldmap'
 import { ITEMS, rarityColor, SLOT_ORDER, SLOT_LABEL_PLURAL } from '../data/items'
-import { equipRestrictionMessage } from '../core/equip'
+import { equipBlockReason } from '../core/equip'
 import type { EquipSlot } from '../core/types'
 import { MATERIALS } from '../data/materials'
 import { RECIPES } from '../data/recipes'
@@ -801,6 +801,8 @@ export class TownScene extends Phaser.Scene {
     if (this.textures.exists(`item-${itemId}`)) return { texture: `item-${itemId}` }
     const item = ITEMS[itemId]!
     if (item.slot === 'hat') return { texture: `cosmetic-${itemId}` }
+    // même repli que l'inventaire : la silhouette d'arme dessinée au chargement plutôt qu'une pastille
+    if (item.slot === 'weapon' && this.textures.exists(`weapon-${itemId}`)) return { texture: `weapon-${itemId}` }
     const bySlot = {
       weapon: { pastille: 0xe64a19, glyph: 'ATK' },
       armor: { pastille: 0x1e88e5, glyph: 'DEF' },
@@ -883,7 +885,9 @@ export class TownScene extends Phaser.Scene {
           // désormais possédé passe en GRISÉ « Possédé » → plus de rachat en boucle du même chapeau.
           () => { const pl = getPlayer(); save(pl); goldText.setText(`${pl.gold} or`); this.time.delayedCall(230, () => this.openItemShop(kind, list, page)) },
           owned.has(entry.itemId),
-          equipRestrictionMessage(p.classId, entry.itemId),
+          // le niveau requis est ÉCRIT sur la fiche : l'achat reste permis (s'équiper en avance est un
+          // plaisir de RPG), mais on ne dépense plus son or sans savoir qu'on ne pourra pas porter
+          equipBlockReason(p.classId, p.level, entry.itemId),
         )
       })
       y += cardH + gapY

@@ -15,6 +15,12 @@ export type SfxName =
   | 'jump' | 'attack' | 'hit' | 'enemy-death' | 'coin' | 'potion' | 'skill'
   | 'level-up' | 'player-hit' | 'player-death' | 'boss-victory' | 'ui-tap' | 'buy'
   | 'stomp' | 'player-burn' | 'elite' | 'npc-talk' | 'bubble' | 'coins' | 'splash'
+  // ── SORTS ET ATTAQUES, PAR FAMILLE (demande du user : « rajoute des bruits sur certaines attaques du
+  // mage ou des autres »). Tout passait par un unique 'skill' : 66 compétences, un seul bruit — on ne
+  // distinguait pas une boule de feu d'un soin. Le classement d'une compétence vers l'une de ces
+  // familles est dans audio/skill-sfx.ts (pur et testé), pas dispersé dans les scènes.
+  | 'sort-feu' | 'sort-glace' | 'sort-foudre' | 'sort-arcane' | 'sort-soin'
+  | 'coup-lame' | 'tir-fleche' | 'sort-buff'
 
 export type MusicTrack =
   | 'titre' | 'ville' | 'carte' | 'plaine' | 'foret' | 'desert' | 'cave'
@@ -380,6 +386,58 @@ class AudioEngine {
       case 'skill':
         this.tone('sawtooth', 300, t, 0.22, 0.35, 1200)
         this.tone('square', 600, t, 0.18, 0.25, 1500)
+        break
+
+      // ─── FAMILLES DE SORTS ─────────────────────────────────────────────────────────────────────
+      // Chacune doit être RECONNAISSABLE LES YEUX FERMÉS : c'est tout l'intérêt d'en avoir plusieurs.
+      // On joue donc sur des axes différents (grave/aigu, bruité/tonal, montant/descendant) plutôt que
+      // sur la même recette re-teintée — deux variantes du même souffle s'entendraient pareil.
+
+      // FEU : un souffle GRAVE qui s'ouvre (le carburant qui prend) + une scie descendante. Bruité.
+      case 'sort-feu':
+        this.noise(t, 0.34, 0.34, 'lowpass', 900)
+        this.tone('sawtooth', 260, t, 0.3, 0.26, 70)
+        this.noise(t + 0.06, 0.2, 0.16, 'bandpass', 1800)
+        break
+      // GLACE : cristallin, AIGU et net — deux tintements qui montent, puis un chuintement fin.
+      case 'sort-glace':
+        this.tone('triangle', 1245, t, 0.09, 0.3)
+        this.tone('triangle', 1661, t + 0.06, 0.16, 0.26, 1975)
+        this.noise(t + 0.05, 0.22, 0.13, 'highpass', 4200)
+        break
+      // FOUDRE : crépitement SEC. Trois éclats de bruit très courts espacés irrégulièrement, plus un
+      // claquement. Rien de tenu : c'est ce qui le distingue du feu.
+      case 'sort-foudre':
+        this.noise(t, 0.05, 0.4, 'highpass', 3000)
+        this.noise(t + 0.045, 0.03, 0.3, 'highpass', 5000)
+        this.noise(t + 0.11, 0.06, 0.34, 'highpass', 2400)
+        this.tone('square', 880, t, 0.07, 0.22, 220)
+        break
+      // ARCANE : deux sinus légèrement désaccordés qui MONTENT ensemble → battement irréel, sans bruit.
+      case 'sort-arcane':
+        this.tone('sine', 320, t, 0.34, 0.28, 1280)
+        this.tone('sine', 327, t, 0.34, 0.24, 1310)
+        this.tone('sine', 960, t + 0.12, 0.2, 0.12, 1920)
+        break
+      // SOIN : arpège doux ASCENDANT en triangle, aucune composante bruitée — le seul son « gentil ».
+      case 'sort-soin':
+        [659, 784, 988, 1319].forEach((f, i) => this.tone('triangle', f, t + i * 0.07, 0.2, 0.26))
+        break
+      // LAME : sifflement d'acier. Bruit passe-bande qui balaie vers l'aigu + un tic métallique bref.
+      case 'coup-lame':
+        this.noise(t, 0.12, 0.34, 'bandpass', 2600)
+        this.tone('square', 1400, t + 0.02, 0.05, 0.16, 700)
+        this.tone('triangle', 300, t, 0.09, 0.18, 160)
+        break
+      // FLÈCHE : « thwip » très court, aigu et DESCENDANT (l'effet Doppler du trait qui s'éloigne).
+      case 'tir-fleche':
+        this.noise(t, 0.07, 0.3, 'highpass', 3400)
+        this.tone('sine', 1600, t, 0.1, 0.2, 500)
+        break
+      // BUFF : gonflement ASCENDANT et tenu, plus long que les autres — on doit sentir que ça dure.
+      case 'sort-buff':
+        this.tone('triangle', 220, t, 0.42, 0.26, 660)
+        this.tone('sine', 440, t + 0.08, 0.34, 0.16, 880)
         break
       case 'level-up':
         [523, 659, 784, 1047].forEach((f, i) => this.tone('square', f, t + i * 0.09, 0.16, 0.4))

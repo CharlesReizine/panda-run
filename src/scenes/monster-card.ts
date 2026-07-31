@@ -3,7 +3,8 @@ import { ITEMS, rarityColor } from '../data/items'
 import { MATERIALS } from '../data/materials'
 import { SKILLS } from '../data/skills'
 import type { DropEntry, MonsterDef } from '../core/types'
-import { BD, CARD, headerBox, identityBox, skillsBox, lootBox, lootRowH, LOOT_COLS, maxSkillRows, truncate } from './bestiary-layout'
+import { BD, CARD, headerBox, identityBox, skillsBox, loreBox, lootBox, lootRowH, LOOT_COLS, maxSkillRows, truncate } from './bestiary-layout'
+import { charsPerLine, wrapText } from './text-metrics'
 
 // FICHE MONSTRE — LE RENDU, PARTAGÉ PAR TOUS LES ÉCRANS QUI DÉCRIVENT UN MONSTRE.
 //
@@ -163,6 +164,22 @@ export function renderMonsterCard(scene: Phaser.Scene, m: MonsterDef, opts: Mons
       gridCard(scene, skl.x, y + BD.skillRowH / 2, skl.w, BD.skillRowH - 4, `skill-${sk.id}`, undefined,
         sk.name, 0xffffff, truncate(sk.description, BD.descMax), '#b0bec5')
     })
+  }
+
+  // ── BANDE DE PRÉSENTATION : qui est ce monstre ──
+  // Le texte existait pour les 86 monstres (MonsterDef.lore) mais n'était affiché nulle part. Il est
+  // replié à la main plutôt que via wordWrap de Phaser : c'est la même découpe que celle dont le test
+  // vérifie qu'elle tient en 3 lignes, donc ce qui est vérifié est exactement ce qui est dessiné.
+  const lore = loreBox()
+  if (seen) {
+    const lignes = wrapText(m.lore, charsPerLine(lore.w, BD.loreFont), BD.loreLines)
+    scene.add.text(lore.x, lore.y, lignes.join('\n'), {
+      fontSize: `${BD.loreFont}px`, color: '#d7e7ef', fontStyle: 'italic', lineSpacing: 3,
+    }).setOrigin(0, 0)
+  } else {
+    scene.add.text(lore.x, lore.y, 'Monstre inconnu — approche-le pour en apprendre plus.', {
+      fontSize: `${BD.loreFont}px`, color: '#607d8b', fontStyle: 'italic',
+    }).setOrigin(0, 0)
   }
 
   // ── BANDE DU BAS : BUTIN sur toute la largeur ──

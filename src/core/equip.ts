@@ -1,5 +1,6 @@
 import type { ClassId, WeaponType } from './types'
 import { ITEMS } from '../data/items'
+import { minLevelOf } from './item-level'
 
 // Familles d'armes autorisées par classe. Une classe ne peut équiper que les armes de sa spécialité :
 // les épéistes (sabreur/chevalier) les lames, les archers (archer/chasseur) les arcs, les mages
@@ -75,4 +76,38 @@ export function weaponTextureKeys(classId: ClassId, weaponItemId?: string | null
 // (sabreur/chevalier). Les arcs et bâtons restent visibles en permanence.
 export function isBigWeapon(classId: ClassId, type: WeaponType | null): boolean {
   return type === 'sword' && (classId === 'swordsman' || classId === 'chevalier')
+}
+
+// ─── NIVEAU MINIMUM D'ÉQUIPEMENT ──────────────────────────────────────────────────────────────
+//
+// Demande du user : « rajoute un niveau min par objet ». Chaque objet porte un `minLevel` (données dans
+// data/items.ts) et ne peut être ÉQUIPÉ qu'à partir de ce niveau.
+//
+// ⚠️ ON N'EMPÊCHE PAS L'ACHAT NI LE BUTIN, seulement le port. Acheter ou looter en avance pour plus tard
+// est un plaisir de RPG ; le bloquer transformerait une boutique en mur. Le niveau requis est en revanche
+// ÉCRIT sur la fiche de boutique et d'inventaire, pour qu'on ne dépense jamais son or à l'aveugle.
+
+/**
+ * Niveau requis pour porter cet objet — DÉDUIT DE SES PERFORMANCES (core/item-level.ts).
+ * 1 si l'objet est inconnu : une vieille sauvegarde référençant un objet retiré ne doit pas se bloquer.
+ */
+export const itemMinLevel = (itemId: string): number => {
+  const item = ITEMS[itemId]
+  return item ? minLevelOf(item) : 1
+}
+
+/** Le joueur est-il assez haut niveau pour porter cet objet ? */
+export const meetsLevel = (playerLevel: number, itemId: string): boolean =>
+  playerLevel >= itemMinLevel(itemId)
+
+/**
+ * Raison unique de blocage à l'équipement, ou null si l'objet est portable.
+ * Regroupe les DEUX règles (classe et niveau) : un seul appel, donc impossible d'en oublier une —
+ * c'est exactement ce qui serait arrivé en ajoutant le niveau comme vérification séparée à côté.
+ */
+export function equipBlockReason(classId: ClassId, playerLevel: number, itemId: string): string | null {
+  const classe = equipRestrictionMessage(classId, itemId)
+  if (classe) return classe
+  if (!meetsLevel(playerLevel, itemId)) return `Niveau ${itemMinLevel(itemId)} requis.`
+  return null
 }
