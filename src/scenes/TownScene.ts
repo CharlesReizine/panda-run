@@ -14,6 +14,7 @@ import { MATERIALS } from '../data/materials'
 import { RECIPES } from '../data/recipes'
 import { audio } from '../audio/audio-engine'
 import { CX, CY, VIEW_H, VIEW_W } from '../core/viewport'
+import { spreadLabels } from './label-spread'
 
 const TOWN_SPEED = 170
 const INTERACT_RADIUS = 70
@@ -78,6 +79,11 @@ interface TownSpot {
   label: string
   doorX: number
   doorY: number
+  // Position du PNJ VISIBLE, qui n'est pas la porte : il est décalé vers le centre de la place pour
+  // ne pas chevaucher la façade. Le joueur va naturellement vers le bonhomme — l'interaction doit
+  // donc déclencher là AUSSI, sinon « il faut aller devant la maison et c'est pas évident ».
+  npcX: number
+  npcY: number
 }
 
 interface TownBuilding {
@@ -191,6 +197,12 @@ export class TownScene extends Phaser.Scene {
   private joystick!: TopDownJoystick
   private nearSpot: SpotKind | null = null
   private interactBtn?: Phaser.GameObjects.Text
+  // bulle « 💬 » flottant au-dessus de l'interlocuteur à portée : dit OÙ parler, pas seulement qu'on
+  // peut parler (le bouton en bas de l'écran ne désignait personne)
+  private talkHint?: Phaser.GameObjects.Text
+  // Sortie automatique : armée seulement quand le joueur s'est éloigné des bords, sinon on
+  // ressortirait instantanément puisque le point d'apparition est lui-même près d'un bord.
+  private exitArmed = false
   private panel?: Phaser.GameObjects.Container
   private feedback?: Phaser.GameObjects.Text
   private questMarker?: Phaser.GameObjects.Text // « ❗ »/« ❓ » flottant au-dessus du garde (rafraîchi)
@@ -267,11 +279,11 @@ export class TownScene extends Phaser.Scene {
     this.drawGround(cfg)
     this.drawThemeDecor(theme, cfg)
 
-    // zones d'interaction dérivées de la disposition de CE thème (portes de boutiques + garde)
-    this.spots = [
-      ...cfg.buildings.map((b) => ({ id: b.id as SpotKind, label: b.name, doorX: b.x, doorY: b.y + b.h / 2 + 10 })),
-      { id: 'quete', label: QUEST_CHAIN[0]!.npcName, doorX: cfg.questDoor.x, doorY: cfg.questDoor.y },
-    ]
+    // zones d'interaction : remplies dans la boucle des bâtiments ci-dessous, pour enregistrer la
+    // position RÉELLE de chaque PNJ en même temps que celle de sa porte
+    this.spots = []
+    // étiquettes de nom, réparties à la fin pour qu'aucune ne chevauche une voisine
+    const nameLabels: Phaser.GameObjects.Text[] = []
 
     const wallsGroup = this.physics.add.staticGroup()
     for (const b of cfg.buildings) {
@@ -291,21 +303,34 @@ export class TownScene extends Phaser.Scene {
       const maxH = 210
       if (dispH > maxH) { const s = maxH / dispH; dispW *= s; dispH *= s }
       img.setDisplaySize(dispW, dispH)
-      this.add.text(b.x, bottom - dispH - 4, b.name, {
+      nameLabels.push(this.add.text(b.x, bottom - dispH - 4, b.name, {
         fontSize: '14px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 3,
-      }).setOrigin(0.5, 1)
+      }).setOrigin(0.5, 1))
       // boutiquier PNJ décoratif, AGRANDI et DÉCALÉ vers le CENTRE de la place pour ne plus se
       // superposer à la façade (retour user). Aucune collision, rendu par-dessus.
       const toCx = cfg.worldW / 2 - b.x, toCy = cfg.worldH / 2 - bottom
       const cd = Math.hypot(toCx, toCy) || 1, off = 112
-      this.placeNpc(SHOP_NPC[b.id], b.x + (toCx / cd) * off, bottom + 20 + (toCy / cd) * off, 132)
+      const npcX = b.x + (toCx / cd) * off
+      const npcY = bottom + 20 + (toCy / cd) * off
+      this.placeNpc(SHOP_NPC[b.id], npcX, npcY, 132)
+      this.spots.push({ id: b.id as SpotKind, label: b.name, doorX: b.x, doorY: b.y + b.h / 2 + 10, npcX, npcY })
     }
 
     // PNJ de quête : le garde (panda à la lance), planté devant sa zone. Décor uniquement.
     this.placeNpc('npc-garde', cfg.questDoor.x, cfg.questDoor.y + 66, 156)
-    this.add.text(cfg.questDoor.x, cfg.questDoor.y - 58, QUEST_CHAIN[0]!.npcName, {
+    this.spots.push({
+      id: 'quete', label: QUEST_CHAIN[0]!.npcName,
+      doorX: cfg.questDoor.x, doorY: cfg.questDoor.y,
+      npcX: cfg.questDoor.x, npcY: cfg.questDoor.y + 66,
+    })
+    nameLabels.push(this.add.text(cfg.questDoor.x, cfg.questDoor.y - 58, QUEST_CHAIN[0]!.npcName, {
       fontSize: '14px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 3,
-    }).setOrigin(0.5)
+    }).setOrigin(0.5, 1))
+
+    // ANTI-CHEVAUCHEMENT des noms : c'est une contrainte de RENDU (police, longueur du nom, échelle),
+    // elle ne peut pas être réglée en décalant des coordonnées dans les données de thème.
+    const dys = spreadLabels(nameLabels.map((t) => ({ x: t.x, y: t.y, w: t.width, h: t.height })))
+    nameLabels.forEach((t, i) => { t.y += dys[i]! })
 
     // marqueur de quête flottant au-dessus du garde : « ❗ » si la quête courante de la chaîne est à
     // PRENDRE, « ❓ » si sa récompense est PRÊTE à réclamer. Rien tant qu'elle est en cours ou que
@@ -500,6 +525,19 @@ export class TownScene extends Phaser.Scene {
     else if (c.down) vy = TOWN_SPEED
     if (vx !== 0 && vy !== 0) { vx *= Math.SQRT1_2; vy *= Math.SQRT1_2 }
     this.player.setVelocity(vx, vy)
+
+    // SORTIE AUTOMATIQUE : atteindre un bord de la place ramène à la carte du monde, sans viser le
+    // bouton « Sortie ». Le garde-fou `exitArmed` est indispensable : le point d'apparition est
+    // lui-même près d'un bord, donc sans lui on ressortirait dans la frame qui suit l'arrivée.
+    const { worldW: ww, worldH: wh } = this.cfg
+    const EDGE = 24
+    if (this.player.x > 90 && this.player.x < ww - 90 && this.player.y > 90 && this.player.y < wh - 90) {
+      this.exitArmed = true
+    } else if (this.exitArmed
+      && (this.player.x <= EDGE || this.player.x >= ww - EDGE || this.player.y <= EDGE || this.player.y >= wh - EDGE)) {
+      this.scene.start('WorldMap')
+      return
+    }
     const cls = p.classId
     if (vx !== 0 || vy !== 0) this.player.play(`panda-${cls}-run`, true)
     else this.player.play(`panda-${cls}-idle`, true)
@@ -507,15 +545,26 @@ export class TownScene extends Phaser.Scene {
     let closest: SpotKind | null = null
     let closestDist = INTERACT_RADIUS
     for (const s of this.spots) {
-      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, s.doorX, s.doorY)
+      // porte OU bonhomme : on retient le plus proche des deux. Aller vers le PNJ visible est le
+      // réflexe naturel du joueur ; n'accepter que la porte rendait l'interaction « pas évidente ».
+      const d = Math.min(
+        Phaser.Math.Distance.Between(this.player.x, this.player.y, s.doorX, s.doorY),
+        Phaser.Math.Distance.Between(this.player.x, this.player.y, s.npcX, s.npcY),
+      )
       if (d <= closestDist) { closest = s.id; closestDist = d }
     }
     if (closest !== this.nearSpot) {
       this.nearSpot = closest
       this.interactBtn?.destroy()
       this.interactBtn = undefined
+      this.talkHint?.destroy()
+      this.talkHint = undefined
       if (closest) {
         const spot = this.spots.find((s) => s.id === closest)!
+        // la bulle est posée dans le MONDE (pas en scrollFactor 0) : elle désigne l'interlocuteur
+        this.talkHint = this.add.text(spot.npcX, spot.npcY - 150, '💬', { fontSize: '30px' })
+          .setOrigin(0.5).setDepth(34)
+        this.tweens.add({ targets: this.talkHint, y: spot.npcY - 162, yoyo: true, repeat: -1, duration: 620, ease: 'Sine.inOut' })
         this.interactBtn = this.add.text(480, 500, `Parler — ${spot.label}`, {
           fontSize: '18px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 16, y: 8 },
         }).setOrigin(0.5).setScrollFactor(0).setDepth(30).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openSpot(closest!))
