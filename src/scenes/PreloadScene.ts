@@ -2489,6 +2489,35 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0x8d6e63).fillEllipse(17, 6, 30, 10)
     g.fillStyle(0xffd54f).fillRect(0, 15, 34, 3).fillRect(15, 4, 4, 22)
     g.fillStyle(0xfff176).fillCircle(17, 16, 3); g.generateTexture('prop-coffre', 34, 30); g.clear()
+    // ── COFFRE DE FER : acier sombre, cerclages bleu-acier rivetés, gemme bleue sur la serrure ──
+    // Les trois coffres doivent se reconnaître AU PREMIER COUP D'ŒIL et de loin : on change donc la
+    // matière ET la silhouette (celui-ci est plus trapu, cerclé), pas seulement la teinte. Un simple
+    // changement de couleur se perd sur un fond de terrain coloré.
+    g.fillStyle(0x37474f).fillRoundedRect(0, 6, 34, 22, 3)
+    g.fillStyle(0x546e7a).fillRect(2, 8, 30, 18)
+    g.fillStyle(0x37474f).fillEllipse(17, 6, 34, 14)
+    g.fillStyle(0x607d8b).fillEllipse(17, 6, 30, 10)
+    g.fillStyle(0x90a4ae).fillRect(0, 14, 34, 4).fillRect(14, 3, 6, 24) // cerclages larges
+    for (const rx of [3, 10, 24, 31]) g.fillStyle(0xcfd8dc).fillCircle(rx, 16, 1.6) // rivets
+    g.fillStyle(0x263238).fillCircle(17, 16, 4)
+    g.fillStyle(0x40c4ff).fillCircle(17, 16, 2.6)
+    g.fillStyle(0xb3e5fc).fillCircle(16, 15, 1.1)
+    g.generateTexture('prop-coffre-fer', 34, 30); g.clear()
+    // ── COFFRE D'OR : plus GRAND, or massif, filigrane et gemme violette ──
+    g.fillStyle(0x8d6e00).fillRoundedRect(0, 8, 38, 24, 4)
+    g.fillStyle(0xffb300).fillRect(2, 10, 34, 20)
+    g.fillStyle(0x8d6e00).fillEllipse(19, 8, 38, 16)
+    g.fillStyle(0xffca28).fillEllipse(19, 8, 34, 12)
+    g.fillStyle(0xfff59d).fillEllipse(19, 6, 24, 6) // reflet sur le couvercle bombé
+    g.fillStyle(0xffe082).fillRect(0, 17, 38, 3).fillRect(16, 4, 6, 27)
+    // filigrane : petites volutes de part et d'autre de la serrure
+    g.lineStyle(1.4, 0xfff8e1, 0.9)
+    g.beginPath(); g.arc(9, 21, 5, -0.6, 1.9); g.strokePath()
+    g.beginPath(); g.arc(29, 21, 5, 1.2, 3.7); g.strokePath()
+    g.fillStyle(0x4a148c).fillCircle(19, 20, 5)
+    g.fillStyle(0xba68c8).fillCircle(19, 20, 3.4)
+    g.fillStyle(0xf3e5f5).fillCircle(18, 19, 1.4)
+    g.generateTexture('prop-coffre-or', 38, 34); g.clear()
     // coffre ouvert (couvercle relevé + lueur dorée)
     g.fillStyle(0x4e342e).fillRoundedRect(0, 12, 34, 18, 3)
     g.fillStyle(0x6d4c41).fillRect(2, 14, 30, 14)

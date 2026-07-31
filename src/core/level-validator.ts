@@ -10,6 +10,7 @@
 
 import { groundRowFor, canReach, maxJumpGapPx, MAX_LADDER_TILES, TILE, type Plat } from './platforming'
 import type { LevelDef } from '../data/levels'
+import { estCoffre } from '../data/props'
 
 const ROW_TOL = 1 // tolérance verticale (en tuiles) pour « le dessus est à la rangée y »
 
@@ -597,7 +598,7 @@ export function longEmptyFlats(level: LevelDef, maxRun = 16): EmptyFlatProblem[]
   const hasRock = (x: number) => (level.rockBands ?? []).some((r) => x >= r.x && x < r.x + r.w)
   const hasSign = (x: number) => (level.signs ?? []).some((s) => x >= s.x - 1 && x <= s.x + 1)
   // seuls les COFFRES meublent (l'herbe/le champignon décoratifs, eux, ne comptent pas)
-  const hasChest = (x: number) => (level.props ?? []).some((p) => p.kind === 'coffre' && x >= p.x - 1 && x <= p.x + 1)
+  const hasChest = (x: number) => (level.props ?? []).some((p) => estCoffre(p.kind) && x >= p.x - 1 && x <= p.x + 1)
   const hasSpawn = (x: number) => level.spawns.some((s) => x >= s.x - 1 && x <= s.x + 1)
   // une plateforme/un pont AU-DESSUS de la surface marchable de la colonne (relief en surplomb)
   const overhead = (x: number, row: number) => surfaces.some((p) => x >= p.x && x < p.x + p.w && p.y < row)

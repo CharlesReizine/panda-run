@@ -7,7 +7,7 @@ import { Projectile } from '../entities/Projectile'
 import { Prop } from '../entities/Prop'
 import { FlameWall } from '../entities/FlameWall'
 import { MONSTERS } from '../data/monsters'
-import { PROPS } from '../data/props'
+import { PROPS, estCoffre } from '../data/props'
 import { MATERIALS } from '../data/materials'
 import { ITEMS, rarityColor } from '../data/items'
 import { physicalDamage, inMeleeReach } from '../core/combat'
@@ -501,11 +501,44 @@ export class LevelScene extends Phaser.Scene {
       const yTile = propDef.y ?? this.groundRow - 1
       const prop = new Prop(this, propDef.x * TILE + TILE / 2, yTile * TILE + TILE / 2, PROPS[propDef.kind]!)
       this.props.add(prop)
-      // les coffres attirent l'œil : petit rebond + éclat régulier
-      if (propDef.kind === 'coffre') {
-        this.tweens.add({ targets: prop, y: prop.y - 5, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
-        const glint = this.add.text(prop.x, prop.y - 22, '✦', { fontSize: '16px', color: '#fff59d' }).setOrigin(0.5)
-        this.tweens.add({ targets: glint, alpha: 0.2, scale: 1.4, duration: 600, yoyo: true, repeat: -1 })
+      // ── LUEUR PAR PALIER DE COFFRE ────────────────────────────────────────────────────────────
+      // « Plus c'est rare, plus ça a un glow stylé. » Le palier vient de la DONNÉE (PropDef.tier), pas
+      // d'un test sur l'identifiant : c'est la même source qui décide du butin et de la texture, donc un
+      // coffre ne peut pas être doré à l'écran et lâcher du butin de coffre en bois.
+      const tier = PROPS[propDef.kind]?.tier
+      if (tier) {
+        const style = {
+          bois: { flot: 5, halo: 0, teinte: 0xfff59d, etincelles: 1, taille: 16 },
+          fer: { flot: 6, halo: 26, teinte: 0x40c4ff, etincelles: 2, taille: 17 },
+          or: { flot: 8, halo: 40, teinte: 0xffd54f, etincelles: 4, taille: 20 },
+        }[tier]
+        this.tweens.add({ targets: prop, y: prop.y - style.flot, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+        // halo pulsant SOUS le coffre (depth négatif) : il agrandit la silhouette sans la masquer
+        if (style.halo) {
+          const halo = this.add.image(prop.x, prop.y, 'ring').setTint(style.teinte)
+            .setBlendMode(Phaser.BlendModes.ADD).setDepth(-4).setAlpha(0.5)
+            .setDisplaySize(style.halo * 2, style.halo * 2)
+          this.tweens.add({ targets: halo, alpha: 0.15, scale: { from: halo.scale, to: halo.scale * 1.35 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+        }
+        // étincelles : elles tournent AUTOUR du coffre pour les paliers rares — c'est le mouvement, plus
+        // que la couleur, qui fait remarquer un objet dans un décor déjà chargé
+        for (let k = 0; k < style.etincelles; k++) {
+          const a0 = (k / style.etincelles) * Math.PI * 2
+          const rayon = tier === 'bois' ? 0 : 20
+          const et = this.add.text(prop.x, prop.y - 22, '✦', { fontSize: `${style.taille}px`, color: `#${style.teinte.toString(16).padStart(6, '0')}` }).setOrigin(0.5)
+          if (rayon === 0) {
+            this.tweens.add({ targets: et, alpha: 0.2, scale: 1.4, duration: 600, yoyo: true, repeat: -1 })
+          } else {
+            this.tweens.addCounter({
+              from: 0, to: Math.PI * 2, duration: tier === 'or' ? 2600 : 3400, repeat: -1,
+              onUpdate: (tw) => {
+                const a = a0 + (tw.getValue() ?? 0)
+                et.setPosition(prop.x + Math.cos(a) * rayon, prop.y - 6 + Math.sin(a) * rayon * 0.5)
+                et.setAlpha(0.35 + 0.5 * (0.5 + 0.5 * Math.sin(a * 2)))
+              },
+            })
+          }
+        }
       }
     }
 
@@ -3939,9 +3972,13 @@ export class LevelScene extends Phaser.Scene {
   onEnemyLoot(e: Enemy) { this.spawnDrops(e.x, e.y, e.monster.drops) }
 
   onPropBroken(prop: Prop) {
-    if (prop.def.id === 'coffre') {
+    // ⚠️ estCoffre ET PAS id === 'coffre' : sinon les coffres de fer et d'or, ajoutés depuis, se
+    // casseraient comme une touffe d'herbe — sans ouverture, sans onde, sans mise en scène du butin.
+    if (estCoffre(prop.def.id)) {
       const open = this.add.image(prop.x, prop.y, 'chest-open').setDepth(4)
-      this.aoeRing(prop.x, prop.y, 40, 0xffd54f)
+      // l'onde d'ouverture prend la couleur du palier : on voit à l'éclat ce qu'on vient d'ouvrir
+      const teinteOuverture = { bois: 0xffd54f, fer: 0x40c4ff, or: 0xffe082 }[prop.def.tier ?? 'bois']
+      this.aoeRing(prop.x, prop.y, prop.def.tier === 'or' ? 64 : prop.def.tier === 'fer' ? 52 : 40, teinteOuverture)
       this.tweens.add({ targets: open, y: open.y - 8, scale: 1.15, duration: 160, yoyo: true, onComplete: () => open.destroy() })
       // très rarement, le coffre recèle un trésor épique/légendaire (révélation brillante réutilisée)
       const rareItem = rollChestRareItem()

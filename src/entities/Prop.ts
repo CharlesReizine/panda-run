@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import type { PropDef } from '../data/props'
+import { estCoffre } from '../data/props'
 
 export class Prop extends Phaser.Physics.Arcade.Sprite {
   def: PropDef
@@ -19,7 +20,8 @@ export class Prop extends Phaser.Physics.Arcade.Sprite {
     if (!this.active) return
     this.hp -= amount
     const dying = this.hp <= 0
-    if (this.def.id === 'coffre') {
+    // même remarque qu'ailleurs : le palier, pas l'identifiant (cf. data/props.ts estCoffre)
+    if (estCoffre(this.def.id)) {
       // le coffre s'ouvre visuellement (teinte or + léger grossissement) au lieu du flash blanc générique
       this.setTint(0xffd54f)
       this.setScale(this.scaleX + (dying ? 0.2 : 0.05))
@@ -29,7 +31,7 @@ export class Prop extends Phaser.Physics.Arcade.Sprite {
     }
     if (dying) {
       this.scene.events.emit('prop-broken', this)
-      this.scene.time.delayedCall(this.def.id === 'coffre' ? 120 : 0, () => this.destroy())
+      this.scene.time.delayedCall(estCoffre(this.def.id) ? 120 : 0, () => this.destroy())
     }
   }
 }

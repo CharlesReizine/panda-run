@@ -4,7 +4,7 @@ import { statsForLevel } from '../core/mob-stats'
 
 const goldSmall = { kind: 'gold', chance: 1, min: 2, max: 6 } as const
 const goldMid = { kind: 'gold', chance: 1, min: 5, max: 12 } as const
-const potion = { kind: 'potion', chance: 0.25, min: 1, max: 1 } as const
+const potion = { kind: 'potion', chance: 0.0357, min: 1, max: 1 } as const
 
 // Drop de MATIÈRE de craft : toujours 1 exemplaire, seule la chance varie — d'où ce raccourci, qui rend
 // les tables lisibles là où chaque mob porte 2-3 matières.
@@ -62,7 +62,7 @@ const list: MonsterDef[] = [
   M({ id: 'zombie', name: 'Zombie', lore: 'Cadavre ambulant et hagard, il avance en titubant, mû par une faim qui ne meurt jamais.', color: 0x6b8e63, xp: 900, level: 19, role: 'costaud', speed: 22, behavior: 'contact', drops: [goldMid, potion] }),
   M({
     id: 'mini-baphomet', name: 'Mini Baphomet', lore: 'Diablotin cornu au sourire mauvais, minuscule mais déjà rongé par la malice infernale.', color: 0x6a1b4d, xp: 1500, level: 19, role: 'rapide', speed: 80, behavior: 'charge',
-    drops: [{ kind: 'gold', chance: 1, min: 20, max: 40 }, { kind: 'potion', chance: 0.4, min: 1, max: 1 }, mat('gemme-brute', 0.15)],
+    drops: [{ kind: 'gold', chance: 1, min: 20, max: 40 }, { kind: 'potion', chance: 0.0571, min: 1, max: 1 }, mat('gemme-brute', 0.15)],
   }),
   M({ id: 'serpent-des-sables', name: 'Serpent des sables', lore: 'Reptile fauve qui ondule sous les dunes, invisible jusqu\'à ce qu\'il jaillisse du sable pour fondre d\'une ruée sur sa proie.', color: 0xd2a679, xp: 700, level: 15, role: 'rapide', speed: 120, behavior: 'charge', drops: [goldMid, potion, mat('cuir-souple', 0.3), mat('dard-de-scorpion', 0.2)] }),
   M({ id: 'elementaire-de-sable', name: 'Élémentaire de sable', lore: 'Colosse de grains agglomérés animé par les vents brûlants : lent et massif, il encaisse les coups en s\'effritant à peine avant de se recomposer.', color: 0xc2a15a, xp: 1100, level: 19, role: 'tank', speed: 30, behavior: 'contact', drops: [goldMid, potion, mat('pierre-brute', 0.35), matx('minerai-fer', 0.3, 2)] }),
@@ -77,7 +77,7 @@ const list: MonsterDef[] = [
     id: 'poring-dore', name: 'Poring doré', lore: 'Slime légendaire tout d\'or vêtu : rare, insaisissable et convoité de tous les aventuriers.', color: 0xffd700, hp: 220, atk: 32, def: 14, xp: 2200, level: 12, speed: 30, behavior: 'contact', mvp: true,
     drops: [
       { kind: 'gold', chance: 1, min: 40, max: 80 },
-      { kind: 'potion', chance: 0.5, min: 1, max: 1 },
+      { kind: 'potion', chance: 0.0714, min: 1, max: 1 },
       // Le slime PORTE-BONHEUR est la meilleure source de trèfle du jeu : c'est ce qui donne un but au
       // farm de l'élite, et ce qui rend le talisman légendaire atteignable sans être offert.
       mat('trefle-chance', 0.25),
@@ -91,7 +91,7 @@ const list: MonsterDef[] = [
       // BUTIN SIGNATURE LÉGENDAIRE : seul accès en jeu à cet objet (hors forge) — 1,5 %
       { kind: 'item', itemId: 'corne-kaho', chance: 0.015, min: 1, max: 1 },
       { kind: 'gold', chance: 1, min: 70, max: 130 },
-      { kind: 'potion', chance: 0.5, min: 1, max: 1 },
+      { kind: 'potion', chance: 0.0714, min: 1, max: 1 },
       { kind: 'item', itemId: 'epee-fer-forgee', chance: 0.15, min: 1, max: 1 },
       { kind: 'item', itemId: 'casque-croc', chance: 0.1, min: 1, max: 1 },
       { kind: 'item', itemId: 'lame-scorpion', chance: 0.02, min: 1, max: 1 },
@@ -101,7 +101,7 @@ const list: MonsterDef[] = [
     id: 'roi-crabe', name: 'Roi Crabe', lore: 'Colosse de carapace au blindage insolent, il avance de côté, pinces claquantes et fier de l\'être.', color: 0xe64a19, hp: 640, atk: 115, def: 48, xp: 4400, level: 39, speed: 35, behavior: 'contact', mvp: true,
     drops: [
       { kind: 'gold', chance: 1, min: 80, max: 140 },
-      { kind: 'potion', chance: 0.5, min: 1, max: 1 },
+      { kind: 'potion', chance: 0.0714, min: 1, max: 1 },
       { kind: 'item', itemId: 'amulette-gemme', chance: 0.1, min: 1, max: 1 },
       { kind: 'item', itemId: 'armure-carapace', chance: 0.02, min: 1, max: 1 },
     ],
@@ -110,7 +110,7 @@ const list: MonsterDef[] = [
     id: 'spectre-ancien', name: 'Spectre ancien', lore: 'Revenant millénaire drapé de brume, son regard vide glace le sang de qui ose l\'approcher.', color: 0xb39ddb, hp: 920, atk: 195, def: 36, xp: 6800, level: 30, speed: 45, behavior: 'projectile', mvp: true,
     drops: [
       { kind: 'gold', chance: 1, min: 120, max: 200 },
-      { kind: 'potion', chance: 0.5, min: 1, max: 1 },
+      { kind: 'potion', chance: 0.0714, min: 1, max: 1 },
       { kind: 'item', itemId: 'griffe-royale', chance: 0.12, min: 1, max: 1 },
       { kind: 'item', itemId: 'amulette-pharaon', chance: 0.1, min: 1, max: 1 },
       { kind: 'item', itemId: 'talisman-trefle', chance: 0.02, min: 1, max: 1 },
@@ -122,7 +122,7 @@ const list: MonsterDef[] = [
       // BUTIN SIGNATURE LÉGENDAIRE : seul accès en jeu à cet objet (hors forge) — 1,5 %
       { kind: 'item', itemId: 'lame-solaire', chance: 0.015, min: 1, max: 1 },
       { kind: 'gold', chance: 1, min: 180, max: 300 },
-      { kind: 'potion', chance: 0.6, min: 1, max: 1 },
+      { kind: 'potion', chance: 0.0857, min: 1, max: 1 },
       { kind: 'item', itemId: 'baton-lumineux', chance: 0.1, min: 1, max: 1 },
       { kind: 'item', itemId: 'couronne-royale', chance: 0.1, min: 1, max: 1 },
       { kind: 'item', itemId: 'lame-scorpion', chance: 0.02, min: 1, max: 1 },

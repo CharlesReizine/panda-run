@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { LEVELS } from '../../src/data/levels'
 import { MONSTERS } from '../../src/data/monsters'
-import { PROPS } from '../../src/data/props'
+import { PROPS, estCoffre } from '../../src/data/props'
 import { WORLD_NODES, WORLD_EDGES, START_NODE, isNodeUnlocked, neighborsOf } from '../../src/data/worldmap'
 import { maxJumpTiles, MIN_LADDER_TILES, groundRowFor } from '../../src/core/platforming'
 import {
@@ -53,8 +53,8 @@ describe('niveaux et carte', () => {
       // plongée. Il échappe au quota générique (2-4 props sol + 1-3 coffres) et a son propre test.
       if (l.id === 'epave-1') continue
       expect(l.props, l.id).toBeDefined()
-      const ground = l.props!.filter((p) => p.kind !== 'coffre')
-      const chests = l.props!.filter((p) => p.kind === 'coffre')
+      const ground = l.props!.filter((p) => !estCoffre(p.kind))
+      const chests = l.props!.filter((p) => estCoffre(p.kind))
       expect(ground.length, l.id).toBeGreaterThanOrEqual(2)
       expect(ground.length, l.id).toBeLessThanOrEqual(4)
       expect(chests.length, l.id).toBeGreaterThanOrEqual(1)
@@ -65,7 +65,7 @@ describe('niveaux et carte', () => {
 
   it('les coffres sont posés sur une plateforme existante (x dans [p.x, p.x+p.w), y = p.y - 1)', () => {
     for (const l of Object.values(LEVELS)) {
-      const chests = (l.props ?? []).filter((p) => p.kind === 'coffre')
+      const chests = (l.props ?? []).filter((p) => estCoffre(p.kind))
       for (const c of chests) {
         const onGround = c.y === undefined // posé au sol
         const onPlatform = l.platforms.some((p) => c.x >= p.x && c.x < p.x + p.w && c.y === p.y - 1)
@@ -139,8 +139,8 @@ describe('niveau Épave (sous-marin)', () => {
   })
 
   it('BEAUCOUP de coffres (récompenses de plongée), tous atteignables, aucun prop de sol', () => {
-    const chests = (epave.props ?? []).filter((p) => p.kind === 'coffre')
-    const ground = (epave.props ?? []).filter((p) => p.kind !== 'coffre')
+    const chests = (epave.props ?? []).filter((p) => estCoffre(p.kind))
+    const ground = (epave.props ?? []).filter((p) => !estCoffre(p.kind))
     expect(chests.length, 'beaucoup de coffres attendus').toBeGreaterThanOrEqual(6)
     expect(ground.length, 'aucune végétation de sol dans l’épave').toBe(0)
     expect(unreachablePlatforms(epave), 'débris injoignables').toEqual([])

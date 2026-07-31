@@ -652,4 +652,50 @@ function injectPinnedSpawns(levels: LevelDef[]): void {
 injectPinnedSpawns(list)
 ensureRosterCoverage(list)
 
+// ── PALIERS DE COFFRE : ATTRIBUÉS APRÈS COUP, PAS ÉCRITS DANS CHAQUE TERRAIN ────────────────────────
+//
+// Demande du user : trois coffres de raretés différentes, et « ça drop des trucs rares » pour les rares.
+// Les 58 terrains posent leurs coffres à 21 endroits différents dans le code (modules de terrain compris) :
+// aller y écrire un palier à la main serait 21 occasions de se tromper, et le prochain terrain ajouté
+// repartirait en coffre de bois sans que personne ne le remarque. On DÉRIVE donc le palier du terrain.
+//
+// ⚠️ DÉTERMINISTE, SANS Math.random. Deux joueurs doivent voir le même coffre au même endroit, et les
+// tests doivent pouvoir vérifier la répartition. La clé de répartition est l'identifiant du terrain et
+// l'index du coffre — pas un tirage.
+//
+// Répartition voulue : le bois reste la norme en début de jeu, le fer devient courant à partir du désert,
+// et l'or reste un ÉVÉNEMENT — au maximum un par terrain, et seulement dans la seconde moitié du jeu.
+const niveauMobMax = (l: LevelDef): number => {
+  let max = 0
+  for (const s of l.spawns) { const m = MONSTERS[s.monsterId]; if (m && m.level > max) max = m.level }
+  const b = l.boss ? MONSTERS[l.boss] : undefined
+  if (b && b.level > max) max = b.level
+  return max
+}
+
+/** Somme des codes de caractères : suffit à répartir sans corréler avec l'ordre alphabétique. */
+const empreinte = (s: string): number => {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 100000
+  return h
+}
+
+function attribuerPaliersDeCoffre(l: LevelDef): void {
+  const coffres = (l.props ?? []).filter((p) => p.kind === 'coffre')
+  if (!coffres.length) return
+  const nv = niveauMobMax(l)
+  const h = empreinte(l.id)
+  let orPose = false
+  coffres.forEach((c, i) => {
+    const graine = (h + i * 7919) % 100
+    // OR : seconde moitié du jeu, un seul par terrain, et rare même là (≈12 % des coffres éligibles)
+    if (!orPose && nv >= 30 && graine < 12) { c.kind = 'coffre-or'; orPose = true; return }
+    // FER : apparaît dès le désert, devient la norme ensuite
+    const seuilFer = nv < 12 ? 18 : nv < 30 ? 55 : 80
+    if (graine < seuilFer) c.kind = 'coffre-fer'
+  })
+}
+
+for (const l of list) attribuerPaliersDeCoffre(l)
+
 export const LEVELS: Record<string, LevelDef> = Object.fromEntries(list.map((l) => [l.id, l]))
