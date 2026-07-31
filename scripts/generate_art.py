@@ -308,21 +308,39 @@ def a_deja_de_l_alpha(im) -> bool:
     return sum(1 for c in coins if c[3] < 32) >= 3
 
 
-def finaliser(im):
-    """Recadre sur le contenu, centre dans un carré avec une petite marge, sort du 128×128 RGBA."""
+# TAUX DE REMPLISSAGE CIBLE PAR EMPLACEMENT — mesuré sur les 62 illustrations existantes (part de la
+# largeur du cadre occupée par l'objet, médiane) :
+#     armes 79 %   ·   chapeaux 63 %   ·   accessoires 64 %   ·   armures 56 %
+#
+# ⚠️ CE N'EST PAS DE L'ESTHÉTIQUE, ÇA CHANGE LA TAILLE À L'ÉCRAN. Player.refreshHat met le chapeau à
+# l'échelle 38 / max(largeur, hauteur) DU CADRE — pas de l'objet. Deux illustrations de même cadre mais de
+# remplissage différent donnent donc deux chapeaux de tailles différentes sur la tête du panda. Une
+# première version recadrait au plus près (≈89 % de remplissage) : les nouveaux chapeaux auraient été
+# ~45 % plus gros que les six existants, sur la même tête.
+REMPLISSAGE_CIBLE = {"weapon": 0.79, "hat": 0.63, "accessory": 0.64, "armor": 0.56}
+
+
+def finaliser(im, slot: str = "weapon"):
+    """Recadre sur le contenu puis reconstitue le CADRAGE des illustrations existantes.
+
+    L'objet est recadré au plus près, puis replacé au centre d'un cadre carré dimensionné pour que son
+    remplissage colle à la médiane mesurée sur le corpus (cf. REMPLISSAGE_CIBLE). Sortie 128×128 RGBA,
+    le format des illustrations déjà en place.
+    """
     from PIL import Image
 
     boite = im.split()[-1].getbbox()
     if boite:
         im = im.crop(boite)
-    cote = max(im.size)
-    marge = max(2, cote // 16)
-    fond = Image.new("RGBA", (cote + marge * 2, cote + marge * 2), (0, 0, 0, 0))
-    fond.paste(im, ((fond.width - im.width) // 2, (fond.height - im.height) // 2), im)
+    cible = REMPLISSAGE_CIBLE.get(slot, 0.75)
+    cote = max(2, int(round(max(im.size) / cible)))
+    cote = max(cote, im.width, im.height)  # jamais plus petit que l'objet : on ne rogne pas
+    fond = Image.new("RGBA", (cote, cote), (0, 0, 0, 0))
+    fond.paste(im, ((cote - im.width) // 2, (cote - im.height) // 2), im)
     return fond.resize((TAILLE_FINALE, TAILLE_FINALE), Image.LANCZOS)
 
 
-def detacher(png_bytes: bytes) -> "object":
+def detacher(png_bytes: bytes, slot: str = "weapon") -> "object":
     """Prépare l'image pour public/art : 128×128 RGBA, objet centré, fond transparent.
 
     ⚠️ ON NE DÉTOURE QUE SI C'EST NÉCESSAIRE. Quand le modèle a déjà rendu la transparence (Gemini), on
@@ -337,7 +355,7 @@ def detacher(png_bytes: bytes) -> "object":
 
     im = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
     if a_deja_de_l_alpha(im):
-        return finaliser(im)
+        return finaliser(im, slot)
 
     w, h = im.size
     px = im.load()
@@ -364,7 +382,7 @@ def detacher(png_bytes: bytes) -> "object":
                 vus[ny * w + nx] = 1
                 file.append((nx, ny))
 
-    return finaliser(im)
+    return finaliser(im, slot)
 
 
 def generer(creds, project, item) -> tuple:
@@ -485,7 +503,7 @@ def main():
         print(f"[{i}/{len(cibles)}] {it['id']} … ", end="", flush=True)
         try:
             brut, modele = generer(creds, project, it)
-            detacher(brut).save(cible)
+            detacher(brut, it["slot"]).save(cible)
             ok += 1
             modeles_utilises[modele] = modeles_utilises.get(modele, 0) + 1
             print(f"ok ({modele})")
