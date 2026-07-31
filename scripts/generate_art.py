@@ -69,67 +69,65 @@ MODELES = [
 ]
 REGION = "us-central1"
 
-TAILLE_FINALE = 128  # identique aux 48 illustrations déjà en place
+TAILLE_FINALE = 128  # taille des illustrations d'objets déjà en place (la note d'origine
+                     # demande 1024² au modèle ; c'est ici qu'on redescend à la taille d'affichage,
+                     # cf. scripts/art-caps.mjs — une texture coûte l×h×4 octets de VRAM)
 FOND = (255, 0, 255)  # magenta pur : absent de toute palette d'objet, donc détachable sans ambiguïté
 TOLERANCE = 60
 
-# ── STYLE : calé sur les 48 illustrations DÉJÀ EN PLACE, planche de contact à l'appui. Il doit coller,
-# sinon les nouveaux objets jureront dans la même grille d'inventaire.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+# STYLE — LA RÉFÉRENCE EST DANS LE DÉPÔT : public/art/A_GENERER.md
 #
-# Ce qu'on lit sur les illustrations existantes : look AUTOCOLLANT façon kawaii — contour brun foncé épais
-# et régulier, aplats vifs mais tirant vers le pastel, ombrage cel très simple, minuscules reflets
-# blancs, aucune ombre portée, objet centré et cadré serré, lisible à 40 px.
+# ⚠️ NE PAS RÉINVENTER CE STYLE. C'est la note de commande d'origine, écrite pour la campagne de
+# génération qui a produit les 281 illustrations actuelles (70 monstres, 49 pandas, 50 fonds, 48 objets…).
+# Elle donne la phrase à préfixer, mot pour mot, et le format de sortie. Une première version de ce
+# script décrivait le style « à l'œil » d'après une planche de contact : c'était une reconstitution
+# approximative d'une consigne qui existait déjà, à deux dossiers de là.
 #
-# ⚠️ « three-quarter view » a été RETIRÉ du style commun. Les objets existants ne sont pas tous de
-# trois-quarts : les armes sont VERTICALES pointe en haut, les armures vues de FACE posées à plat. Le
-# cadrage est donc décidé par emplacement (CADRAGE_SLOT) et pas imposé globalement.
+# Extrait de public/art/A_GENERER.md :
+#   « Style à préfixer : "Kawaii Ragnarok Online, chibi, gros contours nets, couleurs vives, ombrage
+#     anime doux." Monstres/pandas : 1024×1024, fond transparent PNG. »
+#
+# La consigne est EN FRANÇAIS et le reste ici en français : c'est elle qui a produit l'art existant, et
+# la traduire serait déjà la modifier.
 STYLE = (
-    "2D game item icon, flat vector illustration, cute kawaii sticker look, thick even dark brown "
-    "outline, vivid slightly pastel palette, simple cel shading, tiny white specular highlights, "
-    "no drop shadow, no text, no border, no frame, no circular plate behind the object, "
-    "single object centered, stylized fantasy MMORPG inventory icon, highly readable at small size"
-)
-# Deux formulations de fond : transparent quand le modèle sait le faire, magenta uni sinon (il faudra
-# alors détourer). Le magenta est choisi parce qu'il n'apparaît dans aucune palette d'objet crédible.
-CADRE_ALPHA = (
-    "The object fills most of the frame. Fully transparent background (PNG alpha channel), "
-    "absolutely nothing else in the image, no background scenery, no shadow on the ground."
-)
-CADRE_MAGENTA = (
-    "The object fills most of the frame. Plain uniform magenta background (#FF00FF), "
-    "absolutely nothing else in the image."
+    "Kawaii Ragnarok Online, chibi, gros contours nets, couleurs vives, ombrage anime doux."
 )
 
-# Formulation par emplacement : une armure doit être vue comme un vêtement posé à plat, une arme de
-# trois-quarts, un anneau de face. Sans ça Imagen livre des personnages qui PORTENT l'objet.
-# Formulation par emplacement — relevée sur les illustrations existantes, pas devinée :
-#  · armes : VERTICALES (ou très légèrement inclinées), pointe en haut, poignée en bas, entières ;
-#  · armures : le vêtement VIDE vu de face, posé à plat, comme un t-shirt étalé ;
+# Deux formulations de fond. Le fond TRANSPARENT est la consigne d'origine (« fond transparent PNG ») et
+# c'est vérifiable sur les fichiers : leurs pixels semi-transparents ne portent aucune frange de couleur,
+# donc aucun chroma-key n'a eu lieu — le modèle rend l'alpha. Le magenta ne sert qu'au repli Imagen, qui
+# ne sait pas sortir d'alpha.
+CADRE_ALPHA = (
+    "Icône d'objet d'inventaire, l'objet SEUL au centre, cadré serré, fond TRANSPARENT (canal alpha PNG), "
+    "rien d'autre dans l'image : aucun décor, aucune ombre portée, aucun texte, aucun cadre, "
+    "aucun disque derrière l'objet. Doit rester lisible en tout petit (40 px)."
+)
+CADRE_MAGENTA = CADRE_ALPHA.replace(
+    "fond TRANSPARENT (canal alpha PNG)", "fond MAGENTA UNI (#FF00FF)"
+)
+
+# Cadrage par emplacement, relevé sur les illustrations existantes (planche de contact) :
+#  · armes : VERTICALES, pointe en haut, poignée en bas, entières ;
+#  · armures : le vêtement VIDE vu de face, posé à plat comme un t-shirt étalé ;
 #  · chapeaux : le couvre-chef seul, vide, sans tête dedans ;
-#  · accessoires : le petit objet de face, grossi pour que ses détails se lisent à 40 px.
-# Sans cette précision, le modèle livre des personnages qui PORTENT l'objet, ou des armes couchées en
-# diagonale qui n'ont pas la même silhouette que les 30 armes déjà en place.
+#  · accessoires : le petit objet de face, grossi pour que ses détails se lisent.
+# Sans cette précision le modèle livre des personnages qui PORTENT l'objet, ou des armes couchées en
+# diagonale dont la silhouette ne va pas avec les 30 armes déjà en place.
 CADRAGE_SLOT = {
-    "weapon": (
-        "The weapon alone, standing vertically (or tilted only slightly), tip or top pointing up and "
-        "grip at the bottom, whole weapon visible from grip to tip."
-    ),
-    "armor": (
-        "The garment alone, empty, laid flat and seen from the front like a shirt spread out, "
-        "no body wearing it, no mannequin, no arms, no head."
-    ),
-    "hat": "The headgear alone, empty, seen from the front or three-quarter, no head wearing it, no face.",
-    "accessory": "The small trinket alone, seen from the front, enlarged so its details read at small size.",
+    "weapon": "L'arme seule, à la VERTICALE (ou à peine inclinée), pointe vers le haut et poignée en bas, entière.",
+    "armor": "Le vêtement SEUL et VIDE, vu de face, posé à plat comme un t-shirt étalé — personne ne le porte, pas de mannequin, pas de bras, pas de tête.",
+    "hat": "Le couvre-chef SEUL et VIDE, vu de face ou de trois-quarts — aucune tête dedans, aucun visage.",
+    "accessory": "Le petit objet SEUL, vu de face, un peu grossi pour que ses détails se lisent.",
 }
 
-# La rareté se lit à l'œil sur les illustrations existantes : les communs sont en matières simples, les
-# légendaires portent une lueur franche (lame solaire enflammée, trèfle qui rayonne). On reste toutefois
+# La rareté se lit à l'œil sur l'art existant (lame solaire enflammée, trèfle rayonnant), tout en restant
 # dans la gamme MIGNONNE du jeu — pas de rendu sombre et épique qui trancherait avec le reste.
 TEINTE_RARETE = {
-    "commun": "simple everyday materials, worn leather, plain iron, linen, wood",
-    "rare": "polished metal with a blue-steel sheen and one small bright gemstone",
-    "epique": "ornate craftsmanship, purple and gold filigree, gentle magical glow",
-    "legendaire": "legendary artifact with a clear warm glow, golden filigree, glowing runes, sparkles",
+    "commun": "matières simples et usées : cuir, fer brut, lin, bois",
+    "rare": "métal poli aux reflets bleu acier, une petite gemme vive",
+    "epique": "travail ouvragé, filigrane violet et or, lueur magique douce",
+    "legendaire": "objet légendaire, lueur chaude franche, filigrane doré, runes lumineuses, étincelles",
 }
 
 MOTIF_ITEM = re.compile(
@@ -186,11 +184,14 @@ def prompt_pour(item, alpha: bool = True) -> str:
     quoi = item["name"]
     if item["slot"] == "weapon" and item["weaponType"]:
         quoi = f"{quoi}, a {famille.get(item['weaponType'], 'weapon')}"
+    # LE STYLE EST EN PRÉFIXE, comme l'impose la note d'origine (« style à préfixer »). L'ordre compte
+    # pour un modèle d'image : ce qui vient en tête pèse le plus dans le rendu.
     return (
+        f"{STYLE} "
         f"{quoi}. {item['description']} "
         f"{CADRAGE_SLOT.get(item['slot'], '')} "
-        f"Material and mood: {TEINTE_RARETE.get(item['rarity'], '')}. "
-        f"{STYLE}. {CADRE_ALPHA if alpha else CADRE_MAGENTA}"
+        f"Matière et ambiance : {TEINTE_RARETE.get(item['rarity'], '')}. "
+        f"{CADRE_ALPHA if alpha else CADRE_MAGENTA}"
     )
 
 
