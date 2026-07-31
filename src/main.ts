@@ -26,6 +26,7 @@ import { SkillEquipScene } from './scenes/SkillEquipScene'
 import { BestiaryScene } from './scenes/BestiaryScene'
 import { TrainingScene } from './scenes/TrainingScene'
 import { GRAVITY } from './core/platforming'
+import { VIEW_W, VIEW_H } from './core/viewport'
 
 // ─── Capture globale des erreurs ────────────────────────────────────────────
 // Sur iPhone il n'y a pas de console : toute exception non gérée doit devenir VISIBLE.
@@ -50,8 +51,11 @@ try {
   game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game',
-    width: 960,
-    height: 540,
+    // Largeur LOGIQUE calculée d'après le format de l'écran (cf. core/viewport.ts) : le jeu remplit
+    // toute la largeur au lieu de letterboxer un 16:9 sur un écran en 2,16:1. La hauteur reste 540,
+    // donc toutes les coordonnées verticales existantes sont intactes.
+    width: VIEW_W,
+    height: VIEW_H,
     antialias: true,
     roundPixels: false,
     backgroundColor: '#87ceeb',

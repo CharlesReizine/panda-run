@@ -9,6 +9,7 @@ import { newPlayer, type PlayerState } from '../core/player-state'
 import { getPlayer, setPlayer } from '../state'
 import type { ClassId } from '../core/types'
 import { audio } from '../audio/audio-engine'
+import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 
 // PAGE D'ENTRAÎNEMENT : on incarne n'importe quelle classe (base + évolutions), MANA infini, TOUS
 // les skills débloqués au rang max. Un gros Poring-boss encaisse sans mourir et frappe pour 0, des
@@ -54,6 +55,9 @@ export class TrainingScene extends LevelScene {
   }
 
   create() {
+    // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
+    // une seule ligne, aucune coordonnée à retoucher
+    centerCamera(this)
     if (this.phase === 'picker') { this.buildPicker(); return }
     // arène complète (sol, joueur, groupes physiques, entrées, HUD) via la machinerie LevelScene
     super.create()
@@ -121,7 +125,7 @@ export class TrainingScene extends LevelScene {
   // écran de choix de la classe à essayer (phase picker) : une grille de cartes (classes de base +
   // évolutions). Un clic relance la scène en phase arène avec la classe choisie.
   private buildPicker() {
-    this.add.rectangle(480, 270, 960, 540, 0x0d1b2a).setScrollFactor(0)
+    this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x0d1b2a).setScrollFactor(0)
     this.add.text(480, 40, 'Essaie les classes !', {
       fontSize: '34px', color: '#ffd700', fontStyle: 'bold',
     }).setOrigin(0.5)

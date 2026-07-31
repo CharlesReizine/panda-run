@@ -7,6 +7,7 @@ import { energyCostOf } from '../core/skill-executor'
 import { EVOLUTIONS } from '../core/progression'
 import { CLASSES } from '../data/classes'
 import type { ClassId, SkillDef } from '../core/types'
+import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 
 // Gestion des compétences DIRECTEMENT en jeu (pas besoin de la carte).
 // Lancée par-dessus le niveau en pause ; à la fermeture, on reprend le jeu.
@@ -26,6 +27,9 @@ export class SkillEquipScene extends Phaser.Scene {
   }
 
   create() {
+    // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
+    // une seule ligne, aucune coordonnée à retoucher
+    centerCamera(this)
     this.tab = null
     this.render()
   }
@@ -77,7 +81,7 @@ export class SkillEquipScene extends Phaser.Scene {
   private render() {
     for (const child of [...this.children.list]) child.destroy()
     const p = getPlayer()
-    this.add.rectangle(480, 270, 960, 540, 0x0d1b2a, 0.96)
+    this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x0d1b2a, 0.96)
     this.add.text(480, 16, 'Compétences', { fontSize: '24px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
     this.add.text(480, 36, `Points à dépenser : ${p.skillPoints}`, { fontSize: '14px', color: '#ffd54f' }).setOrigin(0.5)
     // Légende de l'arbre : « ↳ » marque une compétence enfant (débloque son parent d'abord) ; les cartes
@@ -222,7 +226,7 @@ export class SkillEquipScene extends Phaser.Scene {
 
     const panel = this.add.container(0, 0).setDepth(1000)
     // Fond opaque qui bloque les clics vers l'écran dessous
-    const backdrop = this.add.rectangle(480, 270, 960, 540, 0x000000, 0.72).setInteractive()
+    const backdrop = this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x000000, 0.72).setInteractive()
     const card = this.add.rectangle(480, 270, 560, 470, 0x102a3a, 0.99).setStrokeStyle(2, 0x4fc3f7, 0.9)
     panel.add([backdrop, card])
 

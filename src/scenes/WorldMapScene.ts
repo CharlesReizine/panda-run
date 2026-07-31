@@ -5,6 +5,7 @@ import { canChangeClass, canEvolveClass } from '../core/progression'
 import { save } from '../core/save'
 import { audio } from '../audio/audio-engine'
 import { isLevelSeen } from './LevelIntroScene'
+import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 
 const NODE_COLORS = { town: 0xffd700, level: 0x66bb6a, boss: 0xef5350 } as const
 const LOCKED_COLOR = 0x555555
@@ -14,6 +15,9 @@ export class WorldMapScene extends Phaser.Scene {
   constructor() { super('WorldMap') }
 
   create() {
+    // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
+    // une seule ligne, aucune coordonnée à retoucher
+    centerCamera(this)
     audio.playMusic('carte')
     // la scène est réutilisée entre deux niveaux : on REMET À ZÉRO le verrou de voyage, sinon il
     // reste bloqué à true après le 1er trajet (scene.start part pendant l'anim) → carte figée au retour.
@@ -187,7 +191,7 @@ export class WorldMapScene extends Phaser.Scene {
       t.clear()
       return t
     }
-    return this.textures.addDynamicTexture(key, 960, 540)!
+    return this.textures.addDynamicTexture(key, VIEW_W, VIEW_H)!
   }
 
   // Double cercle de révélation autour d'un nœud ancre : d'abord l'ANNEAU extérieur à 50 % (perce la
@@ -239,8 +243,8 @@ export class WorldMapScene extends Phaser.Scene {
   // par-dessus pour le contraste. Repli sur le parchemin procédural si l'illustration manque.
   private drawBackground() {
     if (this.textures.exists('map-monde')) {
-      this.add.image(480, 270, 'map-monde').setDisplaySize(960, 540).setDepth(-30)
-      this.add.rectangle(480, 270, 960, 540, 0x1a1208, 0.2).setDepth(-29)
+      this.add.image(480, 270, 'map-monde').setDisplaySize(VIEW_W, VIEW_H).setDepth(-30)
+      this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x1a1208, 0.2).setDepth(-29)
       return
     }
     const bg = this.add.graphics()

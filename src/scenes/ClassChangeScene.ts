@@ -5,6 +5,7 @@ import { changeClass, canEvolveClass, evolveClass, EVOLUTIONS } from '../core/pr
 import { getPlayer } from '../state'
 import { save } from '../core/save'
 import type { ClassId } from '../core/types'
+import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 
 const CHOICES: ClassId[] = ['swordsman', 'mage', 'archer']
 
@@ -14,8 +15,11 @@ export class ClassChangeScene extends Phaser.Scene {
   constructor() { super('ClassChange') }
 
   create() {
+    // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
+    // une seule ligne, aucune coordonnée à retoucher
+    centerCamera(this)
     this.chosen = false
-    this.add.rectangle(480, 270, 960, 540, 0x0d1b2a)
+    this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x0d1b2a)
 
     // deux modes : évolution (1 seule voie → confirmation) si le joueur y est éligible,
     // sinon choix de la 1re classe (3 cartes, novice)
@@ -90,7 +94,7 @@ export class ClassChangeScene extends Phaser.Scene {
   }
 
   private finish(message: string) {
-    const flash = this.add.rectangle(480, 270, 960, 540, 0xffffff).setAlpha(0)
+    const flash = this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0xffffff).setAlpha(0)
     this.tweens.add({
       targets: flash, alpha: 1, yoyo: true, duration: 300,
       onComplete: () => this.scene.start('WorldMap'),

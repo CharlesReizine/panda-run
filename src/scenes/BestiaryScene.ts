@@ -7,6 +7,7 @@ import type { DropEntry, MonsterDef } from '../core/types'
 import { playerXpForMobLevel } from '../core/progression'
 import { SKILLS } from '../data/skills'
 import { BD, truncate } from './bestiary-layout'
+import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 
 // Bestiaire — page en lecture seule listant tous les monstres, leurs stats et leur table de drop.
 // Aucune écriture dans la sauvegarde ni dans les données du jeu.
@@ -68,6 +69,9 @@ export class BestiaryScene extends Phaser.Scene {
   constructor() { super('Bestiary') }
 
   create() {
+    // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
+    // une seule ligne, aucune coordonnée à retoucher
+    centerCamera(this)
     // lecture seule du suivi de kills ; robuste si aucun joueur n'est chargé
     try { this.kills = getPlayer().killsByMonster ?? {} } catch { this.kills = {} }
     this.renderList()
@@ -80,7 +84,7 @@ export class BestiaryScene extends Phaser.Scene {
 
   private clear() {
     for (const child of [...this.children.list]) child.destroy()
-    this.add.rectangle(480, 270, 960, 540, 0x0d1b2a, 0.97)
+    this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x0d1b2a, 0.97)
   }
 
   private btn(x: number, y: number, label: string, bg: number, onTap: () => void) {

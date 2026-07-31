@@ -6,6 +6,7 @@ import { upgradedBonus } from '../core/reforge'
 import { canEquipItem, equipRestrictionMessage } from '../core/equip'
 import type { EquipSlot, Rarity } from '../core/types'
 import type { LevelScene } from './LevelScene'
+import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 
 // ordre fixe chapeau → armure → arme → accessoire (partagé avec les boutiques)
 const SLOTS: EquipSlot[] = SLOT_ORDER
@@ -47,6 +48,9 @@ export class InventoryScene extends Phaser.Scene {
   }
 
   create() {
+    // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
+    // une seule ligne, aucune coordonnée à retoucher
+    centerCamera(this)
     this.render()
   }
 
@@ -82,7 +86,7 @@ export class InventoryScene extends Phaser.Scene {
   private render() {
     for (const child of [...this.children.list]) child.destroy()
     const p = getPlayer()
-    this.add.rectangle(480, 270, 960, 540, 0x0d1b2a, 0.96)
+    this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x0d1b2a, 0.96)
     this.add.text(480, 22, 'Inventaire', { fontSize: '26px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
 
     // ─── GAUCHE : STOCK (objets non équipés) ───────────────────────────────
@@ -203,7 +207,7 @@ export class InventoryScene extends Phaser.Scene {
     const up = p.upgrades[sel.itemId] ?? 0
 
     // fond assombri : clic en dehors de la carte = fermer la fiche
-    this.add.rectangle(480, 270, 960, 540, 0x000000, 0.55)
+    this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x000000, 0.55)
       .setInteractive({ useHandCursor: false }).on('pointerdown', () => { this.selected = null; this.render() })
 
     const cx = 480, top = 96, cardW = 460, cardH = 348

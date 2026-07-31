@@ -4,17 +4,21 @@ import { save } from '../core/save'
 import { skillsOf, maxRankOf } from '../data/skills'
 import { MATERIALS } from '../data/materials'
 import { computeStats } from '../core/stats'
+import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 
 export class MenuScene extends Phaser.Scene {
   constructor() { super('Menu') }
 
   create() {
+    // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
+    // une seule ligne, aucune coordonnée à retoucher
+    centerCamera(this)
     this.render()
   }
 
   private render() {
     for (const child of [...this.children.list]) child.destroy()
-    this.add.rectangle(480, 270, 960, 540, 0x1b2631, 0.95)
+    this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x1b2631, 0.95)
     const p = getPlayer()
     const stats = computeStats(p)
     this.add.text(30, 20, `${p.name} — Nv ${p.level} — ATK ${stats.atk} / DEF ${Math.round(stats.def)} / PV ${stats.maxHp} / VIT ${stats.attackSpeed.toFixed(2)}`, { fontSize: '18px', color: '#ffffff' })

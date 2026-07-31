@@ -4,6 +4,7 @@ import { getPlayer } from '../state'
 import { xpToNext } from '../core/progression'
 import { audio } from '../audio/audio-engine'
 import type { LevelScene } from './LevelScene'
+import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 
 const BAR_W = 200
 const SLOT_SIZE = 50
@@ -50,6 +51,9 @@ export class UIScene extends Phaser.Scene {
   }
 
   create() {
+    // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
+    // une seule ligne, aucune coordonnée à retoucher
+    centerCamera(this)
     // Scène réutilisée à chaque niveau (launch depuis LevelScene) : ces tableaux sont des
     // class fields initialisés une seule fois à l'instanciation, pas à chaque create().
     // Sans reset, refresh()/update() continuent de cibler les objets détruits du niveau précédent.
@@ -309,7 +313,7 @@ export class UIScene extends Phaser.Scene {
     this.freezeLevelForOverlay()
     this.scene.pause(this.levelKey)
     const panel = this.add.container(0, 0).setDepth(2000)
-    const backdrop = this.add.rectangle(480, 270, 960, 540, 0x000000, 0.78).setInteractive()
+    const backdrop = this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x000000, 0.78).setInteractive()
     const card = this.add.rectangle(480, 262, 640, 320, 0x102a3a, 0.99).setStrokeStyle(3, 0x4fc3f7, 0.95)
     const title = this.add.text(480, 138, '⭐ Niveau 2 — ta première compétence !', {
       fontSize: '24px', color: '#ffd54f', fontStyle: 'bold',

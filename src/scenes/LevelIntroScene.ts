@@ -6,6 +6,7 @@ import { MATERIALS } from '../data/materials'
 import { SKILLS } from '../data/skills'
 import { audio } from '../audio/audio-engine'
 import type { DropEntry, MonsterDef } from '../core/types'
+import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 
 // Écran de présentation d'un NOUVEAU terrain : montré une seule fois par levelId (la première
 // entrée), il présente les monstres uniques du niveau et leurs loots notables avant de lancer
@@ -92,8 +93,11 @@ export class LevelIntroScene extends Phaser.Scene {
   }
 
   create() {
+    // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
+    // une seule ligne, aucune coordonnée à retoucher
+    centerCamera(this)
     const level = LEVELS[this.intro.levelId]
-    this.add.rectangle(480, 270, 960, 540, 0x10151f, 1)
+    this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x10151f, 1)
 
     // Bandeau titre
     this.add.text(480, 30, 'Nouveau terrain', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' }).setOrigin(0.5)

@@ -30,6 +30,7 @@ import { BIOMES } from '../data/biomes'
 import { bgKeyFor, bgPathFor } from '../data/level-backgrounds'
 import { logEvent } from '../core/logger'
 import { audio, type MusicTrack } from '../audio/audio-engine'
+import { CX, CY, VIEW_H, VIEW_W } from '../core/viewport'
 
 // biomes → piste musicale ; 'carriere' n'a pas d'ambiance dédiée → repli sur 'montagne'
 const BIOME_TRACKS: Record<string, MusicTrack> = {
@@ -653,7 +654,7 @@ export class LevelScene extends Phaser.Scene {
 
     // voile bleuté discret, épinglé à l'écran, affiché seulement quand la tête est immergée
     // (alpha piloté dans updateWater). Sous les overlays de menu/K.O. (depth ≥ 20).
-    this.submergeVeil = this.add.rectangle(480, 270, 960, 540, 0x0a4a7a, 0)
+    this.submergeVeil = this.add.rectangle(CX, CY, VIEW_W, VIEW_H, 0x0a4a7a, 0)
       .setScrollFactor(0).setDepth(15)
 
     // plages de colonnes (en tuiles) occupées par une CASCADE remontable : sert à NE PAS dessiner
@@ -788,11 +789,11 @@ export class LevelScene extends Phaser.Scene {
     // échelle) ; ESPACE = attaque ; MAJ = dash.
     this.wasd = this.input.keyboard!.addKeys('W,A,S,D,Z,Q') as Record<string, Phaser.Input.Keyboard.Key>
 
-    this.add.text(480, 8, this.levelDef.name, { fontSize: '15px', color: '#ffffff' }).setOrigin(0.5, 0).setScrollFactor(0)
+    this.add.text(CX, 8, this.levelDef.name, { fontSize: '15px', color: '#ffffff' }).setOrigin(0.5, 0).setScrollFactor(0)
 
     // MODE TEST : bandeau « invincible » + bouton retour au sélecteur (balade libre pour inspecter).
     if (this.testMode) {
-      this.add.text(480, 28, '🧪 TEST — invincible', { fontSize: '12px', color: '#80cbc4' }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(30)
+      this.add.text(CX, 28, '🧪 TEST — invincible', { fontSize: '12px', color: '#80cbc4' }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(30)
       this.add.text(12, 40, '← Niveaux', { fontSize: '16px', color: '#ffffff', backgroundColor: '#455a64', padding: { x: 10, y: 5 } })
         .setScrollFactor(0).setDepth(30).setInteractive({ useHandCursor: true })
         .on('pointerdown', () => { audio.playSfx('ui-tap'); this.scene.stop('UI'); this.scene.start('LevelTest') })
@@ -866,7 +867,7 @@ export class LevelScene extends Phaser.Scene {
 
     const parts = [panel, title, body, hint]
     // capteur plein écran : un tap n'importe où ferme le panneau (sans bloquer le jeu dessous)
-    const catcher = this.add.rectangle(480, 270, 960, 540, 0xffffff, 0.001)
+    const catcher = this.add.rectangle(CX, CY, VIEW_W, VIEW_H, 0xffffff, 0.001)
       .setScrollFactor(0).setDepth(depth + 2).setInteractive()
     catcher.once('pointerdown', () => {
       audio.playSfx('ui-tap')
@@ -897,7 +898,7 @@ export class LevelScene extends Phaser.Scene {
     if (hasBgArt) {
       const src = this.textures.get(bgKey).getSourceImage()
       const cover = Math.max(960 / src.width, 540 / src.height)
-      this.add.image(480, 270, bgKey).setScale(cover).setScrollFactor(0).setDepth(-28)
+      this.add.image(CX, 270, bgKey).setScale(cover).setScrollFactor(0).setDepth(-28)
     } else {
       const sky = this.add.graphics().setScrollFactor(0).setDepth(-30)
       sky.fillGradientStyle(b.skyTop, b.skyTop, b.skyBot, b.skyBot, 1).fillRect(0, 0, 960, 540)
@@ -1186,9 +1187,9 @@ export class LevelScene extends Phaser.Scene {
 
     // barre de vie du boss : centrée sous son nom, largeur maîtrisée et posée assez bas pour
     // ne PAS chevaucher les slots de compétences en haut à droite (qui descendent jusqu'à ~y63)
-    this.bossName = this.add.text(480, 74, def.name, { fontSize: '20px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5).setScrollFactor(0)
-    this.bossBarBg = this.add.rectangle(480, 100, BOSS_BAR_W + 4, 20, 0x000000, 0.6).setScrollFactor(0).setStrokeStyle(1, 0xffffff, 0.3)
-    this.bossBar = this.add.rectangle(480 - BOSS_BAR_W / 2, 100, BOSS_BAR_W, 16, 0xef5350).setOrigin(0, 0.5).setScrollFactor(0)
+    this.bossName = this.add.text(CX, 74, def.name, { fontSize: '20px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5).setScrollFactor(0)
+    this.bossBarBg = this.add.rectangle(CX, 100, BOSS_BAR_W + 4, 20, 0x000000, 0.6).setScrollFactor(0).setStrokeStyle(1, 0xffffff, 0.3)
+    this.bossBar = this.add.rectangle(CX - BOSS_BAR_W / 2, 100, BOSS_BAR_W, 16, 0xef5350).setOrigin(0, 0.5).setScrollFactor(0)
 
     // le contrôleur prend la main sur le boss (locomotion + skills + télégraphes + phases)
     this.bossCtrl = new BossController(this, boss)
@@ -1463,13 +1464,13 @@ export class LevelScene extends Phaser.Scene {
     this.player.setVisible(false)
 
     // voile sombre plein écran, épinglé à l'écran
-    this.add.rectangle(480, 270, 960, 540, 0x0b0b12, 0.72).setScrollFactor(0).setDepth(20)
+    this.add.rectangle(CX, CY, VIEW_W, VIEW_H, 0x0b0b12, 0.72).setScrollFactor(0).setDepth(20)
     this.add.text(480, 108, 'Essaie encore !', {
       fontSize: '52px', color: '#ff5252', fontStyle: 'bold', stroke: '#000000', strokeThickness: 6,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(22)
 
     // illustration K.O. (panda sur le dos + étoiles), centrée plus bas pour ne pas chevaucher le titre
-    const dead = this.add.image(480, 322, 'death-panda').setScrollFactor(0).setDepth(21)
+    const dead = this.add.image(CX, 322, 'death-panda').setScrollFactor(0).setDepth(21)
     const targetH = 195
     dead.setDisplaySize(targetH * (dead.width / dead.height), targetH)
     const sx = dead.scaleX, sy = dead.scaleY
@@ -1979,7 +1980,7 @@ export class LevelScene extends Phaser.Scene {
 
   // Flash plein écran additif d'une couleur donnée qui se dissout ; alpha = pic d'intensité.
   flashScreen(color: number, alpha: number, ms: number) {
-    const rect = this.add.rectangle(480, 270, 960, 540, color, alpha)
+    const rect = this.add.rectangle(CX, CY, VIEW_W, VIEW_H, color, alpha)
       .setScrollFactor(0).setDepth(50).setBlendMode(Phaser.BlendModes.ADD)
     this.tweens.add({ targets: rect, alpha: 0, duration: ms, onComplete: () => rect.destroy() })
   }
@@ -2877,9 +2878,9 @@ export class LevelScene extends Phaser.Scene {
     const reticle = this.add.container(this.player.x + this.player.facing * 160, this.groundRow * TILE - 30, [g, ring]).setDepth(9)
 
     // UI écran (épinglée) : consigne + bouton Annuler visuel (hit-test manuel dans onAimPointer)
-    const hint = this.add.text(480, 458, 'Touche la zone à viser', { fontSize: '16px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5).setScrollFactor(0).setDepth(60)
-    const cancelBg = this.add.rectangle(480, 498, 150, 34, 0x455a64, 0.95).setScrollFactor(0).setDepth(60).setStrokeStyle(2, 0xffffff, 0.6)
-    const cancelTxt = this.add.text(480, 498, 'Annuler ✕', { fontSize: '15px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(61)
+    const hint = this.add.text(CX, 458, 'Touche la zone à viser', { fontSize: '16px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5).setScrollFactor(0).setDepth(60)
+    const cancelBg = this.add.rectangle(CX, 498, 150, 34, 0x455a64, 0.95).setScrollFactor(0).setDepth(60).setStrokeStyle(2, 0xffffff, 0.6)
+    const cancelTxt = this.add.text(CX, 498, 'Annuler ✕', { fontSize: '15px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(61)
 
     this.aim = { slot, skill, reticle, ui: [hint, cancelBg, cancelTxt], cancelAt: { x: 480, y: 498 } }
     // Le tap qui a lancé la visée (bouton de slot / touche) ne doit pas valider aussitôt :
@@ -4078,7 +4079,7 @@ export class LevelScene extends Phaser.Scene {
     this.bossBar = null
     this.bossBarBg = null
     this.bossName = null
-    const txt = this.add.text(480, 200, 'VICTOIRE !', { fontSize: '56px', color: '#ffd700', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0)
+    const txt = this.add.text(CX, 200, 'VICTOIRE !', { fontSize: '56px', color: '#ffd700', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0)
     this.tweens.add({ targets: txt, scale: 1.2, yoyo: true, repeat: 3, duration: 300 })
     this.createExit()
   }

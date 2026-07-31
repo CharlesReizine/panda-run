@@ -1,5 +1,6 @@
 import Phaser from 'phaser'
 import { audio } from '../audio/audio-engine'
+import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 
 // Menu de pause superposé au niveau gelé (Level + UI mis en pause par le bouton ⏸).
 // Deux vues : le menu principal et le sous-panneau « Réglages » (volume + muet).
@@ -9,6 +10,9 @@ export class PauseScene extends Phaser.Scene {
   constructor() { super('Pause') }
 
   create() {
+    // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
+    // une seule ligne, aucune coordonnée à retoucher
+    centerCamera(this)
     this.showSettings = false
     this.render()
   }
@@ -43,7 +47,7 @@ export class PauseScene extends Phaser.Scene {
     for (const child of [...this.children.list]) child.destroy()
 
     // voile semi-transparent (plein écran, non ancré à la caméra du niveau)
-    this.add.rectangle(480, 270, 960, 540, 0x0d1b2a, 0.82).setScrollFactor(0)
+    this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x0d1b2a, 0.82).setScrollFactor(0)
     this.add.text(480, 90, 'Pause', { fontSize: '48px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
 
     if (this.showSettings) this.renderSettings()

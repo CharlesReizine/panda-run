@@ -13,6 +13,7 @@ import type { EquipSlot } from '../core/types'
 import { MATERIALS } from '../data/materials'
 import { RECIPES } from '../data/recipes'
 import { audio } from '../audio/audio-engine'
+import { CX, CY, VIEW_H, VIEW_W } from '../core/viewport'
 
 const TOWN_SPEED = 170
 const INTERACT_RADIUS = 70
@@ -591,7 +592,7 @@ export class TownScene extends Phaser.Scene {
 
   // fond de panneau façon coffre/parchemin, commun aux boutiques — bordure dorée sur bois sombre
   private drawPanelFrame(c: Phaser.GameObjects.Container, w: number, h: number, title: string) {
-    c.add(this.add.rectangle(480, 270, 960, 540, 0x000000, 0.45)) // voile derrière le panneau
+    c.add(this.add.rectangle(CX, CY, VIEW_W, VIEW_H, 0x000000, 0.45)) // voile derrière le panneau
     c.add(this.add.rectangle(480, 270, w, h, 0x3e2723, 0.97).setStrokeStyle(4, 0xd7a86e, 1))
     c.add(this.add.rectangle(480, 270, w - 12, h - 12, 0xffffff, 0).setStrokeStyle(1, 0xffd54f, 0.35))
     const top = 270 - h / 2

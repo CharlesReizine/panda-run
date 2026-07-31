@@ -7,6 +7,7 @@ import { logEvent } from '../core/logger'
 import { BUILD } from '../core/build'
 import { cloudAvailable, prewarm, authReady, signInPopup, signInRedirect, completeRedirect, signOutCloud, onUser, PopupRefusedError, type CloudUser } from '../cloud/auth'
 import { syncNow, adoptCloud, pushLocal, setAutoPushUser } from '../cloud/sync-service'
+import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 
 // Écran-titre volontairement NU : trois boutons au maximum, aucun texte explicatif.
 // L'avertissement « ta sauvegarde n'est pas garantie » n'est plus un paragraphe mais le libellé du
@@ -28,12 +29,15 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create() {
+    // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
+    // une seule ligne, aucune coordonnée à retoucher
+    centerCamera(this)
     // déblocage audio iOS/Safari : le contexte ne peut (re)démarrer que sur un geste utilisateur
     this.input.once('pointerdown', () => audio.unlock())
     audio.playMusic('titre')
 
     // splash illustré (image fournie) en fond plein écran
-    this.add.image(480, 270, 'splash').setDisplaySize(960, 540)
+    this.add.image(480, 270, 'splash').setDisplaySize(VIEW_W, VIEW_H)
     // léger voile en haut pour la lisibilité du logo
     this.add.rectangle(480, 60, 960, 120, 0x000000, 0.18)
 
