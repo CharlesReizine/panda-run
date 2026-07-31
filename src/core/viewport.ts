@@ -78,3 +78,16 @@ export function centerCamera(scene: Phaser.Scene): void { // Phaser.Scene = TYPE
 // sont en coordonnées ÉCRAN : c'est là que `CX`/`VIEW_W` sont les bons repères.
 export const DESIGN_LEFT = 480 - VIEW_W / 2
 export const DESIGN_RIGHT = 480 + VIEW_W / 2
+
+/**
+ * `x` pixels depuis le BORD GAUCHE RÉEL de l'écran, dans une scène recentrée.
+ *
+ * ⚠️ À UTILISER POUR TOUT LE HUD COLLÉ À GAUCHE. Écrire `8` place l'objet à 8 px du bord de l'espace
+ * de CONCEPTION, qui est centré : sur un écran 2,16:1 il apparaît à ~111 px du bord de l'écran.
+ * Retour user : « les stats, la vie et tout, c'est pas tout à gauche de l'écran mais genre milieu
+ * gauche, pas ouf ». Un HUD est une surcouche : il se colle à l'ÉCRAN, pas au cadre de dessin.
+ */
+export const fromLeft = (x: number): number => DESIGN_LEFT + x
+
+/** `x` pixels depuis le BORD DROIT RÉEL de l'écran (même piège que `fromLeft`, en miroir). */
+export const fromRight = (x: number): number => DESIGN_RIGHT - x

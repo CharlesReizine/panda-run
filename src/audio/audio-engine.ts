@@ -103,6 +103,8 @@ class AudioEngine {
   // l'élément via createMediaElementSource → musicGain rend le volume pilotable partout, parce que
   // c'est alors un GainNode Web Audio qui décide, plus l'élément média.
   private musicSrc: MediaElementAudioSourceNode | null = null
+  // filtre du bus musique : on en balaie la coupure pour l'effet « sous l'eau » (cf. setUnderwater)
+  private musicFilter: BiquadFilterNode | null = null
   private musicWanted = false // playMusic a été demandé au moins une fois
   // Anti-doublon du clic d'interface. Deux sources peuvent le déclencher pour un même appui : le
   // crochet global (ui/click-sound.ts) et les appels explicites restés dans certaines scènes. Sans
@@ -157,6 +159,7 @@ class AudioEngine {
       this.ctx = ctx
       this.master = master
       this.musicGain = music
+      this.musicFilter = musicFilter
       this.sfxGain = sfx
       // la piste média a pu être créée AVANT le contexte (playMusic au tout premier écran) : on la
       // branche maintenant, sinon son volume resterait à la merci de l'élément — ignoré sur iOS.
@@ -176,14 +179,20 @@ class AudioEngine {
    * l'eau et mets plus de bulles. »
    */
   setUnderwater(on: boolean) {
-    // 0,03 : la musique doit QUASIMENT DISPARAÎTRE sous l'eau. Les paliers précédents (0,3 puis 0,08)
-    // ont été jugés inaudibles — mais ce n'était pas qu'une question de valeur : iOS ignorait purement
-    // et simplement le réglage (cf. connectMusicGraph). Maintenant que le volume passe par un GainNode
-    // et fonctionne vraiment, on peut viser franchement bas et laisser toute la place aux bulles.
-    const target = on ? 0.03 : 1
+    // ⚠️ ON ÉTOUFFE LA MUSIQUE, ON NE LA COUPE PAS. Historique de ce réglage : 0,3 → 0,08 → 0,03 parce
+    // que le user n'entendait « aucune différence »… alors que la vraie cause était qu'iOS ignore
+    // `HTMLMediaElement.volume` (corrigé depuis via connectMusicGraph). À 0,03 le ducking marchait enfin,
+    // mais trop bien : « j'entends pas ma musique quand je suis sous l'eau ».
+    // Donc la différence ne se joue plus sur le seul volume : on BALAIE LE PASSE-BAS du bus musique de
+    // 2800 Hz à 420 Hz. C'est ce qui fait « sous l'eau » (l'eau absorbe les aigus), et ça s'entend
+    // franchement tout en laissant la mélodie audible — un simple gain très bas donnait du silence.
+    const target = on ? 0.4 : 1
     if (this.duck === target) return
     this.duck = target
     this.applyMusicLevel()
+    if (this.musicFilter && this.ctx) {
+      this.musicFilter.frequency.setTargetAtTime(on ? 420 : 2800, this.ctx.currentTime, 0.12)
+    }
   }
 
   // Branche la piste média sur le bus musique du graphe Web Audio. Idempotent, et sans effet si le

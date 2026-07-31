@@ -1,4 +1,10 @@
-// Zones réservées de la colonne GAUCHE du HUD, en coordonnées écran (coin haut-gauche).
+// Zones réservées de la colonne GAUCHE du HUD, en DÉCALAGE DEPUIS LE BORD GAUCHE de l'écran.
+//
+// ⚠️ CES ABSCISSES NE SONT PAS DES COORDONNÉES DE SCÈNE. UIScene est recentrée (centerCamera) : il faut
+// les passer par `fromLeft()` (core/viewport.ts) au moment de poser l'objet. Posées telles quelles, elles
+// tombent à ~111 px du bord sur un écran large — c'est le défaut « la vie c'est pas tout à gauche mais
+// genre milieu gauche ». Ce fichier reste volontairement PUR (aucun import de viewport) pour que le test
+// de non-recouvrement tourne sans DOM ; le décalage est ajouté au site d'appel.
 //
 // POURQUOI CE FICHIER EXISTE. Chaque élément du HUD était positionné par des littéraux dispersés dans
 // UIScene, et ils ont fini par se marcher dessus : la pastille de buff ATK (x 12→116, y 86→110)
