@@ -98,10 +98,17 @@ STYLE = (
 # c'est vérifiable sur les fichiers : leurs pixels semi-transparents ne portent aucune frange de couleur,
 # donc aucun chroma-key n'a eu lieu — le modèle rend l'alpha. Le magenta ne sert qu'au repli Imagen, qui
 # ne sait pas sortir d'alpha.
+# ⚠️ INTERDICTIONS TIRÉES DE CE QUE LE MODÈLE A RÉELLEMENT PRODUIT, pas de précautions théoriques.
+# Sur 92 illustrations générées : une PLAQUE DE FOND opaque à chaque fois (blanche, parfois noire), un
+# DAMIER PEINT imitant la transparence (le modèle dessine ce qu'un éditeur d'image affiche derrière un
+# fond vide), des CADRES décoratifs, et du TEXTE en anglais dans l'image (« SEAL OF ELDERS », « CAPTAIN »).
 CADRE_ALPHA = (
-    "Icône d'objet d'inventaire, l'objet SEUL au centre, cadré serré, fond TRANSPARENT (canal alpha PNG), "
-    "rien d'autre dans l'image : aucun décor, aucune ombre portée, aucun texte, aucun cadre, "
-    "aucun disque derrière l'objet. Doit rester lisible en tout petit (40 px)."
+    "Icône d'objet d'inventaire, l'objet SEUL au centre, cadré serré, fond TRANSPARENT (canal alpha PNG). "
+    "RIEN d'autre dans l'image : aucun décor, aucune ombre portée, aucun cadre, aucune bordure, aucun "
+    "disque ni carré derrière l'objet, aucune plaque de couleur, AUCUN damier gris et blanc (ne dessine "
+    "PAS le motif d'échiquier qui représente la transparence — le fond doit être RÉELLEMENT vide), "
+    "AUCUNE lettre, AUCUN mot, AUCUN chiffre, aucune inscription nulle part. "
+    "Doit rester lisible en tout petit (40 px)."
 )
 CADRE_MAGENTA = CADRE_ALPHA.replace(
     "fond TRANSPARENT (canal alpha PNG)", "fond MAGENTA UNI (#FF00FF)"
@@ -442,6 +449,221 @@ def generer(creds, project, item) -> tuple:
     raise RuntimeError(" | ".join(erreurs))
 
 
+
+def _anneau_opaque(px, w, h, alpha):
+    """Pixels du contour EXTÉRIEUR de la zone opaque : c'est là qu'un fond peint se trahit."""
+    boite = alpha.getbbox()
+    if not boite:
+        return []
+    x0, y0, x1, y1 = boite
+    pts = []
+    for x in range(x0, x1):
+        for y in (y0, y1 - 1):
+            if px[x, y][3] > 200:
+                pts.append(px[x, y])
+    for y in range(y0, y1):
+        for x in (x0, x1 - 1):
+            if px[x, y][3] > 200:
+                pts.append(px[x, y])
+    if pts:
+        return pts
+    # bord de la boîte trop transparent (halo dégradé) : on rentre de quelques pixels
+    for marge in (3, 6, 10):
+        for x in range(x0 + marge, x1 - marge):
+            for y in (y0 + marge, y1 - marge - 1):
+                if px[x, y][3] > 200:
+                    pts.append(px[x, y])
+        if pts:
+            return pts
+    return pts
+
+
+def detecter_plaque(im):
+    """Renvoie la couleur de la plaque de fond, ou None s'il n'y en a pas.
+
+    ⚠️ LE SIGNAL N'EST PAS « LES COINS SONT-ILS TRANSPARENTS ». Toutes les illustrations générées ont un
+    liseré transparent de ~5 px puis une PLAQUE OPAQUE qui remplit le reste du cadre : blanche le plus
+    souvent, noire parfois, et dans certains cas le modèle a carrément PEINT un damier de fausse
+    transparence (ce qu'affiche un éditeur d'image derrière un fond vide). Deux audits successifs sont
+    passés à côté — l'un ne testait que les quatre coins, l'autre le pourtour de la boîte englobante, qui
+    est justement dans le liseré.
+    Signature retenue, vérifiée sur les 150 fichiers : la zone opaque couvre plus de 60 % du cadre ET son
+    contour extérieur est à ≥70 % d'une seule teinte. Les illustrations saines ont une zone opaque bien
+    plus petite (22 % pour le sakkat) et un contour multicolore.
+    """
+    from collections import Counter
+
+    w, h = im.size
+    px = im.load()
+    alpha = im.split()[-1]
+    # Seuil à 40 % et pas 60 % : après une première réparation, une plaque en DISQUE (et non en carré)
+    # ne couvre plus que ~44 % du cadre — item-baton-cosmique est passé entre les mailles à 60 %.
+    # Validé sur les 138 illustrations : aucune illustration saine n'atteint 40 % d'opaques d'une seule
+    # teinte neutre, parce qu'un objet dessiné est multicolore et bordé d'un contour foncé.
+    opaques = sum(alpha.histogram()[201:])
+    if opaques / (w * h) < 0.4:
+        return None
+    anneau = _anneau_opaque(px, w, h, alpha)
+    if not anneau:
+        return None
+    # ⚠️ REGROUPEMENT PAR TOLÉRANCE, PAS PAR SEAU DE QUANTIFICATION. Compter les teintes quantifiées
+    # laissait passer 34 fichiers sur 92 : quand le modèle PEINT un damier de fausse transparence, le
+    # contour alterne blanc (252) et gris clair (218), soit deux seaux à ~50 % chacun — donc jamais 70 %.
+    # On prend la teinte la plus fréquente, puis on compte tout ce qui en est PROCHE.
+    c = Counter((r // 24, g // 24, b // 24) for r, g, b, a in anneau)
+    teinte, _ = c.most_common(1)[0]
+    ref = tuple(int(v * 24 + 12) for v in teinte)
+    proches = sum(1 for r, g, b, a in anneau if abs(r - ref[0]) + abs(g - ref[1]) + abs(b - ref[2]) <= 90)
+    if proches / len(anneau) < 0.7:
+        return None
+    return ref
+
+
+def retirer_plaque(im, couleur, tolerance=140):
+    """Efface la plaque par remplissage depuis le bord de l'image, puis recadre.
+
+    Le remplissage traverse AUSSI les pixels transparents : la plaque est séparée du bord par un liseré
+    vide, un remplissage qui n'accepterait que la couleur ne l'atteindrait jamais. La tolérance est large
+    (140 sur la somme des trois canaux) pour couvrir le damier peint, qui alterne blanc et gris clair.
+    """
+    from collections import deque
+
+    w, h = im.size
+    px = im.load()
+
+    def passable(c):
+        return c[3] < 40 or sum(abs(c[i] - couleur[i]) for i in range(3)) <= tolerance
+
+    vus = bytearray(w * h)
+    file = deque()
+    for x in range(w):
+        for y in (0, h - 1):
+            if passable(px[x, y]):
+                file.append((x, y)); vus[y * w + x] = 1
+    for y in range(h):
+        for x in (0, w - 1):
+            if passable(px[x, y]):
+                file.append((x, y)); vus[y * w + x] = 1
+    efface = 0
+    while file:
+        x, y = file.popleft()
+        if px[x, y][3] > 0:
+            px[x, y] = (0, 0, 0, 0)
+            efface += 1
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < w and 0 <= ny < h and not vus[ny * w + nx] and passable(px[nx, ny]):
+                vus[ny * w + nx] = 1
+                file.append((nx, ny))
+
+    # ── NETTOYAGE DU LISERÉ. Le bord anti-aliasé de la plaque laisse des pixels semi-transparents que le
+    # remplissage n'atteint pas : à l'écran, un cercle en POINTILLÉS autour de l'objet. On retire tout
+    # pixel faiblement opaque qui n'a AUCUN voisin franchement opaque — l'anti-aliasing de l'objet, lui,
+    # borde toujours des pixels opaques, donc il est préservé.
+    isoles = []
+    for y in range(h):
+        for x in range(w):
+            if not (0 < px[x, y][3] < 160):
+                continue
+            solide = any(
+                0 <= x + dx < w and 0 <= y + dy < h and px[x + dx, y + dy][3] > 200
+                for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+            )
+            if not solide:
+                isoles.append((x, y))
+    for x, y in isoles:
+        px[x, y] = (0, 0, 0, 0)
+        efface += 1
+    return efface
+
+
+def reparer_nommes(ids: list, slots: dict) -> None:
+    """Retire la plaque de fond d'objets DÉSIGNÉS À LA MAIN, sans passer par la détection.
+
+    ⚠️ POURQUOI CETTE PORTE DE SORTIE EXISTE. La détection automatique attrape les plaques CARRÉES, qui
+    sont la grande majorité. Elle rate les plaques en DISQUE : le contour de la boîte englobante d'un
+    disque est fait de coins transparents et d'un liseré anti-aliasé, donc l'échantillon sur lequel la
+    détection se prononce est trop pauvre. Plutôt que de complexifier l'heuristique jusqu'à risquer des
+    faux positifs sur des illustrations saines, on garde une liste explicite : voir un disque blanc à
+    l'œil est immédiat, et la réparation, elle, fonctionne parfaitement sur ces cas.
+    """
+    from PIL import Image
+    from collections import Counter
+
+    for iid in ids:
+        f = ART / f"item-{iid}.png"
+        if not f.exists():
+            print(f"  {iid}: fichier absent")
+            continue
+        im = Image.open(f).convert("RGBA")
+        px = im.load()
+        w, h = im.size
+        # teinte de la plaque = la plus fréquente parmi les pixels opaques NEUTRES et clairs ou sombres
+        c = Counter()
+        for y in range(h):
+            for x in range(w):
+                r, g, b, a = px[x, y]
+                if a > 200 and max(r, g, b) - min(r, g, b) < 40:
+                    c[(r // 20, g // 20, b // 20)] += 1
+        if not c:
+            print(f"  {iid}: aucune teinte neutre dominante, rien à retirer")
+            continue
+        t, part = c.most_common(1)[0]
+        couleur = tuple(int(v * 20 + 10) for v in t)
+        avant = sum(im.split()[-1].histogram()[201:])
+        # ⚠️ REFUS SI LA TEINTE N'EST PAS MAJORITAIRE. Relancer cette réparation sur un fichier DÉJÀ propre
+        # est destructeur : la teinte neutre la plus fréquente devient alors une couleur de l'OBJET, et le
+        # remplissage la mange. C'est arrivé — le plastron de feuilles s'est retrouvé troué après un second
+        # passage (1189 → 733 pixels opaques). Une plaque de fond représente toujours la majorité des
+        # pixels neutres opaques ; en dessous, il n'y a plus de plaque à retirer.
+        if part / max(1, avant) < 0.45:
+            print(f"  {iid}: rien à retirer (teinte neutre dominante à {part * 100 // max(1, avant)} % seulement)")
+            continue
+        efface = retirer_plaque(im, couleur)
+        reste = sum(im.split()[-1].histogram()[201:])
+        if reste < 200:
+            print(f"  {iid}: RÉPARATION REFUSÉE — il ne resterait que {reste} px opaques")
+            continue
+        finaliser(im, slots.get(iid, "weapon")).save(f)
+        print(f"  {iid}: plaque {couleur} retirée ({efface} px, {avant} → {reste} opaques)")
+
+
+def auditer(reparer: bool = False, slots: dict | None = None) -> int:
+    """Contrôle qualité des illustrations d'objets ; --repair retire les plaques de fond et recadre.
+
+    Le recadrage post-réparation n'est pas cosmétique : Player.refreshHat met le chapeau à l'échelle
+    38 / max(largeur, hauteur) DU CADRE, donc le remplissage décide de la taille du chapeau sur la tête
+    du panda (cf. REMPLISSAGE_CIBLE).
+    """
+    from PIL import Image
+
+    anomalies = 0
+    for f in sorted(ART.glob("item-*.png")):
+        im = Image.open(f).convert("RGBA")
+        if im.size != (TAILLE_FINALE, TAILLE_FINALE):
+            print(f"  {f.name}: taille {im.size}")
+            anomalies += 1
+            continue
+        couleur = detecter_plaque(im)
+        if not couleur:
+            continue
+        anomalies += 1
+        if not reparer:
+            print(f"  {f.name}: plaque de fond {couleur}")
+            continue
+        efface = retirer_plaque(im, couleur)
+        reste = sum(im.split()[-1].histogram()[201:])
+        if reste < 200:
+            print(f"  {f.name}: RÉPARATION REFUSÉE — il ne resterait que {reste} px opaques")
+            continue
+        iid = f.stem[len("item-"):]
+        slot = (slots or {}).get(iid, "weapon")
+        finaliser(im, slot).save(f)
+        print(f"  {f.name}: plaque {couleur} retirée ({efface} px), recadré en {slot}")
+        anomalies -= 1
+    return anomalies
+
+
 def main():
     ap = argparse.ArgumentParser(description="Génère les illustrations d'objets manquantes.")
     ap.add_argument("only", nargs="*", help="filtre par sous-chaîne d'identifiant (mot-clé 'only' optionnel)")
@@ -449,6 +671,10 @@ def main():
     ap.add_argument("--dry", action="store_true", help="affiche les prompts, aucun appel réseau")
     ap.add_argument("--force", action="store_true", help="regénère même si le PNG existe")
     ap.add_argument("--env", type=Path, default=ENV_DEFAUT, help=f"fichier d'identifiants (défaut : {ENV_DEFAUT})")
+    ap.add_argument("--audit", action="store_true", help="contrôle qualité des illustrations déjà en place, puis sort")
+    ap.add_argument("--repair-only", nargs="*", default=None, metavar="ID",
+                    help="retire la plaque de fond de ces objets précis (contourne la détection), puis sort")
+    ap.add_argument("--repair", action="store_true", help="avec --audit : retire les plaques de fond détectées")
     ap.add_argument("--comptes", action="store_true", help="liste les comptes de service disponibles et sort")
     ap.add_argument("--compte", default=None, help="compte de service à utiliser (sous-chaîne du nom)")
     ap.add_argument("--limit", type=int, default=0, help="s'arrête après N objets")
@@ -457,6 +683,17 @@ def main():
         help="inclut aussi les chapeaux qui ont déjà un dessin vectoriel (pour les remplacer par une illustration)",
     )
     args = ap.parse_args()
+
+    if args.repair_only is not None:
+        slots = {it["id"]: it["slot"] for it in lire_items()}
+        reparer_nommes(args.repair_only, slots)
+        return
+
+    if args.audit:
+        slots = {it["id"]: it["slot"] for it in lire_items()}
+        n = auditer(reparer=args.repair, slots=slots)
+        print(f"{n} anomalie(s)" if n else "✔ aucune anomalie")
+        return
 
     if args.comptes:
         for nom, sa in lire_comptes(args.env).items():

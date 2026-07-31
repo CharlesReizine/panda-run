@@ -35,12 +35,8 @@ const COSMETIC_DRAWN = new Set([
 //     fourre-tout dont personne ne sait ce qu'il contient encore.
 //
 // Régénérer l'état des lieux : `node scripts/art-manquant.mjs` → docs/art-a-generer.md
-const ART_A_GENERER = new Set([
-  'casquette-de-toile', 'foulard-de-pirate', 'cagoule-de-voleur', 'heaume-de-bronze',
-  'couronne-de-fleurs', 'masque-de-renard', 'casque-a-plumet', 'mitre-du-clerc',
-  'bandeau-du-moine', 'heaume-du-chevalier', 'chapeau-du-magicien', 'couronne-de-laurier',
-  'casque-de-dragon', 'couronne-du-roi-demon', 'anneau-du-dragon', 'coeur-de-golem',
-  'larme-d-etoile', 'sceau-des-anciens',
+const ART_A_GENERER = new Set<string>([
+  // vide : les 150 objets ont tous leur illustration
 ])
 
 const hasPng = (id: string) => artPaths.some((p) => p.endsWith(`/item-${id}.png`))
