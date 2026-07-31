@@ -2,6 +2,7 @@ import Phaser from 'phaser'
 import { getPlayer } from '../state'
 import { save } from '../core/save'
 import { ITEMS, rarityColor, SLOT_ORDER, SLOT_LABEL_PLURAL } from '../data/items'
+import { MATERIALS } from '../data/materials'
 import { upgradedBonus } from '../core/reforge'
 import { equipBlockReason, itemMinLevel } from '../core/equip'
 import type { EquipSlot, Rarity } from '../core/types'
@@ -12,6 +13,7 @@ import {
   INV, CARD, stockBox, equipBox, layoutStock, cellRect, cellFrame, cellIconCenter, cellNameTop,
   cellNameLines, equipRowRect, equipLabelPos, equipIconCenter, equipNameX,
   equipNameChars, equipHintX, layoutInfo, infoButtons, centerOf, type Rect,
+  MAT, matBox, matCellRect, matPerPage, matPageCount, matPagerY,
 } from './inventory-layout'
 import { truncate } from './text-metrics'
 
@@ -41,6 +43,11 @@ export class InventoryScene extends Phaser.Scene {
   // page courante du stock. Sans pagination, tout objet au-delà de la capacité de l'écran serait
   // définitivement inatteignable — le sac n'ayant aucune limite (cf. inventory-layout.ts).
   private stockPage = 0
+  // ONGLET du panneau de gauche. Retour du user : « je vois pas dans mon inventaire où je trouve mes
+  // matériaux et loots » — ils existaient, mais UNIQUEMENT dans l'écran Menu, pas dans l'inventaire, qui
+  // est l'endroit où on les cherche.
+  private tab: 'equip' | 'mats' = 'equip'
+  private matPage = 0
   private returnKey = 'WorldMap'
   private overlay = false // true = lancée par-dessus le jeu en pause (à reprendre à la fermeture)
   private dirty = false // un équipement a changé → rafraîchir le panda en jeu à la fermeture
@@ -111,11 +118,17 @@ export class InventoryScene extends Phaser.Scene {
 
     const stock = stockBox(), equip = equipBox()
 
-    // ─── GAUCHE : STOCK (objets non équipés) ───────────────────────────────
-    this.add.text(stock.x + 10, INV.labelY, 'STOCK', { fontSize: `${INV.labelFont}px`, color: '#80cbc4' })
+    // ─── GAUCHE : DEUX ONGLETS — ÉQUIPEMENT / MATÉRIAUX ────────────────────
+    // On RÉUTILISE la surface du panneau plutôt que d'en ajouter un troisième : l'écran fait 540 px de
+    // haut, fixes, et ce panneau est DÉJÀ paginé parce qu'il ne tenait pas. Un panneau de plus aurait
+    // rétréci les deux autres et remis le débordement au programme.
+    this.add.text(stock.x + 10, INV.labelY, 'SAC', { fontSize: `${INV.labelFont}px`, color: '#80cbc4' })
     this.add.rectangle(stock.x, stock.y, stock.w, stock.h, 0x000000, 0.25).setOrigin(0).setStrokeStyle(1, 0xffffff, 0.15)
+    this.drawTabs(stock, p.inventory.length, Object.values(p.materials).filter((c) => c > 0).length)
 
-    if (p.inventory.length === 0) {
+    if (this.tab === 'mats') {
+      this.renderMaterials(p)
+    } else if (p.inventory.length === 0) {
       this.add.text(stock.x + stock.w / 2, stock.y + stock.h / 2, '(vide — les objets ramassés\napparaissent ici)', { fontSize: '14px', color: '#78909c', align: 'center' }).setOrigin(0.5)
     } else {
       // regroupé visuellement par type (chapeau → armure → arme → accessoire), en-tête par section.
@@ -205,6 +218,86 @@ export class InventoryScene extends Phaser.Scene {
 
   // Une case de la grille du stock : cadre + icône + nom sur deux lignes au plus, tout borné par
   // inventory-layout (le nom ne peut plus déborder du cadre ni la case sortir du panneau).
+  /**
+   * Barre d'onglets du panneau de gauche.
+   *
+   * Le COMPTEUR sur chaque onglet est le vrai correctif : sans lui, il faut cliquer pour savoir s'il y a
+   * quelque chose dedans, et c'est exactement ce qui manquait — les matériaux existaient sans que rien
+   * n'indique où les regarder.
+   */
+  private drawTabs(stock: { x: number; y: number; w: number }, nbObjets: number, nbMats: number) {
+    const w = (stock.w - 6) / 2
+    const mk = (i: number, cle: 'equip' | 'mats', label: string, n: number) => {
+      const actif = this.tab === cle
+      const x = stock.x + i * (w + 6)
+      const r = this.add.rectangle(x, stock.y, w, MAT.tabsH, actif ? 0x1b5e5a : 0x14202a, actif ? 0.95 : 0.6)
+        .setOrigin(0).setStrokeStyle(1, actif ? 0x80cbc4 : 0xffffff, actif ? 0.9 : 0.15)
+        .setInteractive({ useHandCursor: true })
+      this.add.text(x + w / 2, stock.y + MAT.tabsH / 2, `${label} (${n})`, {
+        fontSize: '13px', color: actif ? '#ffffff' : '#90a4ae', fontStyle: actif ? 'bold' : 'normal',
+      }).setOrigin(0.5)
+      r.on('pointerdown', () => { this.tab = cle; this.selected = null; this.render() })
+    }
+    mk(0, 'equip', 'Équipement', nbObjets)
+    mk(1, 'mats', 'Matériaux', nbMats)
+  }
+
+  /**
+   * Liste des matériaux collectés : icône, nom, quantité. Paginée comme le stock.
+   *
+   * ⚠️ L'ICÔNE EST LA VRAIE (`material-<id>`, dessinée au chargement pour chaque matière), pas une
+   * pastille teintée. Le repli générique existe encore dans le moteur, et c'est lui que le user a rejeté
+   * mot pour mot ailleurs : « on voit rien, c'est des vieux cercles de couleurs ».
+   * Les matières RARES remontent en tête : ce sont elles qu'on cherche avant d'aller à la forge.
+   */
+  private renderMaterials(p: ReturnType<typeof getPlayer>) {
+    const collectes = Object.entries(p.materials)
+      .filter(([, n]) => n > 0)
+      .map(([id, n]) => ({ def: MATERIALS[id], id, n }))
+      .filter((m): m is { def: NonNullable<typeof m.def>; id: string; n: number } => !!m.def)
+      .sort((a, b) => (a.def.rarity === b.def.rarity ? a.def.name.localeCompare(b.def.name) : a.def.rarity === 'rare' ? -1 : 1))
+
+    const b = matBox()
+    if (!collectes.length) {
+      this.add.text(b.x + b.w / 2, b.y + b.h / 2, '(aucun matériau)\n\nCasse les buissons, les roches\net les coffres pour en récolter.', {
+        fontSize: '14px', color: '#78909c', align: 'center', lineSpacing: 3,
+      }).setOrigin(0.5)
+      return
+    }
+
+    const pages = matPageCount(collectes.length)
+    this.matPage = Math.min(Math.max(0, this.matPage), pages - 1)
+    const debut = this.matPage * matPerPage()
+    collectes.slice(debut, debut + matPerPage()).forEach((m, i) => {
+      const r = matCellRect(i)
+      this.add.rectangle(r.x, r.y + r.h / 2, r.w, r.h - 4, 0x000000, 0.3).setOrigin(0, 0.5).setStrokeStyle(1, 0xffffff, 0.1)
+      const cle = `material-${m.id}`
+      if (this.textures.exists(cle)) this.add.image(r.x + 6 + MAT.icon / 2, r.y + r.h / 2, cle).setDisplaySize(MAT.icon, MAT.icon)
+      this.add.text(r.x + MAT.icon + 14, r.y + r.h / 2, m.def.name, {
+        fontSize: `${MAT.nameFont}px`, color: m.def.rarity === 'rare' ? '#ffd54f' : '#cfd8dc',
+        wordWrap: { width: r.w - MAT.icon - 60 }, maxLines: 1,
+      }).setOrigin(0, 0.5)
+      this.add.text(r.x + r.w - 8, r.y + r.h / 2, `×${m.n}`, {
+        fontSize: `${MAT.qtyFont}px`, color: '#ffffff', fontStyle: 'bold',
+      }).setOrigin(1, 0.5)
+    })
+
+    if (pages > 1) {
+      const cy = matPagerY()
+      const fleche = (x: number, label: string, to: number, on: boolean) => {
+        const t = this.add.text(x, cy, label, {
+          fontSize: '18px', color: on ? '#ffffff' : '#546e7a', fontStyle: 'bold',
+          backgroundColor: on ? '#37474f' : '#1c262b', padding: { x: 10, y: 3 },
+        }).setOrigin(0.5)
+        if (on) t.setInteractive({ useHandCursor: true }).on('pointerdown', () => { this.matPage = to; this.render() })
+      }
+      const mid = b.x + b.w / 2
+      fleche(mid - 62, '‹', this.matPage - 1, this.matPage > 0)
+      this.add.text(mid, cy, `${this.matPage + 1}/${pages}`, { fontSize: '14px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0.5)
+      fleche(mid + 62, '›', this.matPage + 1, this.matPage < pages - 1)
+    }
+  }
+
   private drawStockCell(entry: { itemId: string; i: number }, cell: Rect) {
     const p = getPlayer()
     const item = ITEMS[entry.itemId]!

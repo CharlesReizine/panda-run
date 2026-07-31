@@ -5,9 +5,11 @@ import {
   CELL_NAME_LINES, equipRowRect, equipRowsFit, equipLabelPos, equipIconCenter, equipNameX,
   equipNameChars, equipHintX, layoutInfo, infoButtons, closeRect, cardNameChars, cardDescChars,
   sectionH, noticeH, type Rect,
+  MAT, matBox, matCellRect, matCellW, matPerPage, matPageCount, matPagerY,
 } from '../../src/scenes/inventory-layout'
 import { charsPerLine, lineH } from '../../src/scenes/text-metrics'
 import { ITEMS, SLOT_ORDER } from '../../src/data/items'
+import { MATERIALS } from '../../src/data/materials'
 import { MAX_REFORGE_LEVEL, upgradedBonus } from '../../src/core/reforge'
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -370,5 +372,49 @@ describe('pagination du stock', () => {
 
   it('un sac qui tient en entier n\'affiche qu\'une seule page', () => {
     expect(layoutStock(groups(1, 1, 1, 1), 0).pageCount).toBe(1)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// ONGLET MATÉRIAUX — il ne doit pas déborder non plus
+//
+// Retour du user : « je vois pas dans mon inventaire où je trouve mes matériaux et loots ». Ils sont
+// désormais dans un onglet du panneau de gauche. Comme le stock, la liste est paginée : la contrainte est
+// la HAUTEUR (540 px fixes), et le nombre de matières collectées n'a pas de plafond.
+describe('onglet matériaux', () => {
+  it('la zone de liste tient dans le panneau de gauche, sous la barre d\'onglets', () => {
+    const s = stockBox(), m = matBox()
+    expect(m.x).toBeGreaterThanOrEqual(s.x)
+    expect(m.x + m.w).toBeLessThanOrEqual(s.x + s.w)
+    expect(m.y).toBeGreaterThanOrEqual(s.y + MAT.tabsH)
+    expect(m.y + m.h).toBeLessThanOrEqual(s.y + s.h)
+  })
+
+  it('toutes les cases d\'une page RESTENT dans la zone', () => {
+    for (let i = 0; i < matPerPage(); i++) {
+      const r = matCellRect(i)
+      const m = matBox()
+      expect(r.x, `case ${i}`).toBeGreaterThanOrEqual(m.x)
+      expect(r.x + r.w, `case ${i}`).toBeLessThanOrEqual(m.x + m.w + 1)
+      expect(r.y, `case ${i}`).toBeGreaterThanOrEqual(m.y)
+      expect(r.y + r.h, `case ${i}`).toBeLessThanOrEqual(m.y + m.h + 1)
+    }
+  })
+
+  it('la pagination couvre TOUTES les matières du jeu, même si on les a toutes', () => {
+    const n = Object.keys(MATERIALS).length
+    expect(matPageCount(n) * matPerPage()).toBeGreaterThanOrEqual(n)
+  })
+
+  it('la ligne de pagination reste sous la liste et dans le cadre', () => {
+    expect(matPagerY()).toBeGreaterThan(matBox().y)
+    expect(matPagerY()).toBeLessThanOrEqual(INV.bottom)
+  })
+
+  it('une case est assez large pour un nom de matière et sa quantité', () => {
+    // le plus long nom du registre doit rester lisible à côté de son icône
+    const plusLong = Math.max(...Object.values(MATERIALS).map((m) => m.name.length))
+    const dispo = matCellW() - MAT.icon - 60
+    expect(charsPerLine(dispo, MAT.nameFont), `nom le plus long : ${plusLong} caractères`).toBeGreaterThan(10)
   })
 })

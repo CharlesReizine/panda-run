@@ -24,9 +24,14 @@ export const CLASSES: Record<ClassId, ClassDef> = {
   },
   archer: {
     id: 'archer', name: 'Archer', tint: 0x88dd88,
-    // atk réduite (cf. Sabreur) : reste plus fort que le novice mais ne trivialise plus les mobs.
-    baseStats: { atk: 12, def: 3, maxHp: 110, attackSpeed: 2.0 },
-    growth: { atk: 1.7, def: 1, maxHp: 15, attackSpeed: 0 },
+    // ⚠️ LE PLUS FRAGILE DES COMBATTANTS, ET C'EST SON IDENTITÉ. Demande du user : « l'archer devrait être
+    // beaucoup plus fragile et devrait avoir besoin de se battre pour rester à distance ». Il avait 110 PV
+    // pour 85 au novice : il encaissait donc mieux que le personnage de départ tout en tirant de loin, si
+    // bien que la distance n'était plus un choix tactique mais un confort. À 86 PV et 2 DÉF, se faire
+    // rattraper coûte cher — reculer, poser un piège et gérer son espace redevient le cœur du jeu d'archer.
+    // Son ATK monte d'un cran en compensation : fragile ET faible ne serait pas un archétype, juste un malus.
+    baseStats: { atk: 13, def: 2, maxHp: 82, attackSpeed: 2.0 },
+    growth: { atk: 1.8, def: 1, maxHp: 11, attackSpeed: 0 },
     skillIds: ['fleche-percante', 'tir-instinctif', 'double-tir', 'fleche-autoguidee', 'pluie-de-fleches', 'piege', 'course-rapide', 'oeil-de-lynx', 'reflexes-felins'],
   },
   chevalier: {
@@ -43,8 +48,10 @@ export const CLASSES: Record<ClassId, ClassDef> = {
   },
   chasseur: {
     id: 'chasseur', name: 'Chasseur', tint: 0x33aa55,
-    baseStats: { atk: 26, def: 6, maxHp: 195, attackSpeed: 2.2 },
-    growth: { atk: 3.2, def: 2, maxHp: 25, attackSpeed: 0 },
+    // CHASSEUR : même identité que l'archer, un cran au-dessus. Il reste le plus fragile des classes
+    // évoluées (150 PV contre 238 au chevalier), et frappe plus fort pour compenser.
+    baseStats: { atk: 30, def: 4, maxHp: 150, attackSpeed: 2.2 },
+    growth: { atk: 3.4, def: 2, maxHp: 18, attackSpeed: 0 },
     skillIds: ['mitraillette', 'tir-du-faucon', 'blitz-faucon', 'nuee-de-fleches', 'fleche-mortelle', 'fleche-enflammee', 'fleche-explosive', 'bond-du-chasseur', 'fleches-entravantes'],
   },
 }

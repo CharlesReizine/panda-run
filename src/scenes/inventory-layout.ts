@@ -366,3 +366,54 @@ export function closeRect(label: string): Rect {
   const w = Math.ceil(textWidth(label, INV.closeFont)) + 2 * INV.closePadX
   return { x: CARD.cx - w / 2, y: INV.closeY - h / 2, w, h }
 }
+
+// ─── ONGLET « MATÉRIAUX » DU PANNEAU DE GAUCHE ──────────────────────────────────────────────────
+//
+// Retour du user : « je vois pas dans mon inventaire où je trouve mes matériaux et loots ». Ils
+// existaient, mais UNIQUEMENT dans l'écran Menu — pas dans l'inventaire, qui est l'endroit où on les
+// cherche. On réutilise donc la surface du panneau de stock avec deux onglets : Équipement / Matériaux.
+//
+// ⚠️ ON RÉUTILISE LA SURFACE PLUTÔT QUE D'AJOUTER UN TROISIÈME PANNEAU. L'écran fait 540 px de haut,
+// fixes, et le panneau de stock est déjà paginé parce qu'il ne tenait pas. Un panneau de plus aurait
+// rétréci les deux autres et remis le débordement au programme.
+
+export const MAT = {
+  /** hauteur d'une ligne de matériau : icône + nom + quantité sur une seule ligne, bien lisible */
+  rowH: 34,
+  icon: 24,
+  nameFont: 13,
+  qtyFont: 14,
+  /** deux colonnes : les noms de matériaux sont courts, une seule colonne gâcherait la largeur */
+  cols: 2,
+  gap: 8,
+  /** hauteur de la barre d'onglets, au-dessus des panneaux */
+  tabsH: 26,
+}
+
+/** Zone utile de la liste de matériaux (sous la barre d'onglets, dans le panneau de gauche). */
+export const matBox = (): Rect => {
+  const s = stockBox()
+  return { x: s.x + INV.pad, y: s.y + MAT.tabsH + INV.pad, w: s.w - 2 * INV.pad, h: s.h - MAT.tabsH - 2 * INV.pad }
+}
+
+export const matCellW = (): number => Math.floor((matBox().w - (MAT.cols - 1) * MAT.gap) / MAT.cols)
+
+/** Nombre de lignes de matériaux affichables par colonne. */
+export const matRows = (): number => Math.max(1, Math.floor(matBox().h / MAT.rowH))
+
+/** Capacité d'une page (toutes colonnes confondues). */
+export const matPerPage = (): number => matRows() * MAT.cols
+
+/** Rectangle d'une case de matériau, par index DANS la page. */
+export function matCellRect(i: number): Rect {
+  const b = matBox()
+  const col = Math.floor(i / matRows())
+  const row = i % matRows()
+  return { x: b.x + col * (matCellW() + MAT.gap), y: b.y + row * MAT.rowH, w: matCellW(), h: MAT.rowH }
+}
+
+/** Nombre de pages nécessaires pour `n` matériaux collectés. */
+export const matPageCount = (n: number): number => Math.max(1, Math.ceil(n / matPerPage()))
+
+/** Y de la ligne de pagination des matériaux (sous la dernière ligne possible). */
+export const matPagerY = (): number => matBox().y + matRows() * MAT.rowH + 10
