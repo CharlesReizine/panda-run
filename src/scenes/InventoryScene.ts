@@ -8,6 +8,12 @@ import type { EquipSlot, Rarity } from '../core/types'
 import type { LevelScene } from './LevelScene'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 import { installUiClickSound } from '../ui/click-sound'
+import {
+  INV, CARD, stockBox, equipBox, layoutStock, cellRect, cellFrame, cellIconCenter, cellNameTop,
+  cellNameLines, equipRowRect, equipLabelPos, equipIconCenter, equipNameX,
+  equipNameChars, equipHintX, layoutInfo, infoButtons, centerOf, type Rect,
+} from './inventory-layout'
+import { truncate } from './text-metrics'
 
 // ordre fixe chapeau → armure → arme → accessoire (partagé avec les boutiques)
 const SLOTS: EquipSlot[] = SLOT_ORDER
@@ -86,71 +92,67 @@ export class InventoryScene extends Phaser.Scene {
     this.add.text(x, y, p.glyph, { fontSize: `${Math.round(size / 3.6)}px`, color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
   }
 
+  // Cette scène ne fait plus que PEINDRE : toutes les positions viennent de inventory-layout.ts, qui
+  // est testé pour ne rien laisser sortir du cadre quel que soit le contenu du sac (lequel n'a aucune
+  // limite — cf. l'en-tête du module de géométrie).
   private render() {
     for (const child of [...this.children.list]) child.destroy()
     const p = getPlayer()
     this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x0d1b2a, 0.96)
-    this.add.text(480, 22, 'Inventaire', { fontSize: '26px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
+    this.add.text(480, INV.titleY, 'Inventaire', { fontSize: `${INV.titleFont}px`, color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
+
+    const stock = stockBox(), equip = equipBox()
 
     // ─── GAUCHE : STOCK (objets non équipés) ───────────────────────────────
-    this.add.text(40, 52, 'STOCK', { fontSize: '18px', color: '#80cbc4' })
-    this.add.rectangle(30, 88, 470, 420, 0x000000, 0.25).setOrigin(0).setStrokeStyle(1, 0xffffff, 0.15)
+    this.add.text(stock.x + 10, INV.labelY, 'STOCK', { fontSize: `${INV.labelFont}px`, color: '#80cbc4' })
+    this.add.rectangle(stock.x, stock.y, stock.w, stock.h, 0x000000, 0.25).setOrigin(0).setStrokeStyle(1, 0xffffff, 0.15)
 
     if (p.inventory.length === 0) {
-      this.add.text(265, 300, '(vide — les objets ramassés\napparaissent ici)', { fontSize: '14px', color: '#78909c', align: 'center' }).setOrigin(0.5)
+      this.add.text(stock.x + stock.w / 2, stock.y + stock.h / 2, '(vide — les objets ramassés\napparaissent ici)', { fontSize: '14px', color: '#78909c', align: 'center' }).setOrigin(0.5)
     } else {
       // regroupé visuellement par type (chapeau → armure → arme → accessoire), en-tête par section.
       // On conserve l'index réel dans p.inventory pour l'équipement (splice).
-      const cols = 3, cellW = 150, cellH = 92
-      const gridLeft = 40
       const entries = p.inventory.map((itemId, i) => ({ itemId, i }))
-      let y = 92
-      for (const slot of SLOTS) {
-        const group = entries.filter((e) => ITEMS[e.itemId]!.slot === slot)
-        if (group.length === 0) continue
-        this.add.text(44, y, SLOT_LABEL_PLURAL[slot], { fontSize: '13px', color: '#ffd54f', fontStyle: 'bold' })
-        const rowsTop = y + 22
-        group.forEach((e, gi) => {
-          const item = ITEMS[e.itemId]!
-          const col = gi % cols, row = Math.floor(gi / cols)
-          const cx = gridLeft + col * cellW + cellW / 2
-          const cy = rowsTop + row * cellH + cellH / 2
-          const up = p.upgrades[e.itemId] ?? 0
-          const upTxt = up > 0 ? ` +${up}` : ''
-          const isSel = this.selected?.source === 'stock' && this.selected.invIndex === e.i
-          const tile = this.add.rectangle(cx, cy, cellW - 12, cellH - 16, 0x1b2b3a, 0.9)
-            .setStrokeStyle(isSel ? 3 : 2, isSel ? 0xffffff : rarityColor(item.rarity), isSel ? 1 : 0.9)
-          this.itemIcon(e.itemId, cx, cy - 14, 40)
-          this.add.text(cx, cy + 20, `${item.name}${upTxt}`, {
-            fontSize: '11px', color: this.css(rarityColor(item.rarity)), align: 'center', wordWrap: { width: cellW - 18 },
-          }).setOrigin(0.5, 0)
-          // clic sur la case = ouvrir la fiche info de l'objet (l'équipement se fait depuis la fiche)
-          tile.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-            this.selected = { itemId: e.itemId, source: 'stock', slot: item.slot, invIndex: e.i }
-            this.notice = null
-            this.render()
-          })
-        })
-        y = rowsTop + Math.ceil(group.length / cols) * cellH + 6
+      const bySlot = (slot: EquipSlot) => entries.filter((e) => ITEMS[e.itemId]!.slot === slot)
+      const layout = layoutStock(SLOTS.map((slot) => ({ key: slot, count: bySlot(slot).length })))
+
+      for (const section of layout.sections) {
+        const slot = section.key as EquipSlot
+        this.add.text(stock.x + 14, section.headerY, SLOT_LABEL_PLURAL[slot], { fontSize: `${INV.sectionFont}px`, color: '#ffd54f', fontStyle: 'bold' })
+        bySlot(slot).slice(0, section.shown).forEach((e, gi) => this.drawStockCell(e, cellRect(section.gridY, gi)))
+      }
+
+      // le surplus est ANNONCÉ, jamais dessiné dans le vide : c'est la règle du dépôt depuis le bug
+      // du menu, et elle est d'autant plus nécessaire ici que le sac est sans limite
+      if (layout.hidden > 0) {
+        this.add.text(stock.x + stock.w / 2, layout.noticeY, `+${layout.hidden} autre${layout.hidden > 1 ? 's' : ''} en sac (équipe ou vends)`, {
+          fontSize: `${INV.noticeFont}px`, color: '#ffab40', fontStyle: 'bold',
+        }).setOrigin(0.5, 0)
       }
     }
 
     // ─── DROITE : ÉQUIPEMENT porté (4 slots) ───────────────────────────────
-    this.add.text(560, 52, 'ÉQUIPEMENT', { fontSize: '18px', color: '#80cbc4' })
+    this.add.text(equip.x, INV.labelY, 'ÉQUIPEMENT', { fontSize: `${INV.labelFont}px`, color: '#80cbc4' })
     SLOTS.forEach((slot, i) => {
-      const y = 116 + i * 88
+      const row = equipRowRect(i, SLOTS.length)
+      const mid = centerOf(row)
       const itemId = p.equipment[slot]
       const item = itemId ? ITEMS[itemId]! : null
       const isSel = this.selected?.source === 'equip' && this.selected.slot === slot
-      const box = this.add.rectangle(750, y, 360, 76, 0x1b2b3a, 0.9)
+      const box = this.add.rectangle(mid.x, mid.y, row.w, row.h, 0x1b2b3a, 0.9)
         .setStrokeStyle(isSel ? 3 : 2, isSel ? 0xffffff : (item ? rarityColor(item.rarity) : 0x455a64), item ? (isSel ? 1 : 0.95) : 0.6)
-      this.add.text(590, y - 24, SLOT_LABELS[slot], { fontSize: '12px', color: '#90a4ae' }).setOrigin(0, 0.5)
+      const lab = equipLabelPos(row)
+      this.add.text(lab.x, lab.y, SLOT_LABELS[slot], { fontSize: `${INV.slotLabelFont}px`, color: '#90a4ae' })
       if (item && itemId) {
-        this.itemIcon(itemId, 610, y + 6, 44)
+        const ic = equipIconCenter(row)
+        this.itemIcon(itemId, ic.x, ic.y, INV.slotIcon)
         const up = p.upgrades[itemId] ?? 0
         const upTxt = up > 0 ? ` +${up}` : ''
-        this.add.text(646, y + 2, `${item.name}${upTxt}`, { fontSize: '15px', color: this.css(rarityColor(item.rarity)), fontStyle: 'bold', wordWrap: { width: 240 } }).setOrigin(0, 0.5)
-        this.add.text(880, y + 2, 'Infos', { fontSize: '11px', color: '#b0d4ff' }).setOrigin(0.5)
+        // tronqué à la largeur CALCULÉE de la rangée : aucun nom ne peut plus recouvrir « Infos »
+        this.add.text(equipNameX(row), ic.y, truncate(`${item.name}${upTxt}`, equipNameChars(row)), {
+          fontSize: `${INV.slotNameFont}px`, color: this.css(rarityColor(item.rarity)), fontStyle: 'bold',
+        }).setOrigin(0, 0.5)
+        this.add.text(equipHintX(row), ic.y, 'Infos', { fontSize: `${INV.slotHintFont}px`, color: '#b0d4ff' }).setOrigin(0.5)
         // clic sur le slot équipé = ouvrir la fiche info (le retrait se fait depuis la fiche)
         box.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
           this.selected = { itemId, source: 'equip', slot }
@@ -158,16 +160,49 @@ export class InventoryScene extends Phaser.Scene {
           this.render()
         })
       } else {
-        this.add.text(750, y + 4, '— vide —', { fontSize: '13px', color: '#607d8b' }).setOrigin(0.5)
+        this.add.text(mid.x, mid.y + 6, '— vide —', { fontSize: '13px', color: '#607d8b' }).setOrigin(0.5)
       }
     })
 
-    // Fermer : retour à la scène d'origine
-    this.add.text(480, 505, '← Fermer', { fontSize: '20px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 16, y: 8 } })
-      .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.close())
+    // Fermer : retour à la scène d'origine — SOUS les deux panneaux (il était auparavant recouvert
+    // par la dernière rangée d'objets, qui descendait jusqu'à y = 558)
+    this.add.text(480, INV.closeY, '← Fermer', {
+      fontSize: `${INV.closeFont}px`, color: '#ffffff', backgroundColor: '#33691e',
+      padding: { x: INV.closePadX, y: INV.closePadY },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.close())
 
     // Fiche info par-dessus (modale) quand un objet est sélectionné
     if (this.selected) this.drawInfoPanel()
+  }
+
+  // Une case de la grille du stock : cadre + icône + nom sur deux lignes au plus, tout borné par
+  // inventory-layout (le nom ne peut plus déborder du cadre ni la case sortir du panneau).
+  private drawStockCell(entry: { itemId: string; i: number }, cell: Rect) {
+    const p = getPlayer()
+    const item = ITEMS[entry.itemId]!
+    const frame = cellFrame(cell)
+    const mid = centerOf(frame)
+    const isSel = this.selected?.source === 'stock' && this.selected.invIndex === entry.i
+    const tile = this.add.rectangle(mid.x, mid.y, frame.w, frame.h, 0x1b2b3a, 0.9)
+      .setStrokeStyle(isSel ? 3 : 2, isSel ? 0xffffff : rarityColor(item.rarity), isSel ? 1 : 0.9)
+
+    const ic = cellIconCenter(cell)
+    this.itemIcon(entry.itemId, ic.x, ic.y, INV.icon)
+
+    const up = p.upgrades[entry.itemId] ?? 0
+    const upTxt = up > 0 ? ` +${up}` : ''
+    this.add.text(cell.x + cell.w / 2, cellNameTop(cell), cellNameLines(`${item.name}${upTxt}`).join('\n'), {
+      // la découpe est faite par la géométrie (nombre de lignes BORNÉ) : on n'utilise PAS wordWrap,
+      // qui ne sait pas s'arrêter au bout de deux lignes et laissait donc le nom sortir du cadre
+      fontSize: `${INV.nameFont}px`, color: this.css(rarityColor(item.rarity)), align: 'center',
+    }).setOrigin(0.5, 0)
+
+    // clic sur la case = ouvrir la fiche info de l'objet (l'équipement se fait depuis la fiche)
+    tile.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+      this.selected = { itemId: entry.itemId, source: 'stock', slot: item.slot, invIndex: entry.i }
+      this.notice = null
+      this.render()
+    })
   }
 
   // équipe l'objet sélectionné du stock (l'objet déjà porté retourne au stock), puis ferme la fiche.
@@ -213,39 +248,42 @@ export class InventoryScene extends Phaser.Scene {
     this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x000000, 0.55)
       .setInteractive({ useHandCursor: false }).on('pointerdown', () => { this.selected = null; this.render() })
 
-    const cx = 480, top = 96, cardW = 460, cardH = 348
-    this.add.rectangle(cx, top + cardH / 2, cardW, cardH, 0x14263a, 1).setStrokeStyle(3, color, 1)
+    // Flux vertical CALCULÉ (cf. inventory-layout) : les anciens offsets en dur depuis le haut de la
+    // carte se chevauchaient dès qu'un nom passait sur deux lignes ou qu'une description était longue.
+    const upTxt = up > 0 ? ` +${up}` : ''
+    const desc = item.description ?? 'Aucune description.'
+    const L = layoutInfo(`${item.name}${upTxt}`, desc, this.notice)
+    const cx = CARD.cx
+    this.add.rectangle(cx, L.card.y + L.card.h / 2, L.card.w, L.card.h, 0x14263a, 1).setStrokeStyle(3, color, 1)
 
     // icône + nom + rareté
-    this.itemIcon(sel.itemId, cx, top + 52, 72)
-    const upTxt = up > 0 ? ` +${up}` : ''
-    this.add.text(cx, top + 104, `${item.name}${upTxt}`, { fontSize: '20px', color: this.css(color), fontStyle: 'bold', align: 'center', wordWrap: { width: cardW - 40 } }).setOrigin(0.5, 0)
-    this.add.text(cx, top + 132, `${RARITY_LABELS[item.rarity ?? 'commun']} · ${SLOT_LABELS[item.slot]}`, { fontSize: '13px', color: this.css(color) }).setOrigin(0.5, 0)
+    this.itemIcon(sel.itemId, cx, L.icon.y + L.icon.h / 2, CARD.icon)
+    this.add.text(cx, L.name.y, L.nameLines.join('\n'), { fontSize: `${CARD.nameFont}px`, color: this.css(color), fontStyle: 'bold', align: 'center' }).setOrigin(0.5, 0)
+    this.add.text(cx, L.rarity.y, `${RARITY_LABELS[item.rarity ?? 'commun']} · ${SLOT_LABELS[item.slot]}`, { fontSize: `${CARD.rarityFont}px`, color: this.css(color) }).setOrigin(0.5, 0)
 
     // description
-    const desc = item.description ?? 'Aucune description.'
-    this.add.text(cx, top + 158, desc, { fontSize: '13px', color: '#cfd8dc', align: 'center', fontStyle: 'italic', wordWrap: { width: cardW - 56 } }).setOrigin(0.5, 0)
+    this.add.text(cx, L.desc.y, L.descLines.join('\n'), { fontSize: `${CARD.descFont}px`, color: '#cfd8dc', align: 'center', fontStyle: 'italic' }).setOrigin(0.5, 0)
 
     // propriétés (bonus effectifs, majorés du niveau de réforge)
     const bonus = upgradedBonus(item.bonus, up)
     const props = (['atk', 'def', 'maxHp'] as const).filter((k) => (bonus[k] ?? 0) > 0).map((k) => `+${bonus[k]} ${STAT_LABELS[k]}`)
-    const propsY = top + 226
-    this.add.text(cx, propsY, 'PROPRIÉTÉS', { fontSize: '12px', color: '#80cbc4', fontStyle: 'bold' }).setOrigin(0.5, 0)
-    this.add.text(cx, propsY + 20, props.length ? props.join('   ') : '(aucun bonus)', { fontSize: '15px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5, 0)
+    this.add.text(cx, L.propsTitle.y, 'PROPRIÉTÉS', { fontSize: `${CARD.propsTitleFont}px`, color: '#80cbc4', fontStyle: 'bold' }).setOrigin(0.5, 0)
+    this.add.text(cx, L.props.y, props.length ? props.join('   ') : '(aucun bonus)', { fontSize: `${CARD.propsFont}px`, color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5, 0)
 
-    // message contextuel (ex. « Arme réservée aux mages ») au-dessus du bouton d'action
+    // message contextuel (ex. « Arme réservée aux mages ») dans la bande réservée au-dessus des boutons
     if (this.notice) {
-      this.add.text(cx, top + cardH - 74, this.notice, { fontSize: '13px', color: '#ff8a80', fontStyle: 'bold', align: 'center', wordWrap: { width: cardW - 48 } }).setOrigin(0.5)
+      this.add.text(cx, L.notice.y, L.noticeLines.join('\n'), { fontSize: `${CARD.noticeFont}px`, color: '#ff8a80', fontStyle: 'bold', align: 'center' }).setOrigin(0.5, 0)
     }
 
-    // bouton d'action contextuel
-    const btnY = top + cardH - 42
+    // boutons ancrés au bas de la carte, largeur déduite de leurs libellés
     const actLabel = sel.source === 'stock' ? 'Équiper' : 'Retirer'
     const actBg = sel.source === 'stock' ? '#2e7d32' : '#8d3b3b'
-    this.add.text(cx - 70, btnY, actLabel, { fontSize: '16px', color: '#ffffff', backgroundColor: actBg, padding: { x: 18, y: 8 } })
+    const btns = infoButtons(actLabel, 'Fermer')
+    const actMid = centerOf(btns.action), closeMid = centerOf(btns.close)
+    this.add.text(actMid.x, actMid.y, actLabel, { fontSize: `${CARD.btnFont}px`, color: '#ffffff', backgroundColor: actBg, padding: { x: CARD.btnPadX, y: CARD.btnPadY } })
       .setOrigin(0.5).setInteractive({ useHandCursor: true })
       .on('pointerdown', () => { if (sel.source === 'stock') this.equipSelected(sel); else this.unequipSelected(sel) })
-    this.add.text(cx + 80, btnY, 'Fermer', { fontSize: '16px', color: '#ffffff', backgroundColor: '#37474f', padding: { x: 18, y: 8 } })
+    this.add.text(closeMid.x, closeMid.y, 'Fermer', { fontSize: `${CARD.btnFont}px`, color: '#ffffff', backgroundColor: '#37474f', padding: { x: CARD.btnPadX, y: CARD.btnPadY } })
       .setOrigin(0.5).setInteractive({ useHandCursor: true })
       .on('pointerdown', () => { this.selected = null; this.render() })
   }

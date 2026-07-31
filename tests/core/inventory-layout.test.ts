@@ -6,9 +6,9 @@ import {
   equipNameChars, equipHintX, layoutInfo, infoButtons, closeRect, cardNameChars, cardDescChars,
   sectionH, noticeH, type Rect,
 } from '../../src/scenes/inventory-layout'
-import { lineH, wrapText } from '../../src/scenes/text-metrics'
+import { charsPerLine, lineH } from '../../src/scenes/text-metrics'
 import { ITEMS, SLOT_ORDER } from '../../src/data/items'
-import { MAX_REFORGE_LEVEL } from '../../src/core/reforge'
+import { MAX_REFORGE_LEVEL, upgradedBonus } from '../../src/core/reforge'
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 // INVENTAIRE — RIEN NE DÉBORDE, QUEL QUE SOIT LE CONTENU DU SAC. TEST BLOQUANT.
@@ -30,8 +30,12 @@ import { MAX_REFORGE_LEVEL } from '../../src/core/reforge'
 const cellsOf = (rows: number, gridY: number, shown: number): Rect[] =>
   Array.from({ length: shown }, (_, i) => cellRect(gridY, i)).slice(0, rows * INV.cols)
 
-/** Répartitions à couvrir : 0 objet, sacs de début de partie, sacs pleins, sacs absurdes. */
-const COUNTS = [0, 1, 2, 3, 4, 5, 8, 9, 17, 60]
+/**
+ * Répartitions à couvrir : sac vide, sacs de début de partie (là où était le bug), sacs pleins, sacs
+ * absurdes. Le produit cartésien sur les 4 types donne 2401 combinaisons — assez pour attraper une
+ * borne fausse, assez peu pour que la suite reste rapide.
+ */
+const COUNTS = [0, 1, 2, 4, 9, 17, 60]
 const distributions: number[][] = []
 for (const a of COUNTS) for (const b of COUNTS) for (const c of COUNTS) for (const d of COUNTS) {
   distributions.push([a, b, c, d])
@@ -99,27 +103,33 @@ describe('grille du stock bornée', () => {
   })
 
   it('les sections ne se marchent pas dessus et restent dans le panneau', () => {
+    // on accumule les fautes et on fait UNE assertion : sur 2401 répartitions × 4 sections, appeler
+    // expect() à chaque tour coûterait des secondes pour la même garantie
+    const fautes: string[] = []
     for (const counts of distributions) {
       const l = layoutStock(groupsOf(counts))
       let prevBottom = INV.top
       for (const s of l.sections) {
-        expect(s.headerY, `${counts.join('/')} · ${s.key}`).toBeGreaterThanOrEqual(prevBottom)
-        expect(s.gridY).toBe(s.headerY + sectionH())
-        expect(s.rows).toBeGreaterThanOrEqual(1)
+        if (s.headerY < prevBottom) fautes.push(`${counts.join('/')} · ${s.key} : en-tête ${s.headerY} < ${prevBottom}`)
+        if (s.gridY !== s.headerY + sectionH()) fautes.push(`${counts.join('/')} · ${s.key} : grille mal placée`)
+        if (s.rows < 1) fautes.push(`${counts.join('/')} · ${s.key} : section sans rangée`)
         prevBottom = s.gridY + s.rows * INV.cellH
-        expect(prevBottom, `${counts.join('/')} · ${s.key} bas`).toBeLessThanOrEqual(gridLimit())
+        if (prevBottom > gridLimit()) fautes.push(`${counts.join('/')} · ${s.key} : bas ${prevBottom} > ${gridLimit()}`)
       }
     }
+    expect(fautes.slice(0, 8), `sections fautives (${fautes.length}) :\n  ${fautes.slice(0, 8).join('\n  ')}`).toEqual([])
   })
 
   it('ne perd JAMAIS un objet en silence : affiché + masqué = contenu du sac', () => {
+    const fautes: string[] = []
     for (const counts of distributions) {
       const l = layoutStock(groupsOf(counts))
       const shown = l.sections.reduce((n, s) => n + s.shown, 0)
       const total = counts.reduce((n, v) => n + v, 0)
-      expect(shown + l.hidden, `${counts.join('/')}`).toBe(total)
-      if (shown < total) expect(l.hidden, 'surplus non annoncé').toBeGreaterThan(0)
+      if (shown + l.hidden !== total) fautes.push(`${counts.join('/')} : ${shown} + ${l.hidden} ≠ ${total}`)
+      if (shown < total && l.hidden <= 0) fautes.push(`${counts.join('/')} : surplus non annoncé`)
     }
+    expect(fautes.slice(0, 8), `comptes faux (${fautes.length}) :\n  ${fautes.slice(0, 8).join('\n  ')}`).toEqual([])
   })
 
   it('LE CAS DU BUG : un objet de chacun des 4 types tient entièrement à l\'écran', () => {
@@ -140,6 +150,19 @@ describe('grille du stock bornée', () => {
     expect(shown).toBeLessThan(total)
     expect(l.hidden).toBe(total - shown)
     for (const s of l.sections) expect(s.gridY + s.rows * INV.cellH).toBeLessThanOrEqual(gridLimit())
+  })
+
+  it('aucun type d\'équipement ne peut être ÉVINCÉ par un autre', () => {
+    // 30 chapeaux et une arme : si la distribution était « premier arrivé, premier servi », les
+    // chapeaux mangeraient toute la hauteur et l'arme deviendrait inéquipable — un écran d'inventaire
+    // qui empêche d'équiper son arme est cassé, même si plus rien ne dépasse
+    for (const counts of [[30, 1, 1, 1], [1, 1, 1, 30], [9, 9, 9, 9], [60, 60, 60, 60]]) {
+      const l = layoutStock(groupsOf(counts))
+      expect(l.sections.map((s) => s.key), `${counts.join('/')}`).toEqual([...SLOT_ORDER])
+      for (const s of l.sections) {
+        expect(s.shown, `${counts.join('/')} · ${s.key}`).toBeGreaterThanOrEqual(1)
+      }
+    }
   })
 
   it('la capacité reste utile : au moins 12 objets visibles même avec les 4 sections', () => {
@@ -267,6 +290,18 @@ describe('fiche info (modale)', () => {
       .filter((it) => layoutInfo(it.name, it.description!, null).descLines.some((l) => l.endsWith('…')))
       .map((it) => `${it.id} (${it.description!.length} caractères)`)
     expect(coupees, `descriptions tronquées :\n  ${coupees.join('\n  ')}`).toEqual([])
+  })
+
+  it('les lignes construites par la scène (rareté, propriétés) tiennent aussi en largeur', () => {
+    // ces deux lignes ne passent pas par wrapText : elles sont assemblées par la scène, donc c'est
+    // ici qu'on vérifie qu'aucune combinaison de bonus ne les fait sortir de la carte
+    const rarete = 'Légendaire · Accessoire'
+    expect(rarete.length, `« ${rarete} »`).toBeLessThanOrEqual(charsPerLine(CARD.w - 2 * CARD.padX, CARD.rarityFont))
+    const props = Object.values(ITEMS).map((it) => {
+      const b = upgradedBonus(it.bonus, MAX_REFORGE_LEVEL)
+      return (['atk', 'def', 'maxHp'] as const).filter((k) => (b[k] ?? 0) > 0).map((k) => `+${b[k]} XXX`).join('   ')
+    }).sort((a, b) => b.length - a.length)[0]!
+    expect(props.length, `« ${props} »`).toBeLessThanOrEqual(charsPerLine(CARD.w - 2 * CARD.padX, CARD.propsFont))
   })
 
   it('les deux boutons de la fiche ne se recouvrent pas et restent dans la carte', () => {

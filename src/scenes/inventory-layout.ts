@@ -16,6 +16,15 @@
 // le vide. Ici la capacité dépend même du CONTENU du sac (chaque type d'objet présent coûte un
 // en-tête de section), donc elle se calcule à chaque rendu — impossible à figer dans une constante.
 //
+// ⚠️ LIMITE CONNUE, À TRANCHER PAR LE JEU, PAS PAR LA GÉOMÉTRIE. La grille montre 16 objets (4 rangées
+// de 4, cf. `layoutStock`) : sur 540 px de haut, avec un en-tête par type d'équipement, il n'y a pas
+// plus de place. Comme le sac est SANS LIMITE, un joueur qui accumule au-delà de 16 objets ne peut plus
+// atteindre les suivants depuis cet écran — ils sont comptés (« +N en sac ») mais pas cliquables. Deux
+// vraies réponses, toutes deux hors géométrie : plafonner le sac dans src/core (et refuser/vendre le
+// butin au-delà), ou paginer ce panneau comme le fait déjà l'écran de réforge en ville. En attendant,
+// annoncer le surplus vaut toujours mieux que le dessiner hors de l'écran, où il n'était NI visible NI
+// cliquable.
+//
 // ⚠️ ESPACE DE CONCEPTION. Toutes les coordonnées ci-dessous vivent dans le repère 0→960 × 0→540. La
 // LARGEUR réelle de l'écran varie (960→1404, cf. core/viewport.ts) ; la scène appelle `centerCamera`
 // et ce repère tombe pile au milieu. C'est pourquoi on borne à 960 et non à VIEW_W : borner à VIEW_W

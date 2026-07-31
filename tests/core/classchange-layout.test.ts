@@ -223,6 +223,15 @@ describe('pied d\'écran : les trois éléments qui se marchaient dessus', () =>
     }
   })
 
+  it('le bouton d\'action tient dans l\'écran MÊME au sommet de son battement', () => {
+    // il grossit de 6 % en boucle : réserver sa taille au repos ne suffirait pas
+    const r = actionRect(action)
+    const grossi = { x: DESIGN.w / 2 - (r.w * CC.actionPulse) / 2, y: r.y, w: r.w * CC.actionPulse, h: r.h * CC.actionPulse }
+    expect(grossi.x).toBeGreaterThanOrEqual(0)
+    expect(grossi.x + grossi.w).toBeLessThanOrEqual(DESIGN.w)
+    expect(overlap(grossi, trainingRect(training)), 'battement × entraînement').toBe(false)
+  })
+
   it('le titre le plus long tient dans l\'écran', () => {
     const titre = '✦ Choisis ta voie, petit panda ✦'
     expect(titre.length * CC.titleFont * 0.6).toBeLessThanOrEqual(DESIGN.w - 40)

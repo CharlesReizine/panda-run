@@ -4,9 +4,12 @@ import { skillsOf } from '../data/skills'
 import { changeClass, canEvolveClass, evolveClass, EVOLUTIONS } from '../core/progression'
 import { getPlayer } from '../state'
 import { save } from '../core/save'
-import type { ClassId } from '../core/types'
+import type { ClassDef, ClassId } from '../core/types'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 import { installUiClickSound } from '../ui/click-sound'
+import {
+  CC, cardRect, cardFlow, portraitScale, splitSkills, fitName, fitSkill, trainingRect, type Rect,
+} from './classchange-layout'
 
 const CHOICES: ClassId[] = ['swordsman', 'mage', 'archer']
 
@@ -30,25 +33,63 @@ export class ClassChangeScene extends Phaser.Scene {
     else this.buildFirstChoice()
 
     // accès à la page d'entraînement depuis le choix de classe (essayer les classes librement,
-    // mana infini + dummy invincible) — coin bas-gauche, à l'écart des cartes/du bouton d'évolution
-    this.add.text(20, 516, '⚔ Entraînement', {
-      fontSize: '18px', color: '#ffd54f', fontStyle: 'bold', backgroundColor: '#00000066', padding: { x: 10, y: 6 },
+    // mana infini + dummy invincible) — coin bas-gauche, à l'écart des cartes ET du bouton
+    // d'évolution : sa bande est comparée aux deux autres dans tests/core/classchange-layout.test.ts
+    const training = '⚔ Entraînement'
+    const tr = trainingRect(training)
+    this.add.text(tr.x, CC.trainingY, training, {
+      fontSize: `${CC.trainingFont}px`, color: '#ffd54f', fontStyle: 'bold', backgroundColor: '#00000066',
+      padding: { x: CC.trainingPadX, y: CC.trainingPadY },
     }).setOrigin(0, 0.5).setDepth(2).setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.scene.start('Training'))
   }
 
+  private title(text: string) {
+    this.add.text(480, CC.titleY, text, { fontSize: `${CC.titleFont}px`, color: '#ffd700' }).setOrigin(0.5)
+  }
+
+  // Peint le contenu commun d'une carte de classe : illustration BORNÉE par la carte, puis nom, stats
+  // et liste de compétences bornée. Renvoie le rectangle de fond pour que l'appelant le rende cliquable.
+  private paintCard(card: Rect, texture: string, name: string, def: ClassDef, skills: string[], heading?: string) {
+    const f = cardFlow(card)
+    const bg = this.add.rectangle(card.x + card.w / 2, card.y + card.h / 2, card.w, card.h, 0x1b3a4b)
+      .setStrokeStyle(3, def.tint)
+
+    // l'échelle vient de la carte, jamais l'inverse : c'est ce qui empêche le panda de ressortir par
+    // le haut du cadre comme il le faisait (cadre 83→267 pour une carte commençant à 110)
+    this.add.image(f.portrait.x + f.portrait.w / 2, f.portrait.y + f.portrait.h / 2, texture)
+      .setScale(portraitScale(card))
+
+    this.add.text(card.x + card.w / 2, f.name.y, fitName(name, card), {
+      fontSize: `${CC.nameFont}px`, color: '#ffffff', fontStyle: 'bold',
+    }).setOrigin(0.5, 0)
+
+    this.add.text(card.x + card.w / 2, f.stats.y, `ATK ${def.baseStats.atk}  DEF ${def.baseStats.def}\nPV ${def.baseStats.maxHp}`, {
+      fontSize: `${CC.statsFont}px`, color: '#b0bec5', align: 'center',
+    }).setOrigin(0.5, 0)
+
+    // liste de compétences BORNÉE : le surplus est compté, pas remplacé par un « … » muet
+    const { shown, hidden } = splitSkills(skills, card, heading ? 1 : 0)
+    const lines = [
+      ...(heading ? [fitSkill(heading, card)] : []),
+      ...shown.map((s) => fitSkill(`• ${s}`, card)),
+      ...(hidden > 0 ? [`+${hidden} autre${hidden > 1 ? 's' : ''}`] : []),
+    ]
+    this.add.text(card.x + card.w / 2, f.skills.y, lines.join('\n'), {
+      fontSize: `${CC.skillFont}px`, color: '#80cbc4', align: 'center',
+    }).setOrigin(0.5, 0)
+
+    return bg
+  }
+
   private buildFirstChoice() {
-    this.add.text(480, 50, '✦ Choisis ta voie, petit panda ✦', { fontSize: '32px', color: '#ffd700' }).setOrigin(0.5)
+    this.title('✦ Choisis ta voie, petit panda ✦')
 
     CHOICES.forEach((id, i) => {
       const def = CLASSES[id]
-      const x = 200 + i * 280
-      const card = this.add.rectangle(x, 290, 240, 360, 0x1b3a4b).setStrokeStyle(3, def.tint).setInteractive()
-      this.add.image(x, 175, `panda-${id}`).setScale(2)
-      this.add.text(x, 260, def.name, { fontSize: '26px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
-      this.add.text(x, 300, `ATK ${def.baseStats.atk}  DEF ${def.baseStats.def}\nPV ${def.baseStats.maxHp}`, { fontSize: '14px', color: '#b0bec5', align: 'center' }).setOrigin(0.5)
-      this.add.text(x, 390, skillsOf(id).slice(0, 3).map((s) => `• ${s.name}`).join('\n') + '\n…', { fontSize: '12px', color: '#80cbc4', align: 'center' }).setOrigin(0.5)
-      card.on('pointerdown', () => this.choose(id))
+      const card = cardRect(i, CHOICES.length)
+      const bg = this.paintCard(card, `panda-${id}`, def.name, def, skillsOf(id).map((s) => s.name))
+      bg.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.choose(id))
     })
   }
 
@@ -56,17 +97,21 @@ export class ClassChangeScene extends Phaser.Scene {
     const p = getPlayer()
     const target = EVOLUTIONS[p.classId]!
     const def = CLASSES[target]
-    this.add.text(480, 50, '✦ Ton pouvoir s\'éveille ✦', { fontSize: '32px', color: '#ffd700' }).setOrigin(0.5)
+    this.title('✦ Ton pouvoir s\'éveille ✦')
 
-    const card = this.add.rectangle(480, 290, 300, 380, 0x1b3a4b).setStrokeStyle(4, def.tint)
-    this.add.image(480, 175, `panda-${target}`).setScale(2.4)
-    this.add.text(480, 255, `${CLASSES[p.classId].name} → ${def.name}`, { fontSize: '24px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
-    this.add.text(480, 300, `ATK ${def.baseStats.atk}  DEF ${def.baseStats.def}\nPV ${def.baseStats.maxHp}`, { fontSize: '15px', color: '#b0bec5', align: 'center' }).setOrigin(0.5)
-    this.add.text(480, 380, 'Nouveaux skills :\n' + skillsOf(target).slice(0, 3).map((s) => `• ${s.name}`).join('\n'), { fontSize: '13px', color: '#80cbc4', align: 'center' }).setOrigin(0.5)
+    const card = cardRect(0, 1)
+    this.paintCard(card, `panda-${target}`, `${CLASSES[p.classId].name} → ${def.name}`, def,
+      skillsOf(target).map((s) => s.name), 'Nouveaux skills :')
 
-    const btn = this.add.text(480, 500, `Évoluer en ${def.name} !`, { fontSize: '24px', color: '#000000', backgroundColor: '#ffd700', padding: { x: 20, y: 10 } })
-      .setOrigin(0.5).setInteractive({ useHandCursor: true })
-    this.tweens.add({ targets: btn, scale: 1.06, yoyo: true, repeat: -1, duration: 500 })
+    // bouton d'action SOUS les cartes : il recouvrait le message de fin (bandes 474→526 et 504→536)
+    const label = `Évoluer en ${def.name} !`
+    const btn = this.add.text(480, CC.actionY, label, {
+      fontSize: `${CC.actionFont}px`, color: '#000000', backgroundColor: '#ffd700',
+      padding: { x: CC.actionPadX, y: CC.actionPadY },
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+    // le battement (+6 %) reste dans l'écran : le test vérifie que le rectangle réservé, grossi de 6 %,
+    // tient encore dans les 960 px de l'espace de conception
+    this.tweens.add({ targets: btn, scale: CC.actionPulse, yoyo: true, repeat: -1, duration: 500 })
     btn.on('pointerdown', () => this.evolve())
   }
 
@@ -102,6 +147,9 @@ export class ClassChangeScene extends Phaser.Scene {
       targets: flash, alpha: 1, yoyo: true, duration: 300,
       onComplete: () => this.scene.start('WorldMap'),
     })
-    this.add.text(480, 520, message, { fontSize: '24px', color: '#ffd700' }).setOrigin(0.5).setDepth(1)
+    // le message partage sa ligne avec le bouton d'entraînement (l'écran n'a plus de place ailleurs) :
+    // c'est l'écart HORIZONTAL qui garantit le non-recouvrement, et il est vérifié par le test
+    this.add.text(480, CC.messageY, message, { fontSize: `${CC.messageFont}px`, color: '#ffd700' })
+      .setOrigin(0.5).setDepth(1)
   }
 }

@@ -52,6 +52,8 @@ export const CC = {
   statsFont: 14, statsLines: 2,
   skillFont: 12,
   actionY: 474, actionFont: 22, actionPadX: 20, actionPadY: 8,
+  /** battement du bouton d'action : il grossit, donc la place réservée doit tenir compte du +6 % */
+  actionPulse: 1.06,
   trainingX: 20, trainingY: 518, trainingFont: 16, trainingPadX: 10, trainingPadY: 6,
   messageY: 518, messageFont: 20,
 }
