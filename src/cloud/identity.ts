@@ -5,24 +5,35 @@
 // pseudo charge ta partie, peut l'écraser, et peut se déclarer niveau 99 sous ton nom au classement.
 // C'est indissociable du « pas de mot de passe » — pas un oubli. Acceptable pour un jeu entre
 // quelques personnes ; à revoir si le lien se met à circuler (la parade serait un code de
-// récupération généré, cf. docs/specs/…-design.md).
+// récupération généré).
 //
 // L'authentification anonyme reste branchée mais ne sert PLUS d'identité : elle est une simple
-// barrière anti-abus (les règles Firestore exigent `request.auth != null`), pour qu'on ne puisse pas
-// vider la base au curl sans même lancer le jeu.
+// barrière anti-abus (les règles Firestore exigent `request.auth != null`).
 
-// Clé de document Firestore dérivée du pseudo. Normalisée pour que « Charles », « charles » et
-// « Charles  » désignent LA MÊME partie — sinon le joueur croit avoir perdu sa sauvegarde alors qu'il
-// a juste tapé une majuscule. Contrainte Firestore : pas de '/', ni '.', ni '..'.
-export function pseudoKey(pseudo: string): string {
-  const k = pseudo
-    .normalize('NFD').replace(/[̀-ͯ]/g, '') // accents : « Léo » et « Leo » = même partie
+export const PSEUDO_MAX = 14
+
+/**
+ * Format canonique d'un pseudo : minuscules, sans accent, sans espace, sans caractère exotique.
+ *
+ * ⚠️ C'EST LA SEULE FONCTION DE NORMALISATION DU PROJET, et elle est appliquée DÈS LA SAISIE (cf.
+ * ui/pseudo-prompt.ts). Conséquence voulue : le pseudo AFFICHÉ est identique à la clé de stockage.
+ * Tant qu'on normalisait seulement au moment d'écrire, « Léo » s'affichait mais cherchait « leo » —
+ * et le joueur qui tapait une majuscule croyait avoir perdu sa sauvegarde. En bloquant au clavier,
+ * l'écart ne peut plus exister.
+ */
+export function sanitizePseudo(raw: string): string {
+  return raw
+    .normalize('NFD').replace(/[̀-ͯ]/g, '') // « é » → « e »
     .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9_-]/g, '')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40)
-  return k || 'panda' // pseudo entièrement exotique : on retombe sur une clé valide
+    .replace(/[^a-z0-9_-]/g, '') // supprime espaces, ponctuation, emoji…
+    .slice(0, PSEUDO_MAX)
+}
+
+// Clé de document Firestore. Identique au pseudo canonique par construction : deux fonctions
+// distinctes pourraient DIVERGER, une seule ne peut pas. Contrainte Firestore respectée (pas de
+// '/', ni '.', ni '..'), et repli sur une clé valide si la saisie ne donne rien d'exploitable.
+export function pseudoKey(pseudo: string): string {
+  return sanitizePseudo(pseudo) || 'panda'
 }
 
 const ACTIVE_KEY = 'panda-run-pseudo'

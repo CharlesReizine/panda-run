@@ -78,9 +78,10 @@ export class TitleScene extends Phaser.Scene {
     // barrière anti-abus exigée par les règles Firestore
     if (cloudAvailable()) void ensureUser()
 
-    let y = existing ? 196 : 226
-    const step = 68
+    let y = existing ? 226 : 256
+    const step = 70
 
+    // Chemin le plus rapide : la partie de cet appareil, sans réseau ni saisie.
     if (existing) {
       this.mkButton(y, `Continuer${active ? ` — ${active}` : ''}`, () => {
         setPlayer(existing)
@@ -89,42 +90,47 @@ export class TitleScene extends Phaser.Scene {
       y += step
     }
 
-    this.mkButton(y, 'Nouvelle partie', () => void this.newGame())
+    // UN SEUL bouton pour tout le reste. Avant, « Nouvelle partie » et « Reprendre mon pseudo »
+    // faisaient taper le même nom deux fois pour deux chemins qui ne diffèrent que par l'existence
+    // d'une partie — une question à laquelle le jeu peut répondre tout seul.
+    this.mkButton(y, 'Commencer', () => void this.start())
     y += step
 
-    if (cloudAvailable()) {
-      this.mkButton(y, 'Reprendre mon pseudo', () => void this.resume())
-      y += step
-      this.mkButton(y, '🏆 Classement', () => this.scene.start('Leaderboard', { return: 'Title' }))
-    }
+    if (cloudAvailable()) this.mkButton(y, '🏆 Classement', () => this.scene.start('Leaderboard', { return: 'Title' }))
   }
 
   private say(msg: string, color = '#e1f5fe') {
     this.status?.setColor(color).setText(msg)
   }
 
-  // NOUVELLE PARTIE — on demande le pseudo, puis on vérifie s'il porte DÉJÀ une partie en ligne.
-  // Sans ce garde-fou, taper un pseudo déjà utilisé écraserait la partie sans un mot.
-  private async newGame() {
+  // COMMENCER — on demande le nom une seule fois, puis le jeu décide : une partie existe pour ce
+  // nom → on la reprend en le signalant ; sinon → on la crée. AUCUN des deux chemins ne détruit
+  // quoi que ce soit, donc rien à faire confirmer.
+  private async start() {
     const pseudo = await askPseudo(readActivePseudo() ?? '')
     if (pseudo === null) return
     const key = pseudoKey(pseudo)
 
-    if (cloudAvailable()) {
-      this.say('Vérification du pseudo…')
-      try {
-        await ensureUser()
-        const cloud = await pull(key)
-        if (cloud) {
-          this.askExisting(pseudo, key, cloud)
-          return
-        }
-      } catch (e) {
-        // hors réseau : on ne bloque pas la création d'une partie locale
-        logEvent('warn', 'cloud', `vérification pseudo impossible : ${e instanceof Error ? e.message : String(e)}`)
+    if (!cloudAvailable()) { this.startFresh(pseudo, key); return }
+
+    this.say(`Recherche de « ${pseudo} »…`)
+    try {
+      await ensureUser()
+      const cloud = await pull(key)
+      if (cloud) {
+        this.say(`Bon retour ${pseudo} — niveau ${cloud.player.level} retrouvé.`, '#a5d6a7')
+        this.adopt(pseudo, key, cloud)
+        return
       }
+      this.say(`Nouveau joueur « ${pseudo} » — c'est parti !`, '#a5d6a7')
+      this.startFresh(pseudo, key)
+    } catch (e) {
+      // hors réseau : on ne bloque pas le joueur, on démarre en local (la synchro suivra)
+      const msg = e instanceof Error ? e.message : String(e)
+      logEvent('warn', 'cloud', `recherche impossible : ${msg}`)
+      this.say('Hors connexion — partie locale, elle sera synchronisée plus tard.', '#ffcc80')
+      this.startFresh(pseudo, key)
     }
-    this.startFresh(pseudo, key)
   }
 
   private startFresh(pseudo: string, key: string) {
@@ -136,59 +142,12 @@ export class TitleScene extends Phaser.Scene {
     this.scene.start('LevelIntro', { levelId: 'plaine-1', fromNode: 'plaine-1', targetNode: 'plaine-1', dir: 'forward' })
   }
 
-  // REPRENDRE — le cœur du « je retrouve ma partie sur un autre téléphone ».
-  private async resume() {
-    const pseudo = await askPseudo(readActivePseudo() ?? '')
-    if (pseudo === null) return
-    const key = pseudoKey(pseudo)
-    this.say('Recherche de ta partie…')
-    try {
-      await ensureUser()
-      const cloud = await pull(key)
-      if (!cloud) {
-        this.say(`Aucune partie en ligne pour « ${pseudo} ».`, '#ffcc80')
-        return
-      }
-      this.adopt(pseudo, key, cloud)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      logEvent('error', 'cloud', msg)
-      this.say(`Impossible de récupérer la partie : ${msg}`, '#ffab91')
-    }
-  }
-
   private adopt(pseudo: string, key: string, cloud: StampedSave) {
     adoptCloud(cloud)
     writeActivePseudo(pseudo)
     setAutoPushKey(key)
     setPlayer(cloud.player)
     this.scene.start('WorldMap')
-  }
-
-  // Le pseudo demandé porte déjà une partie : on ne décide pas à la place du joueur.
-  private askExisting(pseudo: string, key: string, cloud: StampedSave) {
-    const depth = 60
-    const items: Phaser.GameObjects.GameObject[] = []
-    const d = cloud.savedAt ? new Date(cloud.savedAt).toLocaleString('fr-FR') : 'date inconnue'
-
-    items.push(this.add.rectangle(480, 270, 700, 320, 0x0d1b2a, 0.97).setDepth(depth).setStrokeStyle(2, 0xffd54f, 0.7))
-    items.push(this.add.text(480, 150, `« ${pseudo} » a déjà une partie`, { fontSize: '24px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0.5).setDepth(depth + 1))
-    items.push(this.add.text(480, 196, `Niveau ${cloud.player.level} · ${cloud.player.gold} or · ${cloud.player.completedLevels.length} terrains\n${d}`, {
-      fontSize: '16px', color: '#e1f5fe', align: 'center',
-    }).setOrigin(0.5).setDepth(depth + 1))
-
-    const btn = (y: number, label: string, color: number, onTap: () => void) => {
-      items.push(this.add.text(480, y, label, {
-        fontSize: '19px', color: '#ffffff', fontStyle: 'bold',
-        backgroundColor: `#${color.toString(16).padStart(6, '0')}`, padding: { x: 18, y: 11 },
-      }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-        for (const it of items) it.destroy()
-        onTap()
-      }))
-    }
-    btn(266, 'Reprendre cette partie', 0x2e7d32, () => this.adopt(pseudo, key, cloud))
-    btn(330, 'Recommencer à zéro (écrase)', 0x8e2f2f, () => this.startFresh(pseudo, key))
-    btn(390, 'Annuler', 0x455a64, () => { /* le panneau est déjà détruit */ })
   }
 
   private mkButton(y: number, label: string, onTap: () => void) {

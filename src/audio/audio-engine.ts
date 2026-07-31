@@ -14,6 +14,7 @@ const MUSIC_VOLUME = 0.35
 export type SfxName =
   | 'jump' | 'attack' | 'hit' | 'enemy-death' | 'coin' | 'potion' | 'skill'
   | 'level-up' | 'player-hit' | 'player-death' | 'boss-victory' | 'ui-tap' | 'buy'
+  | 'stomp' | 'player-burn'
 
 export type MusicTrack =
   | 'titre' | 'ville' | 'carte' | 'plaine' | 'foret' | 'desert' | 'cave'
@@ -250,6 +251,15 @@ class AudioEngine {
         this.tone('square', 180, t, 0.08, 0.4, 90)
         this.noise(t, 0.09, 0.25, 'bandpass', 1200)
         break
+      // SAUT SUR LA TÊTE : un impact du POIDS du panda, pas un coup d'épée. Trois couches — un thud
+      // grave qui plonge (le choc), un corps de bruit filtré bas (l'écrasement), et un petit tic aigu
+      // pour que ça claque au lieu de faire « bloup ». Plus fort que 'hit' : c'est le seul retour que
+      // le joueur a pour savoir qu'il a bien touché, et l'ancien passait sous la musique.
+      case 'stomp':
+        this.tone('triangle', 150, t, 0.16, 0.62, 55)
+        this.noise(t, 0.13, 0.34, 'lowpass', 700)
+        this.tone('square', 520, t, 0.045, 0.2, 240)
+        break
       case 'enemy-death':
         this.tone('square', 400, t, 0.28, 0.4, 70)
         this.noise(t, 0.18, 0.2, 'lowpass', 900)
@@ -272,6 +282,13 @@ class AudioEngine {
       case 'player-hit':
         this.tone('sawtooth', 200, t, 0.16, 0.4, 80)
         this.noise(t, 0.12, 0.3, 'bandpass', 700)
+        break
+      // DÉGÂTS CONTINUS SUBIS (flammes, lave, noyade) : un souffle court et sourd, volontairement
+      // PLUS DISCRET que 'player-hit'. Il se répète plusieurs fois par seconde tant qu'on cuit — un
+      // vrai bruit de coup à chaque tick ferait mitraillette et deviendrait insupportable.
+      case 'player-burn':
+        this.noise(t, 0.1, 0.2, 'bandpass', 1500)
+        this.tone('sawtooth', 165, t, 0.09, 0.2, 95)
         break
       case 'player-death':
         this.tone('sawtooth', 300, t, 0.7, 0.45, 55)

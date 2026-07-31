@@ -1,19 +1,22 @@
 // Saisie du pseudo. Overlay DOM et non un objet Phaser : Phaser n'a pas de champ texte, et un vrai
-// <input> déclenche le clavier natif (avec autocomplétion et bouton « OK » du clavier iOS), ce qu'un
-// faux champ dessiné dans le canvas ne sait pas faire. `window.prompt` marcherait mais l'alerte
-// système est laide et, sur iOS, elle peut suspendre la boucle de rendu.
+// <input> déclenche le clavier natif (avec le bouton « OK » du clavier iOS), ce qu'un faux champ
+// dessiné dans le canvas ne sait pas faire. `window.prompt` marcherait mais l'alerte système est
+// laide et, sur iOS, elle peut suspendre la boucle de rendu.
+//
+// LE FORMAT EST IMPOSÉ AU CLAVIER : chaque frappe passe par `sanitizePseudo` (minuscules, sans
+// accent, sans espace). Le joueur voit donc EXACTEMENT ce qui sera stocké et recherché — impossible
+// de taper « Léo » et de ne pas retrouver la partie de « leo ».
 
-import { PSEUDO_MAX, cleanPseudo } from '../cloud/leaderboard'
+import { PSEUDO_MAX, sanitizePseudo } from '../cloud/identity'
 
-/** Affiche la saisie et résout avec le pseudo nettoyé, ou `null` si le joueur annule. */
+/** Affiche la saisie et résout avec le pseudo canonique, ou `null` si le joueur annule. */
 export function askPseudo(current = ''): Promise<string | null> {
   return new Promise((resolve) => {
     const back = document.createElement('div')
     back.style.cssText = [
       'position:fixed', 'inset:0', 'z-index:10000', 'display:grid', 'place-items:center',
       'background:rgba(4,10,18,.86)', '-webkit-backdrop-filter:blur(3px)', 'backdrop-filter:blur(3px)',
-      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
-      'padding:24px',
+      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif', 'padding:24px',
     ].join(';')
 
     const card = document.createElement('div')
@@ -24,24 +27,27 @@ export function askPseudo(current = ''): Promise<string | null> {
     ].join(';')
 
     const title = document.createElement('div')
-    title.textContent = 'Ton pseudo'
+    title.textContent = 'Ton nom de joueur'
     title.style.cssText = 'font-size:22px;font-weight:800;color:#ffd54f;margin-bottom:14px'
 
     const input = document.createElement('input')
     input.type = 'text'
-    input.value = current
+    input.value = sanitizePseudo(current)
     input.maxLength = PSEUDO_MAX
     input.autocomplete = 'off'
-    input.placeholder = 'Panda'
-    input.setAttribute('autocapitalize', 'off')
+    input.spellcheck = false
+    input.placeholder = 'panda'
+    // pas de majuscule auto ni de correction : le champ n'accepte que des minuscules
+    input.setAttribute('autocapitalize', 'none')
+    input.setAttribute('autocorrect', 'off')
     input.style.cssText = [
-      'width:100%', 'box-sizing:border-box', 'padding:12px 14px', 'font-size:19px',
+      'width:100%', 'box-sizing:border-box', 'padding:12px 14px', 'font-size:20px',
       'border-radius:9px', 'border:1px solid #4fc3f7', 'background:#0a1c28', 'color:#ffffff',
-      'text-align:center', 'font-weight:700', 'outline:none',
+      'text-align:center', 'font-weight:700', 'outline:none', 'letter-spacing:.5px',
     ].join(';')
 
     const hint = document.createElement('div')
-    hint.textContent = `${PSEUDO_MAX} caractères max — visible dans le classement`
+    hint.textContent = `minuscules, sans accent ni espace · ${PSEUDO_MAX} max`
     hint.style.cssText = 'font-size:12px;opacity:.6;margin-top:9px'
 
     const row = document.createElement('div')
@@ -53,19 +59,32 @@ export function askPseudo(current = ''): Promise<string | null> {
       return b
     }
     const cancel = mkBtn('Annuler', '#455a64')
-    const ok = mkBtn('C\'est parti', '#2e7d32')
+    const ok = mkBtn('Commencer', '#2e7d32')
 
     row.append(cancel, ok)
     card.append(title, input, hint, row)
     back.append(card)
     document.body.append(back)
 
+    // Filtrage à la frappe. On restaure la position du curseur : sans ça, taper une lettre refusée
+    // au milieu du mot renverrait le curseur à la fin.
+    input.addEventListener('input', () => {
+      const before = input.value
+      const pos = input.selectionStart ?? before.length
+      const after = sanitizePseudo(before)
+      if (after === before) return
+      input.value = after
+      const delta = before.length - after.length
+      const p = Math.max(0, pos - delta)
+      input.setSelectionRange(p, p)
+    })
+
     const close = (value: string | null) => {
       back.remove()
       resolve(value)
     }
-    // un pseudo vide n'a pas de sens : on retombe sur « Panda » plutôt que de bloquer le joueur
-    const submit = () => close(cleanPseudo(input.value) || 'Panda')
+    // un nom vide n'a pas de sens : on retombe sur « panda » plutôt que de bloquer le joueur
+    const submit = () => close(sanitizePseudo(input.value) || 'panda')
 
     ok.addEventListener('click', submit)
     cancel.addEventListener('click', () => close(null))

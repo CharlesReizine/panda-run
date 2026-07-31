@@ -129,6 +129,9 @@ export class LevelScene extends Phaser.Scene {
   private passiveHealAccum = 0 // PV de régén passive cumulés, affichés en chiffre vert par paquets
   private passiveHealFlushAt = 0
   private stompCdUntil = 0 // anti multi-stomp : un seul coup de saut-sur-la-tête par courte fenêtre
+  // Cadence du son de dégât continu (flammes/lave/noyade) : les ticks tombent plusieurs fois par
+  // seconde, on ne joue donc le souffle qu'au plus 4 fois par seconde.
+  private burnSfxUntil = 0
   private dashUntil = 0
   private dashCooldownUntil = 0
   private nextBasicAttackAt = 0
@@ -1570,6 +1573,12 @@ export class LevelScene extends Phaser.Scene {
     if ((globalThis as { __pandaGodMode?: boolean }).__pandaGodMode) return
     if (this.player.hp <= 0) return
     this.showDamageNumber(this.player.x, this.player.y - 44, amount, true) // chiffre ROUGE (noyade/lave)
+    // Ce chemin (flammes, lave, noyade) était totalement MUET : on voyait les PV tomber sans rien
+    // entendre. Son cadencé, sinon un tick toutes les ~120 ms devient une mitraillette.
+    if (this.time.now > this.burnSfxUntil) {
+      audio.playSfx('player-burn')
+      this.burnSfxUntil = this.time.now + 250
+    }
     this.player.takeDamage(amount)
     if (this.player.hp <= 0) {
       audio.playSfx('player-death')
@@ -3767,7 +3776,7 @@ export class LevelScene extends Phaser.Scene {
     const atk = this.player.stats.atk * this.player.outgoingMult()
     e.takeDamage(physicalDamage(atk, e.effectiveDef()))
     if (this.player.isFlaming()) e.applyBurn(atk * 0.35, 3000)
-    audio.playSfx('hit')
+    audio.playSfx('stomp') // impact lourd et distinct : 'hit' se noyait sous la musique
     this.impactFx(e.x, e.y - 8, 0xffffff)
     // PAS de rebond (retour user) : le joueur continue de tomber à travers le monstre jusqu'au sol.
   }
