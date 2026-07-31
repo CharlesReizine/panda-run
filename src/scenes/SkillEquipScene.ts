@@ -350,7 +350,64 @@ export class SkillEquipScene extends Phaser.Scene {
       : 'Équipe-la dans un slot 1-4, puis touche l\'icône du slot ou la touche 1-4 en jeu.'
     panel.add(this.add.text(left, y, howto, { fontSize: '12px', color: '#b0bec5', wordWrap: { width: 500 } }).setOrigin(0, 0))
 
-    const closeBtn = this.add.text(480, 470, 'Fermer', { fontSize: '14px', color: '#ffffff', backgroundColor: '#455a64', padding: { x: 14, y: 6 } })
+    // ─── ACTIONS : DÉBLOQUER / +1 / ÉQUIPER ─────────────────────────────────────────────────────
+    // ⚠️ RÉGRESSION CORRIGÉE ICI. En refaisant la page en ARBRE, les boutons « Débloquer / +1 pt » et
+    // « Équiper » ont disparu des cartes (devenues trop petites) en supposant qu'ils existaient dans
+    // cette fiche — ils n'y étaient PAS. Résultat : plus aucun moyen de dépenser un point de
+    // compétence (« je peux plus améliorer les skills »). Ils vivent désormais ICI, où il y a la place.
+    const p2 = getPlayer()
+    const curRank = p2.skillLevels[s.id] ?? 0
+    const lock = curRank > 0 ? null : this.lockReason(p2, s)
+    const equipped = p2.equippedSkills.includes(s.id)
+    const act = (x: number, label: string, bg: number, onTap: () => void) => {
+      const b = this.add.text(x, 470, label, {
+        fontSize: '15px', color: '#ffffff', fontStyle: 'bold',
+        backgroundColor: `#${bg.toString(16).padStart(6, '0')}`, padding: { x: 14, y: 7 },
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', onTap)
+      panel.add(b)
+      return b
+    }
+
+    if (lock) {
+      panel.add(this.add.text(360, 470, `🔒 ${lock}`, { fontSize: '14px', color: '#ef9a9a', fontStyle: 'bold' }).setOrigin(0.5))
+    } else if (curRank >= maxRankOf(s)) {
+      panel.add(this.add.text(360, 470, `Rang maximum (${maxRankOf(s)})`, { fontSize: '14px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0.5))
+    } else if (p2.skillPoints > 0) {
+      act(360, curRank > 0 ? `+1 rang (${p2.skillPoints} pt)` : `Débloquer (${p2.skillPoints} pt)`, 0x8d6e00, () => {
+        p2.skillPoints--
+        p2.skillLevels[s.id] = curRank + 1
+        this.persist(p2)
+        panel.destroy()
+        this.render() // l'arbre se redessine : la branche s'ouvre, les grisés se lèvent
+      })
+    } else {
+      panel.add(this.add.text(360, 470, 'Aucun point de compétence', { fontSize: '14px', color: '#90a4ae' }).setOrigin(0.5))
+    }
+
+    // Les passifs ne s'équipent JAMAIS : appris = actif en permanence, hors des 4 slots.
+    if (s.kind !== 'passive' && curRank > 0) {
+      if (equipped) {
+        act(580, 'Retirer du slot', 0x8e2f2f, () => {
+          const i = p2.equippedSkills.indexOf(s.id)
+          if (i >= 0) p2.equippedSkills[i] = null
+          this.persist(p2)
+          panel.destroy()
+          this.render()
+        })
+      } else {
+        act(580, 'Équiper', 0x33691e, () => {
+          const free = p2.equippedSkills.indexOf(null)
+          p2.equippedSkills[free >= 0 ? free : 3] = s.id
+          this.persist(p2)
+          panel.destroy()
+          this.render()
+        })
+      }
+    } else if (s.kind === 'passive' && curRank > 0) {
+      panel.add(this.add.text(580, 470, 'Passif actif ✓', { fontSize: '14px', color: '#ce93d8', fontStyle: 'bold' }).setOrigin(0.5))
+    }
+
+    const closeBtn = this.add.text(760, 470, 'Fermer', { fontSize: '14px', color: '#ffffff', backgroundColor: '#455a64', padding: { x: 14, y: 6 } })
       .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => panel.destroy())
     panel.add(closeBtn)
     // La croix en haut à droite ferme aussi

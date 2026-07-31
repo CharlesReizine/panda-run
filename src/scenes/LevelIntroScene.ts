@@ -134,16 +134,21 @@ export class LevelIntroScene extends Phaser.Scene {
     const cols = n <= 4 ? n : n <= 6 ? 3 : 4
     const rows = Math.ceil(n / cols)
 
-    const areaLeft = 40, areaTop = 100, areaW = 880, areaH = 384
+    // on exploite la largeur réelle de l'écran : les cartes respirent au lieu d'être tassées dans 880
+    const areaW = Math.min(VIEW_W - 60, 1340)
+    const areaLeft = 480 - areaW / 2
+    const areaTop = 100, areaH = 384
     const cellW = areaW / cols
     const cellH = areaH / rows
     const cardW = cellW - 14
     const cardH = cellH - 14
 
-    // Nombre de lignes de butin qui tiennent dans la carte (au-dessus : sprite + nom + badge).
-    const headerH = 96
-    const lineH = 17
-    const maxLines = Math.max(1, Math.floor((cardH - headerH) / lineH))
+    // TOUT le butin doit tenir : on ne tronque PLUS avec un « +1 autre… » (retour user : « le (1 et
+    // autre pour les drop) c'est nul »). On calcule donc la hauteur de ligne pour que le monstre le
+    // plus chargé du terrain rentre entièrement, bornée pour rester lisible.
+    const headerH = 92
+    const maxDrops = Math.max(1, ...monsters.map((mm) => mm.drops.length))
+    const lineH = Math.max(11, Math.min(17, Math.floor((cardH - headerH - 4) / maxDrops)))
 
     monsters.forEach((m, i) => {
       const col = i % cols
@@ -177,27 +182,25 @@ export class LevelIntroScene extends Phaser.Scene {
       const allDrops = [...m.drops].sort((a, b) => rank(a) - rank(b))
       const listLeft = cx - cardW / 2 + 8
       let y = top + headerH
-      const shown = allDrops.slice(0, maxLines)
-      shown.forEach((d) => {
+      allDrops.forEach((d) => {
         const { color, chance, label } = dropLine(d)
         const info = this.dropIconInfo(d)
         const size = Math.min(20, lineH - 2)
+        const fs = `${Math.max(8, Math.min(10, lineH - 6))}px`
         this.add.rectangle(listLeft, y + 1, size + 2, size + 2, color, 0.28).setOrigin(0, 0)
         const img = this.add.image(listLeft + 1, y + 2, info.texture).setOrigin(0, 0).setDisplaySize(size, size)
         if (info.tint !== undefined) img.setTint(info.tint)
         // la proba est ancrée à DROITE, le nom occupe la place restante et se fait tronquer : ainsi la
         // proba reste toujours lisible, quelle que soit la longueur du nom
         const chanceTxt = this.add.text(cx + cardW / 2 - 8, y + size / 2, chance, {
-          fontSize: '10px', color: '#ffd54f', fontStyle: 'bold',
+          fontSize: fs, color: '#ffd54f', fontStyle: 'bold',
         }).setOrigin(1, 0.5)
         const nameW = cardW - 22 - size - chanceTxt.width
         this.add.text(listLeft + size + 5, y + size / 2, label, {
-          fontSize: '10px', color: css(color), wordWrap: { width: Math.max(24, nameW) }, maxLines: 1,
+          fontSize: fs, color: css(color), wordWrap: { width: Math.max(24, nameW) }, maxLines: 1,
         }).setOrigin(0, 0.5)
         y += lineH
       })
-      const hidden = allDrops.length - shown.length
-      if (hidden > 0) this.add.text(listLeft, y, `+${hidden} autre${hidden > 1 ? 's' : ''}…`, { fontSize: '9px', color: '#78909c' }).setOrigin(0, 0)
 
       // COMPÉTENCES (seulement pour les mobs qui EN ONT : boss/élites) : rangée d'icônes skill + petit
       // nom dessous, en bas de la carte → contexte immédiat sur ce que fait le monstre.

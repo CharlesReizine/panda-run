@@ -104,81 +104,129 @@ export class TitleScene extends Phaser.Scene {
     // barrière anti-abus exigée par les règles Firestore
     if (cloudAvailable()) void ensureUser()
 
-    let y = existing ? 226 : 256
+    let y = existing ? 214 : 240
     const step = 70
 
-    // Chemin le plus rapide : la partie de cet appareil, sans réseau ni saisie.
-    if (existing) {
-      this.mkButton(y, `Continuer${active ? ` — ${active}` : ''}`, () => {
-        if (this.busy || this.left) return
-        setPlayer(existing)
-        this.left = true
-        this.scene.start('WorldMap')
-      })
-      y += step
-    }
-
-    // UN SEUL bouton pour tout le reste. Avant, « Nouvelle partie » et « Reprendre mon pseudo »
-    // faisaient taper le même nom deux fois pour deux chemins qui ne diffèrent que par l'existence
-    // d'une partie — une question à laquelle le jeu peut répondre tout seul.
-    this.mkButton(y, 'Commencer', () => void this.start())
+    // DEUX chemins explicites (demande du user). Le bouton unique « Commencer » devinait tout seul,
+    // mais du coup on ne pouvait plus dire « je veux repartir de zéro » — et surtout rien ne
+    // prévenait avant d'écraser. Séparés, chaque bouton peut poser LA bonne question.
+    this.mkButton(y, 'Continuer', () => void this.guard(() => this.continueGame()))
+    y += step
+    this.mkButton(y, 'Nouvelle partie', () => void this.guard(() => this.newGame()))
     y += step
 
     if (cloudAvailable()) {
       this.mkButton(y, '🏆 Classement', () => {
-        if (this.busy || this.left) return // même verrou : ne pas quitter l'écran pendant un flux en cours
+        if (this.busy || this.left) return
         this.left = true
         this.scene.start('Leaderboard', { return: 'Title' })
       })
     }
   }
 
-  // Écrit dans la ligne d'état SI elle est encore vivante. Un `await` peut se résoudre APRÈS un
-  // changement de scène : le Text est alors détruit, son canvas est null, et Phaser plante en voulant
-  // le redessiner. On ne suppose donc jamais qu'il est toujours là.
   private say(msg: string, color = '#e1f5fe') {
     if (this.left || !this.status || !this.status.active || !this.scene.isActive()) return
     this.status.setColor(color).setText(msg)
   }
 
-  // COMMENCER — on demande le nom une seule fois, puis le jeu décide : une partie existe pour ce
-  // nom → on la reprend en le signalant ; sinon → on la crée. AUCUN des deux chemins ne détruit
-  // quoi que ce soit, donc rien à faire confirmer.
-  private async start() {
+  // Verrou commun : ces flux enchaînent des await (saisie, réseau). Sans lui, deux appuis lancent
+  // deux flux et le second écrit dans une scène déjà quittée.
+  private async guard(fn: () => Promise<void>) {
     if (this.busy || this.left) return
     this.busy = true
+    try { await fn() } finally { this.busy = false }
+  }
+
+  // CONTINUER — on cherche la partie du pseudo. Si elle n'existe pas, on ne se contente PAS d'un
+  // message d'erreur : on propose d'en créer une avec ce pseudo (demande du user).
+  private async continueGame() {
+    const pseudo = await askPseudo(readActivePseudo() ?? '')
+    if (pseudo === null) return
+    const key = pseudoKey(pseudo)
+
+    // pas de cloud configuré : on reprend la sauvegarde locale s'il y en a une
+    if (!cloudAvailable()) {
+      const local = this.safeLoad()
+      if (local) { setPlayer(local); writeActivePseudo(pseudo); this.left = true; this.scene.start('WorldMap'); return }
+      this.confirmNewGame(pseudo, key)
+      return
+    }
+
+    this.say(`Recherche de « ${pseudo} »…`)
     try {
-      await this.startFlow()
-    } finally {
-      this.busy = false
+      await ensureUser()
+      const cloud = await pull(key)
+      if (cloud) { this.adopt(pseudo, key, cloud); return }
+      this.confirmNewGame(pseudo, key)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      logEvent('error', 'cloud', msg)
+      this.say(`Impossible de vérifier : ${msg}`, '#ffab91')
     }
   }
 
-  private async startFlow() {
+  // NOUVELLE PARTIE — si le pseudo porte DÉJÀ une partie, on demande avant d'écraser.
+  private async newGame() {
     const pseudo = await askPseudo(readActivePseudo() ?? '')
     if (pseudo === null) return
     const key = pseudoKey(pseudo)
 
     if (!cloudAvailable()) { this.startFresh(pseudo, key); return }
 
-    this.say(`Recherche de « ${pseudo} »…`)
+    this.say(`Vérification de « ${pseudo} »…`)
     try {
       await ensureUser()
       const cloud = await pull(key)
-      if (cloud) {
-        this.say(`Bon retour ${pseudo} — niveau ${cloud.player.level} retrouvé.`, '#a5d6a7')
-        this.adopt(pseudo, key, cloud)
-        return
-      }
-      this.say(`Nouveau joueur « ${pseudo} » — c'est parti !`, '#a5d6a7')
+      if (cloud) { this.confirmOverwrite(pseudo, key, cloud); return }
       this.startFresh(pseudo, key)
     } catch (e) {
-      // hors réseau : on ne bloque pas le joueur, on démarre en local (la synchro suivra)
-      const msg = e instanceof Error ? e.message : String(e)
-      logEvent('warn', 'cloud', `recherche impossible : ${msg}`)
-      this.say('Hors connexion — partie locale, elle sera synchronisée plus tard.', '#ffcc80')
+      // hors réseau : on ne bloque pas la création, la synchro suivra
+      logEvent('warn', 'cloud', `vérification impossible : ${e instanceof Error ? e.message : String(e)}`)
+      this.say('Hors connexion — partie locale, synchronisée plus tard.', '#ffcc80')
       this.startFresh(pseudo, key)
     }
+  }
+
+  // Panneau de confirmation générique : un titre, un corps, et deux à trois choix.
+  private ask(title: string, body: string, choices: { label: string; color: number; onPick: () => void }[]) {
+    const depth = 60
+    const items: Phaser.GameObjects.GameObject[] = []
+    items.push(this.add.rectangle(480, 270, 700, 300, 0x0d1b2a, 0.97).setDepth(depth).setStrokeStyle(2, 0xffd54f, 0.7))
+    items.push(this.add.text(480, 160, title, { fontSize: '23px', color: '#ffd54f', fontStyle: 'bold', align: 'center', wordWrap: { width: 620 } }).setOrigin(0.5).setDepth(depth + 1))
+    items.push(this.add.text(480, 214, body, { fontSize: '15px', color: '#e1f5fe', align: 'center', wordWrap: { width: 620 } }).setOrigin(0.5).setDepth(depth + 1))
+    choices.forEach((c, i) => {
+      items.push(this.add.text(480, 274 + i * 52, c.label, {
+        fontSize: '18px', color: '#ffffff', fontStyle: 'bold',
+        backgroundColor: `#${c.color.toString(16).padStart(6, '0')}`, padding: { x: 18, y: 10 },
+      }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        for (const it of items) it.destroy()
+        c.onPick()
+      }))
+    })
+  }
+
+  private confirmNewGame(pseudo: string, key: string) {
+    this.ask(
+      `« ${pseudo} » n'existe pas`,
+      'Aucune partie enregistrée sous ce nom.\nVeux-tu en commencer une nouvelle avec ce pseudo ?',
+      [
+        { label: 'Oui, nouvelle partie', color: 0x2e7d32, onPick: () => this.startFresh(pseudo, key) },
+        { label: 'Annuler', color: 0x455a64, onPick: () => this.say('') },
+      ],
+    )
+  }
+
+  private confirmOverwrite(pseudo: string, key: string, cloud: StampedSave) {
+    const d = cloud.savedAt ? new Date(cloud.savedAt).toLocaleString('fr-FR') : 'date inconnue'
+    this.ask(
+      `« ${pseudo} » a déjà une partie`,
+      `Niveau ${cloud.player.level} · ${cloud.player.gold} or · ${cloud.player.completedLevels.length} terrains\n${d}`,
+      [
+        { label: 'Reprendre cette partie', color: 0x2e7d32, onPick: () => this.adopt(pseudo, key, cloud) },
+        { label: 'Écraser et recommencer', color: 0x8e2f2f, onPick: () => this.startFresh(pseudo, key) },
+        { label: 'Annuler', color: 0x455a64, onPick: () => this.say('') },
+      ],
+    )
   }
 
   private startFresh(pseudo: string, key: string) {

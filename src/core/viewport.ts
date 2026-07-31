@@ -23,7 +23,8 @@ export const VIEW_H = 540
 // verticalement — mieux que de déformer. Au-dessus de 2,4:1 on arrête d'élargir : au-delà, on
 // dévoilerait tant de terrain que la difficulté en serait changée (on verrait venir tous les mobs).
 const MIN_W = DESIGN_W
-const MAX_W = Math.round(VIEW_H * 2.4) // 1296
+const MAX_W = Math.round(VIEW_H * 2.6) // 1404 — assez large pour coller au format des téléphones
+                                       // récents, ce qui rend l'étirement résiduel imperceptible
 
 function computeWidth(): number {
   if (typeof window === 'undefined') return DESIGN_W // tests (env node) : format de référence

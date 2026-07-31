@@ -31,6 +31,7 @@ import { bgKeyFor, bgPathFor } from '../data/level-backgrounds'
 import { logEvent } from '../core/logger'
 import { audio, type MusicTrack } from '../audio/audio-engine'
 import { CX, CY, VIEW_H, VIEW_W } from '../core/viewport'
+import { makeJag } from '../art/jagged-ring'
 
 // biomes → piste musicale ; 'carriere' n'a pas d'ambiance dédiée → repli sur 'montagne'
 const BIOME_TRACKS: Record<string, MusicTrack> = {
@@ -1992,7 +1993,9 @@ export class LevelScene extends Phaser.Scene {
   // ne doit pas mentir sur la zone réellement touchée.
   private aoeRing(x: number, y: number, radius: number, color: number, withShards = false) {
     const SEG = 36
-    const jag = Array.from({ length: SEG }, () => Phaser.Math.FloatBetween(0.78, 1.2))
+    // même générateur que les auras persistantes (art/jagged-ring) → l'éclat et la durée ont
+    // exactement le même langage visuel, ce qui manquait justement au buff
+    const jag = makeJag(SEG)
     const spin = Phaser.Math.FloatBetween(-1.6, 1.6)
     const g = this.add.graphics().setDepth(5).setBlendMode(Phaser.BlendModes.ADD)
 

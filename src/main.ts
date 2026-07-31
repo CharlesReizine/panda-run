@@ -60,7 +60,16 @@ try {
     antialias: true,
     roundPixels: false,
     backgroundColor: '#87ceeb',
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    // ⚠️ SCALE.NONE, PAS FIT — ET C'EST DÉLIBÉRÉ APRÈS QUATRE ÉCHECS.
+    // Avec FIT, Phaser mesure lui-même son conteneur et en déduit la taille du canvas. Sur iOS
+    // Safari cette mesure est fausse et INSTABLE : mesuré sur captures d'écran, le canvas occupait
+    // 69 % de la largeur sur un écran, 59 % sur un autre, décalé et coupé en bas — la hauteur du
+    // conteneur variant avec la barre d'URL, FIT recalculait une échelle différente à chaque scène.
+    // En NONE, Phaser ne touche plus au CSS du canvas : c'est refit() qui l'étire EXACTEMENT sur la
+    // zone visible (visualViewport). Comme la taille logique est déjà calculée au format de l'écran
+    // (core/viewport.ts), l'étirement résiduel est de quelques pourcents, invisible — et il n'y a
+    // plus ni bande noire, ni décalage, ni bas coupé possible.
+    scale: { mode: Phaser.Scale.NONE },
     physics: { default: 'arcade', arcade: { gravity: { x: 0, y: GRAVITY } } },
     // on gère TOUT l'audio via notre moteur Web Audio (src/audio) → on désactive le gestionnaire
     // de son de Phaser, qui créait un 2e AudioContext (échec « failed to start audio device » sur iOS)
@@ -87,8 +96,25 @@ if (game) {
 //
 // Il reste à PRÉVENIR Phaser que la zone a changé, pour qu'il recalcule son échelle : c'est tout ce
 // que fait refit(). Aucun calcul de notre côté, Phaser lit la taille réelle du conteneur.
+// Étire le canvas sur la zone RÉELLEMENT visible et recale Phaser dessus.
+// `visualViewport` est la seule mesure fiable sur iOS : elle exclut la barre d'URL et suit l'encoche.
+// On positionne le canvas en `fixed` à l'offset du viewport visuel → il ne peut plus être coupé.
 function refit() {
-  game?.scale.refresh()
+  if (!game) return
+  const vv = window.visualViewport
+  const w = Math.round(vv?.width ?? window.innerWidth)
+  const h = Math.round(vv?.height ?? window.innerHeight)
+  if (!w || !h) return
+  const c = game.canvas
+  c.style.position = 'fixed'
+  c.style.left = `${Math.round(vv?.offsetLeft ?? 0)}px`
+  c.style.top = `${Math.round(vv?.offsetTop ?? 0)}px`
+  c.style.width = `${w}px`
+  c.style.height = `${h}px`
+  c.style.margin = '0'
+  // indispensable : Phaser doit relire les bornes du canvas, sinon la conversion clic → coordonnées
+  // de jeu reste calée sur l'ancienne taille et les boutons deviennent décalés
+  game.scale.refresh()
 }
 
 window.visualViewport?.addEventListener('resize', refit)

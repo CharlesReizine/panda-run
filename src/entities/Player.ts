@@ -9,6 +9,7 @@ import { displayedWeaponType, isBigWeapon, weaponTextureKeys } from '../core/equ
 import { PANDA_BODY, PANDA_HEAD_ANCHORS } from './player-body'
 import { JUMP_SPEED, RUN_SPEED, GRAVITY } from '../core/platforming'
 import { MAX_SKILL_RANK } from '../core/player-state'
+import { drawAura, makeJag } from '../art/jagged-ring'
 
 const JUMP_VELOCITY = -JUMP_SPEED // source unique (partagée avec le test d'atteignabilité)
 const CLIMB_SPEED = 150 // vitesse verticale sur une échelle (up/down)
@@ -178,12 +179,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // buff d'attaque (Cri de guerre) : multiplicateur temporaire des dégâts sortants + aura dorée suivie
   private buffUntil = 0
   private buffMult = 1
-  private auraImage: Phaser.GameObjects.Image | null = null
+  // Aura de buff : GRAPHICS redessiné à chaque frame, plus une image d'anneau lisse agrandie en yoyo.
+  // Retour user : « c'est stylé une demi-seconde puis j'ai un vieux cercle jaune dégueulasse » — l'éclat
+  // du lancement était déjà refait, l'aura de DURÉE était restée lisse. Dessin partagé : art/jagged-ring.
+  private auraImage: Phaser.GameObjects.Graphics | null = null
+  private auraColor = 0xffd54f
+  private auraJag: number[] = []
+  private auraJagIn: number[] = []
   private auraTween: Phaser.Tweens.Tween | null = null
   // Folie enragée : aura ROUGE SANG pulsante + clignotement rouge du panda, distincte du buff ATK
   // doré. Purement visuel côté joueur (l'effet de terreur s'applique aux ennemis dans LevelScene).
   private rageUntil = 0
-  private rageAura: Phaser.GameObjects.Image | null = null
+  private rageAura: Phaser.GameObjects.Graphics | null = null
+  private rageJag: number[] = []
+  private rageJagIn: number[] = []
   private rageTween: Phaser.Tweens.Tween | null = null
   private rageBlink: Phaser.Time.TimerEvent | null = null
   // Régénération passive (sabreur) : dernier instant où le panda a été touché + accumulateur de PV
@@ -352,7 +361,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.auraImage.destroy(); this.auraImage = null
         this.scene.events.emit('player-buff-end')
       } else {
-        this.auraImage.setPosition(this.x, this.y)
+        // redessin complet à chaque frame : c'est ce qui fait vivre la forme dans la DURÉE
+        drawAura(this.auraImage, this.x, this.y, 46, this.auraColor, this.scene.time.now, this.auraJag, this.auraJagIn)
       }
     }
     // aura de Dévotion (bouclier bleu) : suit le panda tant que la garde tient, puis s'éteint.
@@ -374,7 +384,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.rageAura.destroy(); this.rageAura = null
         this.clearTint()
       } else {
-        this.rageAura.setPosition(this.x, this.y)
+        drawAura(this.rageAura, this.x, this.y, 52, 0xd50000, this.scene.time.now, this.rageJag, this.rageJagIn)
       }
     }
   }
@@ -384,14 +394,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   applyAtkBuff(mult: number, durationMs: number, auraColor = 0xffd54f) {
     this.buffMult = mult
     this.buffUntil = this.scene.time.now + durationMs
-    if (this.auraImage) this.auraImage.setTint(auraColor) // renouvellement : recolore l'aura selon la classe
+    this.auraColor = auraColor // renouvellement : recolore l'aura selon la classe
     if (!this.auraImage) {
-      this.auraImage = this.scene.add.image(this.x, this.y, 'ring')
-        .setTint(auraColor).setDepth(this.depth - 1).setAlpha(0.5).setScale(1.7)
-      this.auraTween = this.scene.tweens.add({
-        targets: this.auraImage, scale: 2.3, alpha: 0.8,
-        duration: 480, yoyo: true, repeat: -1, ease: 'Sine.inOut',
-      })
+      // les amplitudes sont tirées UNE FOIS : les régénérer à chaque frame ferait scintiller la forme
+      this.auraJag = makeJag(30)
+      this.auraJagIn = makeJag(26, 0.7, 1.25)
+      this.auraImage = this.scene.add.graphics()
+        .setDepth(this.depth - 1).setBlendMode(Phaser.BlendModes.ADD)
     }
     this.scene.events.emit('player-buff', this.buffUntil, durationMs)
   }
@@ -402,12 +411,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   applyRageAura(durationMs: number) {
     this.rageUntil = this.scene.time.now + durationMs
     if (!this.rageAura) {
-      this.rageAura = this.scene.add.image(this.x, this.y, 'ring')
-        .setTint(0xd50000).setDepth(this.depth - 1).setAlpha(0.55).setScale(1.8)
-      this.rageTween = this.scene.tweens.add({
-        targets: this.rageAura, scale: 2.5, alpha: 0.85,
-        duration: 300, yoyo: true, repeat: -1, ease: 'Sine.inOut',
-      })
+      this.rageJag = makeJag(32, 0.72, 1.28) // plus déchiquetée que le buff : c'est de la FUREUR
+      this.rageJagIn = makeJag(28, 0.66, 1.3)
+      this.rageAura = this.scene.add.graphics()
+        .setDepth(this.depth - 1).setBlendMode(Phaser.BlendModes.ADD)
     }
     if (!this.rageBlink) {
       this.rageBlink = this.scene.time.addEvent({

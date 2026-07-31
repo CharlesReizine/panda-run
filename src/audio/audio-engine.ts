@@ -165,13 +165,16 @@ class AudioEngine {
    * l'eau et mets plus de bulles. »
    */
   setUnderwater(on: boolean) {
-    const target = on ? 0.3 : 1
+    // 0,08 et pas 0,3 : à 30 % le user ne percevait AUCUNE différence. Sous l'eau, la musique doit
+    // quasiment disparaître — c'est ce qui donne la sensation d'immersion, et ce qui laisse enfin la
+    // place aux bulles.
+    const target = on ? 0.08 : 1
     if (this.duck === target) return
     this.duck = target
     this.applyMusicState()
     // le bus musique de la synthèse suit aussi, sinon seule la piste média serait atténuée
     if (this.musicGain && this.ctx) {
-      this.musicGain.gain.setTargetAtTime(0.18 * target, this.ctx.currentTime, 0.15)
+      this.musicGain.gain.setTargetAtTime(0.18 * target, this.ctx.currentTime, 0.12)
     }
   }
 
