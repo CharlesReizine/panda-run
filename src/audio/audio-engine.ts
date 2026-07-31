@@ -184,14 +184,17 @@ class AudioEngine {
     // `HTMLMediaElement.volume` (corrigé depuis via connectMusicGraph). À 0,03 le ducking marchait enfin,
     // mais trop bien : « j'entends pas ma musique quand je suis sous l'eau ».
     // Donc la différence ne se joue plus sur le seul volume : on BALAIE LE PASSE-BAS du bus musique de
-    // 2800 Hz à 420 Hz. C'est ce qui fait « sous l'eau » (l'eau absorbe les aigus), et ça s'entend
+    // 2800 Hz à 700 Hz. C'est ce qui fait « sous l'eau » (l'eau absorbe les aigus), et ça s'entend
     // franchement tout en laissant la mélodie audible — un simple gain très bas donnait du silence.
-    const target = on ? 0.4 : 1
+    // Réglage final, à l'oreille du user : 70 % du volume (« là on entend pas assez, ça fait un truc
+    // bizarre » à 40 %). À 40 % + coupure à 420 Hz il restait trop peu de musique ET trop peu d'aigus :
+    // ça ne sonnait plus étouffé, ça sonnait cassé. On remonte les deux ensemble.
+    const target = on ? 0.7 : 1 // 70 % : réglé à l'oreille par le user, cf. l'historique ci-dessus
     if (this.duck === target) return
     this.duck = target
     this.applyMusicLevel()
     if (this.musicFilter && this.ctx) {
-      this.musicFilter.frequency.setTargetAtTime(on ? 420 : 2800, this.ctx.currentTime, 0.12)
+      this.musicFilter.frequency.setTargetAtTime(on ? 700 : 2800, this.ctx.currentTime, 0.12)
     }
   }
 

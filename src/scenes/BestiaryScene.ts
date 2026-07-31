@@ -1,12 +1,8 @@
 import Phaser from 'phaser'
 import { MONSTERS } from '../data/monsters'
-import { ITEMS, rarityColor } from '../data/items'
-import { MATERIALS } from '../data/materials'
 import { getPlayer } from '../state'
-import type { DropEntry, MonsterDef } from '../core/types'
-import { playerXpForMobLevel } from '../core/progression'
-import { SKILLS } from '../data/skills'
-import { BD, CARD, headerBox, identityBox, skillsBox, lootBox, lootRowH, LOOT_COLS, maxSkillRows, truncate } from './bestiary-layout'
+import type { MonsterDef } from '../core/types'
+import { renderMonsterCard, monsterKind, css, SILHOUETTE_TINT } from './monster-card'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 import { installUiClickSound } from '../ui/click-sound'
 
@@ -14,54 +10,9 @@ import { installUiClickSound } from '../ui/click-sound'
 // Aucune écriture dans la sauvegarde ni dans les données du jeu.
 const MONSTER_LIST: MonsterDef[] = Object.values(MONSTERS)
 
-const BEHAVIOR_LABELS: Record<MonsterDef['behavior'], string> = {
-  contact: 'Contact',
-  projectile: 'À distance',
-  charge: 'Charge',
-  caster: 'Lanceur de sorts',
-}
-
 const PER_PAGE = 24 // 6 colonnes × 4 rangées
 const COLS = 6
 const ROWS = 4
-
-const css = (n: number) => `#${n.toString(16).padStart(6, '0')}`
-
-// Type d'un monstre pour l'affichage : badge et couleur.
-function monsterKind(m: MonsterDef): { label: string; color: number } {
-  if (m.boss) return { label: 'BOSS', color: 0xff5252 }
-  if (m.mvp) return { label: 'ÉLITE', color: 0xffd54f }
-  return { label: 'Normal', color: 0x90a4ae }
-}
-
-// Libellé du comportement en clair (+ note "immobile" quand la vitesse est nulle).
-function behaviorLabel(m: MonsterDef): string {
-  const base = BEHAVIOR_LABELS[m.behavior]
-  return m.speed === 0 ? `${base} · immobile` : base
-}
-
-// Une ligne de butin : libellé, couleur, pourcentage de chance, quantité.
-function dropLine(d: DropEntry): { label: string; color: number; chance: string; qty: string } {
-  let label = ''
-  let color = 0xffffff
-  if (d.kind === 'gold') { label = 'Or'; color = 0xffd700 }
-  else if (d.kind === 'potion') { label = 'Potion'; color = 0xff6f91 }
-  else if (d.kind === 'item') {
-    const item = d.itemId ? ITEMS[d.itemId] : undefined
-    label = item ? item.name : d.itemId ?? 'Objet'
-    color = rarityColor(item?.rarity)
-  } else {
-    const mat = d.materialId ? MATERIALS[d.materialId] : undefined
-    label = mat ? mat.name : d.materialId ?? 'Matériau'
-    color = mat ? mat.color : 0xffffff
-  }
-  const chance = `${+(d.chance * 100).toFixed(1)}%`
-  const qty = d.min === d.max ? `×${d.min}` : `×${d.min}–${d.max}`
-  return { label, color, chance, qty }
-}
-
-// Teinte de silhouette pour un monstre non découvert (sprite assombri en ombre).
-const SILHOUETTE_TINT = 0x101820
 
 export class BestiaryScene extends Phaser.Scene {
   private page = 0
@@ -146,105 +97,14 @@ export class BestiaryScene extends Phaser.Scene {
     this.btn(60, 24, '✕ Fermer', 0x8e2f2f, () => this.scene.start('Menu'))
   }
 
-  // Texture d'icône d'un butin (vraie image, plus de rond coloré) + teinte de repli éventuelle.
-  private lootIcon(d: DropEntry): { key: string; tint?: number } {
-    if (d.kind === 'gold') return { key: 'coin' }
-    if (d.kind === 'potion') return { key: 'potion-drop' }
-    if (d.kind === 'item') {
-      const k = d.itemId && this.textures.exists(`item-${d.itemId}`) ? `item-${d.itemId}` : 'item-drop'
-      return { key: k }
-    }
-    if (d.materialId && this.textures.exists(`material-${d.materialId}`)) return { key: `material-${d.materialId}` }
-    return { key: 'material-drop', tint: d.materialId ? MATERIALS[d.materialId]?.color : 0xffffff }
-  }
-
-  // Carte de la grille (icône + titre + sous-titre) — brique commune Compétences / Butin.
-  private gridCard(x: number, y: number, w: number, h: number, iconKey: string, tint: number | undefined, title: string, titleColor: number, sub: string, subColor: string) {
-    this.add.rectangle(x, y, w, h, 0x000000, 0.32).setOrigin(0, 0.5).setStrokeStyle(1, 0xffffff, 0.12)
-    if (this.textures.exists(iconKey)) {
-      const img = this.add.image(x + 6, y, iconKey).setOrigin(0, 0.5).setDisplaySize(h - 12, h - 12)
-      if (tint !== undefined) img.setTint(tint)
-    }
-    const tx = x + h + 2
-    this.add.text(tx, y - (sub ? 9 : 7), title, { fontSize: '14px', color: css(titleColor), fontStyle: 'bold', wordWrap: { width: w - h - 10 } }).setOrigin(0, 0.5)
-    if (sub) this.add.text(tx, y + 9, sub, { fontSize: '11px', color: subColor, wordWrap: { width: w - h - 10 } }).setOrigin(0, 0.5)
-  }
-
   private renderDetail(m: MonsterDef) {
     this.clear()
-    const seen = this.discovered(m)
-    const { label: kindLabel } = monsterKind(m)
+    // ⚠️ RENDU PARTAGÉ AVEC L'ÉCRAN DE DÉBUT DE TERRAIN (scenes/monster-card.ts). Il existait deux
+    // rendus de fiche monstre, et ils ont divergé deux fois : icônes de butin d'abord (des « vieux
+    // cercles de couleurs » d'un côté, les vraies images de l'autre), puis la mise en page entière
+    // (l'écran de début de terrain débordait). Un seul rendu, une seule géométrie testée.
+    renderMonsterCard(this, m, { seen: this.discovered(m), kills: this.kills[m.id] ?? 0 })
 
-    // ═══ DISPOSITION EN QUATRE QUARTS (demandée par le user) ═══
-    //   en-tête : nom + (Nv X) JUSTE À CÔTÉ
-    //   haut-gauche : l'image seule · trait vertical · haut-droite : compétences
-    //   bas fusionné, toute la largeur : le BUTIN
-    // ⚠️ AUCUNE STAT (« mets pas les PV, ça sert à rien, juste le niveau c'est ok »). Une version
-    // précédente logeait PV/ATK/DÉF à droite de l'image : ça repoussait le trait au milieu de la fiche
-    // et écrasait les compétences, alors que la consigne était « à droite de ÇA » = de l'image.
-    // Géométrie dans scenes/bestiary-layout.ts, vérifiée par son test sur le VRAI roster.
-    const head = headerBox()
-    const ident = identityBox()
-    const skl = skillsBox()
-    const loot = lootBox()
-
-    // ── EN-TÊTE : nom, puis le niveau entre parenthèses COLLÉ au nom ──
-    const nameTxt = this.add.text(head.x, head.y, seen ? m.name : '???', {
-      fontSize: '25px', color: seen ? '#ffffff' : '#78909c', fontStyle: 'bold',
-    }).setOrigin(0, 0)
-    this.add.text(nameTxt.x + nameTxt.width + 10, head.y + 6, `(Nv ${m.level})`, {
-      fontSize: '18px', color: m.boss ? '#ff5252' : m.mvp ? '#ffd54f' : '#b0bec5', fontStyle: 'bold',
-    }).setOrigin(0, 0)
-    // rang (ÉLITE / BOSS) à l'autre bout de la ligne : il qualifie le monstre, pas ses stats
-    if (seen && (m.boss || m.mvp)) this.badge(head.x + head.w - 40, head.y + 14, m, '13px')
-
-    // ── QUART HAUT-GAUCHE : l'image seule ──
-    const big = this.add.image(ident.x, ident.y, `monster-${m.id}`).setOrigin(0, 0).setDisplaySize(BD.portrait, BD.portrait)
-    if (!seen) big.setTint(SILHOUETTE_TINT).setAlpha(0.85)
-    if (seen) {
-      this.add.text(ident.x, ident.y + BD.portrait + 6, `${behaviorLabel(m)}\nvaincu ${this.kills[m.id]}×`, {
-        fontSize: '11px', color: '#80cbc4', lineSpacing: 2,
-      })
-    }
-
-    // ── TRAIT VERTICAL, juste après l'image ──
-    this.add.rectangle(BD.splitX, ident.y, 2, BD.topH, 0xffffff, 0.22).setOrigin(0.5, 0)
-
-    // ── QUART HAUT-DROITE : compétences ──
-    this.add.text(skl.x, skl.y, 'COMPÉTENCES', { fontSize: '14px', color: '#80cbc4', fontStyle: 'bold' })
-    const skills = seen ? (m.skills ?? []).map((sid) => SKILLS[sid]).filter((sk): sk is NonNullable<typeof sk> => !!sk) : []
-    if (!seen) {
-      this.add.text(skl.x, skl.y + 24, 'Fiche verrouillée — vaincs ce monstre pour la révéler.', { fontSize: '13px', color: '#607d8b', fontStyle: 'italic', wordWrap: { width: skl.w } })
-    } else if (!skills.length) {
-      this.add.text(skl.x, skl.y + 24, 'Aucune compétence — attaque simple.', { fontSize: '12px', color: '#78909c', fontStyle: 'italic', wordWrap: { width: skl.w } })
-    } else {
-      skills.slice(0, maxSkillRows()).forEach((sk, i) => {
-        const y = skl.y + 22 + i * BD.skillRowH
-        this.gridCard(skl.x, y + BD.skillRowH / 2, skl.w, BD.skillRowH - 4, `skill-${sk.id}`, undefined,
-          sk.name, 0xffffff, truncate(sk.description, BD.descMax), '#b0bec5')
-      })
-    }
-
-    // ── BANDE DU BAS : BUTIN sur toute la largeur ──
-    this.add.text(loot.x, loot.y, 'BUTIN', { fontSize: '14px', color: '#80cbc4', fontStyle: 'bold' })
-    if (!seen) {
-      this.add.text(loot.x, loot.y + 24, 'Vaincs ce monstre pour connaître son butin.', { fontSize: '13px', color: '#607d8b', fontStyle: 'italic' })
-    } else {
-      const rh = lootRowH(m.drops.length)
-      const colW = (loot.w - (LOOT_COLS - 1) * 10) / LOOT_COLS
-      m.drops.forEach((d, i) => {
-        const c = i % LOOT_COLS, r = Math.floor(i / LOOT_COLS)
-        const x = loot.x + c * (colW + 10)
-        const y = loot.y + 22 + r * rh + rh / 2
-        const { label, color } = dropLine(d)
-        const { key, tint } = this.lootIcon(d)
-        const chance = `${+(d.chance * 100).toFixed(1)}%`
-        const qty = d.min === d.max ? `×${d.min}` : `×${d.min}–${d.max}`
-        this.gridCard(x, y, colW, rh - 4, key, tint, label, color, `${chance}  ${qty}`, '#ffd54f')
-      })
-    }
-
-    // Boutons
     this.btn(360, 512, '◀ Retour', 0x37474f, () => this.renderList())
     this.btn(600, 512, '✕ Fermer', 0x8e2f2f, () => this.scene.start('Menu'))
   }

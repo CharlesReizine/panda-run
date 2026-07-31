@@ -6,6 +6,7 @@ import { getPlayer } from '../state'
 import { diesOnFall, hasFallenOutOfWorld } from '../core/mob-fall'
 import { GRAVITY } from '../core/platforming'
 import { MONSTER_BOUNDS } from './monster-body'
+import { CastBar } from './cast-bar'
 
 // Texture de projectile thématique par monstre à distance (fireProjectile). La mandragore tire
 // en cloche (fx-lob, géré à part) ; tout id absent retombe sur l'orbe générique fx-shot.
@@ -77,6 +78,14 @@ const sizeScale = (size?: string): number => (size === 'grand' ? GRAND_SCALE : s
 // ÉLITE (MVP) : cadence du SKILL SIGNATURE unique — onde de choc télégraphiée (colosses) ou salve en
 // éventail (lanceurs). Les mobs normaux n'en ont pas ; les boss (3 skills) sont un chantier à part.
 const ELITE_SKILL_COOLDOWN = 6000
+// ⚠️ CHARGEMENTS AJOUTÉS AUX ATTAQUES QUI PARTAIENT SANS PRÉAVIS (tir, sort de zone, skill d'élite).
+// Demande du user : « j'aimerais que les attaques et sorts des monstres aient un chargement + qu'on voie
+// le nom de l'attaque ». La mêlée et la charge en avaient déjà un ; le tir et les sorts partaient
+// instantanément, donc impossibles à anticiper. Le RYTHME global ne change pas (les temps de recharge
+// sont inchangés) : l'attaque est seulement annoncée avant de partir, donc esquivable.
+const SHOOT_WINDUP_MS = 300
+const CAST_WINDUP_MS = 520
+const ELITE_SKILL_WINDUP_MS = 620
 // NOYADE DES MONSTRES : un mob terrestre (ni aquatique ni volant) qui se retrouve immergé dans une
 // eau marine profonde SE NOIE — dégâts périodiques par le chemin de dégâts standard (takeDamage)
 // jusqu'à mourir. Pas d'apnée : l'eau n'est pas son élément (contrairement au joueur). Proportionnel
@@ -133,6 +142,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   // MÊLÉE en trois temps : prochaine attaque autorisée / fin du wind-up / fin de la fenêtre active +
   // garde-coup (le coup ne touche qu'une fois par swing) + sens verrouillé au déclenchement.
   private nextMeleeAt = 0
+  // barre de chargement nommée, au-dessus de la tête (créée à la première attaque, cf. entities/cast-bar.ts)
+  private castBar: CastBar | null = null
   private windUpUntil = 0
   private strikeUntil = 0
   private struckThisSwing = false
@@ -286,6 +297,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.fearFx?.destroy(); this.fearFx = null
     this.slowFx?.destroy(); this.slowFx = null
     this.meleeFx?.destroy(); this.meleeFx = null
+    this.castBar?.destroy(); this.castBar = null
     this.ragdolling = true
     this.aiDisabled = true
     this.ragdollEndAt = this.scene.time.now + 1500
@@ -337,6 +349,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.fearFx?.destroy()
     this.slowFx?.destroy()
     this.meleeFx?.destroy()
+    this.castBar?.destroy()
     this.destroy()
   }
 
@@ -465,6 +478,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // 3) PRÊT : à portée + récupéré → arme une nouvelle attaque (wind-up puis coup puis cooldown).
     if (dist <= attackReach && t > this.nextMeleeAt) {
       this.attackDir = dir < 0 ? -1 : 1
+      this.announceCast('Attaque', MELEE_WINDUP_MS, 0xff5252, t)
       this.windUpUntil = t + MELEE_WINDUP_MS
       this.strikeUntil = t + MELEE_WINDUP_MS + MELEE_STRIKE_MS
       this.struckThisSwing = false
@@ -477,6 +491,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     const grounded = (this.body as Phaser.Physics.Arcade.Body).blocked.down
     const step = dist > stopDist && !(grounded && !this.floorAhead(dir))
     this.setVelocityX(step ? dir * this.monster.speed : 0)
+  }
+
+  /**
+   * Annonce une attaque : barre de chargement nommée au-dessus de la tête pendant `dur` ms.
+   * La barre se démonte d'elle-même à la fin (cf. CastBar.update) — rien à nettoyer côté appelant.
+   */
+  private announceCast(name: string, dur: number, color: number, t: number) {
+    if (!this.castBar) this.castBar = new CastBar(this.scene)
+    this.castBar.start(name, dur, color, t, this.depth + 2)
   }
 
   // Y a-t-il un wind-up de mêlée ou une charge en cours ? (pilote le rendu du télégraphe.)
@@ -691,8 +714,15 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
       // ÉLITE (MVP) : skill signature périodique EN PLUS du comportement de base — onde de choc
       // télégraphiée (mêlée) ou salve en éventail (distance). Cadencé à part du reste de l'IA.
       if (this.monster.mvp && t > this.nextEliteSkillAt) {
-        this.useEliteSkill()
+        // le nom annoncé décrit ce que useEliteSkill fait VRAIMENT (salve en éventail pour les
+        // lanceurs, onde de choc au sol sinon) — pas m.skills, qui est de la donnée descriptive
+        const lanceur = this.monster.behavior === 'projectile' || this.monster.behavior === 'caster'
+        this.announceCast(lanceur ? 'Salve' : 'Onde de choc', ELITE_SKILL_WINDUP_MS, 0xffd54f, t)
         this.nextEliteSkillAt = t + ELITE_SKILL_COOLDOWN * this.cadenceMul()
+        this.scene.time.delayedCall(ELITE_SKILL_WINDUP_MS, () => {
+          if (!this.active || this.isRooted() || this.isFeared()) return
+          this.useEliteSkill()
+        })
       }
       if (this.monster.behavior === 'charge') {
         // CHARGE LISIBLE : bref télégraphe (planté, on voit le monstre s'armer) → RUÉE rapide.
@@ -700,6 +730,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           this.setVelocityX(0)
         } else if (t > this.nextActionAt && !this.isCharging) {
           this.attackDir = dir < 0 ? -1 : 1
+          this.announceCast('Charge', CHARGE_WINDUP_MS, 0xffa726, t)
           this.windUpUntil = t + CHARGE_WINDUP_MS
           this.nextActionAt = t + CHARGE_COOLDOWN * this.cadenceMul()
           this.setVelocityX(0)
@@ -720,8 +751,12 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
           this.setVelocityX(step ? dir * this.monster.speed : 0)
         }
       } else if (this.monster.behavior === 'projectile' && t > this.nextActionAt) {
-        this.fireProjectile()
+        this.announceCast('Tir', SHOOT_WINDUP_MS, 0xff8a65, t)
         this.nextActionAt = t + SHOOT_COOLDOWN * this.cadenceMul()
+        this.scene.time.delayedCall(SHOOT_WINDUP_MS, () => {
+          if (!this.active || this.isRooted() || this.isFeared()) return
+          this.fireProjectile()
+        })
       } else if (this.monster.behavior === 'caster') {
         // garde ses distances : recule si le joueur s'approche, avance s'il fuit
         if (dist < CASTER_KEEP_DIST - 30) this.setVelocityX(-dir * this.monster.speed)
@@ -729,13 +764,24 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
         else this.setVelocityX(0)
         // sort de zone télégraphié sous le joueur
         if (t > this.nextActionAt) {
-          this.levelScene.enemyGroundSpell(player.x, this.monster.atk, player.y)
+          this.announceCast('Éruption', CAST_WINDUP_MS, 0xba68c8, t)
           this.nextActionAt = t + CAST_COOLDOWN * this.cadenceMul()
+          this.scene.time.delayedCall(CAST_WINDUP_MS, () => {
+            if (!this.active || this.isRooted() || this.isFeared()) return
+            // la zone est visée là où le joueur se trouve À LA FIN du chargement : sinon annoncer
+            // l'attaque ne servirait à rien, elle suivrait le joueur pendant qu'il l'esquive
+            const target = this.levelScene.player
+            this.levelScene.enemyGroundSpell(target.x, this.monster.atk, target.y)
+          })
         }
         // + projectile occasionnel pour harceler pendant le rechargement du sort
         if (t > this.nextShootAt) {
-          this.fireProjectile()
+          this.announceCast('Tir', SHOOT_WINDUP_MS, 0xff8a65, t)
           this.nextShootAt = t + SHOOT_COOLDOWN * 1.5 * this.cadenceMul()
+          this.scene.time.delayedCall(SHOOT_WINDUP_MS, () => {
+            if (!this.active || this.isRooted() || this.isFeared()) return
+            this.fireProjectile()
+          })
         }
       } else if (this.monster.behavior !== 'projectile') {
         // 'contact' = MÊLÉE (mobile si speed>0, immobile si speed=0) : avance jusqu'à portée puis
@@ -808,6 +854,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // TÉLÉGRAPHE DE MÊLÉE/CHARGE : arc rouge qui se charge devant le monstre pendant le wind-up, puis
     // éclair de coup (croissant blanc) durant la fenêtre active → « attaquer » devient LISIBLE.
     this.drawMeleeTelegraph(t, hh, hw)
+
+    // barre de chargement nommée : bien AU-DESSUS de la barre de vie (−12) et de la plaque « Nv X »
+    // (−22), sinon elle les recouvrirait pendant tout le chargement.
+    this.castBar?.update(t, this.x, this.y - hh / 2 - 26)
 
     // "zzz" hors aggro, caché dès que le monstre repère le joueur
     if (dist >= AGGRO_RANGE) {

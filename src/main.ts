@@ -28,6 +28,7 @@ import { TrainingScene } from './scenes/TrainingScene'
 import { LeaderboardScene } from './scenes/LeaderboardScene'
 import { GRAVITY } from './core/platforming'
 import { VIEW_W, VIEW_H } from './core/viewport'
+import { LEVELS } from './data/levels'
 
 // ─── Capture globale des erreurs ────────────────────────────────────────────
 // Sur iPhone il n'y a pas de console : toute exception non gérée doit devenir VISIBLE.
@@ -86,6 +87,10 @@ try {
 // Exposés inconditionnellement car l'émulateur joue le build de PRODUCTION (dist/).
 if (game) {
   ;(window as unknown as { __pandaGame?: Phaser.Game }).__pandaGame = game
+  // Liste des terrains, pour les sondes de cadrage : elles doivent pouvoir parcourir TOUS les terrains
+  // sans qu'on maintienne la liste en double dans un script (une liste recopiée finit désynchronisée, et
+  // une sonde qui saute des terrains ne prouve rien). Lecture seule, aucun effet sur le jeu.
+  ;(window as unknown as { __pandaLevelIds?: string[] }).__pandaLevelIds = Object.keys(LEVELS)
 }
 
 // Le conteneur #game est dimensionné en CSS PUR (100dvw/100dvh + insets safe-area symétriques,

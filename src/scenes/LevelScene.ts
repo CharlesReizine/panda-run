@@ -32,6 +32,7 @@ import { logEvent } from '../core/logger'
 import { audio, type MusicTrack } from '../audio/audio-engine'
 import { CX, CY, VIEW_H, VIEW_W } from '../core/viewport'
 import { makeJag } from '../art/jagged-ring'
+import { CastBar } from '../entities/cast-bar'
 
 // biomes → piste musicale ; 'carriere' n'a pas d'ambiance dédiée → repli sur 'montagne'
 const BIOME_TRACKS: Record<string, MusicTrack> = {
@@ -168,6 +169,11 @@ export class LevelScene extends Phaser.Scene {
     cancelAt: { x: number; y: number }
   } | null = null
 
+  // ⚠️ LE JOUEUR A LA MÊME BARRE DE CHARGEMENT QUE LES MONSTRES, ET C'EST DEMANDÉ : « j'aimerais que
+  // les attaques et sorts des monstres aient un chargement (VOIR QUE JE L'AI AUSSI) ». Même classe, même
+  // rendu (entities/cast-bar.ts) : ce qui sert à lire un monstre sert à se lire soi-même.
+  private playerCast: CastBar | null = null
+
   // MAINTIEN (canalisé / chargé) : un seul sort tenu à la fois. La source d'entrée (touche 1-4 ou
   // pointeur du bouton de slot) est capturée au lancement pour savoir quand le bouton est RELÂCHÉ.
   private held: {
@@ -218,6 +224,13 @@ export class LevelScene extends Phaser.Scene {
     // this.time.now est monotone sur toute la durée du jeu (partagé entre scènes) : sans reset,
     // les cooldowns de compétences posés dans un niveau précédent restent actifs dans le suivant.
     this.cooldowns = new CooldownTracker()
+    // ⚠️ REMISE À NULL OBLIGATOIRE. `playerCast` est un champ de classe : il est initialisé UNE fois à
+    // l'instanciation, pas à chaque create(). Or Phaser détruit les objets d'affichage à l'arrêt de la
+    // scène. Si le niveau s'arrête PENDANT un chargement, la barre survivrait avec des rectangles déjà
+    // détruits et le niveau suivant les repositionnerait à chaque frame. C'est exactement le piège qui
+    // avait laissé l'interface cibler les objets du niveau précédent.
+    this.playerCast = null
+
     // la scène est réutilisée entre niveaux : ces états doivent repartir de zéro
     this.ladderRects = []
     this.waterRects = []
@@ -2138,6 +2151,12 @@ export class LevelScene extends Phaser.Scene {
     this.screenShake(Math.min(0.02, radius * 0.00012), 180)
   }
 
+  /** Barre de chargement nommée au-dessus du panda, pour ses propres sorts à temps de charge. */
+  private announcePlayerCast(name: string, dur: number, color: number) {
+    if (!this.playerCast) this.playerCast = new CastBar(this)
+    this.playerCast.start(name, dur, color, this.time.now, this.player.depth + 4)
+  }
+
   private announceSkill(name: string, color = 0xffd700) {
     const hex = `#${color.toString(16).padStart(6, '0')}`
     const txt = this.add.text(this.player.x, this.player.y - 55, name + ' !', {
@@ -2492,6 +2511,7 @@ export class LevelScene extends Phaser.Scene {
     // EN L'AIR : on fige le panda en hauteur le temps de la charge (il frappe en haut), puis on
     // relâche → il retombe (slam). AU SOL : beginAirChargeLock renvoie false → comportement inchangé.
     const airborne = this.player.beginAirChargeLock()
+    this.announcePlayerCast(skill.name, WINDUP, color)
     this.chargeWindupFx(color, WINDUP)
     this.time.delayedCall(WINDUP, () => {
       if (!this.player.active || this.player.hp <= 0) { this.player.endChargeLock(); return }
@@ -3331,7 +3351,12 @@ export class LevelScene extends Phaser.Scene {
     audio.playSfx('skill')
     this.announceSkill(skill.name)
     if (mode === 'channel') this.updateHeld(now) // 1er tick immédiat (un tap = au moins une décharge)
-    else this.beginChargeFx(skill)
+    else {
+      // la jauge court jusqu'à la charge PLEINE : relâcher avant frappe moins fort, donc la barre dit
+      // exactement ce qu'on gagne à attendre (et elle s'efface d'elle-même une fois pleine)
+      this.announcePlayerCast(skill.name, CHARGE_FULL_MS, this.skillColor(skill.id))
+      this.beginChargeFx(skill)
+    }
   }
 
   private updateHeld(now: number) {
@@ -4261,6 +4286,8 @@ export class LevelScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
+    // barre de chargement du panda : au-dessus de sa tête, elle se démonte seule à la fin
+    this.playerCast?.update(this.time.now, this.player.x, this.player.y - this.player.displayHeight / 2 - 8)
     this.eliteAmbience()
     this.underwaterDucking()
     const sx = this.cameras.main.scrollX
