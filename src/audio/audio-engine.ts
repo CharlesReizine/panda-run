@@ -14,7 +14,7 @@ const MUSIC_VOLUME = 0.35
 export type SfxName =
   | 'jump' | 'attack' | 'hit' | 'enemy-death' | 'coin' | 'potion' | 'skill'
   | 'level-up' | 'player-hit' | 'player-death' | 'boss-victory' | 'ui-tap' | 'buy'
-  | 'stomp' | 'player-burn' | 'elite' | 'npc-talk' | 'bubble' | 'coins'
+  | 'stomp' | 'player-burn' | 'elite' | 'npc-talk' | 'bubble' | 'coins' | 'splash'
 
 export type MusicTrack =
   | 'titre' | 'ville' | 'carte' | 'plaine' | 'foret' | 'desert' | 'cave'
@@ -378,6 +378,14 @@ class AudioEngine {
       // BULLE (« bloub ») : une sinusoide qui MONTE vite en frequence — c'est la montee qui fait
       // entendre une bulle qui creve, un son a hauteur fixe ferait « bip ». Tres court et discret :
       // il est rejoue en boucle tant qu'on nage.
+      // PLOUF : entrée dans l'eau. Un volume d'eau déplacé, donc du BRUIT filtré bas (le « ffff »)
+      // plus une tonalité qui PLONGE (l'impact qui s'enfonce). Le joueur l'a demandé aussi comme
+      // vérification : s'il l'entend, la détection d'entrée dans l'eau est bonne.
+      case 'splash':
+        this.noise(t, 0.26, 0.55, 'lowpass', 1100)
+        this.tone('sine', 420, t, 0.2, 0.4, 120)
+        this.noise(t + 0.04, 0.14, 0.22, 'bandpass', 2600) // les éclaboussures, plus aiguës
+        break
       case 'bubble':
         // Volume RELEVÉ (0,3 → 0,55) et deux bulles au lieu d'une : le retour user était « sous l'eau
         // j'entends aucun bruit ». Un blip de 0,13 s à faible gain passait sous la musique.

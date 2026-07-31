@@ -56,10 +56,18 @@ describe('prix par rareté', () => {
     expect(buyPrice('lame-scorpion')).toBe(RARITY_PRICE[ITEMS['lame-scorpion']!.rarity ?? 'commun'])
   })
 
-  it('sellPrice vaut 50 % du prix d\'achat (arrondi)', () => {
+  it('sellPrice est une fraction du prix d\'achat, dégressive avec la rareté', () => {
+    // Le taux n'est plus les 50 % uniformes d'avant : les hauts paliers se revendent proportionnellement
+    // beaucoup moins bien, sans quoi forger un légendaire pour ~100 or et le revendre suffirait à
+    // financer toute la vitrine (cf. RESALE_RATE dans data/shops et tests/data/shop-economy).
     for (const id of Object.keys(ITEMS)) {
-      expect(sellPrice(id)).toBe(Math.round(buyPrice(id) * 0.5))
+      const ratio = sellPrice(id) / buyPrice(id)
+      expect(ratio).toBeGreaterThan(0)
+      expect(ratio).toBeLessThanOrEqual(0.5)
     }
+    // un commun garde bien la moitié historique, un légendaire une petite fraction
+    expect(sellPrice('epee-bambou')).toBe(Math.round(buyPrice('epee-bambou') * 0.5))
+    expect(sellPrice('katana-eclair')).toBeLessThan(buyPrice('katana-eclair') * 0.2)
   })
 })
 
@@ -107,8 +115,9 @@ describe('stock par ville (Prontera ≠ Morocc)', () => {
 })
 
 describe('vente accessible hors forge (n\'importe quelle boutique)', () => {
-  it('un objet acheté à l\'armurerie se revend à 50 % du prix boutique', () => {
-    // une arme vendue à l'armurerie de Prontera (échoppe NON-forge) doit pouvoir être revendue
+  it('un objet commun acheté à l\'armurerie se revend à 50 % du prix boutique', () => {
+    // une arme vendue à l'armurerie de Prontera (échoppe NON-forge) doit pouvoir être revendue.
+    // weapons[0] est l'arme de base (commune) : c'est le palier qui garde les 50 % historiques.
     const armWeapon = SHOP_BY_TOWN['prontera']!.weapons[0]!
     const p = newPlayer('Panda')
     p.gold = 0
@@ -121,8 +130,12 @@ describe('vente accessible hors forge (n\'importe quelle boutique)', () => {
   })
 
   it('la revente ne dépend pas de la ville : même objet, même valeur partout', () => {
-    // amulette-pharaon est en stock à Morocc ; sa revente = 50 % de son prix, indépendamment du lieu
+    // amulette-pharaon n'est en stock qu'à Morocc, mais sa revente se calcule depuis SON prix boutique
+    // où qu'on la vende (on peut l'écouler à Prontera au même tarif). Le taux appliqué est celui de sa
+    // rareté (épique), pas les 50 % des objets communs.
     const entry = SHOP_BY_TOWN['morocc']!.armors.find((e) => e.itemId === 'amulette-pharaon')!
-    expect(sellValue(ITEMS['amulette-pharaon']!)).toBe(Math.round(entry.price * 0.5))
+    expect(sellValue(ITEMS['amulette-pharaon']!)).toBe(sellPrice('amulette-pharaon'))
+    expect(sellValue(ITEMS['amulette-pharaon']!)).toBeLessThan(entry.price * 0.5)
+    expect(sellValue(ITEMS['amulette-pharaon']!)).toBeGreaterThan(0)
   })
 })

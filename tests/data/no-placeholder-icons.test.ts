@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { MONSTERS } from '../../src/data/monsters'
 import { ITEMS } from '../../src/data/items'
 import { MATERIALS } from '../../src/data/materials'
+import { MATERIAL_GLYPH_IDS } from '../../src/art/skill-icon-canvas'
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 // AUCUNE FICHE NE DOIT TOMBER SUR UNE IMAGE PAR DÉFAUT.
@@ -81,5 +82,21 @@ describe('aucune image par défaut — butins', () => {
       .filter(({ d }) => !d.materialId || !MATERIALS[d.materialId])
       .map(({ m, d }) => `${m} → ${d.materialId ?? '(aucun id)'}`)
     expect(missing, `matériau(x) droppé(s) non déclaré(s) dans MATERIALS : ${missing.join(', ')}`).toEqual([])
+  })
+
+  it('chaque matériau a un GLYPHE dédié (jamais le rond de couleur du `default`)', () => {
+    // Être déclaré dans MATERIALS ne suffit pas : materialGlyph dessine une forme par `case` d'id et
+    // retombe sinon sur `default: orb(...)`, une pastille ronde teintée — le repli que le joueur a
+    // rejeté mot pour mot (« on voit rien c'est des vieux cercles de couleurs »). Une matière ajoutée
+    // sans son glyphe passerait donc les autres tests tout en RÉGRESSANT à l'écran. Le switch n'étant pas
+    // inspectable statiquement, skill-icon-canvas EXPORTE la liste des ids qu'il couvre : c'est elle
+    // qu'on confronte au registre des matières.
+    const covered = new Set(MATERIAL_GLYPH_IDS)
+    const orphans = Object.keys(MATERIALS).filter((id) => !covered.has(id))
+    expect(orphans, `matériau(x) sans glyphe dédié (→ pastille ronde) : ${orphans.join(', ')}`).toEqual([])
+    // …et l'inverse : un glyphe qui ne correspond plus à aucune matière est du code mort qui laisse
+    // croire que la couverture est bonne.
+    const stale = MATERIAL_GLYPH_IDS.filter((id) => !MATERIALS[id])
+    expect(stale, `glyphe(s) sans matériau correspondant : ${stale.join(', ')}`).toEqual([])
   })
 })

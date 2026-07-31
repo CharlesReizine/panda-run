@@ -1,11 +1,11 @@
 import Phaser from 'phaser'
 import { getPlayer } from '../state'
 import { save } from '../core/save'
-import { skillsOf, maxRankOf } from '../data/skills'
 import { MATERIALS } from '../data/materials'
 import { computeStats } from '../core/stats'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 import { installUiClickSound } from '../ui/click-sound'
+import { MENU, statsBox, materialsBox, materialRowsPerCol, splitMaterials, materialsBottom } from './menu-layout'
 
 export class MenuScene extends Phaser.Scene {
   constructor() { super('Menu') }
@@ -24,86 +24,81 @@ export class MenuScene extends Phaser.Scene {
     this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x1b2631, 0.95)
     const p = getPlayer()
     const stats = computeStats(p)
-    this.add.text(30, 20, `${p.name} — Nv ${p.level} — ATK ${stats.atk} / DEF ${Math.round(stats.def)} / PV ${stats.maxHp} / VIT ${stats.attackSpeed.toFixed(2)}`, { fontSize: '18px', color: '#ffffff' })
-    this.add.text(30, 50, `Points de skill : ${p.skillPoints}`, { fontSize: '16px', color: '#ffd700' })
 
-    // Colonne skills : rang (points investis), équiper/retirer
-    this.add.text(30, 85, 'SKILLS', { fontSize: '18px', color: '#80cbc4' })
+    // ── EN-TÊTE ──
+    this.add.text(MENU.left, 20, `${p.name} — Nv ${p.level}`, { fontSize: '22px', color: '#ffffff', fontStyle: 'bold' })
+    this.add.text(MENU.left, 50, `ATK ${stats.atk} · DÉF ${Math.round(stats.def)} · PV ${stats.maxHp} · VIT ${stats.attackSpeed.toFixed(2)}`,
+      { fontSize: '15px', color: '#b0bec5' })
+
     const btn = (x: number, y: number, label: string, bg: number, onTap: () => void) =>
-      this.add.text(x, y, label, { fontSize: '13px', color: '#ffffff', backgroundColor: `#${bg.toString(16)}`, padding: { x: 6, y: 3 } })
-        .setInteractive().on('pointerdown', onTap)
+      this.add.text(x, y, label, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold', backgroundColor: `#${bg.toString(16).padStart(6, '0')}`, padding: { x: 8, y: 4 } })
+        .setInteractive({ useHandCursor: true }).on('pointerdown', onTap)
 
-    skillsOf(p.classId).forEach((s, i) => {
-      const y = 110 + i * 50
-      const rank = p.skillLevels[s.id] ?? 0
-      const unlocked = rank > 0
-      const equippedAt = p.equippedSkills.indexOf(s.id)
-      const icon = this.add.image(40, y + 10, `skill-${s.id}`).setDisplaySize(34, 34)
-      if (!unlocked) icon.setAlpha(0.35)
-      const rankTxt = unlocked ? `  Nv ${rank}/${maxRankOf(s)}` : ''
-      this.add.text(64, y, `${s.name}${rankTxt}`, { fontSize: '15px', color: unlocked ? '#ffffff' : '#78909c' })
-      if (equippedAt >= 0) this.add.text(64, y + 20, `équipé — slot ${equippedAt + 1}`, { fontSize: '11px', color: '#80cbc4' })
-
-      // bouton investir un point (débloque au rang 1, puis monte le rang)
-      if (p.skillPoints > 0 && rank < maxRankOf(s)) {
-        btn(300, y, unlocked ? '+1 pt' : 'Débloquer', 0x8d6e00, () => {
-          p.skillPoints--; p.skillLevels[s.id] = rank + 1; save(p); this.render()
-        })
-      }
-      // équiper / retirer
-      if (unlocked && equippedAt < 0) {
-        btn(400, y, 'Équiper', 0x33691e, () => {
-          const free = p.equippedSkills.indexOf(null)
-          p.equippedSkills[free >= 0 ? free : 3] = s.id; save(p); this.render()
-        })
-      } else if (equippedAt >= 0) {
-        btn(400, y, 'Retirer', 0x8e2f2f, () => { p.equippedSkills[equippedAt] = null; save(p); this.render() })
-      }
-    })
-
-    // Colonne stats réparties (STR/AGI/INT)
-    this.add.text(760, 85, 'STATS', { fontSize: '18px', color: '#80cbc4' })
-    this.add.text(760, 108, `Points : ${p.statPoints}`, { fontSize: '14px', color: '#ffd700' })
+    // ── COLONNE GAUCHE : répartition de stats ──
+    // ⚠️ LA LISTE DES COMPÉTENCES A ÉTÉ RETIRÉE D'ICI, et c'est le correctif principal. Elle était
+    // posée à `y = 110 + i * 50` sans aucune borne : avec les 15 sorts de l'archer la dernière ligne
+    // tombait à y = 810 sur un écran haut de 540 — « le menu cata cata ». Elle faisait de surcroît
+    // DOUBLON avec l'écran d'arbre de compétences, qui la présente bien mieux. Un bouton y mène.
+    const sb = statsBox()
+    this.add.text(sb.x, sb.y - 24, 'STATS', { fontSize: '17px', color: '#80cbc4', fontStyle: 'bold' })
+    this.add.text(sb.x + sb.w, sb.y - 24, `${p.statPoints} point${p.statPoints > 1 ? 's' : ''}`,
+      { fontSize: '14px', color: p.statPoints > 0 ? '#ffd700' : '#607d8b', fontStyle: 'bold' }).setOrigin(1, 0)
     const STAT_ROWS: { key: 'str' | 'agi' | 'int'; label: string; effet: string }[] = [
-      { key: 'str', label: 'STR', effet: '+2 ATK' },
-      { key: 'agi', label: 'AGI', effet: '+VIT/DEF' },
-      { key: 'int', label: 'INT', effet: '+4 PV' },
+      { key: 'str', label: 'STR', effet: '+2 ATK par point' },
+      { key: 'agi', label: 'AGI', effet: '+vitesse d\'attaque et DÉF' },
+      { key: 'int', label: 'INT', effet: '+4 PV max par point' },
     ]
     STAT_ROWS.forEach((row, i) => {
-      const y = 135 + i * 40
-      this.add.text(760, y, `${row.label} ${p.allocated[row.key]}`, { fontSize: '16px', color: '#ffffff' })
-      this.add.text(760, y + 18, row.effet, { fontSize: '11px', color: '#78909c' })
-      if (p.statPoints > 0) {
-        btn(880, y, '+', 0x8d6e00, () => {
-          p.statPoints--; p.allocated[row.key]++; save(p); this.render()
-        })
-      }
+      const y = sb.y + 6 + i * 46
+      this.add.rectangle(sb.x, y, sb.w, 40, 0x000000, 0.25).setOrigin(0, 0)
+      this.add.text(sb.x + 10, y + 5, `${row.label} ${p.allocated[row.key]}`, { fontSize: '16px', color: '#ffffff', fontStyle: 'bold' })
+      this.add.text(sb.x + 10, y + 23, row.effet, { fontSize: '11px', color: '#78909c' })
+      if (p.statPoints > 0) btn(sb.x + sb.w - 34, y + 10, '+', 0x8d6e00, () => {
+        p.statPoints--; p.allocated[row.key]++; save(p); this.render()
+      })
     })
 
-    // L'équipement et l'inventaire se gèrent désormais dans l'écran Inventaire dédié
-    // (InventoryScene), accessible depuis la carte et en jeu — retirés d'ici.
-
-    // Colonne matériaux — collection pure en V1, le craft viendra plus tard
-    this.add.text(520, 350, 'MATÉRIAUX', { fontSize: '18px', color: '#80cbc4' })
+    // ── COLONNE DROITE : matériaux, en grille BORNÉE ──
+    const mb = materialsBox()
+    this.add.text(mb.x, mb.y - 24, 'MATÉRIAUX', { fontSize: '17px', color: '#80cbc4', fontStyle: 'bold' })
+    // « Le craft arrive bientôt… » était AFFICHÉ ICI alors que la forge existe en ville depuis
+    // longtemps : le joueur cherchait donc une fonctionnalité qu'on lui disait absente.
+    this.add.text(mb.x + mb.w, mb.y - 22, 'à la forge, en ville', { fontSize: '12px', color: '#78909c', fontStyle: 'italic' }).setOrigin(1, 0)
     const collected = Object.entries(p.materials).filter(([, count]) => count > 0)
     if (collected.length === 0) {
-      this.add.text(520, 378, '(rien pour l\'instant)', { fontSize: '14px', color: '#78909c' })
+      this.add.text(mb.x, mb.y + 6, 'Aucun matériau pour l\'instant.\nLes monstres en laissent tomber.',
+        { fontSize: '13px', color: '#78909c', fontStyle: 'italic', lineSpacing: 3 })
     } else {
-      collected.forEach(([id, count], i) => {
-        const def = MATERIALS[id]!
-        const color = `#${def.color.toString(16).padStart(6, '0')}`
-        this.add.text(520, 378 + i * 20, `${def.name} ×${count}`, { fontSize: '14px', color })
+      const { shown, hidden } = splitMaterials(collected)
+      const perCol = materialRowsPerCol()
+      const colW = mb.w / MENU.matCols
+      shown.forEach(([id, count], i) => {
+        const def = MATERIALS[id]
+        const col = Math.floor(i / perCol), r = i % perCol
+        const x = mb.x + col * colW
+        const y = mb.y + 4 + r * MENU.rowH
+        if (this.textures.exists(`material-${id}`)) {
+          this.add.image(x + 8, y + 8, `material-${id}`).setDisplaySize(16, 16)
+        }
+        const color = def ? `#${def.color.toString(16).padStart(6, '0')}` : '#ffffff'
+        this.add.text(x + 22, y, `${def ? def.name : id} ×${count}`, { fontSize: '13px', color })
       })
+      if (hidden > 0) {
+        this.add.text(mb.x, materialsBottom(collected.length), `+${hidden} autre${hidden > 1 ? 's' : ''}…`,
+          { fontSize: '12px', color: '#78909c' })
+      }
     }
-    this.add.text(520, 378 + Math.max(collected.length, 1) * 20 + 4, 'Le craft arrive bientôt…', { fontSize: '12px', color: '#546e7a' })
 
-    this.add.text(480, 500, '← Retour', { fontSize: '22px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 16, y: 8 } })
-      .setOrigin(0.5).setInteractive().on('pointerdown', () => this.scene.start('WorldMap'))
+    // ── RANGÉE DE BOUTONS ──
+    const bigBtn = (x: number, label: string, bg: number, onTap: () => void) =>
+      this.add.text(x, 502, label, { fontSize: '17px', color: '#ffffff', fontStyle: 'bold', backgroundColor: `#${bg.toString(16).padStart(6, '0')}`, padding: { x: 14, y: 8 } })
+        .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', onTap)
 
-    this.add.text(770, 500, '📖 Bestiaire', { fontSize: '18px', color: '#ffffff', backgroundColor: '#37474f', padding: { x: 14, y: 8 } })
-      .setOrigin(0.5).setInteractive().on('pointerdown', () => this.scene.start('Bestiary'))
-
-    this.add.text(770, 458, '⚔ Entraînement', { fontSize: '18px', color: '#ffffff', backgroundColor: '#37474f', padding: { x: 14, y: 8 } })
-      .setOrigin(0.5).setInteractive().on('pointerdown', () => this.scene.start('Training'))
+    bigBtn(110, '← Retour', 0x33691e, () => this.scene.start('WorldMap'))
+    // l'arbre de compétences REMPLACE la liste qui débordait ici
+    bigBtn(320, '✦ Compétences', 0x1565c0, () => this.scene.start('SkillEquip', { levelKey: 'Menu', standalone: true }))
+    bigBtn(520, '🎒 Inventaire', 0x37474f, () => this.scene.start('Inventory', { return: 'Menu' }))
+    bigBtn(700, '📖 Bestiaire', 0x37474f, () => this.scene.start('Bestiary'))
+    bigBtn(860, '⚔ Entraînement', 0x37474f, () => this.scene.start('Training'))
   }
 }

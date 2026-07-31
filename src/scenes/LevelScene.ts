@@ -136,8 +136,6 @@ export class LevelScene extends Phaser.Scene {
   // Prochaine émission du thème d'élite. Ce n'est PAS une annonce ponctuelle : le motif se répète
   // tant qu'un élite est vivant ET dans le champ de la caméra, et se coupe dès qu'il meurt ou sort.
   private eliteSfxAt = 0
-  // Prochain « bloub » : l'ambiance sous-marine est une boucle tant que le panda nage.
-  private bubbleSfxAt = 0
   private dashUntil = 0
   private dashCooldownUntil = 0
   private nextBasicAttackAt = 0
@@ -226,7 +224,6 @@ export class LevelScene extends Phaser.Scene {
     this.lavaAccumMs = 0
     this.flameRects = []
     this.eliteSfxAt = 0
-    this.bubbleSfxAt = 0
     this.flameAccumMs = 0
     this.airPocketRects = []
     // plongée : on entame chaque niveau souffle plein, sans dette de noyade ; les overlays
@@ -1667,6 +1664,9 @@ export class LevelScene extends Phaser.Scene {
   // crève. Elle enfle en montant, ondule légèrement en x, et s'estompe en arrivant à la surface. Plus
   // grosses et plus visibles qu'avant (retour joueur : bulles plus grosses, jusqu'à la surface).
   private emitBubble(headY: number, surfaceY: number) {
+    // Une bulle VUE = une bulle ENTENDUE. Le son est joué ICI, à la source, et non depuis une boucle
+    // séparée qui testait une AUTRE condition d'immersion — c'était la cause du décalage complet.
+    audio.playSfx('bubble')
     const bx = this.player.x + Phaser.Math.Between(-10, 10)
     const startScale = Phaser.Math.FloatBetween(0.5, 0.9) // grosses bulles
     const b = this.add.image(bx, headY + 2, 'fx-bubble')
@@ -4218,15 +4218,22 @@ export class LevelScene extends Phaser.Scene {
   // AMBIANCE SOUS L'EAU : « bloub… bloub… bloub » tant que le panda est dans l'eau. L'intervalle est
   // VOLONTAIREMENT irregulier — des bulles a rythme metronomique sonnent comme une machine, pas comme
   // de l'eau.
-  private underwaterAmbience() {
-    // la musique baisse SOUS L'EAU : c'est ce qui rend les bulles réellement audibles
-    audio.setUnderwater(this.player.inWater)
-    if (!this.player.inWater) { this.bubbleSfxAt = 0; return }
-    // bubbleSfxAt à 0 = on vient d'ENTRER dans l'eau → première bulle IMMÉDIATE, pour qu'on entende
-    // tout de suite qu'on est sous l'eau au lieu d'attendre jusqu'à une seconde.
-    if (this.bubbleSfxAt !== 0 && this.time.now < this.bubbleSfxAt) return
-    audio.playSfx('bubble')
-    this.bubbleSfxAt = this.time.now + Phaser.Math.Between(200, 480) // plus de bulles (demandé)
+  // ATTÉNUATION DE LA MUSIQUE SOUS L'EAU.
+  //
+  // ⚠️ LE SON DES BULLES N'EST PLUS ICI, ET C'EST LE CORRECTIF. Cette méthode sondait
+  // `player.inWater` (vrai dès que le CENTRE du panda touche l'eau) pour jouer des bulles, alors que
+  // les bulles VISUELLES ne sont émises que si la TÊTE est immergée (cf. updateBreath, `submerged`).
+  // Deux conditions distinctes → « dès qu'il y a des bulles je veux un son bulle, et là c'est pas du
+  // tout le cas ». Le son est désormais joué dans `emitBubble()` : une bulle vue est une bulle
+  // entendue par CONSTRUCTION, sans deux conditions à garder synchronisées à la main.
+  //
+  // Le ducking, lui, se déclenche sur les PIEDS et non sur le centre : il doit commencer dès qu'on
+  // touche l'eau, pas seulement quand la tête passe sous la surface.
+  private underwaterDucking() {
+    const feetY = (this.player.body as Phaser.Physics.Arcade.Body).bottom
+    const touchingWater = this.player.inWater
+      || this.waterRects.some((r) => r.contains(this.player.x, feetY))
+    audio.setUnderwater(touchingWater)
   }
 
   private eliteAmbience() {
@@ -4244,7 +4251,7 @@ export class LevelScene extends Phaser.Scene {
 
   update(_time: number, delta: number) {
     this.eliteAmbience()
-    this.underwaterAmbience()
+    this.underwaterDucking()
     const sx = this.cameras.main.scrollX
     if (this.bgClouds) this.bgClouds.tilePositionX = sx * 0.1
     if (this.bgFar) this.bgFar.tilePositionX = sx * 0.3
@@ -4286,6 +4293,10 @@ export class LevelScene extends Phaser.Scene {
     // ENTRÉE dans un LAC MARINE (front montant de inWater, hors cascade) : la surface ONDULE au point
     // d'impact (ripple de vaguelettes). On EXCLUT la cascade — y « tomber » se fait par le bas de la
     // colonne, un splash posé en haut du rideau serait faux (retour user : gouttes parasites en haut).
+    // PLOUF au FRONT MONTANT de l'entrée dans l'eau — demandé aussi comme VÉRIFICATION que la
+    // détection fonctionne. Posé ici parce que le code repère DÉJÀ ce front pour l'ondulation de
+    // surface : inventer un second détecteur, c'est prendre le risque qu'ils divergent.
+    if (this.player.inWater && !this.wasInWater) audio.playSfx('splash')
     if (this.player.inWater && !this.wasInWater && !this.player.inCascade && containingWater) {
       this.waterSplashFx(this.player.x, containingWater.top)
     }

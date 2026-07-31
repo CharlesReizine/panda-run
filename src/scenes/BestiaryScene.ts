@@ -6,7 +6,7 @@ import { getPlayer } from '../state'
 import type { DropEntry, MonsterDef } from '../core/types'
 import { playerXpForMobLevel } from '../core/progression'
 import { SKILLS } from '../data/skills'
-import { BD, truncate } from './bestiary-layout'
+import { BD, CARD, identityBox, skillsBox, lootBox, lootRowH, LOOT_COLS, maxSkillRows, truncate } from './bestiary-layout'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 import { installUiClickSound } from '../ui/click-sound'
 
@@ -175,59 +175,84 @@ export class BestiaryScene extends Phaser.Scene {
     const seen = this.discovered(m)
     const { label: kindLabel } = monsterKind(m)
 
-    // ── COLONNE GAUCHE : portrait + identité + stats compactes ──
-    const big = this.add.image(158, 138, `monster-${m.id}`).setDisplaySize(150, 150)
+    // ═══ DISPOSITION EN QUATRE QUARTS (demandée par le user) ═══
+    //   haut-gauche : nom + (niveau), image dessous à gauche
+    //   haut-droite : compétences, séparées par un trait vertical
+    //   bas (fusionné, toute la largeur) : le BUTIN, qui a besoin de largeur
+    // Toute la géométrie vient de scenes/bestiary-layout.ts, vérifiée par
+    // tests/core/bestiary-layout.test.ts sur le VRAI roster : rien ne peut déborder en silence.
+    const ident = identityBox()
+    const skl = skillsBox()
+    const loot = lootBox()
+
+    // ── QUART HAUT-GAUCHE : identité ──
+    this.add.text(ident.x, ident.y, seen ? m.name : '???', {
+      fontSize: '24px', color: seen ? '#ffffff' : '#78909c', fontStyle: 'bold',
+      wordWrap: { width: ident.w - 96 },
+    }).setOrigin(0, 0)
+    // le niveau ENTRE PARENTHÈSES juste à côté du nom, comme demandé
+    this.add.text(ident.x + ident.w - 4, ident.y + 4, `(Nv ${m.level})`, {
+      fontSize: '17px', color: m.boss ? '#ff5252' : m.mvp ? '#ffd54f' : '#b0bec5', fontStyle: 'bold',
+    }).setOrigin(1, 0)
+
+    // image DESSOUS À GAUCHE
+    const imgY = ident.y + 34
+    const big = this.add.image(ident.x, imgY, `monster-${m.id}`).setOrigin(0, 0).setDisplaySize(BD.portrait, BD.portrait)
     if (!seen) big.setTint(SILHOUETTE_TINT).setAlpha(0.85)
-    this.add.text(158, 224, seen ? m.name : '???', { fontSize: '26px', color: seen ? '#ffffff' : '#78909c', fontStyle: 'bold', align: 'center', wordWrap: { width: 290 } }).setOrigin(0.5, 0)
-    this.badge(158, 262, m, '14px')
+
+    // à droite de l'image, dans le même quart : le rang et les stats compactes
+    const sx = ident.x + BD.portrait + 12
     if (seen) {
-      this.add.text(158, 286, m.lore, { fontSize: '12px', color: '#cfd8dc', align: 'center', fontStyle: 'italic', wordWrap: { width: 292 }, lineSpacing: 2 }).setOrigin(0.5, 0)
-      // stats compactes (2 par ligne) + kills
+      this.badge(sx + 30, imgY + 8, m, '13px')
       const stats: [string, string][] = [
-        ['Niveau', `${m.level}`], ['XP', `${playerXpForMobLevel(m.level)}`],
-        ['PV', `${m.hp}`], ['ATK', `${m.atk}`],
-        ['DEF', `${m.def}`], ['Type', kindLabel],
+        ['PV', `${m.hp}`], ['ATK', `${m.atk}`], ['DÉF', `${m.def}`],
+        ['XP', `${playerXpForMobLevel(m.level)}`], ['Type', kindLabel],
       ]
       stats.forEach(([k, v], i) => {
-        const sx = 30 + (i % 2) * 150, sy = 386 + Math.floor(i / 2) * 24
-        this.add.text(sx, sy, k, { fontSize: '13px', color: '#78909c' })
-        this.add.text(sx + 132, sy, v, { fontSize: '13px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(1, 0)
+        const yy = imgY + 26 + i * 18
+        this.add.text(sx, yy, k, { fontSize: '12px', color: '#78909c' })
+        this.add.text(ident.x + ident.w, yy, v, { fontSize: '12px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(1, 0)
       })
-      this.add.text(158, 464, `${behaviorLabel(m)} · vaincu ${this.kills[m.id]}×`, { fontSize: '12px', color: '#80cbc4', align: 'center' }).setOrigin(0.5, 0)
     } else {
-      this.add.text(158, 292, 'Monstre non découvert.\nVaincs-le pour révéler sa fiche.', { fontSize: '13px', color: '#78909c', align: 'center', fontStyle: 'italic', wordWrap: { width: 292 }, lineSpacing: 2 }).setOrigin(0.5, 0)
+      this.add.text(sx, imgY + 30, 'Non découvert.\nVaincs-le pour\nrévéler sa fiche.', {
+        fontSize: '12px', color: '#78909c', fontStyle: 'italic', lineSpacing: 2,
+      })
     }
 
-    // ── COLONNE DROITE : Compétences (si le mob en a) puis Butin, en GRILLE 2 colonnes ──
-    const colX = (c: number) => BD.X0 + c * (BD.COLW + BD.GAP)
-    let y = BD.top
+    // ── TRAIT VERTICAL de séparation ──
+    this.add.rectangle(BD.splitX, ident.y, 2, BD.topH, 0xffffff, 0.22).setOrigin(0.5, 0)
 
+    // ── QUART HAUT-DROITE : compétences ──
+    this.add.text(skl.x, skl.y, 'COMPÉTENCES', { fontSize: '14px', color: '#80cbc4', fontStyle: 'bold' })
+    const skills = seen ? (m.skills ?? []).map((sid) => SKILLS[sid]).filter((sk): sk is NonNullable<typeof sk> => !!sk) : []
     if (!seen) {
-      this.add.text(BD.X0, y, 'Fiche verrouillée', { fontSize: '16px', color: '#607d8b', fontStyle: 'bold' })
+      this.add.text(skl.x, skl.y + 24, 'Fiche verrouillée', { fontSize: '13px', color: '#607d8b', fontStyle: 'italic' })
+    } else if (!skills.length) {
+      this.add.text(skl.x, skl.y + 24, 'Aucune compétence — attaque simple.', { fontSize: '12px', color: '#78909c', fontStyle: 'italic', wordWrap: { width: skl.w } })
     } else {
-      // COMPÉTENCES
-      const skills = (m.skills ?? []).map((sid) => SKILLS[sid]).filter((s): s is NonNullable<typeof s> => !!s)
-      if (skills.length) {
-        this.add.text(BD.X0, y, 'COMPÉTENCES', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' }); y += BD.titleGap
-        const rowH = m.boss ? BD.skillRowHBoss : BD.skillRowH
-        skills.forEach((sk, i) => {
-          const c = i % 2, r = Math.floor(i / 2)
-          // description TRONQUÉE (boss only) → ne déborde jamais de la carte (retour user : « trop de trucs »).
-          this.gridCard(colX(c), y + r * (rowH + BD.rowGap) + rowH / 2, BD.COLW, rowH, `skill-${sk.id}`, undefined, sk.name, 0xffffff, m.boss ? truncate(sk.description, BD.descMax) : '', '#b0bec5')
-        })
-        y += Math.ceil(skills.length / 2) * (rowH + BD.rowGap) + BD.sectionGap
-      }
+      skills.slice(0, maxSkillRows()).forEach((sk, i) => {
+        const y = skl.y + 22 + i * BD.skillRowH
+        this.gridCard(skl.x, y + BD.skillRowH / 2, skl.w, BD.skillRowH - 4, `skill-${sk.id}`, undefined,
+          sk.name, 0xffffff, truncate(sk.description, BD.descMax), '#b0bec5')
+      })
+    }
 
-      // BUTIN
-      this.add.text(BD.X0, y, 'BUTIN', { fontSize: '16px', color: '#80cbc4', fontStyle: 'bold' }); y += BD.titleGap
-      const rowH = BD.butinRowH
+    // ── BANDE DU BAS : BUTIN sur toute la largeur ──
+    this.add.text(loot.x, loot.y, 'BUTIN', { fontSize: '14px', color: '#80cbc4', fontStyle: 'bold' })
+    if (!seen) {
+      this.add.text(loot.x, loot.y + 24, 'Vaincs ce monstre pour connaître son butin.', { fontSize: '13px', color: '#607d8b', fontStyle: 'italic' })
+    } else {
+      const rh = lootRowH(m.drops.length)
+      const colW = (loot.w - (LOOT_COLS - 1) * 10) / LOOT_COLS
       m.drops.forEach((d, i) => {
-        const c = i % 2, r = Math.floor(i / 2)
+        const c = i % LOOT_COLS, r = Math.floor(i / LOOT_COLS)
+        const x = loot.x + c * (colW + 10)
+        const y = loot.y + 22 + r * rh + rh / 2
         const { label, color } = dropLine(d)
         const { key, tint } = this.lootIcon(d)
         const chance = `${+(d.chance * 100).toFixed(1)}%`
         const qty = d.min === d.max ? `×${d.min}` : `×${d.min}–${d.max}`
-        this.gridCard(colX(c), y + r * (rowH + BD.rowGap) + rowH / 2, BD.COLW, rowH, key, tint, label, color, `${chance}  ${qty}`, '#ffd54f')
+        this.gridCard(x, y, colW, rh - 4, key, tint, label, color, `${chance}  ${qty}`, '#ffd54f')
       })
     }
 

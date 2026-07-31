@@ -23,9 +23,14 @@ export class SkillEquipScene extends Phaser.Scene {
 
   constructor() { super('SkillEquip') }
 
-  init(data?: { levelKey?: string; training?: boolean }) {
+  // Scène à REJOINDRE en sortant. Ouvert en overlay au-dessus d'un niveau, on REPREND la scène de jeu ;
+  // ouvert en plein écran depuis le menu, il faut au contraire la DÉMARRER — d'où ce drapeau.
+  private standalone = false
+
+  init(data?: { levelKey?: string; training?: boolean; standalone?: boolean }) {
     this.levelKey = data?.levelKey ?? 'Level'
     this.training = !!data?.training
+    this.standalone = !!data?.standalone
   }
 
   create() {
@@ -39,6 +44,11 @@ export class SkillEquipScene extends Phaser.Scene {
   }
 
   private close() {
+    if (this.standalone) {
+      // ouvert depuis le menu : il n'y a aucune scène de jeu en pause à reprendre
+      this.scene.start(this.levelKey)
+      return
+    }
     this.scene.resume(this.levelKey)
     this.scene.resume('UI')
     this.game.events.emit('hud-refresh')

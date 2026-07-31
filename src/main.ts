@@ -96,22 +96,34 @@ if (game) {
 //
 // Il reste à PRÉVENIR Phaser que la zone a changé, pour qu'il recalcule son échelle : c'est tout ce
 // que fait refit(). Aucun calcul de notre côté, Phaser lit la taille réelle du conteneur.
-// Étire le canvas sur la zone RÉELLEMENT visible et recale Phaser dessus.
-// `visualViewport` est la seule mesure fiable sur iOS : elle exclut la barre d'URL et suit l'encoche.
-// On positionne le canvas en `fixed` à l'offset du viewport visuel → il ne peut plus être coupé.
+// Place le canvas dans la zone RÉELLEMENT visible, EN CONSERVANT SON RAPPORT.
+//
+// C'est un « FIT » calculé À LA MAIN. Deux raisons de ne pas laisser Phaser le faire :
+//   · avec Scale.FIT il mesure lui-même son conteneur, et sur iOS Safari cette mesure est fausse et
+//     instable (mesuré : 69 % de largeur sur un écran, 59 % sur un autre, décalé et coupé en bas) ;
+//   · `visualViewport` est la seule mesure fiable sur iOS — elle exclut la barre d'URL et suit l'encoche.
+//
+// ⚠️ ON NE DÉFORME PAS. Une version précédente étirait le canvas sur toute la zone visible sans
+// respecter le rapport : « tout est déformé, c'est ignoble ». On prend donc la plus grande taille au
+// BON rapport qui rentre, et on la centre. Comme la taille logique est déjà calculée au format de
+// l'écran (core/viewport.ts), le liseré restant est minime — et surtout rien n'est jamais déformé
+// ni coupé.
 function refit() {
   if (!game) return
   const vv = window.visualViewport
-  const w = Math.round(vv?.width ?? window.innerWidth)
-  const h = Math.round(vv?.height ?? window.innerHeight)
-  if (!w || !h) return
+  const availW = Math.round(vv?.width ?? window.innerWidth)
+  const availH = Math.round(vv?.height ?? window.innerHeight)
+  if (!availW || !availH) return
+  const k = Math.min(availW / VIEW_W, availH / VIEW_H)
+  const cw = Math.round(VIEW_W * k)
+  const ch = Math.round(VIEW_H * k)
   const c = game.canvas
   c.style.position = 'fixed'
-  c.style.left = `${Math.round(vv?.offsetLeft ?? 0)}px`
-  c.style.top = `${Math.round(vv?.offsetTop ?? 0)}px`
-  c.style.width = `${w}px`
-  c.style.height = `${h}px`
   c.style.margin = '0'
+  c.style.width = `${cw}px`
+  c.style.height = `${ch}px`
+  c.style.left = `${Math.round((vv?.offsetLeft ?? 0) + (availW - cw) / 2)}px`
+  c.style.top = `${Math.round((vv?.offsetTop ?? 0) + (availH - ch) / 2)}px`
   // indispensable : Phaser doit relire les bornes du canvas, sinon la conversion clic → coordonnées
   // de jeu reste calée sur l'ancienne taille et les boutons deviennent décalés
   game.scale.refresh()

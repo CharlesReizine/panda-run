@@ -271,6 +271,19 @@ function glyph(ctx: CanvasRenderingContext2D, kind: string, color: number) {
 // Petits objets détourés (fond transparent) rendus en vecteur — remplacent la pastille ronde tintée
 // générique (« placeholder bleu clair » pour la gemme, etc.). 32×32 logique, rendu à 2×.
 const MAT = 32
+
+// IDS COUVERTS par un `case` dédié de materialGlyph. Le `default` (pastille ronde tintée) est un REPLI
+// anti-crash, PAS un visuel acceptable : le joueur l'a rejeté mot pour mot (« on voit rien c'est des
+// vieux cercles de couleurs »). Une matière qui y retombe est donc une régression — d'où cette liste,
+// comparée à Object.keys(MATERIALS) par tests/data/no-placeholder-icons. La détection statique du switch
+// étant impossible proprement, c'est l'énumération explicite qui sert de contrat : toute matière ajoutée
+// à materials.ts sans son glyphe ici fait ÉCHOUER le test.
+export const MATERIAL_GLYPH_IDS: string[] = [
+  'gemme-brute', 'herbe-tendre', 'trefle-chance', 'chapeau-champi', 'spore-lumineuse', 'minerai-fer',
+  'croc-de-loup', 'dard-de-scorpion', 'gelee-slime', 'bois-brut', 'cuir-souple', 'pierre-brute',
+  'lingot-cuivre', 'carapace-chitine',
+]
+
 function materialGlyph(ctx: CanvasRenderingContext2D, id: string, color: number) {
   const cx = 16, cy = 16
   const drop = (fn: () => void) => { ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 1; fn(); ctx.restore() }
@@ -311,6 +324,53 @@ function materialGlyph(ctx: CanvasRenderingContext2D, id: string, color: number)
       ctx.strokeStyle = solid(color); ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(8, 27); ctx.quadraticCurveTo(24, 22, 22, 7); ctx.stroke()
       tri(ctx, 22, 3, 17, 10, 26, 9, lighten(color, 0.3)) // pointe
       ctx.strokeStyle = darken(color, 0.2); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(15, 19); ctx.lineTo(11, 16); ctx.moveTo(20, 14); ctx.lineTo(16, 12); ctx.stroke() })
+      break
+    // ── MATIÈRES COMMUNES (bois / bronze / fer…) : chacune doit se reconnaître À LA SILHOUETTE, pastille
+    // éteinte. On évite donc les formes déjà prises : le caillou hexagonal est au minerai de fer, la
+    // gemme facettée à la gemme brute → ici bûche, galet, plaque, lingot, goutte, écaille.
+    case 'bois-brut': drop(() => { // BÛCHE couchée, vue de trois-quarts (rondelle + cernes)
+      const g = ctx.createLinearGradient(0, 8, 0, 26); g.addColorStop(0, lighten(color, 0.35)); g.addColorStop(1, darken(color, 0.2))
+      ctx.fillStyle = g; roundRect(ctx, 6, 9, 22, 14, 4); ctx.fill() // corps de la bûche
+      ctx.fillStyle = lighten(color, 0.55); ctx.beginPath(); ctx.ellipse(9, 16, 4, 7, 0, 0, 7); ctx.fill() // rondelle de bout
+      ctx.strokeStyle = darken(color, 0.35); ctx.lineWidth = 1
+      for (const r of [4.5, 2.6]) { ctx.beginPath(); ctx.ellipse(9, 16, r * 0.6, r, 0, 0, 7); ctx.stroke() } // cernes
+      ctx.strokeStyle = darken(color, 0.28); ctx.beginPath(); ctx.moveTo(15, 13); ctx.lineTo(26, 13); ctx.moveTo(16, 19); ctx.lineTo(27, 19); ctx.stroke() }) // écorce
+      break
+    case 'pierre-brute': drop(() => { // GALET anguleux, facette éclairée en haut à gauche
+      const g = ctx.createRadialGradient(11, 11, 2, cx, cy, 15); g.addColorStop(0, lighten(color, 0.45)); g.addColorStop(1, darken(color, 0.25))
+      ctx.beginPath(); ctx.moveTo(5, 18); ctx.lineTo(10, 8); ctx.lineTo(21, 5); ctx.lineTo(28, 15); ctx.lineTo(24, 26); ctx.lineTo(11, 27); ctx.closePath(); ctx.fillStyle = g; ctx.fill()
+      tri(ctx, 10, 8, 21, 5, 14, 15, 'rgba(255,255,255,0.30)') // facette claire
+      ctx.fillStyle = darken(color, 0.4); for (const [x, y, r] of [[19, 20, 1.8], [13, 22, 1.2]] as const) { ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill() } }) // piqûres
+      break
+    case 'cuir-souple': drop(() => { // PLAQUE de cuir tannée, bords souples + surpiqûre
+      const g = ctx.createLinearGradient(0, 6, 0, 28); g.addColorStop(0, lighten(color, 0.4)); g.addColorStop(1, darken(color, 0.1))
+      ctx.beginPath(); ctx.moveTo(7, 8); ctx.quadraticCurveTo(16, 4, 26, 8); ctx.quadraticCurveTo(29, 17, 25, 26); ctx.quadraticCurveTo(15, 29, 6, 25); ctx.quadraticCurveTo(4, 16, 7, 8); ctx.closePath()
+      ctx.fillStyle = g; ctx.fill()
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1; ctx.setLineDash([2, 2]) // surpiqûre
+      ctx.beginPath(); ctx.moveTo(10, 11); ctx.quadraticCurveTo(16, 8, 23, 11); ctx.stroke(); ctx.setLineDash([])
+      ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.ellipse(13, 18, 5, 3.5, -0.4, 0, 7); ctx.fill() }) // lustre du tannage
+      break
+    case 'lingot-cuivre': drop(() => { // LINGOT (métal FONDU) — distinct du caillou brut du fer
+      const face = ctx.createLinearGradient(0, 16, 0, 27); face.addColorStop(0, solid(color)); face.addColorStop(1, darken(color, 0.35))
+      ctx.beginPath(); ctx.moveTo(4, 17); ctx.lineTo(28, 17); ctx.lineTo(25, 26); ctx.lineTo(7, 26); ctx.closePath(); ctx.fillStyle = face; ctx.fill() // face avant
+      ctx.beginPath(); ctx.moveTo(4, 17); ctx.lineTo(9, 9); ctx.lineTo(24, 9); ctx.lineTo(28, 17); ctx.closePath(); ctx.fillStyle = lighten(color, 0.45); ctx.fill() // dessus
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(11, 12); ctx.lineTo(22, 12); ctx.stroke() // reflet du moule
+      ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.beginPath(); ctx.moveTo(20, 17); ctx.lineTo(28, 17); ctx.lineTo(25, 26); ctx.lineTo(19, 26); ctx.closePath(); ctx.fill() }) // ombre de tranche
+      break
+    case 'gelee-slime': drop(() => { // GOUTTE de gelée translucide, gros reflet (mou, ça se voit)
+      const g = ctx.createRadialGradient(12, 12, 2, cx, 18, 14); g.addColorStop(0, lighten(color, 0.6)); g.addColorStop(1, solid(color))
+      ctx.beginPath(); ctx.moveTo(cx, 4); ctx.quadraticCurveTo(28, 16, 26, 22); ctx.quadraticCurveTo(23, 28, cx, 28); ctx.quadraticCurveTo(9, 28, 6, 22); ctx.quadraticCurveTo(4, 16, cx, 4); ctx.closePath()
+      ctx.fillStyle = g; ctx.fill()
+      ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.beginPath(); ctx.ellipse(12, 14, 3.5, 5, -0.5, 0, 7); ctx.fill() // reflet vitreux
+      ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.arc(20, 21, 2, 0, 7); ctx.fill() })
+      break
+    case 'carapace-chitine': drop(() => { // ÉCAILLE bombée segmentée (plaques de chitine)
+      const g = ctx.createLinearGradient(0, 6, 0, 26); g.addColorStop(0, lighten(color, 0.45)); g.addColorStop(1, darken(color, 0.25))
+      ctx.beginPath(); ctx.moveTo(4, 24); ctx.quadraticCurveTo(6, 6, cx, 5); ctx.quadraticCurveTo(26, 6, 28, 24); ctx.quadraticCurveTo(cx, 28, 4, 24); ctx.closePath()
+      ctx.fillStyle = g; ctx.fill()
+      ctx.strokeStyle = darken(color, 0.4); ctx.lineWidth = 1.2 // rainures entre plaques
+      for (const x of [11, cx, 21]) { ctx.beginPath(); ctx.moveTo(x, 7 + Math.abs(x - cx) * 0.5); ctx.lineTo(x, 25); ctx.stroke() }
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.beginPath(); ctx.moveTo(7, 20); ctx.quadraticCurveTo(cx, 9, 25, 20); ctx.stroke() }) // liseré luisant
       break
     default: drop(() => { orb(ctx, cx, cy, 10, color) })
   }

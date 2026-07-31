@@ -3,11 +3,16 @@ import { newPlayer } from '../../src/core/player-state'
 import { canCraft, doCraft } from '../../src/core/craft'
 import type { RecipeDef } from '../../src/data/recipes'
 
+// `level` = palier de progression visé de la recette (cf. data/recipes). Il ne joue AUCUN rôle dans
+// canCraft/doCraft — qui ne regardent que matériaux et or — mais il est obligatoire sur RecipeDef parce
+// qu'il porte le contrat d'atteignabilité des matières (tests/data/craft-reachability) : le rendre
+// optionnel laisserait une recette y échapper silencieusement.
 const recipe: RecipeDef = {
   id: 'craft-test',
   resultItemId: 'epee-fer-forgee',
   materials: { 'minerai-fer': 5, 'croc-de-loup': 2 },
   gold: 60,
+  level: 19,
 }
 
 describe('craft', () => {
@@ -36,7 +41,7 @@ describe('craft', () => {
     const p = newPlayer('Panda')
     p.gold = 0
     p.materials = { 'herbe-tendre': 2 }
-    expect(canCraft(p, { id: 'r', resultItemId: 'x', materials: { 'herbe-tendre': 2 } })).toBe(true)
+    expect(canCraft(p, { id: 'r', resultItemId: 'x', materials: { 'herbe-tendre': 2 }, level: 1 })).toBe(true)
   })
 
   it('doCraft débite matériaux + or et ajoute l\'objet', () => {

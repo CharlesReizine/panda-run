@@ -96,13 +96,20 @@ export function rarityColor(rarity: Rarity = 'commun'): number {
   return RARITY_COLORS[rarity]
 }
 
-// Barème de prix d'ACHAT de référence par rareté (or). Sert de base au prix boutique et de repli
-// pour les objets vendables non listés en boutique (forgés, butin). Fortement croissant : un rare
-// vaut bien plus qu'un commun, un épique bien plus qu'un rare, un légendaire hors de portée sans
-// effort. La valeur de REVENTE en découle (50 % du prix d'achat, cf. data/shops sellPrice).
+// Barème de prix d'ACHAT de référence par rareté (or) — VALEUR PIVOT de chaque palier. Sert de repli
+// pour les objets vendables non listés en boutique (forgés, butin) et d'ancre au barème détaillé des
+// échoppes (cf. data/shops, qui étale les prix DANS une bande par rareté autour de ces pivots).
+//
+// Les paliers sont calés sur l'or RÉELLEMENT gagnable, pas au doigt mouillé (retour joueur : « les
+// chapeaux ne sont pas assez chers, j'arrive à Prontera et je peux tout acheter ») :
+//  • un clear des cinq terrains de plaine qui mènent à Prontera rapporte ~730 or (mobs + coffres) ;
+//  • une traversée COMPLÈTE du jeu (58 terrains, une fois chacun, hors quêtes) ~15 900 or.
+// D'où : commun ≈ un tiers du pécule d'arrivée (on s'équipe, on ne dévalise pas), rare hors de portée
+// à l'arrivée (plusieurs allers-retours de farm), épique réservé au mid-game, légendaire au-dessus de
+// ce que rapporte le jeu entier une fois — c'est un OBJECTIF, pas un achat.
 export const RARITY_PRICE: Record<Rarity, number> = {
-  commun: 100,
-  rare: 500,
-  epique: 2000,
-  legendaire: 8000,
+  commun: 300,
+  rare: 1500,
+  epique: 6500,
+  legendaire: 30000,
 }

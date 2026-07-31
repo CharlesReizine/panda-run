@@ -14,3 +14,5 @@ scripts/_reach.test.mjs
 scripts/_dump.test.mjs
 
 scripts/_phase1.mjs
+# sortie de l'audit visuel headless (jetable)
+dist-audit/

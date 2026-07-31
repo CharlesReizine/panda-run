@@ -1,8 +1,29 @@
-// Données des boutiques et quêtes de ville. Prix d'ACHAT calés sur un barème croissant par rareté
-// (cf. RARITY_PRICE) : quelques dizaines d'or pour un commun, des centaines pour un rare, des
-// milliers pour un épique, une petite fortune pour un légendaire. La REVENTE vaut 50 % du prix
-// d'achat (sellPrice), ce qui rend les surplus (matériaux, doublons) intéressants à écouler.
+// Données des boutiques et quêtes de ville.
+//
+// ─────────────────────── COURBE DE PRIX : d'où sortent les nombres ───────────────────────
+// Les prix ne sont pas décoratifs, ils sont adossés à l'or que le jeu DISTRIBUE réellement (drops de
+// data/monsters + coffres de data/props, cf. tests/data/shop-economy.test.ts qui recalcule ces
+// montants depuis les données et verrouille les rapports) :
+//   • clear des 5 terrains de plaine qui mènent à Prontera ................ ~730 or (pire chance ~420)
+//   • traversée complète des 58 terrains, une fois chacun, hors quêtes .... ~15 900 or
+//
+// Conséquence assumée — À L'ARRIVÉE À PRONTERA ON S'ÉQUIPE, ON NE DÉVALISE PAS. Le pécule d'arrivée
+// paye DEUX articles communs (une arme + une armure, ~500 or), pas plus : le 3ᵉ fait déjà déborder.
+// Le précédent barème (arme de base à 60 or, chapeau rare à 300) laissait acheter la moitié de
+// l'échoppe dès la première visite — d'où le retour joueur « les chapeaux ne sont pas du tout assez
+// chers ». Aucun chapeau de rareté ≥ rare n'est désormais accessible en arrivant : c'est la première
+// raison de RETOURNER farmer la plaine.
+//
+// Les prix sont étalés en BANDES DISJOINTES par rareté (aucun chevauchement d'un palier à l'autre) :
+//   commun 240–360 · rare 900–2400 · épique 5000–8000 · légendaire 22 000–38 000
+// Le barème d'origine mélangeait tout (bonnet-champi COMMUN à 700 or coûtait plus cher que le
+// sabre-acier RARE à 420) : la rareté affichée ne voulait plus rien dire à la caisse. Dans une bande,
+// on trie par puissance du bonus (atk pondéré, def, PV) puis par avancement de la ville.
+//
+// La REVENTE (sellPrice) applique un taux DÉGRESSIF par rareté — voir RESALE_RATE, le piège y est
+// expliqué : à 50 % uniforme, la forge devenait une imprimerie à or.
 
+import type { Rarity } from '../core/types'
 import { ITEMS, RARITY_PRICE } from './items'
 
 export interface ShopItemDef { itemId: string; price: number }
@@ -15,83 +36,100 @@ export interface TownStock {
   hats: ShopItemDef[]
 }
 
+// Potion volontairement LAISSÉE bon marché (12 potions pour le prix d'une arme de base) alors que tout
+// l'équipement a été renchéri : le filet de sécurité d'un débutant ne doit jamais être ce qui le ruine,
+// et une potion se ramasse déjà sur un mob sur quatre. C'est le renchérissement RELATIF de la parure
+// qui crée l'objectif de farm, pas la taxation de la survie.
 export const POTION_PRICE = 20
 
 // Stock PAR VILLE. Prontera (bourg de départ, atteint ~niveau 8) propose du matériel EARLY :
-// communs bon marché + quelques rares abordables. Morocc (cité du désert, atteinte ~niveau 25)
-// propose du matériel MID : rares plus chers + épiques (+ le haut de gamme légendaire), et PAS les
-// objets de base de Prontera. Extensible : ajouter une entrée par nouvelle ville.
+// communs (le kit de départ, seule chose qu'on s'offre en arrivant) + des rares qui demandent chacun
+// deux à trois retours en plaine. Morocc (cité du désert, atteinte ~niveau 25) propose du matériel
+// MID : rares du haut de la bande + épiques (+ le haut de gamme légendaire), et PAS les objets de base
+// de Prontera. Extensible : ajouter une entrée par nouvelle ville.
 export const SHOP_BY_TOWN: Record<string, TownStock> = {
   prontera: {
-    // armes EARLY : les trois archétypes (épée / arc / bâton) en commun, plus quelques rares d'entrée
+    // Armes EARLY : les trois archétypes (épée / arc / bâton) en commun, plus les rares d'entrée.
+    // Les six communes tiennent TOUTES sous le pécule d'arrivée dans le PIRE tirage de butin (~420 or) :
+    // on ne doit jamais pouvoir atterrir à Prontera sans pouvoir s'armer, quelle que soit la classe.
     weapons: [
-      { itemId: 'epee-bambou', price: 60 },
-      { itemId: 'arc-souple', price: 75 },
-      { itemId: 'baton-feuillu', price: 90 },
-      { itemId: 'dague-jumelle', price: 70 },
-      { itemId: 'arc-corne', price: 80 },
-      { itemId: 'baton-noueux', price: 100 },
-      { itemId: 'sabre-acier', price: 420 },
-      { itemId: 'arc-long', price: 460 },
-      { itemId: 'cimeterre-desert', price: 540 },
-      { itemId: 'baton-cristal', price: 560 },
-      { itemId: 'sceptre-glace', price: 600 },
+      { itemId: 'epee-bambou', price: 240 },
+      { itemId: 'arc-souple', price: 260 },
+      { itemId: 'baton-feuillu', price: 290 },
+      { itemId: 'dague-jumelle', price: 270 },
+      { itemId: 'arc-corne', price: 300 },
+      { itemId: 'baton-noueux', price: 320 },
+      { itemId: 'sabre-acier', price: 900 },
+      { itemId: 'arc-long', price: 1000 },
+      { itemId: 'cimeterre-desert', price: 1200 },
+      { itemId: 'baton-cristal', price: 1150 },
+      { itemId: 'sceptre-glace', price: 1300 },
     ],
     armors: [
-      { itemId: 'veste-rembourree', price: 90 },
-      { itemId: 'plastron-feuilles', price: 120 },
-      { itemId: 'bracelet-cuir', price: 110 },
-      { itemId: 'grelot-porte-bonheur', price: 480 },
+      { itemId: 'veste-rembourree', price: 280 },
+      { itemId: 'plastron-feuilles', price: 340 },
+      { itemId: 'bracelet-cuir', price: 250 },
+      { itemId: 'grelot-porte-bonheur', price: 1000 },
     ],
     hats: [
-      { itemId: 'ruban', price: 300 },
-      { itemId: 'sakkat', price: 380 },
-      { itemId: 'chapeau-poring', price: 650 },
-      { itemId: 'bonnet-champi', price: 700 },
-      { itemId: 'bandeau-guerrier', price: 280 },
-      { itemId: 'plume-eclaireur', price: 340 },
-      { itemId: 'bonnet-laine', price: 350 },
-      { itemId: 'oreilles-chat', price: 1400 },
+      // Les chapeaux COMMUNS restent une coquetterie qu'on s'offre au lieu d'une armure (arbitrage
+      // volontaire : ~300 or, soit le même ordre que le kit de départ). Les chapeaux RARES, eux, sont
+      // TOUS au-dessus de 1,5× le pécule d'arrivée : c'est exactement ce que le joueur reprochait au
+      // barème d'avant, où le ruban à 300 or partait avec la monnaie du premier clear.
+      { itemId: 'ruban', price: 250 },
+      { itemId: 'sakkat', price: 320 },
+      { itemId: 'chapeau-poring', price: 1300 },
+      { itemId: 'bonnet-champi', price: 360 },
+      { itemId: 'bandeau-guerrier', price: 340 },
+      { itemId: 'plume-eclaireur', price: 270 },
+      { itemId: 'bonnet-laine', price: 290 },
+      { itemId: 'oreilles-chat', price: 1450 },
       { itemId: 'lunettes-aviateur', price: 1800 },
-      { itemId: 'chapeau-sorciere', price: 2200 },
-      { itemId: 'casque-orc', price: 2600 },
-      { itemId: 'ailes-angeling', price: 4200 },
+      { itemId: 'chapeau-sorciere', price: 1950 },
+      { itemId: 'casque-orc', price: 1650 },
+      // Seul légendaire en vitrine dans le bourg de départ : il est là pour être REGARDÉ. À 22 000 or
+      // il coûte plus que tout l'or de la campagne entière clearée une fois — on l'obtient bien plus
+      // tôt en le faisant tomber de l'Angeling élite (2 %), la vitrine n'est que le lot de consolation
+      // de celui qui n'a jamais eu la chance.
+      { itemId: 'ailes-angeling', price: 22000 },
     ],
   },
   morocc: {
-    // armes MID : le reste des rares, les épiques, et le haut de gamme légendaire (hors de prix)
+    // armes MID : le haut de la bande rare, les épiques, et le haut de gamme légendaire (hors de prix)
     weapons: [
-      { itemId: 'arc-composite', price: 480 },
-      { itemId: 'epee-large', price: 520 },
-      { itemId: 'baton-runique', price: 620 },
-      { itemId: 'masse-etoilee', price: 660 },
-      { itemId: 'arbalete', price: 720 },
-      { itemId: 'griffe-royale', price: 2000 },
-      { itemId: 'epee-cristal', price: 2100 },
-      { itemId: 'arc-elfique', price: 2300 },
-      { itemId: 'sceptre-arcane', price: 2500 },
-      { itemId: 'sceptre-flamme', price: 2600 },
-      { itemId: 'faux-sombre', price: 8500 },
-      { itemId: 'arc-tempete', price: 8800 },
-      { itemId: 'lame-solaire', price: 9000 },
-      { itemId: 'katana-eclair', price: 9500 },
-      { itemId: 'baton-cosmique', price: 11000 },
+      { itemId: 'arc-composite', price: 1600 },
+      { itemId: 'epee-large', price: 1750 },
+      { itemId: 'baton-runique', price: 2000 },
+      { itemId: 'masse-etoilee', price: 2050 },
+      { itemId: 'arbalete', price: 2200 },
+      { itemId: 'griffe-royale', price: 5000 },
+      { itemId: 'epee-cristal', price: 5800 },
+      { itemId: 'arc-elfique', price: 6000 },
+      { itemId: 'sceptre-arcane', price: 7200 },
+      { itemId: 'sceptre-flamme', price: 7500 },
+      // Légendaires : chacun vaut plus que la campagne entière clearée une fois. Ce sont des objectifs
+      // de fin de partie, à atteindre en cumulant farm, quêtes et reventes — jamais un achat d'étape.
+      { itemId: 'faux-sombre', price: 28000 },
+      { itemId: 'arc-tempete', price: 26000 },
+      { itemId: 'lame-solaire', price: 32000 },
+      { itemId: 'katana-eclair', price: 30000 },
+      { itemId: 'baton-cosmique', price: 34000 },
     ],
     armors: [
-      { itemId: 'carapace-scarabee', price: 620 },
-      { itemId: 'cotte-mailles', price: 900 },
-      { itemId: 'anneau-turquoise', price: 850 },
-      { itemId: 'amulette-pharaon', price: 2200 },
+      { itemId: 'carapace-scarabee', price: 2400 },
+      { itemId: 'cotte-mailles', price: 1900 },
+      { itemId: 'anneau-turquoise', price: 1700 },
+      { itemId: 'amulette-pharaon', price: 6800 },
     ],
     hats: [
-      { itemId: 'casque-croc', price: 2200 },
-      { itemId: 'casque-viking', price: 2400 },
-      { itemId: 'aureole-sacree', price: 2500 },
-      { itemId: 'diademe-fee', price: 2600 },
-      { itemId: 'couronne-royale', price: 2800 },
-      { itemId: 'couronne-glace', price: 9500 },
-      { itemId: 'masque-demon', price: 10500 },
-      { itemId: 'corne-kaho', price: 12000 },
+      { itemId: 'casque-croc', price: 5200 },
+      { itemId: 'casque-viking', price: 5500 },
+      { itemId: 'aureole-sacree', price: 6200 },
+      { itemId: 'diademe-fee', price: 6500 },
+      { itemId: 'couronne-royale', price: 8000 },
+      { itemId: 'couronne-glace', price: 31000 },
+      { itemId: 'masque-demon', price: 36000 },
+      { itemId: 'corne-kaho', price: 38000 },
     ],
   },
 }
@@ -116,7 +154,8 @@ export const HAT_SHOP: ShopItemDef[] = dedup(TOWNS.flatMap((s) => s.hats))
 
 // Prix d'achat de référence, source unique pour la boutique ET la revente. On lit le prix affiché
 // en boutique s'il existe, sinon on retombe sur le barème par rareté (objets forgés / butin non
-// vendus en ville). Garantit que la revente = 50 % de ce que coûte réellement l'objet.
+// vendus en ville). Garantit que la revente est indexée sur ce que coûte RÉELLEMENT l'objet, et non
+// sur un second barème qui dériverait du premier.
 const SHOP_PRICE: Record<string, number> = {}
 for (const e of [...WEAPON_SHOP, ...ARMOR_SHOP, ...HAT_SHOP]) SHOP_PRICE[e.itemId] = e.price
 
@@ -126,9 +165,29 @@ export function buyPrice(itemId: string): number {
   return RARITY_PRICE[item?.rarity ?? 'commun']
 }
 
-// Prix de REVENTE : 50 % du prix d'achat, arrondi.
+// Taux de REVENTE par rareté, volontairement DÉGRESSIF.
+//
+// LE PIÈGE ÉVITÉ : garder les 50 % uniformes d'avant après avoir multiplié les prix d'achat des hauts
+// paliers par ~4 aurait transformé la forge en imprimerie à or. Un légendaire FORGÉ (data/recipes) ne
+// coûte que ~100 or plus des matériaux farmables ; le revendre à 50 % de 30 000 rapportait 15 000, soit
+// une centaine de clears de terrain gagnés en quelques poignées de trèfles — la courbe de prix qu'on
+// vient de poser s'effondrait par sa propre revente. À 12 %, écouler un légendaire reste un pactole
+// (3 600 or) sans même financer le premier épique de la vitrine.
+//
+// Les bas paliers gardent les 50 % historiques : écouler ses doublons de début de partie doit rester
+// franchement rentable, c'est le seul or d'appoint du novice et le taux qu'il a appris à connaître.
+// Le barème reste STRICTEMENT croissant en valeur absolue (un épique se revend toujours plus cher que
+// n'importe quel rare) : le taux baisse moins vite que le prix ne monte.
+const RESALE_RATE: Record<Rarity, number> = {
+  commun: 0.5,
+  rare: 0.4,
+  epique: 0.25,
+  legendaire: 0.12,
+}
+
+// Prix de REVENTE : une fraction du prix d'achat qui dépend de la rareté (cf. RESALE_RATE), arrondie.
 export function sellPrice(itemId: string): number {
-  return Math.round(buyPrice(itemId) * 0.5)
+  return Math.round(buyPrice(itemId) * RESALE_RATE[ITEMS[itemId]?.rarity ?? 'commun'])
 }
 
 // ————————————————————————— Quêtes de ville (chaîne du garde) —————————————————————————
@@ -140,6 +199,12 @@ export function sellPrice(itemId: string): number {
 //  - fetch     : rapporter N matériaux (targetId) ; vérifié à la remise et CONSOMMÉ.
 // Le garde propose la première quête de QUEST_CHAIN non encore réclamée (ordre croissant), avec des
 // récompenses de plus en plus généreuses (or + objet de rareté croissante).
+//
+// L'or des quêtes reste MODESTE face aux prix des vitrines (150 or pour la première, soit la moitié
+// d'une arme de base) : c'est l'OBJET offert qui porte la valeur, et il grimpe bien plus vite que la
+// prime en or (le dernier maillon offre un légendaire à 30 000 or de vitrine). Volontaire — la chaîne
+// du garde est la voie « je joue le jeu » vers l'équipement de haut palier, l'or de la boutique en
+// étant la voie « je farme », et les deux ne doivent pas se remplacer l'une l'autre.
 
 export type QuestType = 'kill-any' | 'kill-type' | 'kill-boss' | 'fetch'
 

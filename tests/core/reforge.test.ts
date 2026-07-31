@@ -10,7 +10,7 @@ import {
   sellItem,
 } from '../../src/core/reforge'
 import { ITEMS, RARITY_PRICE } from '../../src/data/items'
-import { buyPrice } from '../../src/data/shops'
+import { buyPrice, sellPrice } from '../../src/data/shops'
 
 describe('reforgeCost', () => {
   it('croît strictement en or et en matériaux avec le niveau', () => {
@@ -93,15 +93,27 @@ describe('doReforge', () => {
 })
 
 describe('sellValue', () => {
-  it('vaut 50 % du prix d\'achat en boutique', () => {
+  // Le taux de revente est DÉGRESSIF avec la rareté depuis le rééquilibrage des prix de boutique
+  // (cf. RESALE_RATE dans data/shops) : seuls les objets COMMUNS gardent les 50 % historiques. Ces
+  // tests vérifient donc le contrat de sellValue — « une fraction du prix d'achat, jamais plus de la
+  // moitié, toujours plus qu'un objet moins rare » — et non un pourcentage unique.
+  it('vaut une fraction du prix d\'achat en boutique, plafonnée à 50 %', () => {
     expect(sellValue(ITEMS['epee-bambou']!)).toBe(Math.round(buyPrice('epee-bambou') * 0.5))
-    expect(sellValue(ITEMS['carapace-scarabee']!)).toBe(Math.round(buyPrice('carapace-scarabee') * 0.5))
-    expect(sellValue(ITEMS['griffe-royale']!)).toBe(Math.round(buyPrice('griffe-royale') * 0.5))
+    for (const id of ['carapace-scarabee', 'griffe-royale'] as const) {
+      expect(sellValue(ITEMS[id]!)).toBeGreaterThan(0)
+      expect(sellValue(ITEMS[id]!)).toBeLessThan(buyPrice(id) * 0.5)
+    }
+    // plus l'objet est rare, plus il rapporte en valeur absolue (commun < rare < épique)
+    expect(sellValue(ITEMS['carapace-scarabee']!)).toBeGreaterThan(sellValue(ITEMS['epee-bambou']!))
+    expect(sellValue(ITEMS['griffe-royale']!)).toBeGreaterThan(sellValue(ITEMS['carapace-scarabee']!))
   })
 
   it('retombe sur le barème par rareté pour un objet hors boutique (forgé)', () => {
-    // lame-scorpion (légendaire forgée) n'est vendue dans aucune boutique
-    expect(sellValue(ITEMS['lame-scorpion']!)).toBe(Math.round(RARITY_PRICE['legendaire'] * 0.5))
+    // lame-scorpion (légendaire forgée) n'est vendue dans aucune boutique : son prix de référence est
+    // RARITY_PRICE['legendaire'], auquel s'applique le taux de revente du palier légendaire.
+    expect(sellValue(ITEMS['lame-scorpion']!)).toBe(sellPrice('lame-scorpion'))
+    expect(sellValue(ITEMS['lame-scorpion']!)).toBeLessThan(RARITY_PRICE['legendaire'] * 0.5)
+    expect(sellValue(ITEMS['lame-scorpion']!)).toBeGreaterThan(0)
   })
 })
 
