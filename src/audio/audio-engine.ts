@@ -351,8 +351,11 @@ class AudioEngine {
       // entendre une bulle qui creve, un son a hauteur fixe ferait « bip ». Tres court et discret :
       // il est rejoue en boucle tant qu'on nage.
       case 'bubble':
-        this.tone('sine', 260, t, 0.13, 0.3, 680)
-        this.noise(t + 0.09, 0.05, 0.07, 'highpass', 2200)
+        // Volume RELEVÉ (0,3 → 0,55) et deux bulles au lieu d'une : le retour user était « sous l'eau
+        // j'entends aucun bruit ». Un blip de 0,13 s à faible gain passait sous la musique.
+        this.tone('sine', 240, t, 0.16, 0.55, 700)
+        this.tone('sine', 380, t + 0.11, 0.12, 0.34, 900)
+        this.noise(t + 0.1, 0.06, 0.12, 'highpass', 2000)
         break
       case 'player-death':
         this.tone('sawtooth', 300, t, 0.7, 0.45, 55)

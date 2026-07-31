@@ -69,6 +69,19 @@ export class TitleScene extends Phaser.Scene {
 
     this.add.text(10, 8, `build ${BUILD}`, { fontSize: '16px', color: '#ffeb3b', fontStyle: 'bold' }).setOrigin(0, 0)
 
+    // ─── DIAGNOSTIC DE CADRAGE ────────────────────────────────────────────────────────────────
+    // Le cadrage sur iPhone (bandes asymétriques, bas coupé) résiste à deux correctifs, et je n'ai
+    // aucun moyen de mesurer sur l'appareil : cette ligne affiche les chiffres RÉELS pour qu'une
+    // capture d'écran suffise à trancher. `logique` doit valoir ~VIEW_H × le format de l'écran ; si
+    // elle affiche 960, le calcul de largeur adaptative n'a pas pris.
+    const el = document.getElementById('game')
+    const r = this.game.canvas.getBoundingClientRect()
+    this.add.text(10, 30,
+      `vp ${window.innerWidth}×${window.innerHeight} · logique ${VIEW_W}×${VIEW_H}`
+      + ` · canvas ${Math.round(r.width)}×${Math.round(r.height)} · boite ${el?.clientWidth ?? 0}×${el?.clientHeight ?? 0}`
+      + ` · dpr ${window.devicePixelRatio}`,
+      { fontSize: '11px', color: '#80cbc4' }).setOrigin(0, 0).setDepth(70)
+
     const muteBtn = this.add.text(944, 6, audio.isMuted() ? '🔇' : '🔊', { fontSize: '22px' })
       .setOrigin(1, 0).setInteractive({ useHandCursor: true })
     muteBtn.on('pointerdown', () => {

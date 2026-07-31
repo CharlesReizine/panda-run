@@ -913,16 +913,20 @@ export class LevelScene extends Phaser.Scene {
     const hasBgArt = this.textures.exists(bgKey)
     if (hasBgArt) {
       const src = this.textures.get(bgKey).getSourceImage()
-      const cover = Math.max(960 / src.width, 540 / src.height)
-      this.add.image(CX, 270, bgKey).setScale(cover).setScrollFactor(0).setDepth(-28)
+      // ⚠️ « COVER » SUR VIEW_W, PAS SUR 960. Le canvas s'élargit au format de l'écran (core/viewport)
+      // et ce calcul était resté sur 960 : le décor ne couvrait plus toute la largeur et laissait des
+      // BANDES NOIRES de part et d'autre — retour user « le fond de Bocage est croppé, c'est horrible ».
+      // C'était un reste incomplet du passage à la largeur adaptative.
+      const cover = Math.max(VIEW_W / src.width, VIEW_H / src.height)
+      this.add.image(CX, CY, bgKey).setScale(cover).setScrollFactor(0).setDepth(-28)
     } else {
       const sky = this.add.graphics().setScrollFactor(0).setDepth(-30)
-      sky.fillGradientStyle(b.skyTop, b.skyTop, b.skyBot, b.skyBot, 1).fillRect(0, 0, 960, 540)
+      sky.fillGradientStyle(b.skyTop, b.skyTop, b.skyBot, b.skyBot, 1).fillRect(0, 0, VIEW_W, VIEW_H)
       if (b.clouds) {
-        this.bgClouds = this.add.tileSprite(0, 30, 960, 60, 'cloud').setOrigin(0).setScrollFactor(0).setDepth(-25).setAlpha(0.85)
+        this.bgClouds = this.add.tileSprite(0, 30, VIEW_W, 60, 'cloud').setOrigin(0).setScrollFactor(0).setDepth(-25).setAlpha(0.85)
       }
-      this.bgFar = this.add.tileSprite(0, 300, 960, 240, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-22).setTint(b.hillFar)
-      this.bgNear = this.add.tileSprite(0, 360, 960, 200, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-20).setTint(b.hillNear)
+      this.bgFar = this.add.tileSprite(0, 300, VIEW_W, 240, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-22).setTint(b.hillFar)
+      this.bgNear = this.add.tileSprite(0, 360, VIEW_W, 200, 'hill').setOrigin(0).setScrollFactor(0).setDepth(-20).setTint(b.hillNear)
     }
 
     // AMBIANCE DE CIEL : le fond de biome (illustration ou dégradé) laissait un HAUT figé et mort.
@@ -985,7 +989,7 @@ export class LevelScene extends Phaser.Scene {
     if (biome === 'cimetiere') {
       // CIMETIÈRE : brumes pâles qui dérivent + orbes spectraux qui palpitent
       for (let i = 0; i < 6; i++) {
-        const fog = this.add.ellipse(rnd(i + 4) * 960, 40 + rnd(i) * 220, 230, 56, 0xb9b0d6, 0.16).setScrollFactor(0).setDepth(-25)
+        const fog = this.add.ellipse(rnd(i + 4) * VIEW_W, 40 + rnd(i) * 220, 230, 56, 0xb9b0d6, 0.16).setScrollFactor(0).setDepth(-25)
         drift(fog, 130 - rnd(i) * 260, 12000 + rnd(i) * 5000)
       }
       for (let i = 0; i < 4; i++) {
@@ -4212,9 +4216,11 @@ export class LevelScene extends Phaser.Scene {
   // de l'eau.
   private underwaterAmbience() {
     if (!this.player.inWater) { this.bubbleSfxAt = 0; return }
-    if (this.time.now < this.bubbleSfxAt) return
+    // bubbleSfxAt à 0 = on vient d'ENTRER dans l'eau → première bulle IMMÉDIATE, pour qu'on entende
+    // tout de suite qu'on est sous l'eau au lieu d'attendre jusqu'à une seconde.
+    if (this.bubbleSfxAt !== 0 && this.time.now < this.bubbleSfxAt) return
     audio.playSfx('bubble')
-    this.bubbleSfxAt = this.time.now + Phaser.Math.Between(520, 1150)
+    this.bubbleSfxAt = this.time.now + Phaser.Math.Between(420, 900)
   }
 
   private eliteAmbience() {

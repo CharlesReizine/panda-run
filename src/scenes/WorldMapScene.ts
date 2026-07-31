@@ -29,7 +29,14 @@ export class WorldMapScene extends Phaser.Scene {
     const byId = new Map(WORLD_NODES.map((n) => [n.id, n]))
     this.drawBackground()
 
-    this.add.text(480, 26, 'Carte du monde', { fontSize: '26px', color: '#4e342e', fontStyle: 'bold' }).setOrigin(0.5)
+    // TITRE TOUJOURS LISIBLE. Il était brun foncé, posé à même la carte : sur les zones sombres (voile
+    // de brouillard, désert de nuit) il devenait illisible. Plaque noire opaque + texte blanc + depth
+    // au-dessus du voile (qui est en depth 6) → lisible sur n'importe quel fond, en toutes circonstances.
+    const titleTxt = 'Carte du monde'
+    const tw = titleTxt.length * 15 + 36
+    this.add.rectangle(480, 26, tw, 36, 0x000000, 0.82).setDepth(40).setStrokeStyle(1, 0xffffff, 0.25)
+    this.add.text(480, 26, titleTxt, { fontSize: '26px', color: '#ffffff', fontStyle: 'bold' })
+      .setOrigin(0.5).setDepth(41)
 
     const p = getPlayer()
     const current = byId.get(p.currentNode)!
