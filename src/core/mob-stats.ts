@@ -35,15 +35,30 @@ const ROLE: Record<MobRole, { hp: number; atk: number; def: number }> = {
   volant:  { hp: 0.75, atk: 1.1,  def: 0.7 },
 }
 
+// ÉLITE (mvp) : un mini-boss de map, pas un mob normal avec une aura dorée.
+//
+// ⚠️ CE MULTIPLICATEUR CORRIGE UN VRAI BUG, pas un réglage de confort. L'en-tête de ce fichier
+// affirmait que « les BOSS / ÉLITES gardent leurs stats posées à la main » — c'était FAUX pour les
+// élites : l'angeling est `mvp: true` avec le rôle `frele` (le profil le plus fragile du jeu) et
+// AUCUNE stat manuelle, donc il héritait de statsForLevel(6, 'frele') ≈ 59 PV et 3 DÉF. Un joueur
+// niveau 5 le tuait d'un coup — retour user : « pas du tout ce que j'attends d'un élite ».
+//
+// On multiplie surtout les PV (un élite doit se BATTRE, donc durer) et modérément l'ATK : le rendre
+// mortel en un contact punirait la découverte, alors que le rendre coriace crée l'événement.
+const ELITE = { hp: 4.5, atk: 1.35, def: 2.2 }
+
 // Stats finales d'un monstre de niveau `level` et de rôle `role`. `grand` (gabarit géant) épaissit
 // légèrement les PV (silhouette imposante) sans casser la monotonie (borné, appliqué après le rôle).
-export function statsForLevel(level: number, role: MobRole = 'normal', grand = false): { hp: number; atk: number; def: number } {
+// `elite` applique le palier mini-boss PAR-DESSUS le rôle : un élite « frêle » reste le plus frêle
+// des élites, mais cesse d'être aussi fragile qu'un mob ordinaire.
+export function statsForLevel(level: number, role: MobRole = 'normal', grand = false, elite = false): { hp: number; atk: number; def: number } {
   const r = ROLE[role]
   const g = grand ? 1.15 : 1
+  const e = elite ? ELITE : { hp: 1, atk: 1, def: 1 }
   return {
-    hp: Math.round(hpBase(level) * r.hp * g),
-    atk: Math.round(atkBase(level) * r.atk),
-    def: Math.round(defBase(level) * r.def),
+    hp: Math.round(hpBase(level) * r.hp * g * e.hp),
+    atk: Math.round(atkBase(level) * r.atk * e.atk),
+    def: Math.round(defBase(level) * r.def * e.def),
   }
 }
 

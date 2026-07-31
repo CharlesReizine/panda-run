@@ -24,8 +24,8 @@ export function skillDamageMult(skill: { multiplier: number; maxRank?: number },
 const list: SkillDef[] = [
   // Novice
   { id: 'calin-brutal', name: 'Câlin brutal', description: 'Une étreinte si vigoureuse qu\'elle assomme l\'ennemi au corps à corps.', classId: 'novice', kind: 'melee', multiplier: 1.5, cooldownMs: 2000, range: 50 },
-  { id: 'bambou-jete', name: 'Bambou jeté', description: 'Lance un bambou en cloche qui retombe lourdement sur l\'ennemi.', classId: 'novice', kind: 'projectile', multiplier: 1.2, cooldownMs: 3000, range: 520, arc: true },
-  { id: 'rugissement-panda', name: 'Rugissement du panda', description: 'Un cri qui galvanise : frappe autour de soi et booste les dégâts un instant.', classId: 'novice', kind: 'aoe', multiplier: 0.7, cooldownMs: 4500, range: 90, buff: { atkMult: 1.4, durationMs: 6000 } },
+  { id: 'bambou-jete', name: 'Bambou jeté', description: 'Lance un bambou en cloche qui retombe lourdement sur l\'ennemi.', classId: 'novice', kind: 'projectile', multiplier: 1.2, cooldownMs: 3000, range: 520, arc: true, requires: 'calin-brutal' },
+  { id: 'rugissement-panda', name: 'Rugissement du panda', description: 'Un cri qui galvanise : frappe autour de soi et booste les dégâts un instant.', classId: 'novice', kind: 'aoe', multiplier: 0.7, cooldownMs: 4500, range: 90, buff: { atkMult: 1.4, durationMs: 6000 }, requires: 'calin-brutal' },
 
   // ═══════════ SABREUR ═══════════ (l'ultime « Lame ultime » migre au Chevalier sous « Épée fantôme »)
   // ESTOC RAPIDE : AUCUN cooldown, plus rapide que l'attaque de base, mais coût mana ÉLEVÉ par coup

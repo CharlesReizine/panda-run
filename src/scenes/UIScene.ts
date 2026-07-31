@@ -5,6 +5,7 @@ import { xpToNext } from '../core/progression'
 import { audio } from '../audio/audio-engine'
 import type { LevelScene } from './LevelScene'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
+import { HUD_LEFT, centerOf } from './hud-layout'
 
 const BAR_W = 200
 const SLOT_SIZE = 50
@@ -93,7 +94,8 @@ export class UIScene extends Phaser.Scene {
     // aucun point. Cliquer dessus ouvre le même menu des compétences que la barre de vie.
     // badge « point(s) de compétence dispo » : placé SOUS les slots de skills / le bouton Compétences
     // (haut-droite), et non plus près de la barre de vie — c'est là qu'on gère les compétences.
-    this.spBadge = this.add.container(40, 116).setDepth(60)
+    // rangée réservée (HUD_LEFT) : le badge chevauchait la pastille de buff et le bouton
+    this.spBadge = this.add.container(HUD_LEFT.spBadge.x, centerOf(HUD_LEFT.spBadge).y).setDepth(60)
     const badgeBg = this.add.rectangle(76, 0, 152, 32, 0xffca28, 0.97).setStrokeStyle(2, 0x7a4f00, 1)
     const badgeArrow = this.add.text(-4, 0, '◀', { fontSize: '20px', color: '#ffca28', fontStyle: 'bold', stroke: '#3a2600', strokeThickness: 4 }).setOrigin(1, 0.5)
     this.spBadgeText = this.add.text(14, 0, '', { fontSize: '15px', color: '#3a2600', fontStyle: 'bold' }).setOrigin(0, 0.5)
@@ -105,7 +107,8 @@ export class UIScene extends Phaser.Scene {
     this.tweens.add({ targets: badgeBg, fillAlpha: 0.55, duration: 460, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
 
     // pastille de buff ATK : masquée par défaut, affichée avec un compte à rebours tant que le buff est actif
-    const bx = 12, by = 86, bw = 104, bh = 24
+    // Position issue de HUD_LEFT (scenes/hud-layout.ts) : elle recouvrait le bouton « Compétences ».
+    const { x: bx, y: by, w: bw, h: bh } = HUD_LEFT.buffPill
     const buffBg = this.add.rectangle(bx, by, bw, bh, 0xff8f00, 0.9).setOrigin(0).setStrokeStyle(2, 0xffe082, 0.8)
     const buffLabel = this.add.text(bx + 8, by + 4, '⚔ ATK+', { fontSize: '13px', color: '#3a2600', fontStyle: 'bold' }).setOrigin(0)
     this.buffBar = this.add.rectangle(bx + 2, by + bh - 5, bw - 4, 4, 0xfff176).setOrigin(0)
@@ -158,11 +161,12 @@ export class UIScene extends Phaser.Scene {
 
     // bouton EXPLICITE « compétences » sous les slots (le clic sur la barre de vie l'ouvre aussi,
     // mais un bouton dédié est bien plus découvrable) — disponible en jeu ET en entraînement.
-    const skillsBtn = this.add.rectangle(116, 90, 138, 24, 0x37474f, 0.9)
+    const sb = centerOf(HUD_LEFT.skillsBtn)
+    const skillsBtn = this.add.rectangle(sb.x, sb.y, HUD_LEFT.skillsBtn.w, HUD_LEFT.skillsBtn.h, 0x37474f, 0.9)
       .setStrokeStyle(1, 0xffffff, 0.55)
       .setInteractive(new Phaser.Geom.Rectangle(-11, -13, 160, 50), Phaser.Geom.Rectangle.Contains)
     this.skillsBtn = skillsBtn
-    this.skillsBtnText = this.add.text(116, 90, '⚙ Compétences', { fontSize: '12px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
+    this.skillsBtnText = this.add.text(sb.x, sb.y, '⚙ Compétences', { fontSize: '12px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
     skillsBtn.on('pointerdown', () => { this.pressFx(skillsBtn); this.openSkillMenu() })
 
     // Bas-droite : contrôles saut / attaque. Zone tactile TRÈS ÉLARGIE au-delà du disque visuel pour

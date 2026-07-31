@@ -6,6 +6,7 @@ import { ITEMS, rarityColor } from '../data/items'
 import type { MonsterDef, WeaponType } from '../core/types'
 import { stripBorderBackground } from '../core/image-strip'
 import { PANDA_TEX, PANDA_HEAD_ANCHORS } from '../entities/player-body'
+import { MONSTER_BOUNDS, measureOpaqueBounds } from '../entities/monster-body'
 import { renderSkillIcon, renderMaterialIcon, renderExitPortal, renderExitGlow } from '../art/skill-icon-canvas'
 import { MATERIALS } from '../data/materials'
 import { SKILL_ICONS } from '../data/skill-icons'
@@ -276,7 +277,8 @@ export class PreloadScene extends Phaser.Scene {
   private artMonster(id: string, big: boolean) {
     const s = big ? 120 : 70
     const h = s + 6
-    const img = this.add.image(0, 0, this.cleanArtTexture(id)).setOrigin(0, 0).setDisplaySize(s, s)
+    const srcKey = this.cleanArtTexture(id)
+    const img = this.add.image(0, 0, srcKey).setOrigin(0, 0).setDisplaySize(s, s)
     img.setPosition(0, (h - s) / 2)
     const rt = this.make.renderTexture({ width: s, height: h }, false)
     rt.draw(img, 0, (h - s) / 2)
@@ -285,6 +287,17 @@ export class PreloadScene extends Phaser.Scene {
     rt.render()
     rt.saveTexture(`monster-${id}`)
     img.destroy()
+
+    // BORNES RÉELLES DE LA CRÉATURE — sans ça, la hitbox se déduit de la hauteur de la TEXTURE et les
+    // mobs dont l'art a beaucoup de marge transparente FLOTTENT (cf. entities/monster-body.ts).
+    // L'art est étiré dans le carré s×s dessiné à y=(h-s)/2, donc une fraction mesurée sur la source
+    // se transpose directement dans la texture bakée.
+    const source = this.textures.get(srcKey).getSourceImage() as HTMLImageElement | HTMLCanvasElement
+    const b = measureOpaqueBounds(source)
+    if (b) {
+      const y0 = (h - s) / 2
+      MONSTER_BOUNDS[id] = { top: (y0 + b.top * s) / h, bottom: (y0 + b.bottom * s) / h }
+    }
   }
 
   // coiffe/accessoire de classe, dessiné au-dessus de la tête (hx,hy = centre tête)

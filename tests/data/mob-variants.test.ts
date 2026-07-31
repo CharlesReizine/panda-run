@@ -43,7 +43,12 @@ describe('menaces aquatiques (font mal au nageur)', () => {
 })
 
 describe('cohérence stats↔niveau sur le roster réel (mobs normaux)', () => {
-  const normals = Object.values(MONSTERS).filter((m) => m.role) // rôle = stats dérivées du niveau
+  // « mobs NORMAUX » : rôle présent (stats dérivées du niveau) MAIS ni élite, ni boss, ni gardien.
+  // Le filtre ne gardait que `m.role` et laissait donc passer les élites — or un élite a un
+  // multiplicateur de mini-boss (ELITE dans core/mob-stats.ts) qui le fait délibérément frapper
+  // AU-DESSUS de son niveau. Les inclure dans un test de monotonie stats↔niveau revenait à
+  // interdire aux élites d'être des élites.
+  const normals = Object.values(MONSTERS).filter((m) => m.role && !m.mvp && !m.boss && !m.id.startsWith('gardien-'))
   it('aucun mob de niveau ≥ L+8 n\'est plus faible qu\'un mob de niveau L (fin des « niv7 = niv1 »)', () => {
     for (const a of normals) {
       for (const b of normals) {

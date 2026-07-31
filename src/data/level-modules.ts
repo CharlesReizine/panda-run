@@ -2046,6 +2046,44 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   safeSpawns.push(...aquaticSpawns) // menaces d'eau réintégrées intactes (bancs en cuve, hors déclustering)
   safeSpawns.sort((a, b) => a.x - b.x)
 
+  // ── AUCUN MONSTRE POSÉ DANS UN DANGER (dernier filet, après tous les placements) ──────────────
+  // Retour user : « l'angeling dans Bocage est positionné sur des flammes ». Le placeur ne vérifiait
+  // QUE la distance au départ, jamais les dangers : le mob naissait dans le feu, y cuisait et mourait
+  // seul — un élite censé être un événement devenait une farce. Le test
+  // tests/data/spawns-on-hazards.test.ts a montré que le cas n'était PAS isolé (5 terrains).
+  //
+  // On DÉCALE au lieu de supprimer : retirer un spawn ferait baisser l'XP du terrain (et pourrait
+  // faire tomber le test d'économie d'XP). Et on ne décale que vers une colonne encore PORTÉE par la
+  // même surface, sinon on remplacerait un mob qui brûle par un mob qui flotte dans le vide.
+  const dangers = hazards.filter((h) => h.kind === 'spikes' || (h.kind === 'water' && h.water === 'lave'))
+  if (dangers.length) {
+    const inDanger = (x: number, y?: number) => dangers.some((h) =>
+      x >= h.x && x < h.x + h.w && (y === undefined || h.top === undefined || Math.abs(y - h.top) <= 1))
+    const inGap = (x: number) => gaps.some((g) => x >= g.x && x < g.x + g.w)
+    const carried = (x: number, y?: number) => y === undefined
+      ? !inGap(x) // spawn au sol : porté partout sauf au-dessus d'un trou
+      : platforms.some((pl) => pl.y === y && x >= pl.x && x < pl.x + pl.w)
+    for (const sp of safeSpawns) {
+      const m = MONSTERS[sp.monsterId]
+      if (!m || m.aerial || m.aquatic) continue // volants et aquatiques ne posent pas les pieds là
+      if (!inDanger(sp.x, sp.y)) continue
+      let moved = false
+      for (let d = 1; d <= 10 && !moved; d++) {
+        for (const cand of [sp.x - d, sp.x + d]) {
+          if (cand <= 0 || cand >= totalWidth - 1) continue
+          if (inDanger(cand, sp.y) || !carried(cand, sp.y)) continue
+          sp.x = cand
+          moved = true
+          break
+        }
+      }
+      // aucune colonne saine à portée : mieux vaut pas de monstre qu'un monstre qui brûle sur place
+      if (!moved) sp.monsterId = ''
+    }
+    for (let i = safeSpawns.length - 1; i >= 0; i--) if (!safeSpawns[i]!.monsterId) safeSpawns.splice(i, 1)
+    safeSpawns.sort((a, b) => a.x - b.x)
+  }
+
   return {
     id: opts.id, name: opts.name, biome: opts.biome,
     widthTiles: totalWidth, heightTiles,

@@ -573,6 +573,8 @@ export class TownScene extends Phaser.Scene {
   }
 
   private openSpot(kind: SpotKind) {
+    // « gnagnagna » : une voix sans langage, pour que parler à quelqu'un s'entende
+    audio.playSfx('npc-talk')
     // stock de la VILLE courante (Prontera ≠ Morocc…), repli propre sur Prontera si non défini
     const stock = getTownStock(this.townId)
     if (kind === 'potions') this.openPotionShop()

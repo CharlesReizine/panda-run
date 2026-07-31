@@ -14,7 +14,7 @@ const MUSIC_VOLUME = 0.35
 export type SfxName =
   | 'jump' | 'attack' | 'hit' | 'enemy-death' | 'coin' | 'potion' | 'skill'
   | 'level-up' | 'player-hit' | 'player-death' | 'boss-victory' | 'ui-tap' | 'buy'
-  | 'stomp' | 'player-burn'
+  | 'stomp' | 'player-burn' | 'elite' | 'npc-talk' | 'bubble'
 
 export type MusicTrack =
   | 'titre' | 'ville' | 'carte' | 'plaine' | 'foret' | 'desert' | 'cave'
@@ -234,6 +234,31 @@ class AudioEngine {
     src.stop(at + dur + 0.02)
   }
 
+  // SYLLABE DE VOIX : une dent de scie (riche en harmoniques, comme des cordes vocales) passée dans
+  // un BANDPASS étroit qui joue le rôle de formant — c'est le formant, pas la fréquence, qui fait
+  // « entendre » une voix. Un glissando de hauteur sur la syllabe donne l'intonation, sinon ça sonne
+  // robot. Aucun mot : juste la prosodie.
+  private syllable(at: number, dur: number, freq: number, freqEnd: number, formant: number, peak: number) {
+    const ctx = this.ctx!
+    const osc = ctx.createOscillator()
+    const bp = ctx.createBiquadFilter()
+    const g = ctx.createGain()
+    osc.type = 'sawtooth'
+    osc.frequency.setValueAtTime(freq, at)
+    osc.frequency.linearRampToValueAtTime(freqEnd, at + dur)
+    bp.type = 'bandpass'
+    bp.frequency.value = formant
+    bp.Q.value = 6
+    // attaque et chute douces : une syllabe qui claque ferait « tac tac » au lieu de « gna gna »
+    g.gain.setValueAtTime(0.0001, at)
+    g.gain.exponentialRampToValueAtTime(peak, at + 0.02)
+    g.gain.setValueAtTime(peak, at + dur * 0.6)
+    g.gain.exponentialRampToValueAtTime(0.0001, at + dur)
+    osc.connect(bp).connect(g).connect(this.sfxGain!)
+    osc.start(at)
+    osc.stop(at + dur + 0.02)
+  }
+
   playSfx(name: SfxName) {
     if (this.muted) return
     if (!this.ensure() || !this.ctx) return
@@ -289,6 +314,35 @@ class AudioEngine {
       case 'player-burn':
         this.noise(t, 0.1, 0.2, 'bandpass', 1500)
         this.tone('sawtooth', 165, t, 0.09, 0.2, 95)
+        break
+      // RENCONTRE D'UN ÉLITE : court motif « épique » — montée grave (la menace qui arrive), quinte
+      // par-dessus (le côté solennel), puis une cloche claire. Volontairement bref : il se déclenche
+      // en pleine action, pas sur un écran d'intro.
+      case 'elite':
+        this.tone('triangle', 82, t, 0.55, 0.5, 164)
+        this.tone('triangle', 123, t + 0.06, 0.5, 0.34, 246)
+        this.tone('sine', 880, t + 0.16, 0.6, 0.28, 660)
+        this.noise(t, 0.3, 0.14, 'lowpass', 400)
+        break
+      // PNJ QUI PARLE : 4 à 5 syllabes de formant, façon « gnagnagna » — aucune langue, juste une
+      // voix d'homme et une intonation. Les hauteurs descendent globalement (fin de phrase) avec des
+      // variations par syllabe, sinon on entend une sirène plutôt que quelqu'un qui cause.
+      case 'npc-talk': {
+        const base = 118 // voix masculine (~fondamentale grave)
+        const pattern = [1, 0.86, 1.08, 0.8, 0.92]
+        const n = 4 + (Math.random() < 0.5 ? 0 : 1) // longueur variable : deux PNJ ne débitent pas pareil
+        for (let i = 0; i < n; i++) {
+          const f = base * pattern[i % pattern.length]!
+          this.syllable(t + i * 0.115, 0.1, f, f * 0.9, 620 + (i % 2) * 260, 0.34)
+        }
+        break
+      }
+      // BULLE (« bloub ») : une sinusoide qui MONTE vite en frequence — c'est la montee qui fait
+      // entendre une bulle qui creve, un son a hauteur fixe ferait « bip ». Tres court et discret :
+      // il est rejoue en boucle tant qu'on nage.
+      case 'bubble':
+        this.tone('sine', 260, t, 0.13, 0.3, 680)
+        this.noise(t + 0.09, 0.05, 0.07, 'highpass', 2200)
         break
       case 'player-death':
         this.tone('sawtooth', 300, t, 0.7, 0.45, 55)

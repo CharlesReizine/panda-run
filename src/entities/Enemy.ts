@@ -5,6 +5,7 @@ import type { LevelScene } from '../scenes/LevelScene'
 import { getPlayer } from '../state'
 import { diesOnFall, hasFallenOutOfWorld } from '../core/mob-fall'
 import { GRAVITY } from '../core/platforming'
+import { MONSTER_BOUNDS } from './monster-body'
 
 // Texture de projectile thématique par monstre à distance (fireProjectile). La mandragore tire
 // en cloche (fx-lob, géré à part) ; tout id absent retombe sur l'orbe générique fx-shot.
@@ -202,14 +203,28 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     // rendu ET la hitbox (le corps Arcade suit la scale) → il passe sous les ponts. Niveau inchangé.
     if (def.id === 'angeling') this.baseScale *= 0.78
     if (this.baseScale !== 1) this.setScale(this.baseScale)
-    // hitbox = la créature seule (la texture a de la marge : ombre au sol + place au-dessus),
-    // pour qu'elle repose au sol au même niveau que le panda
+    // hitbox = LA CRÉATURE SEULE.
+    //
+    // ⚠️ Avant, la hauteur venait de la TEXTURE (`this.height - 8`) : comme les illustrations ont des
+    // marges transparentes VARIABLES, le bas de la hitbox tombait souvent bien sous les pieds réels et
+    // la créature FLOTTAIT — d'une hauteur différente selon le mob (retour user : « le poring vole, les
+    // lapins volent aussi un peu »). On utilise donc les bornes opaques mesurées au bake
+    // (entities/monster-body.ts) quand elles existent, avec repli sur l'ancien calcul.
     const bw = this.width * 0.8
-    const bh = this.height - 8
+    const bounds = MONSTER_BOUNDS[def.artFrom ?? def.id]
+    let bh: number
+    let topPx: number
+    if (bounds) {
+      topPx = bounds.top * this.height
+      bh = Math.max(6, (bounds.bottom - bounds.top) * this.height)
+    } else {
+      topPx = 2
+      bh = this.height - 8
+    }
     this.setSize(bw, bh)
     // FLOTTEMENT VISUEL (def.floatPx) : on descend le CORPS de floatPx px dans la texture → à corps
     // posé au sol, le sprite (la créature) est rendu floatPx px PLUS HAUT = elle vole légèrement.
-    this.setOffset((this.width - bw) / 2, 2 + (def.floatPx ?? 0))
+    this.setOffset((this.width - bw) / 2, topPx + (def.floatPx ?? 0))
     this.levelScene = scene
     this.monster = def
     this.hp = def.hp

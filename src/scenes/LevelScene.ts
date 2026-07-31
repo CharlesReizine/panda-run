@@ -132,6 +132,11 @@ export class LevelScene extends Phaser.Scene {
   // Cadence du son de dégât continu (flammes/lave/noyade) : les ticks tombent plusieurs fois par
   // seconde, on ne joue donc le souffle qu'au plus 4 fois par seconde.
   private burnSfxUntil = 0
+  // Prochaine émission du thème d'élite. Ce n'est PAS une annonce ponctuelle : le motif se répète
+  // tant qu'un élite est vivant ET dans le champ de la caméra, et se coupe dès qu'il meurt ou sort.
+  private eliteSfxAt = 0
+  // Prochain « bloub » : l'ambiance sous-marine est une boucle tant que le panda nage.
+  private bubbleSfxAt = 0
   private dashUntil = 0
   private dashCooldownUntil = 0
   private nextBasicAttackAt = 0
@@ -219,6 +224,8 @@ export class LevelScene extends Phaser.Scene {
     this.lavaRects = []
     this.lavaAccumMs = 0
     this.flameRects = []
+    this.eliteSfxAt = 0
+    this.bubbleSfxAt = 0
     this.flameAccumMs = 0
     this.airPocketRects = []
     // plongée : on entame chaque niveau souffle plein, sans dette de noyade ; les overlays
@@ -4197,7 +4204,35 @@ export class LevelScene extends Phaser.Scene {
     this.physics.world.resume()
   }
 
+  // THEME D'ELITE : rejoue en boucle tant qu'un elite est VIVANT et DANS LA FENETRE. C'est une
+  // ambiance de rencontre, pas un « ding » d'apparition — la tension doit durer le combat.
+  // On repart a zero quand il quitte le champ, pour que le theme reprenne aussitot s'il revient.
+  // AMBIANCE SOUS L'EAU : « bloub… bloub… bloub » tant que le panda est dans l'eau. L'intervalle est
+  // VOLONTAIREMENT irregulier — des bulles a rythme metronomique sonnent comme une machine, pas comme
+  // de l'eau.
+  private underwaterAmbience() {
+    if (!this.player.inWater) { this.bubbleSfxAt = 0; return }
+    if (this.time.now < this.bubbleSfxAt) return
+    audio.playSfx('bubble')
+    this.bubbleSfxAt = this.time.now + Phaser.Math.Between(520, 1150)
+  }
+
+  private eliteAmbience() {
+    const view = this.cameras.main.worldView
+    let present = false
+    for (const obj of this.enemies.getChildren()) {
+      const e = obj as Enemy
+      if (e.active && e.monster.mvp && !e.monster.boss && view.contains(e.x, e.y)) { present = true; break }
+    }
+    if (!present) { this.eliteSfxAt = 0; return }
+    if (this.time.now < this.eliteSfxAt) return
+    audio.playSfx('elite')
+    this.eliteSfxAt = this.time.now + 2600 // le motif dure ~0,8 s : on laisse respirer entre deux
+  }
+
   update(_time: number, delta: number) {
+    this.eliteAmbience()
+    this.underwaterAmbience()
     const sx = this.cameras.main.scrollX
     if (this.bgClouds) this.bgClouds.tilePositionX = sx * 0.1
     if (this.bgFar) this.bgFar.tilePositionX = sx * 0.3

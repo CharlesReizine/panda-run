@@ -10,7 +10,9 @@ const potion = { kind: 'potion', chance: 0.25, min: 1, max: 1 } as const
 // posée à la main (fin des incohérences niv↔stats). On ne fournit donc que le niveau + le rôle.
 type NormalSpec = Omit<MonsterDef, 'hp' | 'atk' | 'def'> & { role: MobRole }
 function M(s: NormalSpec): MonsterDef {
-  const st = statsForLevel(s.level, s.role, s.size === 'grand')
+  // `s.mvp` compte : sans lui, un élite héritait des stats d'un mob ordinaire de son niveau
+  // (cf. ELITE dans core/mob-stats.ts).
+  const st = statsForLevel(s.level, s.role, s.size === 'grand', s.mvp === true)
   return { ...s, hp: st.hp, atk: st.atk, def: st.def }
 }
 

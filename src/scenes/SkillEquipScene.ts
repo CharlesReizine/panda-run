@@ -8,6 +8,7 @@ import { EVOLUTIONS } from '../core/progression'
 import { CLASSES } from '../data/classes'
 import type { ClassId, SkillDef } from '../core/types'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
+import { layoutSkillTree } from './skill-tree-layout'
 
 // Gestion des compétences DIRECTEMENT en jeu (pas besoin de la carte).
 // Lancée par-dessus le niveau en pause ; à la fermeture, on reprend le jeu.
@@ -86,7 +87,7 @@ export class SkillEquipScene extends Phaser.Scene {
     this.add.text(480, 36, `Points à dépenser : ${p.skillPoints}`, { fontSize: '14px', color: '#ffd54f' }).setOrigin(0.5)
     // Légende de l'arbre : « ↳ » marque une compétence enfant (débloque son parent d'abord) ; les cartes
     // verrouillées sont grisées et affichent la raison (niveau ou prérequis manquant).
-    this.add.text(480, 51, 'Arbre — ↳ = requiert la compétence parente · carte grisée = verrouillée (raison affichée)', { fontSize: '10px', color: '#78909c' }).setOrigin(0.5)
+    this.add.text(480, 51, 'Les flèches vont du prérequis vers ce qu\'il ouvre · un peu grisé = 1 condition manquante · très grisé = 2', { fontSize: '10px', color: '#78909c' }).setOrigin(0.5)
 
     const btn = (x: number, y: number, label: string, bg: number, onTap: () => void) =>
       this.add.text(x, y, label, { fontSize: '13px', color: '#ffffff', backgroundColor: `#${bg.toString(16)}`, padding: { x: 8, y: 4 } })
@@ -119,74 +120,120 @@ export class SkillEquipScene extends Phaser.Scene {
       }
     }
 
-    // Grille des compétences de l'onglet actif — colonnes selon le nombre de skills.
+    // ───────── ARBRE DE COMPÉTENCES ─────────
+    // Remplace l'ancienne GRILLE plate. Les dépendances existaient déjà dans les données
+    // (SkillDef.requires) mais n'étaient qu'une mention textuelle « Nécessite : … » : on LISAIT la
+    // structure au lieu de la VOIR, et rien ne montrait qu'un sort en débloque deux autres.
+    // Géométrie déléguée à scenes/skill-tree-layout.ts (pure et testée) ; ici on ne fait que peindre.
+    // Sens GAUCHE→DROITE (format paysage) : un prérequis est toujours à gauche de ce qu'il ouvre.
     const skills = skillsOf(this.tab)
-    const columns = skills.length > 6 ? 3 : skills.length > 1 ? 2 : 1
-    const colW = columns === 3 ? 293 : columns === 2 ? 440 : 860
-    const colX = columns === 3 ? [26, 333, 640] : columns === 2 ? [50, 500] : [50]
-    const rowH = 76
-    const gridTop = 184
+    const tree = layoutSkillTree(skills)
+    const byId = new Map(skills.map((sk) => [sk.id, sk]))
 
-    skills.forEach((s, i) => {
-      const col = i % columns
-      const row = Math.floor(i / columns)
-      const x = colX[col]!
-      const y = gridTop + row * rowH
-      const cardH = rowH - 8
+    const AREA_TOP = 166, AREA_BOT = 524
+    const NODE_W = 176, NODE_H = 46
+    const colGap = 40
+    const rowH = 54
+    const treeH = Math.max(1, tree.rows) * rowH
+    const colW = NODE_W + colGap
+    const totalW = Math.max(1, tree.tiers) * colW
+    const x0 = Math.max(24, (VIEW_W - totalW) / 2)
 
-      const rank = p.skillLevels[s.id] ?? 0
-      const unlocked = rank > 0
-      const equipped = p.equippedSkills.includes(s.id)
-      const lock = unlocked ? null : this.lockReason(p, s)
-      const locked = lock !== null
-      const dim = !unlocked
+    // Conteneur défilable : l'archer monte à 13 rangées, impossible à tenir dans 358 px. On masque
+    // la zone et on fait glisser le contenu — plutôt que d'écraser les cartes jusqu'à l'illisible.
+    const layer = this.add.container(0, 0)
+    const maskShape = this.make.graphics({}, false)
+    maskShape.fillRect(0, AREA_TOP, VIEW_W, AREA_BOT - AREA_TOP)
+    layer.setMask(maskShape.createGeometryMask())
 
-      this.add.rectangle(x, y, colW, cardH, 0x000000, equipped ? 0.55 : locked ? 0.22 : 0.32).setOrigin(0, 0)
-        .setStrokeStyle(1, equipped ? 0x80cbc4 : 0xffffff, equipped ? 0.8 : 0.22)
-
-      const icon = this.add.image(x + 34, y + cardH / 2, `skill-${s.id}`).setDisplaySize(44, 44)
-      if (dim) icon.setAlpha(locked ? 0.28 : 0.4)
-      // Tap sur l'icône = ouvre la fiche de détail
-      icon.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showDetail(s))
-
-      // Aperçu = NOM (préfixe ↳ pour un enfant d'arbre) + état. Description dans la fiche détail.
-      const nameColor = unlocked ? '#ffffff' : locked ? '#607d8b' : '#b0bec5'
-      const childMark = s.requires ? '↳ ' : ''
-      this.add.text(x + 62, y + 5, childMark + s.name, { fontSize: '13px', color: nameColor, fontStyle: 'bold', wordWrap: { width: colW - 150 }, lineSpacing: -3 })
-      // Ligne d'arbre PERSISTANTE : prérequis (parent) + niveau requis, en vert si rempli, rouge sinon.
-      const treeBits: string[] = []
-      if (s.requires) { const req = SKILLS[s.requires]; treeBits.push(req ? req.name : s.requires) }
-      if ((s.minLevel ?? 1) > 1) treeBits.push(`Nv ${s.minLevel}`)
-      if (treeBits.length) {
-        const reqMet = !this.lockReason(p, s)
-        this.add.text(x + 62, y + 29, `requiert : ${treeBits.join(' · ')}${reqMet ? ' ✓' : ''}`, { fontSize: '10px', color: reqMet ? '#81c784' : '#ef9a9a', wordWrap: { width: colW - 96 } })
-      }
-      const stateTxt = unlocked ? `Nv ${rank}/${maxRankOf(s)}` : locked ? `🔒 ${lock!}` : 'À débloquer'
-      const stateColor = unlocked ? '#ffd54f' : locked ? '#ef9a9a' : '#90caf9'
-      this.add.text(x + 62, y + 46, stateTxt, { fontSize: '11px', color: stateColor })
-
-      // Bouton info (fiche de détail) — discret, à droite de l'icône
-      this.add.text(x + 46, y + cardH / 2 + 14, 'ℹ', { fontSize: '13px', color: '#4fc3f7', backgroundColor: '#0b2536', padding: { x: 4, y: 1 } })
-        .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showDetail(s))
-
-      // Débloquer / +1 : masqué si verrouillé par l'arbre.
-      if (!locked && p.skillPoints > 0 && rank < maxRankOf(s)) {
-        btn(x + colW - 54, y + 16, unlocked ? '+1 pt' : 'Débloquer', 0x8d6e00, () => {
-          p.skillPoints--; p.skillLevels[s.id] = rank + 1; this.persist(p); this.render()
-        })
-      }
-      // Les passifs ne s'équipent JAMAIS : appris = actif en permanence (via computeStats), hors des 4 slots.
-      if (s.kind === 'passive') {
-        if (unlocked) this.add.text(x + colW - 54, y + 44, 'Passif actif ✓', { fontSize: '11px', color: '#ce93d8' }).setOrigin(0.5)
-      } else if (unlocked && !equipped) {
-        btn(x + colW - 54, y + 44, 'Équiper', 0x33691e, () => {
-          const free = p.equippedSkills.indexOf(null)
-          p.equippedSkills[free >= 0 ? free : 3] = s.id; this.persist(p); this.render()
-        })
-      } else if (equipped) {
-        this.add.text(x + colW - 54, y + 44, 'Équipé ✓', { fontSize: '12px', color: '#80cbc4' }).setOrigin(0.5)
-      }
+    const posOf = (n: { tier: number; row: number }) => ({
+      x: x0 + n.tier * colW,
+      y: AREA_TOP + 10 + n.row * rowH,
     })
+    const nodePos = new Map(tree.nodes.map((n) => [n.id, posOf(n)]))
+
+    // FLÈCHES de filiation, dessinées AVANT les cartes (donc dessous) : coude horizontal→vertical→
+    // horizontal, façon arbre de talents, plus lisible qu'une diagonale quand plusieurs enfants
+    // partent du même parent.
+    const wires = this.add.graphics()
+    layer.add(wires)
+    for (const e of tree.edges) {
+      const a = nodePos.get(e.from), b = nodePos.get(e.to)
+      if (!a || !b) continue
+      const childSkill = byId.get(e.to)
+      const met = childSkill ? !this.lockReason(p, childSkill) : false
+      // vert quand la filiation est REMPLIE (prérequis appris + niveau atteint), gris sinon : on voit
+      // d'un coup d'œil quelles branches sont ouvertes
+      wires.lineStyle(met ? 3 : 2, met ? 0x81c784 : 0x546e7a, met ? 0.95 : 0.5)
+      const ax = a.x + NODE_W, ay = a.y + NODE_H / 2
+      const bx = b.x, by = b.y + NODE_H / 2
+      const mx = ax + colGap / 2
+      wires.beginPath()
+      wires.moveTo(ax, ay); wires.lineTo(mx, ay); wires.lineTo(mx, by); wires.lineTo(bx, by)
+      wires.strokePath()
+      // pointe de flèche sur l'enfant
+      wires.fillStyle(met ? 0x81c784 : 0x546e7a, met ? 0.95 : 0.6)
+      wires.fillTriangle(bx, by, bx - 8, by - 5, bx - 8, by + 5)
+    }
+
+    for (const n of tree.nodes) {
+      const sk = byId.get(n.id)
+      if (!sk) continue
+      const { x, y } = nodePos.get(n.id)!
+      const rank = p.skillLevels[sk.id] ?? 0
+      const unlocked = rank > 0
+      const equipped = p.equippedSkills.includes(sk.id)
+
+      // GRISÉ SELON LE NOMBRE DE RAISONS (demande explicite) : un peu grisé s'il ne manque QUE le
+      // niveau ou QUE le prérequis, beaucoup grisé si les DEUX manquent — le joueur voit ainsi la
+      // différence entre « bientôt » et « pas pour maintenant ».
+      const needLevel = p.level < (sk.minLevel ?? 1)
+      const needParent = !!sk.requires && (p.skillLevels[sk.requires] ?? 0) <= 0
+      const reasons = (needLevel ? 1 : 0) + (needParent ? 1 : 0)
+      const alpha = unlocked ? 1 : reasons >= 2 ? 0.3 : reasons === 1 ? 0.62 : 1
+
+      const card = this.add.rectangle(x, y, NODE_W, NODE_H, 0x000000, equipped ? 0.6 : 0.34).setOrigin(0, 0)
+        .setStrokeStyle(2, equipped ? 0x80cbc4 : unlocked ? 0xffd54f : 0xffffff, equipped ? 0.9 : unlocked ? 0.7 : 0.22)
+      const icon = this.add.image(x + 26, y + NODE_H / 2, `skill-${sk.id}`).setDisplaySize(34, 34)
+      const name = this.add.text(x + 48, y + 6, sk.name, {
+        fontSize: '12px', color: unlocked ? '#ffffff' : '#cfd8dc', fontStyle: 'bold',
+        wordWrap: { width: NODE_W - 56 }, lineSpacing: -3,
+      })
+      const need: string[] = []
+      if (needLevel) need.push(`Nv ${sk.minLevel}`)
+      if (needParent) need.push(SKILLS[sk.requires!]?.name ?? sk.requires!)
+      const state = unlocked ? `Nv ${rank}/${maxRankOf(sk)}${equipped ? ' · équipé' : ''}`
+        : need.length ? `🔒 ${need.join(' + ')}`
+        : 'À débloquer'
+      const sub = this.add.text(x + 48, y + NODE_H - 17, state, {
+        fontSize: '10px', color: unlocked ? '#ffd54f' : reasons >= 2 ? '#ef9a9a' : reasons === 1 ? '#ffcc80' : '#90caf9',
+        wordWrap: { width: NODE_W - 56 },
+      })
+
+      for (const o of [card, icon, name, sub]) { o.setAlpha(alpha); layer.add(o) }
+
+      // toute la carte est tapable : ouvre la fiche (débloquer / équiper s'y font)
+      card.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showDetail(sk))
+      icon.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showDetail(sk))
+    }
+
+    // DÉFILEMENT VERTICAL si l'arbre dépasse la zone : molette + glisser. Borné aux deux extrémités.
+    const overflow = Math.max(0, treeH + 20 - (AREA_BOT - AREA_TOP))
+    if (overflow > 0) {
+      this.add.text(VIEW_W - 26, AREA_TOP + 4, '↕', { fontSize: '18px', color: '#4fc3f7' }).setOrigin(1, 0)
+      let dragging = false, lastY = 0
+      const clamp = (dy: number) => { layer.y = Phaser.Math.Clamp(layer.y + dy, -overflow, 0) }
+      this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => clamp(-dy * 0.5))
+      this.input.on('pointerdown', (ptr: Phaser.Input.Pointer) => {
+        if (ptr.y < AREA_TOP || ptr.y > AREA_BOT) return
+        dragging = true; lastY = ptr.y
+      })
+      this.input.on('pointermove', (ptr: Phaser.Input.Pointer) => {
+        if (!dragging) return
+        clamp(ptr.y - lastY); lastY = ptr.y
+      })
+      this.input.on('pointerup', () => { dragging = false })
+    }
 
     btn(480, 508, 'Reprendre ▶', 0x33691e, () => this.close())
   }
