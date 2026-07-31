@@ -2,6 +2,21 @@
 
 > Fichier **généré** par `node scripts/art-manquant.mjs`. Ne pas éditer à la main.
 
+## Comment générer
+
+```sh
+python3 scripts/generate_art.py --list          # ce qui manque
+python3 scripts/generate_art.py --dry only arc  # voir les prompts, sans appel réseau
+python3 scripts/generate_art.py                 # génère tout ce qui manque
+```
+
+Le script lit le roster dans `src/data/items.ts`, appelle Vertex AI Imagen avec les identifiants du
+`.env` du monorepo pretto (`--env` pour un autre chemin), détache le fond et écrit du 128×128 RGBA
+directement dans `public/art/` — le format des illustrations déjà en place.
+
+Ensuite : `npx vitest run tests/data/item-images.test.ts` liste les entrées devenues périmées dans
+`ART_A_GENERER` (à retirer), puis relancer `node scripts/art-manquant.mjs` pour rafraîchir ce fichier.
+
 150 objets au total, **90 sans illustration**.
 
 Chaque entrée attend un PNG dans `public/art/`, fond transparent, cadré serré sur l'objet.
