@@ -513,7 +513,11 @@ def detecter_plaque(im):
     c = Counter((r // 24, g // 24, b // 24) for r, g, b, a in anneau)
     teinte, _ = c.most_common(1)[0]
     ref = tuple(int(v * 24 + 12) for v in teinte)
-    proches = sum(1 for r, g, b, a in anneau if abs(r - ref[0]) + abs(g - ref[1]) + abs(b - ref[2]) <= 90)
+    # ⚠️ TOLÉRANCE 140 ET PAS 90, sur la SOMME des trois canaux. Le damier peint alterne blanc (252) et
+    # gris clair (218) : l'écart vaut 34 par canal, soit 102 au total — au-dessus de 90, donc les deux
+    # teintes n'étaient PAS regroupées et aucune ne franchissait les 70 %. C'est ce qui a laissé passer
+    # item-plastron-feuilles une deuxième fois.
+    proches = sum(1 for r, g, b, a in anneau if abs(r - ref[0]) + abs(g - ref[1]) + abs(b - ref[2]) <= 140)
     if proches / len(anneau) < 0.7:
         return None
     return ref
@@ -628,6 +632,63 @@ def reparer_nommes(ids: list, slots: dict) -> None:
         print(f"  {iid}: plaque {couleur} retirée ({efface} px, {avant} → {reste} opaques)")
 
 
+def vider_interieur(ids: list, slots: dict) -> None:
+    """Vide le fond peint ENFERMÉ à l'intérieur d'un objet en anneau (collier, bracelet, couronne).
+
+    ⚠️ POURQUOI ÇA NE PEUT PAS ÊTRE AUTOMATIQUE. Un remplissage depuis le bord de l'image n'atteint jamais
+    l'intérieur d'un anneau : l'objet fait barrage. Il faudrait donc chercher les régions ENFERMÉES de
+    teinte claire et neutre — mais le corps d'une tunique blanche en est une aussi, et on la mangerait.
+    On garde donc une commande explicite, appliquée à des objets qu'on a regardés : le remplissage part du
+    CENTRE de l'image, là où se trouve le trou de l'anneau.
+    """
+    from PIL import Image
+    from collections import deque
+
+    for iid in ids:
+        f = ART / f"item-{iid}.png"
+        if not f.exists():
+            print(f"  {iid}: fichier absent")
+            continue
+        im = Image.open(f).convert("RGBA")
+        px = im.load()
+        w, h = im.size
+        depart = px[w // 2, h // 2]
+        if depart[3] < 40:
+            print(f"  {iid}: le centre est déjà vide, rien à faire")
+            continue
+        if max(depart[:3]) - min(depart[:3]) > 60 or sum(depart[:3]) / 3 < 170:
+            print(f"  {iid}: le centre n'est pas un fond clair et neutre {depart[:3]} — refusé")
+            continue
+
+        def proche(c):
+            return c[3] > 0 and abs(c[0] - depart[0]) + abs(c[1] - depart[1]) + abs(c[2] - depart[2]) <= 160
+
+        avant = sum(im.split()[-1].histogram()[201:])
+        vus = bytearray(w * h)
+        file = deque([(w // 2, h // 2)])
+        vus[(h // 2) * w + (w // 2)] = 1
+        efface = 0
+        touche_bord = False
+        while file:
+            x, y = file.popleft()
+            if x in (0, w - 1) or y in (0, h - 1):
+                touche_bord = True
+            px[x, y] = (0, 0, 0, 0)
+            efface += 1
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                nx, ny = x + dx, y + dy
+                if 0 <= nx < w and 0 <= ny < h and not vus[ny * w + nx] and proche(px[nx, ny]):
+                    vus[ny * w + nx] = 1
+                    file.append((nx, ny))
+        reste = sum(im.split()[-1].histogram()[201:])
+        if reste < 200 or reste < avant * 0.25:
+            print(f"  {iid}: REFUSÉ — la zone débordait de l'anneau ({avant} → {reste} opaques)")
+            continue
+        finaliser(im, slots.get(iid, "accessory")).save(f)
+        bord = " (a atteint le bord de l'image)" if touche_bord else ""
+        print(f"  {iid}: intérieur vidé, {efface} px{bord} — {avant} → {reste} opaques")
+
+
 def auditer(reparer: bool = False, slots: dict | None = None) -> int:
     """Contrôle qualité des illustrations d'objets ; --repair retire les plaques de fond et recadre.
 
@@ -672,6 +733,8 @@ def main():
     ap.add_argument("--force", action="store_true", help="regénère même si le PNG existe")
     ap.add_argument("--env", type=Path, default=ENV_DEFAUT, help=f"fichier d'identifiants (défaut : {ENV_DEFAUT})")
     ap.add_argument("--audit", action="store_true", help="contrôle qualité des illustrations déjà en place, puis sort")
+    ap.add_argument("--vider-interieur", nargs="*", default=None, metavar="ID",
+                    help="vide le fond peint enfermé dans un objet en anneau (collier, bracelet), puis sort")
     ap.add_argument("--repair-only", nargs="*", default=None, metavar="ID",
                     help="retire la plaque de fond de ces objets précis (contourne la détection), puis sort")
     ap.add_argument("--repair", action="store_true", help="avec --audit : retire les plaques de fond détectées")
@@ -683,6 +746,11 @@ def main():
         help="inclut aussi les chapeaux qui ont déjà un dessin vectoriel (pour les remplacer par une illustration)",
     )
     args = ap.parse_args()
+
+    if args.vider_interieur is not None:
+        slots = {it["id"]: it["slot"] for it in lire_items()}
+        vider_interieur(args.vider_interieur, slots)
+        return
 
     if args.repair_only is not None:
         slots = {it["id"]: it["slot"] for it in lire_items()}
