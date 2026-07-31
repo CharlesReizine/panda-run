@@ -43,9 +43,15 @@ const ROLE: Record<MobRole, { hp: number; atk: number; def: number }> = {
 // AUCUNE stat manuelle, donc il héritait de statsForLevel(6, 'frele') ≈ 59 PV et 3 DÉF. Un joueur
 // niveau 5 le tuait d'un coup — retour user : « pas du tout ce que j'attends d'un élite ».
 //
-// On multiplie surtout les PV (un élite doit se BATTRE, donc durer) et modérément l'ATK : le rendre
-// mortel en un contact punirait la découverte, alors que le rendre coriace crée l'événement.
-const ELITE = { hp: 4.5, atk: 1.35, def: 2.2 }
+// RÈGLE POSÉE PAR LE USER : un élite ne tape PAS monstrueusement plus fort que ses voisins de même
+// niveau — il a 3 à 4 fois plus de VIE. Les PV sont donc le seul vrai levier, l'ATK reste quasi celle
+// d'un mob normal (juste assez pour qu'on le sente).
+//
+// ⚠️ POURQUOI LA DÉF EST BASSE ICI : les dégâts sont SOUSTRACTIFS (`atk - def`, cf. core/combat.ts).
+// Une DÉF doublée ajoute donc de la durabilité PAR-DESSUS les PV, et l'élite dépasserait largement le
+// 3-4× demandé sans que ça se voie dans le chiffre de PV. On la garde à un cran modeste pour que la
+// durabilité réelle corresponde à l'intention. Verrouillé par tests/core/mob-stats.test.ts.
+const ELITE = { hp: 3.5, atk: 1.1, def: 1.3 }
 
 // Stats finales d'un monstre de niveau `level` et de rôle `role`. `grand` (gabarit géant) épaissit
 // légèrement les PV (silhouette imposante) sans casser la monotonie (borné, appliqué après le rôle).

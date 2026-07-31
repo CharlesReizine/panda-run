@@ -53,4 +53,43 @@ describe('statsForLevel', () => {
       expect(statsForLevel(L, 'tank', true).hp).toBeGreaterThan(statsForLevel(L, 'tank', false).hp)
     }
   })
+
+  it('un ÉLITE a 3 à 4 fois la VIE d\'un mob normal de même niveau et de même rôle', () => {
+    // Règle explicite du user : « les élites doivent être forts, genre ils tapent pas monstrueusement
+    // plus fort que leurs copains à côté de même niveau mais 3-4 fois plus de vie ».
+    for (const role of ROLES) {
+      for (let L = 1; L <= 78; L += 7) {
+        const normal = statsForLevel(L, role)
+        const elite = statsForLevel(L, role, false, true)
+        const ratio = elite.hp / normal.hp
+        expect(ratio, `L${L} ${role} PV élite/normal`).toBeGreaterThanOrEqual(3)
+        expect(ratio, `L${L} ${role} PV élite/normal`).toBeLessThanOrEqual(4)
+      }
+    }
+  })
+
+  it('un ÉLITE ne tape PAS monstrueusement plus fort (ATK ≤ 1,15× un mob normal)', () => {
+    for (const role of ROLES) {
+      for (let L = 1; L <= 78; L += 7) {
+        const normal = statsForLevel(L, role)
+        const elite = statsForLevel(L, role, false, true)
+        expect(elite.atk / normal.atk, `L${L} ${role} ATK élite/normal`).toBeLessThanOrEqual(1.15)
+        // …mais quand même un peu plus, sinon rien ne le distingue au contact
+        expect(elite.atk, `L${L} ${role} ATK élite`).toBeGreaterThanOrEqual(normal.atk)
+      }
+    }
+  })
+
+  it('la DÉF d\'un élite reste modérée : les dégâts sont SOUSTRACTIFS, donc elle s\'ajoute aux PV', () => {
+    // Une DÉF doublée rendrait l'élite bien plus dur que les 3-4× de PV annoncés, de façon invisible
+    // dans les chiffres de vie. On borne donc son effet.
+    for (const role of ROLES) {
+      for (let L = 10; L <= 78; L += 17) {
+        const normal = statsForLevel(L, role)
+        const elite = statsForLevel(L, role, false, true)
+        if (normal.def === 0) continue
+        expect(elite.def / normal.def, `L${L} ${role} DÉF élite/normal`).toBeLessThanOrEqual(1.4)
+      }
+    }
+  })
 })
