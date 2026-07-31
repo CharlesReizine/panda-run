@@ -11,7 +11,13 @@ import { JUMP_SPEED, RUN_SPEED, GRAVITY } from '../core/platforming'
 import { MAX_SKILL_RANK } from '../core/player-state'
 import { drawAura, makeJag } from '../art/jagged-ring'
 
-const JUMP_VELOCITY = -JUMP_SPEED // source unique (partagée avec le test d'atteignabilité)
+const JUMP_VELOCITY = -JUMP_SPEED
+// Durée de la fenêtre de contrôle latéral élargi après un rebond. Calée sur la durée réelle d'un rebond
+// (montée + descente ≈ 2·v/g avec v = √3·JUMP_SPEED), arrondie au-dessus : la fenêtre doit couvrir tout
+// le vol, sinon le contrôle se coupe en pleine trajectoire et on rate l'arrivée sans comprendre pourquoi.
+const TRAMBO_AIR_MS = 1500
+// Vitesse horizontale maximale pendant un rebond : « ça permet aussi d'aller plus sur le côté ».
+export const TRAMBO_SPEED_MULT = 1.45 // source unique (partagée avec le test d'atteignabilité)
 const CLIMB_SPEED = 150 // vitesse verticale sur une échelle (up/down)
 const CLIMB_STRIDE = 13 // px parcourus entre deux poses du cycle de grimpe (avance au mouvement réel)
 const CLIMB_TILT = 6 // légère inclinaison alternée (degrés) pour vendre l'effort de montée
@@ -124,6 +130,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // du sabreur (double saut), 1 sinon.
   private jumpsUsed = 0
   private jumpWasDown = false
+  // ─── REBOND DE TRAMPOLINE ────────────────────────────────────────────────────────────────────
+  // « Ça fait genre faire un saut 3 fois plus haut et ça permet aussi d'aller plus sur le côté. »
+  //
+  // ⚠️ LA VITESSE SE MULTIPLIE PAR √3, PAS PAR 3. La hauteur d'un saut vaut v²/2g : tripler la VITESSE
+  // multiplierait la hauteur par NEUF. Pour trois fois plus haut, il faut √3 ≈ 1,732. C'est le genre
+  // d'erreur qui ne se voit pas dans le code et qui se voit énormément à l'écran.
+  private tramboUntil = 0
   // Plongeon : piqué vertical verrouillé déclenché en l'air ; l'atterrissage émet 'player-dive-land'
   // (x, y, hauteur de chute) → LevelScene fait l'explosion proportionnelle à la hauteur.
   diving = false
@@ -554,7 +567,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (!this.inWater) { this.setScale(1); this.swimming = false }
 
     // horizontale (ralentie dans l'eau) — le passif « course rapide » (archer) l'accélère durablement
-    const runSpeed = (this.inWater ? RUN_SPEED * SWIM_RUN_MULT : RUN_SPEED) * this.moveSpeedMult()
+    // Pendant un rebond de trampoline, le contrôle latéral s'élargit : « ça permet aussi d'aller plus sur
+    // le côté ». Sans ce bonus, un rebond ne servirait qu'à monter et jamais à FRANCHIR — or c'est
+    // exactement ce qu'on lui demande dans les motifs au-dessus du vide.
+    const runSpeed = (this.inWater ? RUN_SPEED * SWIM_RUN_MULT : RUN_SPEED)
+      * this.moveSpeedMult() * (this.isBouncing() ? TRAMBO_SPEED_MULT : 1)
     if (c.left) { this.setVelocityX(-runSpeed); this.facing = -1; this.setFlipX(true) }
     else if (c.right) { this.setVelocityX(runSpeed); this.facing = 1; this.setFlipX(false) }
     else { this.setVelocityX(0); this.setFlipX(this.facing === -1) } // aligne le flip sur l'orientation (corrige le miroir de grimpe résiduel)
@@ -771,6 +788,23 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   // vitesse verticale du 2e saut : modeste au rang 1 (DOUBLE_JUMP_MIN_FRAC du 1er), atteint la
   // pleine hauteur du 1er saut au rang max (interpolation linéaire sur le rang investi)
+  /**
+   * Rebond sur un trampoline : trois fois la hauteur d'un saut normal, et contrôle latéral accru
+   * pendant la montée.
+   *
+   * Le compteur de sauts est REMIS À ZÉRO : le rebond ne consomme pas le saut, et un double-saut appris
+   * reste disponible au sommet — c'est ce qui rend l'engin amusant plutôt que scripté.
+   */
+  bounce(): void {
+    this.setVelocityY(JUMP_VELOCITY * Math.SQRT2 * Math.SQRT1_2 * Math.sqrt(3))
+    this.jumpsUsed = 0
+    this.tramboUntil = this.scene.time.now + TRAMBO_AIR_MS
+    this.scene.events.emit('player-bounce')
+  }
+
+  /** Le panda est-il dans la phase aérienne d'un rebond (contrôle latéral élargi) ? */
+  isBouncing(): boolean { return this.scene.time.now < this.tramboUntil }
+
   private secondJumpVelocity(): number {
     const rank = Phaser.Math.Clamp(this.doubleJumpRank(), 1, MAX_SKILL_RANK)
     const frac = DOUBLE_JUMP_MIN_FRAC + (1 - DOUBLE_JUMP_MIN_FRAC) * ((rank - 1) / (MAX_SKILL_RANK - 1))

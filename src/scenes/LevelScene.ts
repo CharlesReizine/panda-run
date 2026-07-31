@@ -88,6 +88,9 @@ export class LevelScene extends Phaser.Scene {
   props!: Phaser.Physics.Arcade.Group
   // Murs de flamme (Mage/Sorcier) : barrières statiques temporaires qui bloquent + brûlent les ennemis
   private flameWalls!: Phaser.Physics.Arcade.StaticGroup
+  private trampolines!: Phaser.Physics.Arcade.StaticGroup
+  private trampolineVisuels = new Map<Phaser.GameObjects.GameObject, Phaser.GameObjects.Image>()
+  private nextBounceAt = 0
   private platforms!: Phaser.Physics.Arcade.StaticGroup
   private oneWayPlatforms!: Phaser.Physics.Arcade.StaticGroup
   private ladderRects: Phaser.Geom.Rectangle[] = []
@@ -234,6 +237,8 @@ export class LevelScene extends Phaser.Scene {
     // avait laissé l'interface cibler les objets du niveau précédent.
     this.playerCast = null
     this.flammeSfxAt = 0
+    this.trampolineVisuels.clear()
+    this.nextBounceAt = 0
 
     // la scène est réutilisée entre niveaux : ces états doivent repartir de zéro
     this.ladderRects = []
@@ -360,6 +365,45 @@ export class LevelScene extends Phaser.Scene {
     // TileSprite ; collision en UN corps statique par pont. Le visuel ne fait que 12px de haut mais
     // à grande vitesse de chute le joueur pourrait traverser cette fine tranche en un pas de
     // physique (tunneling) → on épaissit le corps (28px) sans toucher au rendu.
+    // ─── TRAMPOLINES ───────────────────────────────────────────────────────────────────────────
+    // ⚠️ OVERLAP, PAS COLLIDER, ET C'EST LA DEMANDE EXACTE DU USER : « on peut marcher devant (et il se
+    // passe rien) ou sauter dessus / tomber dessus et là ça fait des trucs ». Un trampoline n'est donc
+    // PAS un obstacle : c'est un déclencheur. Avec un collider on buterait dedans en marchant, et il
+    // faudrait le contourner — l'inverse de ce qui est voulu.
+    //
+    // Deux conditions pour rebondir, et les deux comptent : le panda doit DESCENDRE (vitesse verticale
+    // positive) et ses pieds doivent être au-dessus du tapis. Sans la première, traverser le tapis par le
+    // bas déclencherait un rebond vers le haut — on se retrouverait catapulté en montant une échelle
+    // voisine. Sans la seconde, effleurer le bord relancerait un rebond en boucle.
+    this.trampolines = this.physics.add.staticGroup()
+    for (const tr of this.levelDef.trampolines ?? []) {
+      const px = tr.x * TILE + TILE / 2
+      const py = tr.y * TILE + TILE / 2
+      const img = this.add.image(px, py, 'prop-trampoline').setDepth(-2)
+      // respiration lente : un engin inerte à l'écran passe pour du décor
+      this.tweens.add({ targets: img, scaleY: 0.9, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+      const zone = this.physics.add.staticImage(px, py - 4, 'prop-trampoline').setVisible(false)
+      zone.body.setSize(TILE * 1.6, 14).updateFromGameObject()
+      this.trampolines.add(zone)
+      this.trampolineVisuels.set(zone, img)
+    }
+    if ((this.levelDef.trampolines ?? []).length) {
+      this.physics.add.overlap(this.player, this.trampolines, (_pl, zObj) => {
+        const z = zObj as Phaser.Physics.Arcade.Image
+        const body = this.player.body as Phaser.Physics.Arcade.Body
+        if (body.velocity.y <= 0) return                 // il monte : on ne le renvoie pas
+        if (body.bottom > z.y + 18) return               // il est passé DESSOUS : pas de rebond
+        if (this.time.now < this.nextBounceAt) return     // anti-rebond multiple sur une même frame
+        this.nextBounceAt = this.time.now + 220
+        this.player.bounce()
+        audio.playSfx('jump')
+        // détente visuelle du tapis + onde, pour que le rebond se VOIE autant qu'il se sente
+        const visuel = this.trampolineVisuels.get(z)
+        if (visuel) this.tweens.add({ targets: visuel, scaleY: 0.55, duration: 90, yoyo: true })
+        this.aoeRing(z.x, z.y + 6, 34, 0x64b5f6)
+      })
+    }
+
     for (const br of this.levelDef.bridges ?? []) {
       this.add.tileSprite(br.x * TILE, br.y * TILE, br.w * TILE, 12, 'bridge').setOrigin(0, 0).setDepth(-4)
       // Corps 28px alors que le visuel n'en fait que 12 : c'est l'anti-tunneling (à grande vitesse de

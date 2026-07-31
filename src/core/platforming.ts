@@ -89,6 +89,32 @@ export function canReach(surfaceRow: number, b: Plat, hgapTiles: number): boolea
   return hgapTiles * TILE <= dxReachPx
 }
 
+// ─── REBOND DE TRAMPOLINE : LE MÊME MODÈLE, AVEC UNE AUTRE VITESSE ─────────────────────────────
+//
+// Un trampoline propulse le panda TROIS FOIS plus haut qu'un saut normal, et lui donne un contrôle
+// latéral élargi pendant tout le vol (cf. Player.bounce / TRAMBO_SPEED_MULT).
+//
+// ⚠️ LA VITESSE SE MULTIPLIE PAR √3, PAS PAR 3. La hauteur vaut v²/2g : tripler la vitesse multiplierait
+// la hauteur par NEUF. C'est la même erreur qui guette dans le validateur que dans le moteur, donc les
+// deux lisent la MÊME constante — sinon un motif jouable serait déclaré injouable, ou l'inverse.
+export const BOUNCE_SPEED = JUMP_SPEED * Math.sqrt(3)
+export const BOUNCE_RUN_MULT = 1.45
+
+/** Hauteur maximale atteinte depuis un trampoline, en pixels. */
+export const maxBounceHeightPx = (): number => (BOUNCE_SPEED * BOUNCE_SPEED) / (2 * GRAVITY)
+
+/**
+ * Peut-on atteindre `b` en rebondissant sur un trampoline posé sur une surface à `surfaceRow` ?
+ * Même parabole que `canReach`, avec la vitesse de rebond et la vitesse latérale élargie.
+ */
+export function canReachByBounce(surfaceRow: number, b: Plat, hgapTiles: number): boolean {
+  const rise = (surfaceRow - b.y) * TILE
+  if (rise > maxBounceHeightPx()) return false
+  const disc = BOUNCE_SPEED * BOUNCE_SPEED - 2 * GRAVITY * rise
+  const t = (BOUNCE_SPEED + Math.sqrt(Math.max(0, disc))) / GRAVITY
+  return hgapTiles * TILE <= RUN_SPEED * BOUNCE_RUN_MULT * t * SAFETY
+}
+
 function hgap(a: Plat, b: Plat): number {
   return Math.max(0, Math.max(a.x - (b.x + b.w), b.x - (a.x + a.w)))
 }

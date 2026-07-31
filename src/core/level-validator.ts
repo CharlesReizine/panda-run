@@ -8,7 +8,7 @@
 // sommet d'une échelle est donc atteignable dès que son pied l'est, ce que le simple
 // `unreachablePlatforms` de platforming.ts (sauts uniquement) ne sait pas modéliser.
 
-import { groundRowFor, canReach, maxJumpGapPx, MAX_LADDER_TILES, TILE, type Plat } from './platforming'
+import { groundRowFor, canReach, canReachByBounce, maxJumpGapPx, MAX_LADDER_TILES, TILE, type Plat } from './platforming'
 import type { LevelDef } from '../data/levels'
 import { estCoffre } from '../data/props'
 
@@ -20,6 +20,16 @@ export interface LadderProblem { x: number; y: number; h: number; reason: 'somme
 export interface ChestProblem { x: number; y: number }
 export interface GapProblem { x: number; w: number }
 export interface OversizedLadder { x: number; y: number; h: number }
+
+/** Un trampoline repose-t-il sur cette surface ? (tapis posé une rangée au-dessus, dans son étendue) */
+function tramboOn(t: { x: number; y: number }, a: Plat): boolean {
+  return t.x >= a.x - 1 && t.x <= a.x + a.w && Math.abs(a.y - t.y) <= 2
+}
+
+/** Écart horizontal entre un point (trampoline) et une plateforme. */
+function hgapPoint(t: { x: number; y: number }, b: Plat): number {
+  return Math.max(0, Math.max(t.x - (b.x + b.w), b.x - t.x))
+}
 
 function hgap(a: Plat, b: Plat): number {
   return Math.max(0, Math.max(a.x - (b.x + b.w), b.x - (a.x + a.w)))
@@ -252,6 +262,7 @@ export function strictReach(level: LevelDef): StrictReach {
   const hung = ladders.filter((l) => l.hung)
   const cascades = cascadeColumns(level)
   const lakes = basins(level)
+  const trampos = level.trampolines ?? []
 
   const reachable = new Set<number>()
   const reachLad = new Set<number>()
@@ -268,6 +279,11 @@ export function strictReach(level: LevelDef): StrictReach {
   }
 
   const footMeetsReachable = (l: Ladder) => nodes.some((p, i) => reachable.has(i) && footMeets(l, p))
+  // Une échelle SUSPENDUE au-dessus du vide ne s'attrape qu'au rebond dans le motif 4 : on l'admet si son
+  // pied est à portée de rebond depuis un trampoline posé sur une surface atteignable.
+  const footByBounce = (l: Ladder) => trampos.some((t) =>
+    nodes.some((p, i) => reachable.has(i) && tramboOn(t, p))
+    && canReachByBounce(t.y, { x: l.x, y: l.y + l.h, w: 1 }, hgapPoint(t, { x: l.x, y: l.y + l.h, w: 1 })))
   const cascadeFootOk = (c: Cascade) =>
     cascadeFootReachable(c, nodes, reachable) || lakes.some((b, bi) => reachLake.has(bi) && cascadeFootInBasin(c, b))
 
@@ -279,9 +295,16 @@ export function strictReach(level: LevelDef): StrictReach {
       if (reachable.has(i)) continue
       const b = nodes[i]!
       if (surfaces.some((a) => canReach(a.y, b, hgap(a, b)))) { reachable.add(i); changed = true; continue }
+      // TRAMPOLINE : un tapis posé sur une surface DÉJÀ atteignable ouvre tout ce qui est à portée de
+      // rebond (≈ 3× la hauteur d'un saut, et plus loin latéralement). Sans ça, chaque motif à trampoline
+      // serait déclaré injouable — c'est exactement ce qui est arrivé, et pour la même raison que
+      // 'lacs-cascade-descente' n'a jamais pu être posé : le validateur ne modélisait pas le déplacement.
+      if (trampos.some((t) => surfaces.some((a) => tramboOn(t, a)) && canReachByBounce(t.y, b, hgapPoint(t, b)))) {
+        reachable.add(i); changed = true; continue
+      }
       if (ladders.some((l) => !l.hung && isLadderTop(b, l) && footMeetsReachable(l))) { reachable.add(i); changed = true; continue }
       if (cascades.some((c) => isCascadeTop(b, c) && cascadeFootOk(c))) { reachable.add(i); changed = true; continue }
-      if (hung.some((l, li) => reachLad.has(li) && hungTopReaches(l, b))) { reachable.add(i); changed = true; continue }
+      if (hung.some((l, li) => (reachLad.has(li) || footByBounce(l)) && hungTopReaches(l, b))) { reachable.add(i); changed = true; continue }
       if (lakes.some((lk, li) => reachLake.has(li) && bordersBasinSurface(b, lk))) { reachable.add(i); changed = true }
     }
     for (let li = 0; li < hung.length; li++) {
@@ -724,9 +747,22 @@ export function deadEndSurfaces(level: LevelDef): DeadEndProblem[] {
   const canDie = new Array<boolean>(N).fill(false)
 
   // 2a) SAUT (haut / travers) : modèle de parabole partagé avec platforming.canReach
+  //
+  // ⚠️ LE REBOND DE TRAMPOLINE EST UNE ARÊTE DE CE GRAPHE, PAS SEULEMENT DE CELUI D'ATTEIGNABILITÉ.
+  // Ce graphe-ci répond à une autre question : « depuis ici, peut-on repartir, ou reste-t-on coincé
+  // VIVANT ? ». Sans l'arête de rebond, une berge dont la seule issue est un trampoline est déclarée
+  // piège sans retour — et c'est exactement ce que le test a signalé sur desert-5 et montagne-3.
+  const trampos = level.trampolines ?? []
+  const tramboSur = (s: MSurf, t: { x: number; y: number }) =>
+    t.x >= s.x - 1 && t.x <= s.x + s.w && Math.abs(s.y - t.y) <= 2
+  const ecartPoint = (t: { x: number; y: number }, b: MSurf) =>
+    Math.max(0, Math.max(t.x - (b.x + b.w), b.x - t.x))
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
     if (i === j) continue
-    if (canReach(surfaces[i]!.y, surfaces[j]!, hgapOf(surfaces[i]!, surfaces[j]!))) adj[i]!.add(j)
+    if (canReach(surfaces[i]!.y, surfaces[j]!, hgapOf(surfaces[i]!, surfaces[j]!))) { adj[i]!.add(j); continue }
+    if (trampos.some((t) => tramboSur(surfaces[i]!, t) && canReachByBounce(t.y, surfaces[j]!, ecartPoint(t, surfaces[j]!)))) {
+      adj[i]!.add(j)
+    }
   }
   // 2b) CHUTE : on marche jusqu'à une colonne de la surface (ou son bord) et on tombe sur la surface
   // la plus HAUTE strictement en dessous ; rien dessous → gap/lave = mort, bassin = nage (ressort sur

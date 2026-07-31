@@ -68,6 +68,13 @@ export type ModuleKind =
   // PLONGEOIR : corniche HAUTE qui SURPLOMBE (plongeoir) un bassin en CONTREBAS — on saute dedans
   // depuis la corniche, on nage, on ressort sur le rebord ; coffre au fond.
   | 'plongeoir'
+  // ─── TRAMPOLINES (élément demandé par le user) ────────────────────────────────────────────────
+  // « ça fait genre faire un saut 3 fois plus haut et ça permet aussi d'aller plus sur le côté »
+  | 'trampoline-plat'        // 1) sur du plat : il ne sert à rien, on découvre l'objet sans risque
+  | 'trampoline-corniche'    // 2) permet d'atteindre une corniche haute
+  | 'trampoline-vide'        // 3) plateforme haute, et EN DESSOUS c'est le vide
+  | 'trampoline-echelle'     // 4) atteint une échelle en T suspendue, vide en dessous
+  | 'trampoline-cascade'     // 5) dépasse un vide et atteint une cascade
   // PUITS : cuve marine ÉTROITE (2-4 tuiles) et PROFONDE, encadrée de 2 rebords de pierre qui
   // DÉPASSENT (margelle) — distinct du BASSIN large. On plonge par l'étroite ouverture ; coffre au fond.
   | 'puits'
@@ -223,6 +230,8 @@ interface Piece {
   // pics : alt = altitude de la SURFACE qui porte les pics (corniche en hauteur). Absent → pics au sol.
   spikes: { x: number; w: number; alt?: number }[]
   bridges: { x: number; alt: number; w: number }[]
+  // TRAMPOLINES : tapis posé à l'altitude `alt`. Rebond ×3 en hauteur + contrôle latéral accru.
+  trampolines: { x: number; alt: number }[]
   // cuves d'eau : marine (noyade), cascade (remontable) ou lave (mortelle, enfer). bankAlt = rangée des
   // berges (surface juste dessous) ; le liquide descend jusqu'au sol (fond). Le moteur pose murs + fond + déco.
   // `openSide` : ouvre une paroi (passage sous-marin — on ressort par le côté immergé).
@@ -243,7 +252,7 @@ interface Piece {
 }
 
 function emptyPiece(exitAlt: number): Piece {
-  return { platforms: [], rocks: [], gaps: [], spikes: [], bridges: [], waters: [], ladders: [], spawns: [], props: [], signs: [], exitAlt }
+  return { platforms: [], rocks: [], gaps: [], spikes: [], bridges: [], trampolines: [], waters: [], ladders: [], spawns: [], props: [], signs: [], exitAlt }
 }
 
 // Dégagement libre (en rangées) garanti sous un PLAFOND DE ROCHE de tunnel : strictement supérieur à
@@ -452,6 +461,98 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       if (alt >= 1) p.platforms.push({ x: Math.max(x, w - bank), alt, w: bank }) // berge droite
       placeBirds(alt + 2)
       p.exitAlt = alt
+      break
+    }
+    // ─── LES CINQ MOTIFS À TRAMPOLINE ─────────────────────────────────────────────────────────────
+    // Un trampoline propulse le panda TROIS FOIS plus haut qu'un saut normal (≈ 12 rangées contre 4) et
+    // lui donne un vrai contrôle latéral en l'air. Les altitudes ci-dessous en découlent : ce qu'on met
+    // au-dessus d'un trampoline doit être HORS de portée d'un saut simple, sinon l'engin est décoratif.
+    case 'trampoline-plat': {
+      // 1) « Trampoline qui sert à rien et qui est sur du plat. » C'est un ATELIER : on découvre le
+      // rebond sans rien risquer. Découvrir un rebond ×3 au-dessus d'un vide serait une mort gratuite,
+      // et le joueur n'aurait pas compris à quoi sert l'engin.
+      const alt = entryAlt
+      p.platforms.push({ x: 0, alt, w })
+      p.trampolines.push({ x: Math.floor(w / 2), alt: alt + 1 })
+      placeBirds(alt + 4)
+      p.exitAlt = alt
+      break
+    }
+    case 'trampoline-corniche': {
+      // 2) « Trampoline qui permet d'atteindre une corniche haute. » La corniche est posée à +8 rangées :
+      // inatteignable au saut simple (4), confortable au rebond (12).
+      const alt = entryAlt
+      const haut = alt + 8
+      p.platforms.push({ x: 0, alt, w: Math.floor(w * 0.55) })
+      p.trampolines.push({ x: Math.floor(w * 0.3), alt: alt + 1 })
+      // corniche d'arrivée, large : on retombe dessus après un rebond, pas au pixel près
+      p.platforms.push({ x: Math.floor(w * 0.5), alt: haut, w: w - Math.floor(w * 0.5) })
+      // palier de secours à mi-hauteur : rater le rebond ne renvoie pas au début du module
+      p.platforms.push({ x: Math.floor(w * 0.62), alt: alt + 4, w: 4 })
+      placeBirds(haut + 3)
+      p.exitAlt = haut
+      break
+    }
+    case 'trampoline-vide': {
+      // 3) « Trampoline qui permet d'atteindre une plateforme haute et en dessous c'est le vide. »
+      // Le trampoline reste sur une berge SOLIDE — un trampoline suspendu au-dessus du vide serait
+      // injouable, on ne pourrait pas y revenir après une chute.
+      const alt = Math.max(entryAlt, 3)
+      const haut = alt + 8
+      const bw = bank
+      p.platforms.push({ x: 0, alt, w: bw + 4 })
+      p.trampolines.push({ x: bw + 1, alt: alt + 1 })
+      for (let gx = bw + 4; gx < w - bw; gx += 3) p.gaps.push({ x: gx, w: Math.min(3, w - bw - gx) })
+      p.platforms.push({ x: bw + 6, alt: haut, w: Math.max(5, w - bw - bw - 6) })
+      p.platforms.push({ x: w - bw, alt: haut, w: bw })
+      placeBirds(haut + 3)
+      p.exitAlt = haut
+      break
+    }
+    case 'trampoline-echelle': {
+      // 4) « Trampoline qui permet d'atteindre une échelle en T, et en dessous c'est le vide. »
+      // L'échelle est SUSPENDUE (hung) : son pied flotte au-dessus du vide, on ne l'atteint qu'au rebond.
+      const alt = Math.max(entryAlt, 3)
+      const bw = bank
+      p.platforms.push({ x: 0, alt, w: bw + 4 })
+      p.trampolines.push({ x: bw + 1, alt: alt + 1 })
+      for (let gx = bw + 4; gx < w - bw; gx += 3) p.gaps.push({ x: gx, w: Math.min(3, w - bw - gx) })
+      // échelle suspendue : sommet haut, pied à portée du sommet du rebond
+      const hEch = Math.min(MAX_LADDER_TILES, Math.max(MIN_LADDER_TILES, 6))
+      const sommet = alt + 11
+      p.ladders.push({ x: bw + 7, topAlt: sommet, h: hEch, hung: true })
+      // palier de sortie 2 rangées sous le sommet de l'échelle, puis berge droite à la même altitude
+      p.platforms.push({ x: bw + 8, alt: sommet - 2, w: 5 })
+      p.platforms.push({ x: w - bw, alt: sommet - 2, w: bw })
+      placeBirds(sommet + 2)
+      p.exitAlt = sommet - 2
+      break
+    }
+    case 'trampoline-cascade': {
+      // 5) « Trampoline qui permet de dépasser un vide et d'atteindre une cascade. »
+      // La cascade est REMONTABLE (pas de noyade) : le rebond sert à FRANCHIR le vide et à s'accrocher au
+      // rideau, la montée se finit à la nage. `bottomAlt` recueille l'eau dans un bassin — sans lui, la
+      // cascade couvrirait le vide mortel d'un rideau d'eau, ce qui rendrait le danger illisible.
+      const alt = Math.max(entryAlt, 3)
+      const bw = bank
+      p.platforms.push({ x: 0, alt, w: bw + 4 })
+      p.trampolines.push({ x: bw + 1, alt: alt + 1 })
+      const trouG = bw + 4
+      const casX = Math.min(w - bw - 4, trouG + 6)
+      for (let gx = trouG; gx < casX; gx += 3) p.gaps.push({ x: gx, w: Math.min(3, casX - gx) })
+      // 12 rangées au minimum : une cascade remontable plus courte que ~4× le panda ne se lit pas comme
+      // une cascade (règle vérifiée par tests/levels/reachable). Le rebond porte à ~12 rangées, donc on
+      // accroche le rideau à mi-hauteur et on finit à la nage — c'est exactement l'usage voulu.
+      const top = alt + 13
+      p.waters.push({ x: casX, w: 4, kind: 'cascade', bankAlt: top, bottomAlt: alt })
+      // bassin de réception au pied de la cascade : le vide s'arrête là où l'eau tombe
+      p.platforms.push({ x: casX, alt, w: 4 })
+      // corniche de sortie en haut de la cascade + son coffre (récompense de la remontée)
+      p.platforms.push({ x: casX + 4, alt: top, w: Math.max(4, w - bw - (casX + 4)) })
+      p.props.push({ kind: 'coffre', x: casX + 5, alt: top + 1 })
+      p.platforms.push({ x: w - bw, alt: top, w: bw })
+      placeBirds(top + 3)
+      p.exitAlt = top
       break
     }
     case 'corniche-vide':
@@ -1868,6 +1969,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   // 3) EXPAND vers LevelDef
   const platforms: LevelDef['platforms'] = []
   const bridges: NonNullable<LevelDef['bridges']> = []
+  const trampolines: NonNullable<LevelDef['trampolines']> = []
   const gaps: NonNullable<LevelDef['gaps']> = []
   const hazards: NonNullable<LevelDef['hazards']> = []
   const ladders: NonNullable<LevelDef['ladders']> = []
@@ -1881,6 +1983,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   for (const { piece, x0 } of pieces) {
     for (const pl of piece.platforms) platforms.push({ x: x0 + pl.x, y: row(pl.alt), w: pl.w, ...(pl.solid ? { solid: true } : {}) })
     for (const b of piece.bridges) bridges.push({ x: x0 + b.x, y: row(b.alt), w: b.w })
+    for (const t of piece.trampolines) trampolines.push({ x: x0 + t.x, y: row(t.alt) })
     for (const l of piece.ladders) ladders.push({ x: x0 + l.x, y: row(l.topAlt), h: l.h, ...(l.hung ? { hung: true } : {}) })
     for (const g of piece.gaps) gaps.push({ x: x0 + g.x, w: g.w })
     // dalles de roche (plafond de tunnel / socle) : y = rangée du HAUT de la dalle, h = épaisseur ;
@@ -2088,7 +2191,8 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     id: opts.id, name: opts.name, biome: opts.biome,
     widthTiles: totalWidth, heightTiles,
     start, exit,
-    platforms, bridges, gaps, hazards, ladders, rockBands, spawns: safeSpawns, props,
+    platforms, bridges,
+    ...(trampolines.length ? { trampolines } : {}), gaps, hazards, ladders, rockBands, spawns: safeSpawns, props,
     ...(signs.length ? { signs } : {}),
   }
 }
@@ -2211,6 +2315,22 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'escalier-saut': { tier: 2, family: 'vertical', entry: 'bas', exit: 'haut', width: [14, 24], below: 'sol', above: 'air' },
   // R171 — ÉCHELLES SUCCESSIVES (échelle puis échelle, court palier) — motif VERTICAL
   'echelles-successives': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [16, 26], below: 'sol', above: 'air', ladder: true },
+
+  // ─── TRAMPOLINES ──────────────────────────────────────────────────────────────────────────────
+  // ⚠️ `forcedOnly` SUR LES CINQ, ET C'EST INDISPENSABLE. Sans ce marqueur, le planificateur les tire
+  // dans ses pools génériques dès qu'ils existent : ils sont apparus d'un coup dans les 58 terrains, y
+  // compris en grotte et en enfer, et trois validateurs sont tombés — atteignabilité stricte (les
+  // plateformes hautes d'un trampoline sont injoignables pour qui ne sait pas ce qu'est un trampoline),
+  // et jusqu'aux NIVEAUX DES MONSTRES, qui dérivent de la carte et se sont décalés parce que les oiseaux
+  // changeaient de terrain. On les place donc explicitement, terrain par terrain (forcedKinds).
+  // Cinq motifs demandés, du plus inoffensif au plus exigeant. Le premier existe pour APPRENDRE l'objet
+  // sans rien risquer : découvrir un rebond ×3 au-dessus d'un vide serait une mort gratuite, et le
+  // joueur n'aurait pas compris à quoi sert l'engin. Les quatre autres l'utilisent pour de bon.
+  'trampoline-plat': { forcedOnly: true, tier: 1, family: 'filler', entry: 'milieu', exit: 'milieu', width: [12, 18], below: 'sol', above: 'air' },
+  'trampoline-corniche': { forcedOnly: true, tier: 2, family: 'vertical', entry: 'bas', exit: 'haut', width: [14, 22], below: 'sol', above: 'air' },
+  'trampoline-vide': { forcedOnly: true, tier: 3, family: 'risque', entry: 'milieu', exit: 'haut', width: [16, 24], below: 'vide', above: 'air' },
+  'trampoline-echelle': { forcedOnly: true, tier: 4, family: 'vertical', entry: 'milieu', exit: 'haut', width: [16, 24], below: 'vide', above: 'air', ladder: true },
+  'trampoline-cascade': { forcedOnly: true, tier: 3, family: 'risque', entry: 'milieu', exit: 'haut', width: [18, 26], below: 'vide', above: 'air', water: true, chest: true },
 }
 
 // Construit un Module à partir de son kind (fills + métadonnées du CATALOG) + peuplement/flags.

@@ -2480,6 +2480,18 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0xb71c1c).fillEllipse(12, 9, 22, 15)
     g.fillStyle(0xef5350).fillEllipse(12, 8, 20, 12)
     g.fillStyle(0xffffff).fillCircle(6, 6, 2).fillCircle(18, 6, 2).fillCircle(12, 10, 2); g.generateTexture('prop-champignon', 24, 24); g.clear()
+    // ── TRAMPOLINE ─────────────────────────────────────────────────────────────────────────────
+    // Élément demandé par le user. Il doit se lire comme un ENGIN, pas comme une plateforme : cadre de
+    // bois clair, toile bleue tendue avec un reflet, et deux ressorts visibles sur les côtés. Le tapis est
+    // BOMBÉ vers le haut — c'est la forme qui dit « ça rebondit », avant même de l'essayer.
+    g.fillStyle(0x5d4037).fillRect(2, 14, 5, 10).fillRect(29, 14, 5, 10)            // pieds
+    g.fillStyle(0x8d6e63).fillRoundedRect(0, 8, 36, 8, 3)                           // cadre
+    g.fillStyle(0x1565c0).fillEllipse(18, 9, 32, 10)                                // toile (bombée)
+    g.fillStyle(0x42a5f5).fillEllipse(18, 8, 28, 7)
+    g.fillStyle(0x90caf9, 0.85).fillEllipse(14, 6, 12, 3)                           // reflet
+    g.lineStyle(1.5, 0xbdbdbd, 0.95)                                                 // ressorts
+    for (const sx of [5, 31]) { g.beginPath(); for (let k = 0; k < 4; k++) { g.moveTo(sx - 2, 15 + k * 2); g.lineTo(sx + 2, 16 + k * 2) } g.strokePath() }
+    g.generateTexture('prop-trampoline', 36, 26); g.clear()
     g.fillStyle(0x616161).fillEllipse(14, 14, 28, 20)
     g.fillStyle(0x9e9e9e).fillEllipse(13, 11, 16, 9); g.generateTexture('prop-roche', 28, 24); g.clear()
     // coffre plus détaillé (couvercle bombé + serrure + ferrures)

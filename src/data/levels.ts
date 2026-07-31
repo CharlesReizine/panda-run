@@ -53,6 +53,12 @@ export interface LevelDef {
   // une corniche basse de la zone suivante. 'left' | 'right' | 'both'. Absent → cuve close (2 murs).
   hazards?: { kind: 'spikes' | 'water'; x: number; w: number; top?: number; h?: number; water?: 'basin' | 'waterfall' | 'cascade' | 'lave'; openSide?: 'left' | 'right' | 'both' }[]
   bridges?: { x: number; y: number; w: number }[] // ponts de planches (plateformes fines)
+  // TRAMPOLINES : x en tuiles, y = rangée sur laquelle le tapis repose. Rebondir dessus propulse le
+  // panda TROIS FOIS plus haut qu'un saut normal et lui donne un vrai contrôle latéral en l'air.
+  // Canal DISTINCT des plateformes : un trampoline n'est pas une surface où l'on se pose, c'est un
+  // déclencheur — le mélanger aux plateformes obligerait chaque calcul d'atteignabilité à distinguer
+  // les deux au cas par cas.
+  trampolines?: { x: number; y: number }[]
   // trous MORTELS dans le sol : à ces emplacements (x en tuiles, largeur w en tuiles) on ne
   // dessine PAS les rangées de sol pleines (groundRow/+1) → c'est le vide. Tomber dedans = mort.
   // Chaque trou doit rester FRANCHISSABLE au saut simple (w ≤ distance de saut confortable,
@@ -209,6 +215,33 @@ const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
 
   'foret-5': ['lacs-cascade-montee'],
   'montagne-2': ['lacs-cascade-montee'],
+
+  // ─── TRAMPOLINES : un motif par palier de progression ──────────────────────────────────────────
+  // Demande du user : « rajoute tout ça et inclus-en dans des niveaux à tous niveaux. Je trouve que
+  // c'est un peu répétitif là. »
+  //
+  // ⚠️ PLACEMENT EXPLICITE, ET DANS CET ORDRE. Le motif INOFFENSIF vient d'abord (plaine-3, tôt) : on
+  // découvre le rebond sur du plat, sans rien risquer. Les motifs au-dessus du vide arrivent ensuite,
+  // quand l'objet est compris. Découvrir un rebond ×3 au-dessus d'un trou serait une mort gratuite, et le
+  // joueur n'aurait même pas compris à quoi sert l'engin.
+  // Ils sont `forcedOnly` (cf. CATALOG) : laissés dans les pools génériques, ils sont apparus d'un coup
+  // dans les 58 terrains, y compris en grotte et en enfer, et ont décalé jusqu'aux niveaux des monstres.
+  // ⚠️ TROIS TERRAINS SEULEMENT, ET C'EST UNE CONTRAINTE DU GÉNÉRATEUR, PAS UN CHOIX DE DOSAGE.
+  // Un motif imposé PREND un slot central : il en chasse un autre. Posé sur huit terrains, il a fait
+  // disparaître assez de motifs pour que des familles entières (chaînes verticales, passerelles, grotte de
+  // départ) n'apparaissent plus NULLE PART — six tests de couverture sont tombés. Rallonger ces terrains
+  // pour compenser ne marche pas non plus : la longueur alimente la graine, donc elle REDISTRIBUE toute la
+  // sélection et casse d'autres couvertures. On se limite donc à trois terrains, un par grand palier, et
+  // les cinq motifs restent disponibles pour un placement plus large quand la couverture sera pilotée
+  // explicitement plutôt que tirée au sort.
+  'plaine-3': ['trampoline-plat'],           // apprentissage, sans danger
+  'desert-5': ['trampoline-vide'],           // mid : plateforme haute, vide en dessous
+  // ⚠️ 'trampoline-echelle' N'EST PAS PLACÉ. Son échelle SUSPENDUE au-dessus du vide reste injoignable pour
+  // deux validateurs de plus (atteignabilité par niveau, pied d'échelle) : il faudrait leur apprendre le
+  // rebond comme on l'a fait pour les deux autres. Le motif est écrit et jouable, mais on ne le pose pas
+  // tant que ces deux-là ne le reconnaissent pas — poser un motif qu'un validateur juge injouable, c'est
+  // désarmer le validateur, et c'est lui qui a attrapé les pièges sans retour sur ce même lot.
+  'montagne-3': ['trampoline-corniche'],     // late : atteindre une corniche haute au rebond
   // NB : 'lacs-cascade-descente' (chute pure de lac en lac) NON placé — non validable (le validateur ne
   // modélise pas la chute → lacs du haut injoignables) ; l'escalier de lacs GRIMPABLE ci-dessus le remplace.
 }
