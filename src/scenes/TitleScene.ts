@@ -11,7 +11,7 @@ import { pseudoKey, readActivePseudo, writeActivePseudo } from '../cloud/identit
 import { adoptCloud, setAutoPushKey } from '../cloud/sync-service'
 import { askPseudo } from '../ui/pseudo-prompt'
 import type { StampedSave } from '../core/save'
-import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
+import { DESIGN_RIGHT, VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 import { installUiClickSound } from '../ui/click-sound'
 
 // Écran-titre volontairement NU : quelques boutons, aucun texte explicatif.
@@ -51,7 +51,7 @@ export class TitleScene extends Phaser.Scene {
     audio.playMusic('titre')
 
     this.add.image(480, 270, 'splash').setDisplaySize(VIEW_W, VIEW_H)
-    this.add.rectangle(480, 56, 960, 112, 0x000000, 0.18)
+    this.add.rectangle(480, 56, VIEW_W, 112, 0x000000, 0.18) // VIEW_W : la plaque s'arrêtait 209 px avant le bord droit
 
     const logo = this.add.text(480, 96, 'PANDA-RUN', {
       fontFamily: 'Impact, "Arial Black", sans-serif', fontSize: '82px', fontStyle: 'bold', color: '#ffd54f',
@@ -82,7 +82,7 @@ export class TitleScene extends Phaser.Scene {
       + ` · dpr ${window.devicePixelRatio}`,
       { fontSize: '11px', color: '#80cbc4' }).setOrigin(0, 0).setDepth(70)
 
-    const muteBtn = this.add.text(944, 6, audio.isMuted() ? '🔇' : '🔊', { fontSize: '22px' })
+    const muteBtn = this.add.text(DESIGN_RIGHT - 16, 6, audio.isMuted() ? '🔇' : '🔊', { fontSize: '22px' })
       .setOrigin(1, 0).setInteractive({ useHandCursor: true })
     muteBtn.on('pointerdown', () => {
       audio.unlock()

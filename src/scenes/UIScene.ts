@@ -183,14 +183,19 @@ export class UIScene extends Phaser.Scene {
     const atk = this.add.circle(792, 496, 32, 0xfb8c00, 0.7)
       .setInteractive(new Phaser.Geom.Circle(32, 32, 54), Phaser.Geom.Circle.Contains)
     this.add.image(792, 496, 'ui-attack').setDisplaySize(30, 30)
-    this.add.text(792, 534, 'ATTAQUE', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
+    // y=528 et non 534 : avec une origine centrée en police 10, le bas du texte tombait à ~539 pour un
+    // cadre haut de 540 — le libellé était rogné par le bord. Aligné sur SAUT, qui lui tient à 510.
+    this.add.text(792, 528, 'ATTAQUE', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
     atk.on('pointerdown', () => { this.pressFx(atk); this.game.events.emit('input-attack') })
 
     // Bas-gauche : potion. Zone tactile élargie via un rectangle invisible plus grand que l'icône.
     // Taille FIXE (indépendante de la résolution native de la texture potion-drop, désormais
     // issue d'une illustration détourée et non plus d'un dessin 16px) → icône HUD nette et stable.
     const potion = this.add.image(52, 500, 'potion-drop').setDisplaySize(56, 56)
-    const potionHit = this.add.rectangle(52, 500, 92, 100, 0xffffff, 0.001).setInteractive({ useHandCursor: true })
+    // Zone de tap ramenée DANS le cadre : centrée à 500 sur 100 de haut, elle allait de 450 à 550 pour
+    // un écran haut de 540 → 10 % de la surface tactile tombait hors de l'écran et n'était jamais
+    // atteignable. Même surface utile, mais entièrement cliquable.
+    const potionHit = this.add.rectangle(52, 494, 92, 88, 0xffffff, 0.001).setInteractive({ useHandCursor: true })
     potionHit.on('pointerdown', () => { this.pressFx(potion); this.game.events.emit('input-potion') })
     this.potionText = this.add.text(70, 490, '', { fontSize: '16px', color: '#ffffff' })
 

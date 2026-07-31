@@ -276,8 +276,12 @@ export class TownScene extends Phaser.Scene {
 
     audio.playMusic('ville')
 
-    this.physics.world.setBounds(0, 0, cfg.worldW, cfg.worldH)
-    this.cameras.main.setBounds(0, 0, cfg.worldW, cfg.worldH)
+    // ⚠️ AU MOINS LA LARGEUR LOGIQUE. Les maps de ville font 1024 de large alors que la fenêtre en fait
+    // ~1169 : Phaser bornant le défilement au monde, 145 px de l'écran ne pouvaient JAMAIS être
+    // couverts et montraient le bleu de fond en permanence, sur toute la hauteur.
+    const camW = Math.max(cfg.worldW, VIEW_W)
+    this.physics.world.setBounds(0, 0, camW, cfg.worldH)
+    this.cameras.main.setBounds(0, 0, camW, cfg.worldH)
 
     this.drawGround(cfg)
     this.drawThemeDecor(theme, cfg)
@@ -343,15 +347,15 @@ export class TownScene extends Phaser.Scene {
 
     // — HUD écran-fixe (scrollFactor 0) : la caméra suivant le panda, ces éléments restent collés —
     // bannière du bourg (nom + sous-titre thématique) en haut au centre
-    this.add.text(480, 10, townName, {
+    this.add.text(CX, 10, townName, {
       fontSize: '26px', color: '#ffffff', fontStyle: 'bold', stroke: '#3e2723', strokeThickness: 4,
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(35)
-    this.add.text(480, 40, cfg.subtitle, {
+    this.add.text(CX, 40, cfg.subtitle, {
       fontSize: '13px', color: cfg.bannerStroke, fontStyle: 'italic', stroke: '#3e2723', strokeThickness: 3,
     }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(35)
 
     // panneau de sortie — toujours accessible, ramène directement à la carte (coin haut-droit)
-    this.add.text(900, 22, 'Sortie →', { fontSize: '18px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 10, y: 6 } })
+    this.add.text(VIEW_W - 60, 22, 'Sortie →', { fontSize: '18px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 10, y: 6 } })
       .setOrigin(0.5).setScrollFactor(0).setDepth(35).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('WorldMap'))
 
     // panda joueur + caméra qui le suit (la ville est plus grande que l'écran → on se balade)
@@ -369,7 +373,9 @@ export class TownScene extends Phaser.Scene {
 
     this.cursors = this.input.keyboard!.createCursorKeys()
     this.input.addPointer(1)
-    this.joystick = new TopDownJoystick(this, new Phaser.Geom.Rectangle(0, 80, 480, 460))
+    // Zone du joystick en coordonnées ÉCRAN réelles (les pointeurs Phaser y vivent), donc bornée par
+    // la largeur LOGIQUE et non par CX : sur un écran large, la moitié gauche doit rester la moitié.
+    this.joystick = new TopDownJoystick(this, new Phaser.Geom.Rectangle(0, 80, VIEW_W / 2, 460))
 
     // grille de repérage (aide au placement : le user dicte « boutique en C3 ») + bouton pour la basculer
     this.buildPlacementGrid(cfg)
@@ -402,8 +408,11 @@ export class TownScene extends Phaser.Scene {
     // garde que les boutiques + PNJ posés sur cette map. bg thématisé par ville si présent, sinon générique.
     const themedBg = `town-${this.townId}-bg`
     const key = this.textures.exists(themedBg) ? themedBg : 'town-bg'
-    const bg = this.add.image(cfg.worldW / 2, cfg.worldH / 2, key).setDepth(-10)
-    bg.setDisplaySize(cfg.worldW, cfg.worldH)
+    // Le fond est étiré sur la largeur RÉELLEMENT couvrable (cf. camW dans create) pour qu'aucune
+    // bande de ciel nu ne subsiste à droite. L'écart est faible (1024 → ~1169), donc invisible.
+    const bgW = Math.max(cfg.worldW, VIEW_W)
+    const bg = this.add.image(bgW / 2, cfg.worldH / 2, key).setDepth(-10)
+    bg.setDisplaySize(bgW, cfg.worldH)
     // Pour la cité des sables (Morroc), on réchauffe la map générique (verte) vers l'ocre du désert.
     if (cfg.buildingTint !== 0xffffff) bg.setTint(cfg.buildingTint)
   }
@@ -568,7 +577,7 @@ export class TownScene extends Phaser.Scene {
         this.talkHint = this.add.text(spot.npcX, spot.npcY - 150, '💬', { fontSize: '30px' })
           .setOrigin(0.5).setDepth(34)
         this.tweens.add({ targets: this.talkHint, y: spot.npcY - 162, yoyo: true, repeat: -1, duration: 620, ease: 'Sine.inOut' })
-        this.interactBtn = this.add.text(480, 500, `Parler — ${spot.label}`, {
+        this.interactBtn = this.add.text(CX, 500, `Parler — ${spot.label}`, {
           fontSize: '18px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 16, y: 8 },
         }).setOrigin(0.5).setScrollFactor(0).setDepth(30).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.openSpot(closest!))
       }
@@ -597,7 +606,7 @@ export class TownScene extends Phaser.Scene {
   // au-dessus de l'en-tête) : garantit une sortie du menu quel que soit le contenu. Ajoutée en
   // dernier dans le container pour rester au-dessus (rendu ET input).
   private drawCloseCross(c: Phaser.GameObjects.Container, w: number, h: number) {
-    const x = 480 + w / 2 - 22
+    const x = CX + w / 2 - 22
     const y = 270 - h / 2 + 22
     const bg = this.add.circle(x, y, 15, 0x8e2f2f, 1).setStrokeStyle(2, 0xffd54f, 0.95)
     const txt = this.add.text(x, y, '✕', { fontSize: '18px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
@@ -647,11 +656,11 @@ export class TownScene extends Phaser.Scene {
   // fond de panneau façon coffre/parchemin, commun aux boutiques — bordure dorée sur bois sombre
   private drawPanelFrame(c: Phaser.GameObjects.Container, w: number, h: number, title: string) {
     c.add(this.add.rectangle(CX, CY, VIEW_W, VIEW_H, 0x000000, 0.45)) // voile derrière le panneau
-    c.add(this.add.rectangle(480, 270, w, h, 0x3e2723, 0.97).setStrokeStyle(4, 0xd7a86e, 1))
-    c.add(this.add.rectangle(480, 270, w - 12, h - 12, 0xffffff, 0).setStrokeStyle(1, 0xffd54f, 0.35))
+    c.add(this.add.rectangle(CX, 270, w, h, 0x3e2723, 0.97).setStrokeStyle(4, 0xd7a86e, 1))
+    c.add(this.add.rectangle(CX, 270, w - 12, h - 12, 0xffffff, 0).setStrokeStyle(1, 0xffd54f, 0.35))
     const top = 270 - h / 2
-    c.add(this.add.rectangle(480, top + 30, w, 52, 0x2a1a17, 0.9))
-    c.add(this.add.text(480, top + 30, title, { fontSize: '22px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0.5))
+    c.add(this.add.rectangle(CX, top + 30, w, 52, 0x2a1a17, 0.9))
+    c.add(this.add.text(CX, top + 30, title, { fontSize: '22px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0.5))
     return top
   }
 
@@ -744,12 +753,12 @@ export class TownScene extends Phaser.Scene {
     this.panel = c
     const top = this.drawPanelFrame(c, w, h, 'Herboristerie')
     const p = getPlayer()
-    const goldText = this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
+    const goldText = this.drawGoldBadge(c, CX + w / 2 - 70, top + 30, p.gold)
     this.drawShopTabs(c, top, 'buy', 'Herboristerie', () => this.openPotionShop())
-    const stockText = this.add.text(480, top + 112, `Potions en réserve : ${p.potions}`, { fontSize: '14px', color: '#cfd8dc' }).setOrigin(0.5)
+    const stockText = this.add.text(CX, top + 112, `Potions en réserve : ${p.potions}`, { fontSize: '14px', color: '#cfd8dc' }).setOrigin(0.5)
     c.add(stockText)
     this.drawItemCard(
-      c, 480, top + 208, 200, 130,
+      c, CX, top + 208, 200, 130,
       { texture: 'potion-drop' }, 'Potion de soin', 'Restaure des PV en combat', POTION_PRICE,
       () => { const pl = getPlayer(); return buyPotion(pl) },
       () => {
@@ -760,7 +769,7 @@ export class TownScene extends Phaser.Scene {
       },
     )
     c.add(
-      this.add.text(480, top + h - 30, '← Fermer', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 } })
+      this.add.text(CX, top + h - 30, '← Fermer', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 } })
         .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()),
     )
     this.drawCloseCross(c, w, h)
@@ -825,20 +834,20 @@ export class TownScene extends Phaser.Scene {
     this.panel = c
     const top = this.drawPanelFrame(c, w, h, title)
     const p = getPlayer()
-    const goldText = this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
+    const goldText = this.drawGoldBadge(c, CX + w / 2 - 70, top + 30, p.gold)
     this.drawShopTabs(c, top, 'buy', title, () => this.openItemShop(kind, list, 0))
     const owned = this.ownedIds()
 
-    const gridLeft = 480 - (cols * cardW + (cols - 1) * gapX) / 2 + cardW / 2
+    const gridLeft = CX - (cols * cardW + (cols - 1) * gapX) / 2 + cardW / 2
     let y = top + headerH
     let lastSlot: EquipSlot | null = null
     for (const r of pageRows) {
       if (r.slot !== lastSlot) {
         // en-tête de section lisible + fin filet doré séparateur
-        c.add(this.add.text(480 - w / 2 + 24, y + sectionH / 2, SLOT_LABEL_PLURAL[r.slot], {
+        c.add(this.add.text(CX - w / 2 + 24, y + sectionH / 2, SLOT_LABEL_PLURAL[r.slot], {
           fontSize: '14px', color: '#ffd54f', fontStyle: 'bold',
         }).setOrigin(0, 0.5))
-        c.add(this.add.rectangle(480, y + sectionH - 3, w - 44, 1, 0xffd54f, 0.3))
+        c.add(this.add.rectangle(CX, y + sectionH - 3, w - 44, 1, 0xffd54f, 0.3))
         y += sectionH
         lastSlot = r.slot
       }
@@ -861,9 +870,9 @@ export class TownScene extends Phaser.Scene {
       y += cardH + gapY
     }
 
-    this.drawPager(c, 480, top + h - 44, page, pageCount, (pg) => this.openItemShop(kind, list, pg))
+    this.drawPager(c, CX, top + h - 44, page, pageCount, (pg) => this.openItemShop(kind, list, pg))
     c.add(
-      this.add.text(480, top + h - 18, '← Fermer', {
+      this.add.text(CX, top + h - 18, '← Fermer', {
         fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
       }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()),
     )
@@ -902,8 +911,8 @@ export class TownScene extends Phaser.Scene {
     this.closePanel()
     const c = this.add.container(0, 0).setDepth(50).setScrollFactor(0)
     this.panel = c
-    c.add(this.add.rectangle(480, 270, 560, 300, 0x0d1b2a, 0.96))
-    c.add(this.add.text(480, 150, QUEST_CHAIN[0]!.npcName, { fontSize: '22px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
+    c.add(this.add.rectangle(CX, 270, 560, 300, 0x0d1b2a, 0.96))
+    c.add(this.add.text(CX, 150, QUEST_CHAIN[0]!.npcName, { fontSize: '22px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
 
     const render = () => {
       const p = getPlayer()
@@ -912,11 +921,11 @@ export class TownScene extends Phaser.Scene {
 
       // toute la chaîne accomplie : plus rien à proposer
       if (!def) {
-        c.add(this.add.text(480, 250, 'Tu as accompli toutes mes quêtes.\nLe pays te doit une fière chandelle, panda !', {
-          fontSize: '16px', color: '#80cbc4', align: 'center', wordWrap: { width: 480 },
+        c.add(this.add.text(CX, 250, 'Tu as accompli toutes mes quêtes.\nLe pays te doit une fière chandelle, panda !', {
+          fontSize: '16px', color: '#80cbc4', align: 'center', wordWrap: { width: CX },
         }).setOrigin(0.5))
         c.add(
-          this.add.text(480, 390, '← Fermer', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 } })
+          this.add.text(CX, 390, '← Fermer', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 } })
             .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()),
         )
         this.drawCloseCross(c, 560, 300)
@@ -924,23 +933,23 @@ export class TownScene extends Phaser.Scene {
       }
 
       refreshQuestProgress(p, def.id)
-      c.add(this.add.text(480, 184, `Quête ${def.order}/${QUEST_CHAIN.length} — ${def.name}`, { fontSize: '17px', color: '#ffd54f' }).setOrigin(0.5))
-      c.add(this.add.text(480, 220, def.description, { fontSize: '14px', color: '#cfd8dc', align: 'center', wordWrap: { width: 480 } }).setOrigin(0.5))
-      c.add(this.add.text(480, 268, `Récompense : ${this.questRewardLabel(def)}`, { fontSize: '13px', color: '#ffb300', align: 'center', wordWrap: { width: 480 } }).setOrigin(0.5))
+      c.add(this.add.text(CX, 184, `Quête ${def.order}/${QUEST_CHAIN.length} — ${def.name}`, { fontSize: '17px', color: '#ffd54f' }).setOrigin(0.5))
+      c.add(this.add.text(CX, 220, def.description, { fontSize: '14px', color: '#cfd8dc', align: 'center', wordWrap: { width: CX } }).setOrigin(0.5))
+      c.add(this.add.text(CX, 268, `Récompense : ${this.questRewardLabel(def)}`, { fontSize: '13px', color: '#ffb300', align: 'center', wordWrap: { width: CX } }).setOrigin(0.5))
 
       const q = p.quests[def.id]
       if (!q) {
         c.add(
-          this.add.text(480, 320, 'Accepter la quête', {
+          this.add.text(CX, 320, 'Accepter la quête', {
             fontSize: '16px', color: '#ffffff', backgroundColor: '#2e7d32', padding: { x: 14, y: 8 },
           }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
             acceptQuest(p, def.id); save(p); render(); this.refreshQuestMarker()
           }),
         )
       } else if (q.done) {
-        c.add(this.add.text(480, 300, `Progression : ${q.progress}/${def.targetCount} — terminée !`, { fontSize: '15px', color: '#ffd700' }).setOrigin(0.5))
+        c.add(this.add.text(CX, 300, `Progression : ${q.progress}/${def.targetCount} — terminée !`, { fontSize: '15px', color: '#ffd700' }).setOrigin(0.5))
         c.add(
-          this.add.text(480, 336, 'Réclamer la récompense', {
+          this.add.text(CX, 336, 'Réclamer la récompense', {
             fontSize: '16px', color: '#ffffff', backgroundColor: '#2e7d32', padding: { x: 14, y: 8 },
           }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => {
             if (claimQuest(p, def.id)) { save(p); render(); this.refreshQuestMarker() }
@@ -948,11 +957,11 @@ export class TownScene extends Phaser.Scene {
         )
       } else {
         const verb = def.type === 'fetch' ? 'Rapportés' : 'Progression'
-        c.add(this.add.text(480, 320, `${verb} : ${q.progress}/${def.targetCount}`, { fontSize: '15px', color: '#ffd54f' }).setOrigin(0.5))
+        c.add(this.add.text(CX, 320, `${verb} : ${q.progress}/${def.targetCount}`, { fontSize: '15px', color: '#ffd54f' }).setOrigin(0.5))
       }
 
       c.add(
-        this.add.text(480, 390, '← Fermer', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 } })
+        this.add.text(CX, 390, '← Fermer', { fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 } })
           .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()),
       )
       this.drawCloseCross(c, 560, 300)
@@ -988,7 +997,7 @@ export class TownScene extends Phaser.Scene {
   ) {
     const tw = 128, gap = 10
     const totalW = tabs.length * tw + (tabs.length - 1) * gap
-    let x = 480 - totalW / 2 + tw / 2
+    let x = CX - totalW / 2 + tw / 2
     for (const tab of tabs) {
       const btn = this.add.text(x, top + 74, tab.label, {
         fontSize: '15px', color: tab.active ? '#ffd54f' : '#cfd8dc',
@@ -1046,7 +1055,7 @@ export class TownScene extends Phaser.Scene {
     const h = Math.min(500, headerH + rowsForH * rowH + footerH)
     const top = this.drawPanelFrame(c, w, h, 'Forge')
     const p = getPlayer()
-    this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
+    this.drawGoldBadge(c, CX + w / 2 - 70, top + 30, p.gold)
     this.drawForgeTabs(c, top, 'craft')
 
     // récap des matériaux possédés
@@ -1054,20 +1063,20 @@ export class TownScene extends Phaser.Scene {
     const recap = owned.length
       ? owned.map(([id, q]) => `${this.shortMat(id)} x${q}`).join('   ·   ')
       : 'Aucun matériau collecté — va combattre pour en récolter !'
-    c.add(this.add.text(480, top + 108, recap, {
+    c.add(this.add.text(CX, top + 108, recap, {
       fontSize: '12px', color: '#cfd8dc', align: 'center', wordWrap: { width: w - 48 },
     }).setOrigin(0.5))
 
     const render = (m?: string, o?: boolean) => this.renderCraft(c, page, m, o)
     const rowsTop = top + headerH
-    const rowLeft = 480 - w / 2 + 16
+    const rowLeft = CX - w / 2 + 16
 
     pageRecipes.forEach((recipe, i) => {
       const y = rowsTop + i * rowH + rowH / 2
       const item = ITEMS[recipe.resultItemId]!
       const craftable = canCraft(p, recipe)
 
-      if (i > 0) c.add(this.add.rectangle(480, y - rowH / 2, w - 40, 1, 0xffffff, 0.08))
+      if (i > 0) c.add(this.add.rectangle(CX, y - rowH / 2, w - 40, 1, 0xffffff, 0.08))
 
       // icône du résultat
       const icon = this.iconFor(recipe.resultItemId)
@@ -1101,7 +1110,7 @@ export class TownScene extends Phaser.Scene {
       }
 
       // bouton Forger
-      const btn = this.add.text(480 + w / 2 - 24, y, 'Forger', {
+      const btn = this.add.text(CX + w / 2 - 24, y, 'Forger', {
         fontSize: '13px', color: craftable ? '#ffffff' : '#9e9e9e',
         backgroundColor: craftable ? '#2e7d32' : '#3a2b28', padding: { x: 12, y: 6 },
       }).setOrigin(1, 0.5)
@@ -1120,12 +1129,12 @@ export class TownScene extends Phaser.Scene {
     })
 
     // message de retour (résultat du dernier craft)
-    if (msg) c.add(this.add.text(480, top + h - 74, msg, {
+    if (msg) c.add(this.add.text(CX, top + h - 74, msg, {
       fontSize: '14px', color: ok ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
     }).setOrigin(0.5))
 
-    this.drawPager(c, 480, top + h - 46, page, pageCount, (pg) => this.renderCraft(c, pg))
-    c.add(this.add.text(480, top + h - 18, '← Fermer', {
+    this.drawPager(c, CX, top + h - 46, page, pageCount, (pg) => this.renderCraft(c, pg))
+    c.add(this.add.text(CX, top + h - 18, '← Fermer', {
       fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()))
     this.drawCloseCross(c, w, h)
@@ -1155,23 +1164,23 @@ export class TownScene extends Phaser.Scene {
     const h = Math.min(500, headerH + rowsForH * rowH + footerH)
     const top = this.drawPanelFrame(c, w, h, 'Forge')
     const p = getPlayer()
-    this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
+    this.drawGoldBadge(c, CX + w / 2 - 70, top + 30, p.gold)
     this.drawForgeTabs(c, top, 'reforge')
 
     const owned = Object.entries(p.materials).filter(([, q]) => q > 0)
     const recap = owned.length
       ? owned.map(([id, q]) => `${this.shortMat(id)} x${q}`).join('   ·   ')
       : 'Aucun matériau collecté — va combattre pour en récolter !'
-    c.add(this.add.text(480, top + 108, recap, {
+    c.add(this.add.text(CX, top + 108, recap, {
       fontSize: '12px', color: '#cfd8dc', align: 'center', wordWrap: { width: w - 48 },
     }).setOrigin(0.5))
 
     const render = (m?: string, o?: boolean) => this.renderReforge(c, page, m, o)
     const rowsTop = top + headerH
-    const rowLeft = 480 - w / 2 + 16
+    const rowLeft = CX - w / 2 + 16
 
     if (allIds.length === 0) {
-      c.add(this.add.text(480, rowsTop + rowH / 2, 'Aucune pièce à réforger.', {
+      c.add(this.add.text(CX, rowsTop + rowH / 2, 'Aucune pièce à réforger.', {
         fontSize: '14px', color: '#90a4ae',
       }).setOrigin(0.5))
     }
@@ -1183,7 +1192,7 @@ export class TownScene extends Phaser.Scene {
       const atMax = level >= MAX_REFORGE_LEVEL
       const canDo = canReforge(p, id)
 
-      if (i > 0) c.add(this.add.rectangle(480, y - rowH / 2, w - 40, 1, 0xffffff, 0.08))
+      if (i > 0) c.add(this.add.rectangle(CX, y - rowH / 2, w - 40, 1, 0xffffff, 0.08))
 
       // icône
       const icon = this.iconFor(id)
@@ -1228,7 +1237,7 @@ export class TownScene extends Phaser.Scene {
       }
 
       // bouton Réforger
-      const btn = this.add.text(480 + w / 2 - 24, y, atMax ? 'Max' : 'Réforger', {
+      const btn = this.add.text(CX + w / 2 - 24, y, atMax ? 'Max' : 'Réforger', {
         fontSize: '13px', color: canDo ? '#ffffff' : '#9e9e9e',
         backgroundColor: canDo ? '#2e7d32' : '#3a2b28', padding: { x: 12, y: 6 },
       }).setOrigin(1, 0.5)
@@ -1242,12 +1251,12 @@ export class TownScene extends Phaser.Scene {
       })
     })
 
-    if (msg) c.add(this.add.text(480, top + h - 74, msg, {
+    if (msg) c.add(this.add.text(CX, top + h - 74, msg, {
       fontSize: '14px', color: ok ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
     }).setOrigin(0.5))
 
-    this.drawPager(c, 480, top + h - 46, page, pageCount, (pg) => this.renderReforge(c, pg))
-    c.add(this.add.text(480, top + h - 18, '← Fermer', {
+    this.drawPager(c, CX, top + h - 46, page, pageCount, (pg) => this.renderReforge(c, pg))
+    c.add(this.add.text(CX, top + h - 18, '← Fermer', {
       fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()))
     this.drawCloseCross(c, w, h)
@@ -1271,19 +1280,19 @@ export class TownScene extends Phaser.Scene {
     const rowsForH = pageCount > 1 ? rowsPerPage : Math.max(pageItems.length, 1)
     const h = Math.min(500, headerH + rowsForH * rowH + footerH)
     const top = this.drawPanelFrame(c, w, h, ctx?.title ?? 'Forge')
-    this.drawGoldBadge(c, 480 + w / 2 - 70, top + 30, p.gold)
+    this.drawGoldBadge(c, CX + w / 2 - 70, top + 30, p.gold)
     if (ctx) this.drawShopTabs(c, top, 'sell', ctx.title, ctx.back)
     else this.drawForgeTabs(c, top, 'sell')
-    c.add(this.add.text(480, top + 104, 'Revends les objets de ton inventaire non équipé.', {
+    c.add(this.add.text(CX, top + 104, 'Revends les objets de ton inventaire non équipé.', {
       fontSize: '12px', color: '#cfd8dc', align: 'center',
     }).setOrigin(0.5))
 
     const render = (m?: string, o?: boolean) => this.renderSell(c, page, m, o, ctx)
     const rowsTop = top + headerH
-    const rowLeft = 480 - w / 2 + 16
+    const rowLeft = CX - w / 2 + 16
 
     if (p.inventory.length === 0) {
-      c.add(this.add.text(480, rowsTop + rowH / 2, 'Inventaire vide.', {
+      c.add(this.add.text(CX, rowsTop + rowH / 2, 'Inventaire vide.', {
         fontSize: '14px', color: '#90a4ae',
       }).setOrigin(0.5))
     }
@@ -1294,7 +1303,7 @@ export class TownScene extends Phaser.Scene {
       const item = ITEMS[id]!
       const level = p.upgrades[id] ?? 0
 
-      if (i > 0) c.add(this.add.rectangle(480, y - rowH / 2, w - 40, 1, 0xffffff, 0.08))
+      if (i > 0) c.add(this.add.rectangle(CX, y - rowH / 2, w - 40, 1, 0xffffff, 0.08))
 
       const icon = this.iconFor(id)
       if ('texture' in icon) c.add(this.add.image(rowLeft + 18, y, icon.texture).setDisplaySize(28, 28))
@@ -1312,7 +1321,7 @@ export class TownScene extends Phaser.Scene {
         fontSize: '12px', color: '#ffd54f', fontStyle: 'bold',
       }).setOrigin(0, 0.5))
 
-      const btn = this.add.text(480 + w / 2 - 24, y, 'Vendre', {
+      const btn = this.add.text(CX + w / 2 - 24, y, 'Vendre', {
         fontSize: '13px', color: '#ffffff', backgroundColor: '#8e2f2f', padding: { x: 12, y: 6 },
       }).setOrigin(1, 0.5)
       c.add(btn)
@@ -1327,12 +1336,12 @@ export class TownScene extends Phaser.Scene {
       })
     })
 
-    if (msg) c.add(this.add.text(480, top + h - 74, msg, {
+    if (msg) c.add(this.add.text(CX, top + h - 74, msg, {
       fontSize: '14px', color: ok ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
     }).setOrigin(0.5))
 
-    this.drawPager(c, 480, top + h - 46, page, pageCount, (pg) => this.renderSell(c, pg, undefined, undefined, ctx))
-    c.add(this.add.text(480, top + h - 18, '← Fermer', {
+    this.drawPager(c, CX, top + h - 46, page, pageCount, (pg) => this.renderSell(c, pg, undefined, undefined, ctx))
+    c.add(this.add.text(CX, top + h - 18, '← Fermer', {
       fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()))
     this.drawCloseCross(c, w, h)

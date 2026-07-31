@@ -863,9 +863,9 @@ export class LevelScene extends Phaser.Scene {
     } catch { return } // localStorage inaccessible : pas de tuto plutôt que de risquer un boom
 
     const depth = 40
-    const panel = this.add.rectangle(480, 270, 560, 340, 0x0d1b2a, 0.92)
+    const panel = this.add.rectangle(CX, CY, 560, 340, 0x0d1b2a, 0.92)
       .setScrollFactor(0).setDepth(depth).setStrokeStyle(2, 0xffd54f, 0.6)
-    const title = this.add.text(480, 130, 'Comment jouer', { fontSize: '28px', color: '#ffd54f', fontStyle: 'bold' })
+    const title = this.add.text(CX, 130, 'Comment jouer', { fontSize: '28px', color: '#ffd54f', fontStyle: 'bold' })
       .setOrigin(0.5).setScrollFactor(0).setDepth(depth + 1)
     const lines = [
       '• Déplacer : joystick / flèches gauche-droite',
@@ -877,7 +877,7 @@ export class LevelScene extends Phaser.Scene {
     ]
     const body = this.add.text(230, 175, lines.join('\n'), { fontSize: '16px', color: '#ffffff', lineSpacing: 8 })
       .setScrollFactor(0).setDepth(depth + 1)
-    const hint = this.add.text(480, 400, 'Tape pour fermer', { fontSize: '15px', color: '#b0bec5' })
+    const hint = this.add.text(CX, 400, 'Tape pour fermer', { fontSize: '15px', color: '#b0bec5' })
       .setOrigin(0.5).setScrollFactor(0).setDepth(depth + 1)
 
     const parts = [panel, title, body, hint]
@@ -1321,7 +1321,7 @@ export class LevelScene extends Phaser.Scene {
   // Bannière « ENRAGÉ ! » du passage en phase 2 (sous 50 % PV) : secousse + texte pulsé.
   showEnrageBanner() {
     this.cameras.main.shake(300, 0.01)
-    const txt = this.add.text(480, 150, 'ENRAGÉ !', {
+    const txt = this.add.text(CX, 150, 'ENRAGÉ !', {
       fontSize: '44px', color: '#ff1744', fontStyle: 'bold', stroke: '#000000', strokeThickness: 5,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(30).setScale(0.3)
     this.tweens.add({
@@ -1484,7 +1484,7 @@ export class LevelScene extends Phaser.Scene {
 
     // voile sombre plein écran, épinglé à l'écran
     this.add.rectangle(CX, CY, VIEW_W, VIEW_H, 0x0b0b12, 0.72).setScrollFactor(0).setDepth(20)
-    this.add.text(480, 108, 'Essaie encore !', {
+    this.add.text(CX, 108, 'Essaie encore !', {
       fontSize: '52px', color: '#ff5252', fontStyle: 'bold', stroke: '#000000', strokeThickness: 6,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(22)
 
@@ -1508,13 +1508,13 @@ export class LevelScene extends Phaser.Scene {
       })
     }
 
-    mkButton(360, 'Réessayer', 0x33691e, () => this.scene.restart({
+    mkButton(CX - 120, 'Réessayer', 0x33691e, () => this.scene.restart({
       levelId: this.levelDef.id,
       fromNode: this.fromNode ?? undefined,
       targetNode: this.targetNode ?? undefined,
       dir: this.dir,
     }))
-    mkButton(600, 'Carte', 0x455a64, () => this.scene.start('WorldMap'))
+    mkButton(CX + 120, 'Carte', 0x455a64, () => this.scene.start('WorldMap'))
   }
 
   // Plongée sous l'eau (appelé chaque frame ; no-op sans bassin). Le panda est « submergé » quand
@@ -2986,7 +2986,7 @@ export class LevelScene extends Phaser.Scene {
     const cancelBg = this.add.rectangle(CX, 498, 150, 34, 0x455a64, 0.95).setScrollFactor(0).setDepth(60).setStrokeStyle(2, 0xffffff, 0.6)
     const cancelTxt = this.add.text(CX, 498, 'Annuler ✕', { fontSize: '15px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0).setDepth(61)
 
-    this.aim = { slot, skill, reticle, ui: [hint, cancelBg, cancelTxt], cancelAt: { x: 480, y: 498 } }
+    this.aim = { slot, skill, reticle, ui: [hint, cancelBg, cancelTxt], cancelAt: { x: CX, y: 498 } }
     // Le tap qui a lancé la visée (bouton de slot / touche) ne doit pas valider aussitôt :
     // on n'écoute le pointeur qu'après un court délai.
     this.time.delayedCall(160, () => { if (this.aim) this.input.on('pointerdown', this.onAimPointer, this) })
@@ -4051,7 +4051,7 @@ export class LevelScene extends Phaser.Scene {
     const tier = ({ commun: 0, rare: 1, epique: 2, legendaire: 3 } as const)[def.rarity ?? 'commun'] ?? 0
     const ADD = Phaser.BlendModes.ADD
 
-    const cx = 480
+    const cx = CX
     const cy = 236
     const holdMs = 900 + tier * 260 // plus rare = reste plus longtemps
     const totalMs = 360 + holdMs + 420

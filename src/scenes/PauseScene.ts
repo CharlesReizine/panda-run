@@ -11,6 +11,12 @@ export class PauseScene extends Phaser.Scene {
   constructor() { super('Pause') }
 
   create() {
+    // ⚠️ PAS DE setScrollFactor(0) DANS CET ÉCRAN, ET C'EST VOLONTAIRE.
+    // La scène appelle centerCamera() (core/viewport.ts), qui décale la caméra de −BLEED_X pour recentrer
+    // l'espace de conception 0→960 sur un écran plus large. Or un objet en scrollFactor(0) ignore le
+    // défilement de caméra PAR DÉFINITION : il restait donc à sa coordonnée brute, soit 105 px à gauche du
+    // centre réel. Et dans un écran d'interface la caméra ne défile jamais, donc l'épinglage n'apportait
+    // rien. C'est la cause unique du « c'est pas centré » constaté sur plusieurs écrans.
     // chaque bouton de cet écran sonne, sans avoir à l'annoter (cf. ui/click-sound.ts)
     installUiClickSound(this)
     // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
@@ -50,7 +56,7 @@ export class PauseScene extends Phaser.Scene {
     for (const child of [...this.children.list]) child.destroy()
 
     // voile semi-transparent (plein écran, non ancré à la caméra du niveau)
-    this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x0d1b2a, 0.82).setScrollFactor(0)
+    this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x0d1b2a, 0.82)
     this.add.text(480, 90, 'Pause', { fontSize: '48px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
 
     if (this.showSettings) this.renderSettings()

@@ -56,6 +56,12 @@ export class TrainingScene extends LevelScene {
   }
 
   create() {
+    // ⚠️ PAS DE setScrollFactor(0) DANS CET ÉCRAN, ET C'EST VOLONTAIRE.
+    // La scène appelle centerCamera() (core/viewport.ts), qui décale la caméra de −BLEED_X pour recentrer
+    // l'espace de conception 0→960 sur un écran plus large. Or un objet en scrollFactor(0) ignore le
+    // défilement de caméra PAR DÉFINITION : il restait donc à sa coordonnée brute, soit 105 px à gauche du
+    // centre réel. Et dans un écran d'interface la caméra ne défile jamais, donc l'épinglage n'apportait
+    // rien. C'est la cause unique du « c'est pas centré » constaté sur plusieurs écrans.
     // chaque bouton de cet écran sonne, sans avoir à l'annoter (cf. ui/click-sound.ts)
     installUiClickSound(this)
     // espace de conception 0→960 recentré sur l'écran élargi (core/viewport.ts) :
@@ -116,10 +122,10 @@ export class TrainingScene extends LevelScene {
   private buildArenaOverlay() {
     this.add.text(480, 20, `Entraînement — ${CLASSES[this.classId!].name}`, {
       fontSize: '20px', color: '#ffd54f', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4,
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(30)
+    }).setOrigin(0.5).setDepth(30)
     this.add.text(480, 44, 'Mana infini · tous les skills au max · dummy invincible · dégâts nuls', {
       fontSize: '12px', color: '#e0f7fa', stroke: '#000000', strokeThickness: 3,
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(30)
+    }).setOrigin(0.5).setDepth(30)
 
     this.overlayButton(345, 92, '◂ Menu', 0x455a64, () => this.returnToMenu())
     this.overlayButton(575, 92, 'Changer de classe ▸', 0x1565c0, () => { audio.playSfx('ui-tap'); this.scene.restart({}) })
@@ -128,7 +134,7 @@ export class TrainingScene extends LevelScene {
   // écran de choix de la classe à essayer (phase picker) : une grille de cartes (classes de base +
   // évolutions). Un clic relance la scène en phase arène avec la classe choisie.
   private buildPicker() {
-    this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x0d1b2a).setScrollFactor(0)
+    this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x0d1b2a)
     this.add.text(480, 40, 'Essaie les classes !', {
       fontSize: '34px', color: '#ffd700', fontStyle: 'bold',
     }).setOrigin(0.5)
@@ -169,7 +175,7 @@ export class TrainingScene extends LevelScene {
     const t = this.add.text(x, y, label, {
       fontSize: '18px', color: '#ffffff', backgroundColor: `#${bg.toString(16).padStart(6, '0')}`,
       padding: { x: 14, y: 8 }, fontStyle: 'bold',
-    }).setOrigin(0.5).setScrollFactor(0).setDepth(31).setInteractive({ useHandCursor: true })
+    }).setOrigin(0.5).setDepth(31).setInteractive({ useHandCursor: true })
     t.on('pointerdown', () => { this.tweens.add({ targets: t, scale: 0.92, duration: 60, yoyo: true }); onTap() })
     return t
   }

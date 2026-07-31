@@ -191,7 +191,11 @@ export class WorldMapScene extends Phaser.Scene {
       }
     }
     dt.render()
-    this.add.image(0, 0, key).setOrigin(0, 0).setDepth(6).setAlpha(this.DARK_ALPHA)
+    // ⚠️ POSÉ À −BLEED_X, PAS À 0. Le voile fait VIEW_W de large, mais la caméra est décalée par
+    // centerCamera : posé à la coordonnée de conception 0, il laissait une BANDE DE 105 px NON
+    // BROUILLARDÉE sur le bord gauche (on y voyait la carte brute) et débordait d'autant à droite.
+    // La texture travaille donc en coordonnées ÉCRAN, et `punch()` y compense l'écart (cf. plus bas).
+    this.add.image(480 - VIEW_W / 2, 0, key).setOrigin(0, 0).setDepth(6).setAlpha(this.DARK_ALPHA)
   }
 
   // DynamicTexture pleine page (réutilisée entre scènes) sur laquelle composer le voile.
@@ -218,7 +222,11 @@ export class WorldMapScene extends Phaser.Scene {
   // le puff `fog-clear` retire tout l'alpha (trou net) ; `fog-guess` n'en retire que ~50 % (voile
   // aminci → on devine). Le puff fait 128 px (rayon 64) → scale = radius/64.
   private punch(dt: Phaser.Textures.DynamicTexture, key: string, x: number, y: number, radius: number) {
-    dt.stamp(key, undefined, x, y, {
+    // Les nœuds sont en coordonnées de CONCEPTION (0→960) alors que la texture du voile couvre
+    // l'ÉCRAN (VIEW_W) et est posée à −BLEED_X. On décale donc ici, à l'unique point de passage de
+    // tous les perçages : sinon chaque trou de révélation serait à 105 px de son nœud.
+    const offX = (VIEW_W - 960) / 2
+    dt.stamp(key, undefined, x + offX, y, {
       scale: (radius * 2) / 128, originX: 0.5, originY: 0.5, blendMode: Phaser.BlendModes.ERASE,
     })
   }
@@ -253,7 +261,14 @@ export class WorldMapScene extends Phaser.Scene {
   // par-dessus pour le contraste. Repli sur le parchemin procédural si l'illustration manque.
   private drawBackground() {
     if (this.textures.exists('map-monde')) {
-      this.add.image(480, 270, 'map-monde').setDisplaySize(VIEW_W, VIEW_H).setDepth(-30)
+      // ⚠️ TAILLE DE CONCEPTION (960×540), PAS VIEW_W — RÉGRESSION CORRIGÉE.
+      // Les NŒUDS de la carte vivent en coordonnées 0→960. Étirer l'illustration sur VIEW_W (1169)
+      // ne déplaçait que le décor : seul x = 480 restait aligné, et la dérive atteignait ~86 px aux
+      // bords — l'étiquette « Prontera » et le marqueur du panda tombaient à DROITE du château
+      // dessiné. En prime, une illustration 16:9 étirée en 2,16:1 se déforme de +22 % en largeur.
+      // Le débord latéral est couvert par un fond sombre, puis par le voile de brouillard.
+      this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x0d1208).setDepth(-31)
+      this.add.image(480, 270, 'map-monde').setDisplaySize(960, 540).setDepth(-30)
       this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x1a1208, 0.2).setDepth(-29)
       return
     }

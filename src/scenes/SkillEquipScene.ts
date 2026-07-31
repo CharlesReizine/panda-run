@@ -7,7 +7,7 @@ import { energyCostOf } from '../core/skill-executor'
 import { EVOLUTIONS } from '../core/progression'
 import { CLASSES } from '../data/classes'
 import type { ClassId, SkillDef } from '../core/types'
-import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
+import { DESIGN_RIGHT, VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 import { layoutSkillTree } from './skill-tree-layout'
 import { installUiClickSound } from '../ui/click-sound'
 
@@ -143,7 +143,10 @@ export class SkillEquipScene extends Phaser.Scene {
     const tree = layoutSkillTree(skills)
     const byId = new Map(skills.map((sk) => [sk.id, sk]))
 
-    const AREA_TOP = 166, AREA_BOT = 524
+    // ⚠️ AREA_BOT S'ARRÊTE AU-DESSUS DU BOUTON « Reprendre » (posé à y=508, demi-hauteur ~18).
+    // Il valait 524 : la zone de l'arbre passait DERRIÈRE le bouton, qui recouvrait la dernière carte
+    // et rendait deux sorts illisibles sur les classes à 7-8 rangées (chasseur, sorcier, archer).
+    const AREA_TOP = 166, AREA_BOT = 484
     const NODE_W = 176, NODE_H = 46
     const colGap = 40
     const rowH = 54
@@ -233,7 +236,13 @@ export class SkillEquipScene extends Phaser.Scene {
     // DÉFILEMENT VERTICAL si l'arbre dépasse la zone : molette + glisser. Borné aux deux extrémités.
     const overflow = Math.max(0, treeH + 20 - (AREA_BOT - AREA_TOP))
     if (overflow > 0) {
-      this.add.text(VIEW_W - 26, AREA_TOP + 4, '↕', { fontSize: '18px', color: '#4fc3f7' }).setOrigin(1, 0)
+      // ⚠️ EN COORDONNÉE DE CONCEPTION (≤960), PAS VIEW_W. Posé à VIEW_W−26 dans une scène recentrée
+      // par centerCamera, il tombait à x≈1236 sur un écran de 1169 : HORS CADRE. C'était le SEUL
+      // indice qu'on peut faire défiler l'arbre — donc deux sorts paraissaient inatteignables.
+      // Et on l'explicite au lieu d'une flèche seule, que personne n'interprète.
+      this.add.text(DESIGN_RIGHT - 14, AREA_TOP + 2, '↕ glisser', {
+        fontSize: '13px', color: '#4fc3f7', fontStyle: 'bold', backgroundColor: '#0b2536', padding: { x: 6, y: 3 },
+      }).setOrigin(1, 0).setDepth(50)
       let dragging = false, lastY = 0
       const clamp = (dy: number) => { layer.y = Phaser.Math.Clamp(layer.y + dy, -overflow, 0) }
       this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => clamp(-dy * 0.5))
@@ -417,7 +426,8 @@ export class SkillEquipScene extends Phaser.Scene {
       panel.add(this.add.text(580, 470, 'Passif actif ✓', { fontSize: '14px', color: '#ce93d8', fontStyle: 'bold' }).setOrigin(0.5))
     }
 
-    const closeBtn = this.add.text(760, 470, 'Fermer', { fontSize: '14px', color: '#ffffff', backgroundColor: '#455a64', padding: { x: 14, y: 6 } })
+    // 760 = bord DROIT exact du panneau (480+280) : le bouton en dépassait de moitié. Ramené dedans.
+    const closeBtn = this.add.text(716, 470, 'Fermer', { fontSize: '14px', color: '#ffffff', backgroundColor: '#455a64', padding: { x: 14, y: 6 } })
       .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => panel.destroy())
     panel.add(closeBtn)
     // La croix en haut à droite ferme aussi

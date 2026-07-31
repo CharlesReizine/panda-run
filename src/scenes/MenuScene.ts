@@ -94,11 +94,20 @@ export class MenuScene extends Phaser.Scene {
       this.add.text(x, 502, label, { fontSize: '17px', color: '#ffffff', fontStyle: 'bold', backgroundColor: `#${bg.toString(16).padStart(6, '0')}`, padding: { x: 14, y: 8 } })
         .setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', onTap)
 
-    bigBtn(110, '← Retour', 0x33691e, () => this.scene.start('WorldMap'))
-    // l'arbre de compétences REMPLACE la liste qui débordait ici
-    bigBtn(320, '✦ Compétences', 0x1565c0, () => this.scene.start('SkillEquip', { levelKey: 'Menu', standalone: true }))
-    bigBtn(520, '🎒 Inventaire', 0x37474f, () => this.scene.start('Inventory', { return: 'Menu' }))
-    bigBtn(700, '📖 Bestiaire', 0x37474f, () => this.scene.start('Bestiary'))
-    bigBtn(860, '⚔ Entraînement', 0x37474f, () => this.scene.start('Training'))
+    // ⚠️ POSITIONS CALCULÉES, PAS DEVINÉES. Posés à 110/320/520/700/860, « Bestiaire » et
+    // « Entraînement » se chevauchaient (leurs fonds fusionnaient en une seule barre) et le dernier
+    // s'étendait jusqu'à ~985, hors de la zone 0→960. On répartit donc les 5 boutons à pas ÉGAL sur la
+    // largeur utile : impossible de se chevaucher par construction, et rien ne peut sortir du cadre.
+    const actions: [string, number, () => void][] = [
+      ['← Retour', 0x33691e, () => this.scene.start('WorldMap')],
+      // l'arbre de compétences REMPLACE la liste qui débordait ici
+      ['✦ Compétences', 0x1565c0, () => this.scene.start('SkillEquip', { levelKey: 'Menu', standalone: true })],
+      ['🎒 Inventaire', 0x37474f, () => this.scene.start('Inventory', { return: 'Menu' })],
+      ['📖 Bestiaire', 0x37474f, () => this.scene.start('Bestiary')],
+      ['⚔ Entraînement', 0x37474f, () => this.scene.start('Training')],
+    ]
+    const usable = MENU.right - MENU.left
+    const step = usable / actions.length
+    actions.forEach(([label, bg, onTap], i) => bigBtn(MENU.left + step * (i + 0.5), label, bg, onTap))
   }
 }

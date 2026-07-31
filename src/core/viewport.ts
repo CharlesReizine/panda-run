@@ -62,3 +62,19 @@ export function centerCamera(scene: Phaser.Scene): void { // Phaser.Scene = TYPE
   if (BLEED_X === 0) return
   scene.cameras.main.setScroll(-BLEED_X, 0)
 }
+
+// ─── BORDS DE L'ÉCRAN DANS L'ESPACE DE CONCEPTION ────────────────────────────────────────────
+//
+// ⚠️ PIÈGE À COMPRENDRE AVANT DE POSITIONNER QUOI QUE CE SOIT.
+// Dans une scène passée par `centerCamera()`, la caméra est décalée de −BLEED_X : une coordonnée de
+// conception `x` apparaît donc à l'écran en `x + BLEED_X`. Conséquences contre-intuitives :
+//   · le CENTRE de l'écran est la coordonnée 480 (et NON `CX`) ;
+//   · `VIEW_W - 16` tombe HORS CADRE (il apparaîtrait à VIEW_W - 16 + BLEED_X) ;
+//   · la coordonnée 960 n'est pas le bord droit : elle en reste à BLEED_X près.
+// C'est exactement ce qui a rendu l'indicateur de défilement de l'arbre de compétences INVISIBLE.
+//
+// Utiliser ces bornes pour tout ce qu'on veut coller à un bord dans une scène RECENTRÉE. Dans les
+// scènes NON recentrées (LevelScene, TownScene, dont la caméra suit le joueur), les éléments épinglés
+// sont en coordonnées ÉCRAN : c'est là que `CX`/`VIEW_W` sont les bons repères.
+export const DESIGN_LEFT = 480 - VIEW_W / 2
+export const DESIGN_RIGHT = 480 + VIEW_W / 2
