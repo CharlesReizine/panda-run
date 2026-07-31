@@ -9,6 +9,7 @@
 import { decideSync, type SyncAction } from '../core/sync'
 import { loadStamped, save, onSaved, type StampedSave } from '../core/save'
 import { pull, push } from './cloud-save'
+import { publish } from './leaderboard'
 import { BUILD } from '../core/build'
 import type { PlayerState } from '../core/player-state'
 
@@ -43,9 +44,9 @@ export interface SyncOutcome {
 
 // Décide quoi faire, et applique TOUT SAUF le cas ambigu. `demander` est renvoyé tel quel :
 // c'est à l'interface de faire trancher le joueur, jamais à ce module de deviner.
-export async function syncNow(uid: string): Promise<SyncOutcome> {
+export async function syncNow(key: string): Promise<SyncOutcome> {
   const local = loadStamped()
-  const cloud = await pull(uid)
+  const cloud = await pull(key)
   const action = decideSync(local, cloud, readLastSyncedAt())
 
   switch (action) {
@@ -54,7 +55,7 @@ export async function syncNow(uid: string): Promise<SyncOutcome> {
       break
     case 'pousser-le-local':
     case 'garder-le-local':
-      if (local) await pushLocal(uid, local)
+      if (local) await pushLocal(key, local)
       break
     case 'rien':
       // les deux côtés portent le même état : on note juste le point de synchro
@@ -72,9 +73,19 @@ export function adoptCloud(cloud: StampedSave): void {
   writeLastSyncedAt(cloud.savedAt)
 }
 
-export async function pushLocal(uid: string, local: StampedSave): Promise<void> {
-  await push(uid, local.player, local.savedAt, BUILD)
+export async function pushLocal(key: string, local: StampedSave): Promise<void> {
+  await push(key, local.player, local.savedAt, BUILD)
   writeLastSyncedAt(local.savedAt)
+  await publishRank(key, local.player, local.savedAt)
+}
+
+// Ligne de classement : la VITRINE (pseudo, niveau, classe), publique en lecture. Séparée de la
+// sauvegarde, qui reste privée. Échec silencieux : rater une mise à jour de classement ne doit
+// jamais empêcher de jouer ni de sauvegarder.
+async function publishRank(key: string, p: PlayerState, at: number): Promise<void> {
+  try {
+    await publish(key, p.name, p.level, p.classId, at)
+  } catch { /* classement indisponible : sans conséquence sur la partie */ }
 }
 
 // Écriture en cours de partie : DÉBOUNCÉE et « fire-and-forget ». Le jeu ne doit jamais attendre le
@@ -86,24 +97,27 @@ let pending: ReturnType<typeof setTimeout> | null = null
 // Branche la poussée automatique sur TOUTES les sauvegardes locales, via le crochet onSaved de
 // core/save.ts. On s'abonne UNE SEULE FOIS pour la vie de la page et on ne fait ensuite que changer
 // l'utilisateur courant — s'abonner à chaque connexion empilerait les écritures.
-let autoUid: string | null = null
+let autoKey: string | null = null
 let attached = false
 
-export function setAutoPushUser(uid: string | null): void {
-  autoUid = uid
+export function setAutoPushKey(key: string | null): void {
+  autoKey = key
   if (attached) return
   attached = true
   onSaved((player, savedAt) => {
-    if (autoUid) schedulePush(autoUid, player, savedAt)
+    if (autoKey) schedulePush(autoKey, player, savedAt)
   })
 }
 
-export function schedulePush(uid: string, player: PlayerState, savedAt: number, delayMs = 3000): void {
+export function schedulePush(key: string, player: PlayerState, savedAt: number, delayMs = 3000): void {
   if (pending) clearTimeout(pending)
   pending = setTimeout(() => {
     pending = null
-    void push(uid, player, savedAt, BUILD)
-      .then(() => writeLastSyncedAt(savedAt))
+    void push(key, player, savedAt, BUILD)
+      .then(() => {
+        writeLastSyncedAt(savedAt)
+        return publishRank(key, player, savedAt)
+      })
       .catch(() => { /* hors réseau : le local reste en avance, poussé à la prochaine synchro */ })
   }, delayMs)
 }

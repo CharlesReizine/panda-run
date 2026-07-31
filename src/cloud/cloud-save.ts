@@ -1,4 +1,4 @@
-// Lecture/écriture de la sauvegarde dans Firestore : un document par joueur, `saves/{uid}`.
+// Lecture/écriture de la sauvegarde dans Firestore : un document par joueur, `saves/{pseudoKey}`.
 //
 // LA SAUVEGARDE EST STOCKÉE COMME UNE CHAÎNE JSON, pas comme un objet Firestore. C'est délibéré :
 //   - Firestore REFUSE les champs `undefined` (or PlayerState a plein de champs optionnels :
@@ -33,11 +33,11 @@ interface CloudDoc {
 
 // `null` = pas de sauvegarde cloud. Un document illisible est traité EXACTEMENT comme absent : on ne
 // bloque jamais le jeu sur une sauvegarde corrompue (même politique que TitleScene.safeLoad en local).
-export async function pull(uid: string): Promise<StampedSave | null> {
+export async function pull(key: string): Promise<StampedSave | null> {
   const p = getDb()
   if (!p) return null
   const [db, mod] = await Promise.all([p, import('firebase/firestore')])
-  const snap = await mod.getDoc(mod.doc(db, 'saves', uid))
+  const snap = await mod.getDoc(mod.doc(db, 'saves', key))
   if (!snap.exists()) return null
   try {
     const data = snap.data() as CloudDoc
@@ -48,10 +48,10 @@ export async function pull(uid: string): Promise<StampedSave | null> {
   }
 }
 
-export async function push(uid: string, player: PlayerState, savedAt: number, build: string): Promise<void> {
+export async function push(key: string, player: PlayerState, savedAt: number, build: string): Promise<void> {
   const p = getDb()
   if (!p) return
   const [db, mod] = await Promise.all([p, import('firebase/firestore')])
   const payload: CloudDoc = { json: serialize(player, savedAt), savedAt, build }
-  await mod.setDoc(mod.doc(db, 'saves', uid), payload)
+  await mod.setDoc(mod.doc(db, 'saves', key), payload)
 }

@@ -1,15 +1,24 @@
 rules_version = '2';
 
-// Sauvegardes de panda-run : un document par joueur, `saves/{uid}`.
-//
-// Un joueur ne peut lire et écrire QUE son propre document, et seulement authentifié. C'est ici que
-// se joue la sécurité — pas dans la confidentialité de la clé API, qui est publique par conception
-// dans une app web Firebase.
+// Sécurité de panda-run. L'identité vient de l'authentification ANONYME : chaque joueur a un `uid`
+// vérifiable sans avoir jamais tapé de mot de passe. C'est ce qui permet ces règles — sans identité,
+// il faudrait ouvrir l'écriture à tout le monde et n'importe qui pourrait écraser la partie d'un
+// autre ou se déclarer niveau 99 dans le classement.
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // SAUVEGARDES — privées : lisibles et écrivables par leur seul propriétaire.
     match /saves/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
+
+    // CLASSEMENT — la vitrine (pseudo, niveau, classe) est publique EN LECTURE, sinon personne ne
+    // pourrait afficher le tableau. L'écriture reste réservée au propriétaire de la ligne.
+    match /players/{uid} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
     // tout le reste est fermé
     match /{document=**} {
       allow read, write: if false;
