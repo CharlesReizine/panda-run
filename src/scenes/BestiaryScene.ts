@@ -6,7 +6,7 @@ import { getPlayer } from '../state'
 import type { DropEntry, MonsterDef } from '../core/types'
 import { playerXpForMobLevel } from '../core/progression'
 import { SKILLS } from '../data/skills'
-import { BD, CARD, identityBox, skillsBox, lootBox, lootRowH, LOOT_COLS, maxSkillRows, truncate } from './bestiary-layout'
+import { BD, CARD, headerBox, identityBox, skillsBox, lootBox, lootRowH, LOOT_COLS, maxSkillRows, truncate } from './bestiary-layout'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 import { installUiClickSound } from '../ui/click-sound'
 
@@ -176,57 +176,45 @@ export class BestiaryScene extends Phaser.Scene {
     const { label: kindLabel } = monsterKind(m)
 
     // ═══ DISPOSITION EN QUATRE QUARTS (demandée par le user) ═══
-    //   haut-gauche : nom + (niveau), image dessous à gauche
-    //   haut-droite : compétences, séparées par un trait vertical
-    //   bas (fusionné, toute la largeur) : le BUTIN, qui a besoin de largeur
-    // Toute la géométrie vient de scenes/bestiary-layout.ts, vérifiée par
-    // tests/core/bestiary-layout.test.ts sur le VRAI roster : rien ne peut déborder en silence.
+    //   en-tête : nom + (Nv X) JUSTE À CÔTÉ
+    //   haut-gauche : l'image seule · trait vertical · haut-droite : compétences
+    //   bas fusionné, toute la largeur : le BUTIN
+    // ⚠️ AUCUNE STAT (« mets pas les PV, ça sert à rien, juste le niveau c'est ok »). Une version
+    // précédente logeait PV/ATK/DÉF à droite de l'image : ça repoussait le trait au milieu de la fiche
+    // et écrasait les compétences, alors que la consigne était « à droite de ÇA » = de l'image.
+    // Géométrie dans scenes/bestiary-layout.ts, vérifiée par son test sur le VRAI roster.
+    const head = headerBox()
     const ident = identityBox()
     const skl = skillsBox()
     const loot = lootBox()
 
-    // ── QUART HAUT-GAUCHE : identité ──
-    this.add.text(ident.x, ident.y, seen ? m.name : '???', {
-      fontSize: '24px', color: seen ? '#ffffff' : '#78909c', fontStyle: 'bold',
-      wordWrap: { width: ident.w - 96 },
+    // ── EN-TÊTE : nom, puis le niveau entre parenthèses COLLÉ au nom ──
+    const nameTxt = this.add.text(head.x, head.y, seen ? m.name : '???', {
+      fontSize: '25px', color: seen ? '#ffffff' : '#78909c', fontStyle: 'bold',
     }).setOrigin(0, 0)
-    // le niveau ENTRE PARENTHÈSES juste à côté du nom, comme demandé
-    this.add.text(ident.x + ident.w - 4, ident.y + 4, `(Nv ${m.level})`, {
-      fontSize: '17px', color: m.boss ? '#ff5252' : m.mvp ? '#ffd54f' : '#b0bec5', fontStyle: 'bold',
-    }).setOrigin(1, 0)
+    this.add.text(nameTxt.x + nameTxt.width + 10, head.y + 6, `(Nv ${m.level})`, {
+      fontSize: '18px', color: m.boss ? '#ff5252' : m.mvp ? '#ffd54f' : '#b0bec5', fontStyle: 'bold',
+    }).setOrigin(0, 0)
+    // rang (ÉLITE / BOSS) à l'autre bout de la ligne : il qualifie le monstre, pas ses stats
+    if (seen && (m.boss || m.mvp)) this.badge(head.x + head.w - 40, head.y + 14, m, '13px')
 
-    // image DESSOUS À GAUCHE
-    const imgY = ident.y + 34
-    const big = this.add.image(ident.x, imgY, `monster-${m.id}`).setOrigin(0, 0).setDisplaySize(BD.portrait, BD.portrait)
+    // ── QUART HAUT-GAUCHE : l'image seule ──
+    const big = this.add.image(ident.x, ident.y, `monster-${m.id}`).setOrigin(0, 0).setDisplaySize(BD.portrait, BD.portrait)
     if (!seen) big.setTint(SILHOUETTE_TINT).setAlpha(0.85)
-
-    // à droite de l'image, dans le même quart : le rang et les stats compactes
-    const sx = ident.x + BD.portrait + 12
     if (seen) {
-      this.badge(sx + 30, imgY + 8, m, '13px')
-      const stats: [string, string][] = [
-        ['PV', `${m.hp}`], ['ATK', `${m.atk}`], ['DÉF', `${m.def}`],
-        ['XP', `${playerXpForMobLevel(m.level)}`], ['Type', kindLabel],
-      ]
-      stats.forEach(([k, v], i) => {
-        const yy = imgY + 26 + i * 18
-        this.add.text(sx, yy, k, { fontSize: '12px', color: '#78909c' })
-        this.add.text(ident.x + ident.w, yy, v, { fontSize: '12px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(1, 0)
-      })
-    } else {
-      this.add.text(sx, imgY + 30, 'Non découvert.\nVaincs-le pour\nrévéler sa fiche.', {
-        fontSize: '12px', color: '#78909c', fontStyle: 'italic', lineSpacing: 2,
+      this.add.text(ident.x, ident.y + BD.portrait + 6, `${behaviorLabel(m)}\nvaincu ${this.kills[m.id]}×`, {
+        fontSize: '11px', color: '#80cbc4', lineSpacing: 2,
       })
     }
 
-    // ── TRAIT VERTICAL de séparation ──
+    // ── TRAIT VERTICAL, juste après l'image ──
     this.add.rectangle(BD.splitX, ident.y, 2, BD.topH, 0xffffff, 0.22).setOrigin(0.5, 0)
 
     // ── QUART HAUT-DROITE : compétences ──
     this.add.text(skl.x, skl.y, 'COMPÉTENCES', { fontSize: '14px', color: '#80cbc4', fontStyle: 'bold' })
     const skills = seen ? (m.skills ?? []).map((sid) => SKILLS[sid]).filter((sk): sk is NonNullable<typeof sk> => !!sk) : []
     if (!seen) {
-      this.add.text(skl.x, skl.y + 24, 'Fiche verrouillée', { fontSize: '13px', color: '#607d8b', fontStyle: 'italic' })
+      this.add.text(skl.x, skl.y + 24, 'Fiche verrouillée — vaincs ce monstre pour la révéler.', { fontSize: '13px', color: '#607d8b', fontStyle: 'italic', wordWrap: { width: skl.w } })
     } else if (!skills.length) {
       this.add.text(skl.x, skl.y + 24, 'Aucune compétence — attaque simple.', { fontSize: '12px', color: '#78909c', fontStyle: 'italic', wordWrap: { width: skl.w } })
     } else {

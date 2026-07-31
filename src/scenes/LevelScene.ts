@@ -853,9 +853,15 @@ export class LevelScene extends Phaser.Scene {
     this.showTutoOnce()
   }
 
-  // tuto d'intro : au tout premier niveau joué, un panneau non bloquant rappelle les
-  // contrôles ; un tap le ferme ; un flag localStorage garantit qu'il n'apparaît qu'une fois
+  // Tuto d'intro : panneau non bloquant rappelant les contrôles, fermé d'un tap.
+  //
+  // DEUX conditions, et la première est le correctif. Le drapeau localStorage seul ne suffisait pas :
+  // il ne garantit qu'« une fois par navigateur », donc après un changement de domaine ou un cache
+  // vidé, le tuto réapparaissait — et sur le terrain où on se trouvait à ce moment-là, pas sur le
+  // premier (constaté sur une capture : affiché en pleine partie sur Bocage). On exige donc AUSSI
+  // d'être sur le tout PREMIER terrain du jeu : hors de plaine-1, il ne peut plus surgir, jamais.
   private showTutoOnce() {
+    if (this.levelDef.id !== 'plaine-1') return
     const TUTO_KEY = 'panda-run:tuto-vu'
     try {
       if (typeof localStorage === 'undefined' || localStorage.getItem(TUTO_KEY) === '1') return

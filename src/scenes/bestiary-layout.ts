@@ -2,13 +2,20 @@
 // test de non-débordement (tests/core/bestiary-layout.test.ts).
 //
 // DISPOSITION EN QUATRE QUARTS, telle que demandée par le user :
-//   ┌──────────────────────┬──────────────────────┐
-//   │ nom (Nv X)           │  (trait vertical)    │
-//   │ image dessous, à     │  compétences         │
-//   │ gauche               │                      │
-//   ├──────────────────────┴──────────────────────┤
+//   ┌─────────────────────────────────────────────┐
+//   │ Angeling (Nv 8)          ← nom, niveau à côté│
+//   ├──────────┬──────────────────────────────────┤
+//   │ image    │ (trait) COMPÉTENCES              │
+//   │          │                                  │
+//   ├──────────┴──────────────────────────────────┤
 //   │ BUTIN — sur TOUTE la largeur                │
 //   └─────────────────────────────────────────────┘
+//
+// ⚠️ AUCUNE STAT DANS CETTE FICHE, ET C'EST DEMANDÉ : « mets pas les PV ça sert à rien, juste le
+// niveau c'est ok ». Une version précédente logeait PV/ATK/DÉF à droite de l'image, ce qui repoussait
+// le trait vertical au milieu de la fiche et écrasait les compétences — alors que la consigne disait
+// « à droite de ÇA », c'est-à-dire à droite de l'image. Le quart gauche fait donc la largeur de
+// l'image, et les compétences prennent tout le reste.
 // Les deux quarts du haut sont indépendants ; les deux du bas sont fusionnés pour le butin, qui a
 // besoin de largeur (image + nom + probabilité par ligne).
 //
@@ -26,13 +33,15 @@ export const CARD = {
 }
 
 export const BD = {
-  /** colonne de séparation entre le quart « identité » et le quart « compétences » */
-  splitX: 430,
-  /** hauteur de la bande du haut (identité / compétences) */
-  topH: 190,
-  gap: 10,
+  /** hauteur de la ligne d'en-tête (nom + niveau), au-dessus des deux quarts */
+  headerH: 34,
   /** taille de l'illustration du monstre */
   portrait: 118,
+  /** colonne de séparation : juste après l'image, pas au milieu de la fiche */
+  splitX: 24 + 118 + 18,
+  /** hauteur de la bande du haut (image / compétences) */
+  topH: 168,
+  gap: 10,
   /** hauteur d'une ligne de compétence et d'une ligne de butin */
   skillRowH: 40,
   lootRowH: 34,
@@ -42,18 +51,24 @@ export const BD = {
 
 export interface Rect { x: number; y: number; w: number; h: number }
 
+/** Ligne d'en-tête : le nom, et le niveau JUSTE À CÔTÉ entre parenthèses. Toute la largeur. */
+export const headerBox = (): Rect => ({
+  x: CARD.left, y: CARD.top, w: CARD.right - CARD.left, h: BD.headerH,
+})
+
+/** Quart gauche : l'illustration seule, sous l'en-tête. */
 export const identityBox = (): Rect => ({
-  x: CARD.left, y: CARD.top, w: BD.splitX - CARD.left - BD.gap, h: BD.topH,
+  x: CARD.left, y: CARD.top + BD.headerH, w: BD.splitX - CARD.left - BD.gap, h: BD.topH,
 })
 
 export const skillsBox = (): Rect => ({
-  x: BD.splitX + BD.gap, y: CARD.top, w: CARD.right - BD.splitX - BD.gap, h: BD.topH,
+  x: BD.splitX + BD.gap, y: CARD.top + BD.headerH, w: CARD.right - BD.splitX - BD.gap, h: BD.topH,
 })
 
 /** Bande du butin : sous les deux quarts du haut, sur TOUTE la largeur. */
 export const lootBox = (): Rect => ({
-  x: CARD.left, y: CARD.top + BD.topH + BD.gap,
-  w: CARD.right - CARD.left, h: CARD.bottom - (CARD.top + BD.topH + BD.gap),
+  x: CARD.left, y: CARD.top + BD.headerH + BD.topH + BD.gap,
+  w: CARD.right - CARD.left, h: CARD.bottom - (CARD.top + BD.headerH + BD.topH + BD.gap),
 })
 
 /** Nombre de colonnes de butin : le butin s'étale en largeur plutôt qu'en hauteur. */

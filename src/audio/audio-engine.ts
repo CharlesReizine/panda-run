@@ -95,6 +95,14 @@ class AudioEngine {
   private nextStepTime = 0
   // musique de fond : élément média HTML (robuste iOS), une seule piste pour tout le jeu
   private music: HTMLAudioElement | null = null
+  // Nœud qui injecte la piste média DANS le graphe Web Audio.
+  //
+  // ⚠️ C'EST LA CLÉ DU VOLUME SUR iOS. Safari iOS IGNORE `HTMLMediaElement.volume` : le régler par
+  // programmation ne fait RIEN sur iPhone (c'est pourquoi le bouton muet, lui, met en PAUSE au lieu de
+  // baisser le volume). L'atténuation sous l'eau ne s'entendait donc que sur ordinateur. Router
+  // l'élément via createMediaElementSource → musicGain rend le volume pilotable partout, parce que
+  // c'est alors un GainNode Web Audio qui décide, plus l'élément média.
+  private musicSrc: MediaElementAudioSourceNode | null = null
   private musicWanted = false // playMusic a été demandé au moins une fois
   // Anti-doublon du clic d'interface. Deux sources peuvent le déclencher pour un même appui : le
   // crochet global (ui/click-sound.ts) et les appels explicites restés dans certaines scènes. Sans
@@ -136,7 +144,7 @@ class AudioEngine {
       master.gain.value = this.masterLevel()
       master.connect(ctx.destination)
       const music = ctx.createGain()
-      music.gain.value = 0.18 // musique volontairement sous les SFX
+      music.gain.value = MUSIC_VOLUME * this.volume // piloté ensuite par applyMusicLevel (ducking inclus)
       // filtre passe-bas doux sur tout le bus musique : arrondit le timbre, retire la dureté aiguë
       const musicFilter = ctx.createBiquadFilter()
       musicFilter.type = 'lowpass'
@@ -150,6 +158,9 @@ class AudioEngine {
       this.master = master
       this.musicGain = music
       this.sfxGain = sfx
+      // la piste média a pu être créée AVANT le contexte (playMusic au tout premier écran) : on la
+      // branche maintenant, sinon son volume resterait à la merci de l'élément — ignoré sur iOS.
+      this.connectMusicGraph()
       return true
     } catch {
       return false
@@ -171,11 +182,32 @@ class AudioEngine {
     const target = on ? 0.08 : 1
     if (this.duck === target) return
     this.duck = target
-    this.applyMusicState()
-    // le bus musique de la synthèse suit aussi, sinon seule la piste média serait atténuée
+    this.applyMusicLevel()
+  }
+
+  // Branche la piste média sur le bus musique du graphe Web Audio. Idempotent, et sans effet si le
+  // contexte n'existe pas encore (il naît au premier geste utilisateur) : on rappellera plus tard.
+  private connectMusicGraph() {
+    if (this.musicSrc || !this.ctx || !this.music || !this.musicGain) return
+    try {
+      this.musicSrc = this.ctx.createMediaElementSource(this.music)
+      this.musicSrc.connect(this.musicGain)
+      // une fois routé dans le graphe, c'est musicGain qui porte le volume : l'élément reste à 1
+      this.music.volume = 1
+      this.applyMusicLevel()
+    } catch { /* déjà routé, ou média non éligible : on retombe sur le volume de l'élément */ }
+  }
+
+  // Niveau du bus musique = volume de référence × réglage utilisateur × atténuation (ducking).
+  private applyMusicLevel() {
+    const level = MUSIC_VOLUME * this.volume * this.duck
     if (this.musicGain && this.ctx) {
-      this.musicGain.gain.setTargetAtTime(0.18 * target, this.ctx.currentTime, 0.12)
+      // rampe courte : un saut de gain claque, et on veut que la baisse s'ENTENDE comme une immersion
+      this.musicGain.gain.setTargetAtTime(level, this.ctx.currentTime, 0.1)
     }
+    // Repli pour les navigateurs où le routage a échoué. Sans effet sur iOS (volume ignoré), ce qui
+    // était précisément le bug.
+    if (this.music && !this.musicSrc) this.music.volume = level
   }
 
   // à appeler sur un geste utilisateur (iOS/Safari bloquent le son sinon)
@@ -458,7 +490,8 @@ class AudioEngine {
         this.music = el
       }
       if (!this.music) return
-      this.music.volume = MUSIC_VOLUME * this.volume * this.duck
+      this.connectMusicGraph()
+      this.applyMusicLevel()
       if (this.muted || !this.musicWanted) {
         this.music.pause()
       } else {

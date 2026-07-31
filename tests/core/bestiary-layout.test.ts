@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  CARD, BD, identityBox, skillsBox, lootBox, LOOT_COLS,
+  CARD, BD, headerBox, identityBox, skillsBox, lootBox, LOOT_COLS,
   lootRowH, lootBottom, lootFits, maxSkillRows, skillsBottom, skillsFit, truncate,
 } from '../../src/scenes/bestiary-layout'
 import { MONSTERS } from '../../src/data/monsters'
@@ -36,7 +36,7 @@ describe('les quatre quarts', () => {
   })
 
   it('les trois zones tiennent dans la zone utile de la fiche', () => {
-    const zones = { identite: identityBox(), competences: skillsBox(), butin: lootBox() }
+    const zones = { entete: headerBox(), identite: identityBox(), competences: skillsBox(), butin: lootBox() }
     for (const [name, r] of Object.entries(zones)) {
       expect(r.x, `${name}.x`).toBeGreaterThanOrEqual(CARD.left)
       expect(r.x + r.w, `${name} droite`).toBeLessThanOrEqual(CARD.right)
@@ -45,10 +45,25 @@ describe('les quatre quarts', () => {
     }
   })
 
-  it('l\'illustration tient dans le quart d\'identité, sous la ligne du nom', () => {
+  it('l\'illustration tient dans le quart gauche', () => {
     const box = identityBox()
-    expect(BD.portrait).toBeLessThanOrEqual(box.w)
-    expect(34 + BD.portrait, 'nom + image').toBeLessThanOrEqual(box.h)
+    expect(BD.portrait, 'largeur').toBeLessThanOrEqual(box.w)
+    expect(BD.portrait, 'hauteur').toBeLessThanOrEqual(box.h)
+  })
+
+  it('l\'en-tête est AU-DESSUS des deux quarts et occupe toute la largeur', () => {
+    const h = headerBox(), a = identityBox()
+    expect(h.y + h.h).toBeLessThanOrEqual(a.y)
+    expect(h.x).toBe(CARD.left)
+    expect(h.x + h.w).toBe(CARD.right)
+  })
+
+  it('le trait vertical est JUSTE APRÈS l\'image, pas au milieu de la fiche', () => {
+    // la consigne était « à droite de ÇA » (= de l'image) : le quart des compétences doit donc
+    // occuper la MAJORITÉ de la largeur, ce qui n'était pas le cas quand des stats s'y glissaient
+    const gauche = identityBox().w
+    const droite = skillsBox().w
+    expect(droite, 'les compétences doivent avoir bien plus de place que l\'image').toBeGreaterThan(gauche * 3)
   })
 })
 
