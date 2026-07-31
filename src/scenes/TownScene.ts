@@ -800,13 +800,17 @@ export class TownScene extends Phaser.Scene {
   private iconFor(itemId: string): { texture: string } | { pastille: number; glyph: string } {
     if (this.textures.exists(`item-${itemId}`)) return { texture: `item-${itemId}` }
     const item = ITEMS[itemId]!
-    if (item.slot === 'hat') return { texture: `cosmetic-${itemId}` }
+    // ⚠️ ON VÉRIFIE QUE LA TEXTURE EXISTE. Les chapeaux sans PNG sont dessinés vectoriellement
+    // (cosmetic-<id>), mais seuls CERTAINS le sont : demander une clé absente fait afficher à Phaser sa
+    // texture « __MISSING », un carré vert fluo — bien pire que la pastille de repli.
+    if (item.slot === 'hat' && this.textures.exists(`cosmetic-${itemId}`)) return { texture: `cosmetic-${itemId}` }
     // même repli que l'inventaire : la silhouette d'arme dessinée au chargement plutôt qu'une pastille
     if (item.slot === 'weapon' && this.textures.exists(`weapon-${itemId}`)) return { texture: `weapon-${itemId}` }
     const bySlot = {
       weapon: { pastille: 0xe64a19, glyph: 'ATK' },
       armor: { pastille: 0x1e88e5, glyph: 'DEF' },
       accessory: { pastille: 0x43a047, glyph: 'PV' },
+      hat: { pastille: 0x8e24aa, glyph: 'TÊTE' },
     } as const
     return bySlot[item.slot]
   }

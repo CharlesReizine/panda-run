@@ -17,13 +17,73 @@ const COSMETIC_DRAWN = new Set([
   'couronne-glace', 'masque-demon',
 ])
 
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// DETTE D'ILLUSTRATIONS — ASSUMÉE, ET COMPTÉE À L'UNITÉ
+//
+// Le roster est passé de 61 à 150 objets sur demande du user (« il me faut des tonnes de trucs »), avec
+// son accord explicite sur les visuels : « s'il manque quelques visuels on les générera ».
+//
+// ⚠️ CETTE LISTE EST UN INVENTAIRE, PAS UNE DÉROGATION. Elle est écrite en dur ICI, et pas lue depuis
+// docs/art-a-generer.md, exprès : si le test lisait le fichier généré, il suffirait de relancer le script
+// pour faire taire le test — la dette deviendrait invisible, ce qui est exactement le problème qu'on veut
+// éviter. Ajouter un objet sans illustration force donc à venir l'inscrire ici à la main.
+//
+// Deux directions de vérification, et la seconde compte autant que la première :
+//   · un objet sans image ET absent de la liste → échec (on a oublié l'art) ;
+//   · un objet PRÉSENT dans la liste qui a MAINTENANT son PNG → échec aussi (entrée périmée). La liste
+//     ne peut donc que rétrécir à mesure que les illustrations arrivent, et ne se transforme jamais en
+//     fourre-tout dont personne ne sait ce qu'il contient encore.
+//
+// Régénérer l'état des lieux : `node scripts/art-manquant.mjs` → docs/art-a-generer.md
+const ART_A_GENERER = new Set([
+  'couteau-de-chasse', 'glaive-de-fer', 'rapiere', 'hache-de-guerre',
+  'epee-batarde', 'sabre-de-samourai', 'claymore', 'epee-du-croise',
+  'lame-du-neant', 'epee-du-jugement', 'fronde', 'arc-de-chasse',
+  'arc-en-if', 'arbalete-lourde', 'arc-de-glace', 'arc-du-faucon',
+  'arc-de-braise', 'arc-du-crepuscule', 'arc-des-etoiles', 'branche-tordue',
+  'baton-de-novice', 'baton-d-ebene', 'sceptre-de-jade', 'baton-de-tempete',
+  'sceptre-d-ombre', 'baton-des-marees', 'sceptre-du-chaos', 'baton-de-l-aube',
+  'tunique-de-lin', 'gilet-de-cuir', 'robe-d-apprenti', 'brigandine',
+  'manteau-de-voyageur', 'cuirasse-de-bronze', 'armure-d-ecailles', 'robe-de-mage',
+  'jaque-de-mailles', 'plastron-d-os', 'carapace-de-tortue', 'cotte-de-givre',
+  'justaucorps-d-ombre', 'harnois-de-fer', 'armure-de-lamelles', 'robe-arcanique',
+  'cuirasse-du-croise', 'armure-de-mithril', 'toge-du-sage', 'surcot-du-templier',
+  'cuirasse-de-magma', 'plastron-de-dragon', 'armure-d-obsidienne', 'robe-celeste',
+  'armure-du-valhalla', 'carapace-du-roi-scarabee', 'casquette-de-toile', 'foulard-de-pirate',
+  'cagoule-de-voleur', 'heaume-de-bronze', 'couronne-de-fleurs', 'masque-de-renard',
+  'casque-a-plumet', 'mitre-du-clerc', 'bandeau-du-moine', 'heaume-du-chevalier',
+  'chapeau-du-magicien', 'couronne-de-laurier', 'casque-de-dragon', 'couronne-du-roi-demon',
+  'anneau-de-cuivre', 'pendentif-de-bois', 'boucle-d-oreille', 'gant-de-toile',
+  'brassard-de-fer', 'collier-de-crocs', 'anneau-de-rubis', 'anneau-de-saphir',
+  'amulette-d-ambre', 'gants-de-combat', 'broche-d-argent', 'ceinture-de-force',
+  'talisman-d-os', 'anneau-du-mage', 'bracelet-de-mithril', 'pendentif-du-loup',
+  'oeil-de-basilic', 'amulette-de-l-aube', 'anneau-du-dragon', 'coeur-de-golem',
+  'larme-d-etoile', 'sceau-des-anciens',
+])
+
 const hasPng = (id: string) => artPaths.some((p) => p.endsWith(`/item-${id}.png`))
+const aUnVisuel = (id: string, slot: string) => hasPng(id) || (slot === 'hat' && COSMETIC_DRAWN.has(id))
 
 describe('complétude des images d\'objets', () => {
-  it('chaque objet a une image (PNG illustré OU chapeau dessiné cosmetic-<id>)', () => {
-    const missing = Object.values(ITEMS)
-      .filter((it) => !hasPng(it.id) && !(it.slot === 'hat' && COSMETIC_DRAWN.has(it.id)))
+  it('chaque objet a une image, ou figure explicitement dans la dette', () => {
+    const oublies = Object.values(ITEMS)
+      .filter((it) => !aUnVisuel(it.id, it.slot) && !ART_A_GENERER.has(it.id))
       .map((it) => `${it.slot}:${it.id}`)
-    expect(missing, `objets sans image : ${missing.join(', ')}`).toEqual([])
+    expect(oublies, `objets sans image et hors de la dette : ${oublies.join(', ')}`).toEqual([])
+  })
+
+  it('la dette ne contient aucune entrée périmée — un objet illustré doit en sortir', () => {
+    const perimes = [...ART_A_GENERER].filter((id) => {
+      const it = ITEMS[id]
+      return !it || aUnVisuel(it.id, it.slot)
+    })
+    expect(perimes, `à retirer de ART_A_GENERER : ${perimes.join(', ')}`).toEqual([])
+  })
+
+  it('les ARMES restent lisibles sans PNG : leur silhouette est dessinée au chargement', () => {
+    // bakeItemWeapons (PreloadScene) fabrique weapon-<id> pour CHAQUE arme, et l'inventaire comme la
+    // boutique s'en servent en repli. Une arme en dette n'affiche donc jamais de pastille de couleur.
+    const armesEnDette = [...ART_A_GENERER].filter((id) => ITEMS[id]?.slot === 'weapon')
+    for (const id of armesEnDette) expect(ITEMS[id]!.weaponType, id).toBeDefined()
   })
 })
