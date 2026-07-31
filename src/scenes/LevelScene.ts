@@ -34,6 +34,7 @@ import { CX, CY, VIEW_H, VIEW_W } from '../core/viewport'
 import { makeJag } from '../art/jagged-ring'
 import { CastBar } from '../entities/cast-bar'
 import { skillSfx } from '../audio/skill-sfx'
+import { flammeGain, flammeIntervalle, flammeAudible, FLAMME_PORTEE } from '../core/flame-ambience'
 
 // biomes → piste musicale ; 'carriere' n'a pas d'ambiance dédiée → repli sur 'montagne'
 const BIOME_TRACKS: Record<string, MusicTrack> = {
@@ -143,6 +144,7 @@ export class LevelScene extends Phaser.Scene {
   // Prochaine émission du thème d'élite. Ce n'est PAS une annonce ponctuelle : le motif se répète
   // tant qu'un élite est vivant ET dans le champ de la caméra, et se coupe dès qu'il meurt ou sort.
   private eliteSfxAt = 0
+  private flammeSfxAt = 0
   private dashUntil = 0
   private dashCooldownUntil = 0
   private nextBasicAttackAt = 0
@@ -231,6 +233,7 @@ export class LevelScene extends Phaser.Scene {
     // détruits et le niveau suivant les repositionnerait à chaque frame. C'est exactement le piège qui
     // avait laissé l'interface cibler les objets du niveau précédent.
     this.playerCast = null
+    this.flammeSfxAt = 0
 
     // la scène est réutilisée entre niveaux : ces états doivent repartir de zéro
     this.ladderRects = []
@@ -4277,6 +4280,41 @@ export class LevelScene extends Phaser.Scene {
     audio.setUnderwater(touchingWater)
   }
 
+  /**
+   * Crépitement de fond des murs de flammes proches — demande du user : « même quand y a des petits murs
+   * de flamme tu peux mettre un petit bruit de fond flamme ».
+   *
+   * On prend la flamme la PLUS PROCHE du panda, et seulement parmi celles visibles à l'écran : sur un
+   * terrain qui en compte une dizaine, additionner leurs contributions donnerait un grondement continu
+   * qui ne dit plus rien de l'endroit où il faut faire attention. Volume ET cadence dépendent de la
+   * distance (cf. core/flame-ambience.ts) ; à cadence fixe, ça sonnerait comme un métronome.
+   *
+   * Deux sources comptent : les murs de flammes du TERRAIN (hazards 'spikes') et ceux INVOQUÉS par le
+   * mage, qui sont du feu à l'écran tout autant.
+   */
+  private flameAmbience() {
+    const view = this.cameras.main.worldView
+    const px = this.player.x, py = this.player.y
+    let plusProche = Number.POSITIVE_INFINITY
+
+    for (const hz of this.levelDef.hazards ?? []) {
+      if (hz.kind !== 'spikes') continue
+      const cx = (hz.x + hz.w / 2) * TILE
+      if (cx < view.x - FLAMME_PORTEE || cx > view.right + FLAMME_PORTEE) continue
+      plusProche = Math.min(plusProche, Math.abs(cx - px))
+    }
+    for (const obj of this.flameWalls.getChildren()) {
+      const w = obj as Phaser.GameObjects.Sprite
+      if (!w.active) continue
+      plusProche = Math.min(plusProche, Phaser.Math.Distance.Between(px, py, w.x, w.y))
+    }
+
+    if (!flammeAudible(plusProche)) { this.flammeSfxAt = 0; return }
+    if (this.time.now < this.flammeSfxAt) return
+    audio.playSfx('flamme', flammeGain(plusProche))
+    this.flammeSfxAt = this.time.now + flammeIntervalle(plusProche)
+  }
+
   private eliteAmbience() {
     const view = this.cameras.main.worldView
     let present = false
@@ -4294,6 +4332,7 @@ export class LevelScene extends Phaser.Scene {
     // barre de chargement du panda : au-dessus de sa tête, elle se démonte seule à la fin
     this.playerCast?.update(this.time.now, this.player.x, this.player.y - this.player.displayHeight / 2 - 8)
     this.eliteAmbience()
+    this.flameAmbience()
     this.underwaterDucking()
     const sx = this.cameras.main.scrollX
     if (this.bgClouds) this.bgClouds.tilePositionX = sx * 0.1

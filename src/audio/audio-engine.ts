@@ -21,6 +21,8 @@ export type SfxName =
   // familles est dans audio/skill-sfx.ts (pur et testé), pas dispersé dans les scènes.
   | 'sort-feu' | 'sort-glace' | 'sort-foudre' | 'sort-arcane' | 'sort-soin'
   | 'coup-lame' | 'tir-fleche' | 'sort-buff'
+  // ambiance : crépitement d'un mur de flammes proche (cf. core/flame-ambience.ts)
+  | 'flamme'
 
 export type MusicTrack =
   | 'titre' | 'ville' | 'carte' | 'plaine' | 'foret' | 'desert' | 'cave'
@@ -120,6 +122,8 @@ class AudioEngine {
   // Atténuation temporaire de la musique (sous l'eau). Multiplie le volume au lieu de le remplacer,
   // pour ne jamais écraser le réglage utilisateur.
   private duck = 1
+  // facteur de volume de l'effet en cours (cf. playSfx) : 1 sauf pour les ambiances distantes
+  private sfxScale = 1
 
   constructor() {
     // lecture de l'état muet — sans effet de bord audio (localStorage seulement)
@@ -285,6 +289,7 @@ class AudioEngine {
 
   // oscillateur + enveloppe de gain rapide (attaque quasi nulle, decay exponentiel)
   private tone(wave: Wave, freq: number, at: number, dur: number, peak: number, freqEnd?: number) {
+    peak *= this.sfxScale
     const ctx = this.ctx!
     const osc = ctx.createOscillator()
     const g = ctx.createGain()
@@ -301,6 +306,7 @@ class AudioEngine {
 
   // bruit blanc filtré (impacts, souffles)
   private noise(at: number, dur: number, peak: number, filterType: BiquadFilterType, cutoff: number) {
+    peak *= this.sfxScale
     const ctx = this.ctx!
     const src = ctx.createBufferSource()
     src.buffer = this.getNoise()
@@ -340,7 +346,16 @@ class AudioEngine {
     osc.stop(at + dur + 0.02)
   }
 
-  playSfx(name: SfxName) {
+  /**
+   * Joue un effet. `gain` (1 par défaut) met l'effet à l'échelle — utilisé par les ambiances qui
+   * doivent faiblir avec la distance (murs de flammes).
+   *
+   * ⚠️ LE FACTEUR EST UN CHAMP LU PAR tone()/noise(), PAS UN PARAMÈTRE PROPAGÉ. Les cas du switch
+   * appellent ces helpers des dizaines de fois ; leur ajouter un argument aurait demandé de le penser à
+   * chaque appel, et un oubli aurait été silencieux. Le champ est remis à 1 en sortie, dans un finally :
+   * un effet qui lèverait une exception ne doit pas laisser tout le reste du jeu à volume réduit.
+   */
+  playSfx(name: SfxName, gain = 1) {
     if (this.muted) return
     if (!this.ensure() || !this.ctx) return
     if (this.ctx.state === 'suspended') void this.ctx.resume()
@@ -350,6 +365,8 @@ class AudioEngine {
       if (now - this.lastUiTapAt < 60) return
       this.lastUiTapAt = now
     }
+    this.sfxScale = gain
+    try {
     switch (name) {
       case 'jump':
         this.tone('square', 320, t, 0.16, 0.5, 640)
@@ -435,6 +452,14 @@ class AudioEngine {
         this.tone('sine', 1600, t, 0.1, 0.2, 500)
         break
       // BUFF : gonflement ASCENDANT et tenu, plus long que les autres — on doit sentir que ça dure.
+      // CRÉPITEMENT DE FLAMMES : deux souffles de bruit filtré à des hauteurs différentes, plus un
+      // claquement sec de braise. Volontairement court et discret — il se répète tant qu'on longe le feu,
+      // donc tout ce qui traîne devient vite lassant. Le volume est piloté par le paramètre `gain`.
+      case 'flamme':
+        this.noise(t, 0.16, 0.16, 'bandpass', 700)
+        this.noise(t + 0.04, 0.1, 0.1, 'highpass', 2600)
+        this.tone('sawtooth', 120, t, 0.07, 0.07, 70)
+        break
       case 'sort-buff':
         this.tone('triangle', 220, t, 0.42, 0.26, 660)
         this.tone('sine', 440, t + 0.08, 0.34, 0.16, 880)
@@ -526,6 +551,9 @@ class AudioEngine {
         }
         break
       }
+    }
+    } finally {
+      this.sfxScale = 1
     }
   }
 
