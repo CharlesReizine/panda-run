@@ -14,6 +14,11 @@
 // Le doublon avec un appel explicite resté dans une scène est absorbé en amont : l'AudioEngine ignore
 // un 'ui-tap' survenant moins de 60 ms après le précédent.
 
+// ⚠️ IMPORT INDISPENSABLE : ce fichier lit `Phaser.Input.Events.GAMEOBJECT_DOWN` À L'EXÉCUTION.
+// Son absence a cassé la build R285 en production (« ReferenceError: Can't find variable: Phaser »
+// dès le premier create(), donc boot mort et boucle figée) — et `tsc` NE PEUT PAS l'attraper, car
+// phaser déclare un namespace `Phaser` GLOBAL côté types : le fichier compile sans broncher.
+import Phaser from 'phaser'
 import { audio } from '../audio/audio-engine'
 
 export function installUiClickSound(scene: Phaser.Scene): void {

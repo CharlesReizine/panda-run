@@ -57,7 +57,7 @@ export const CY = VIEW_H / 2
  * ⚠️ N'agit PAS sur les objets en `setScrollFactor(0)` (HUD épinglé) : par définition ils ignorent le
  * défilement de caméra. Ceux-là doivent être positionnés explicitement (cf. UIScene).
  */
-export function centerCamera(scene: Phaser.Scene): void {
+export function centerCamera(scene: Phaser.Scene): void { // Phaser.Scene = TYPE seul (effacé à la compilation), aucun import requis
   if (BLEED_X === 0) return
   scene.cameras.main.setScroll(-BLEED_X, 0)
 }

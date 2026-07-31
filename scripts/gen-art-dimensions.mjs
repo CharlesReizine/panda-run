@@ -80,3 +80,47 @@ export function capFor(name: string): ArtCap {
 const totalMB = images.reduce((s, i) => s + i.w * i.h * 4, 0) / 1048576
 const bootMB = images.filter((i) => !capFor(i.name).lazy).reduce((s, i) => s + i.w * i.h * 4, 0) / 1048576
 console.log(`art-dimensions.generated.ts : ${images.length} images — VRAM totale ${totalMB.toFixed(1)} Mo, résidente au boot ${bootMB.toFixed(1)} Mo (budget ${BOOT_BUDGET_MB} Mo)`)
+
+// ─── GARDE-FOU : usage de `Phaser` À L'EXÉCUTION sans import ──────────────────────────────────
+// La build R285 est partie en production avec un « ReferenceError: Can't find variable: Phaser »
+// qui tuait le boot dès le premier create(). `tsc` ne peut PAS l'attraper : phaser déclare un
+// namespace `Phaser` GLOBAL côté types, donc un fichier qui lit `Phaser.Input.Events.X` sans
+// importer phaser compile parfaitement et casse seulement dans le navigateur.
+//
+// On échoue donc la BUILD. On ne signale que les usages de VALEUR (`Phaser.Xxx` suivi d'un accès),
+// pas les annotations de TYPE (`: Phaser.Scene`, `<Phaser.GameObjects.Text>`), qui sont effacées à
+// la compilation et n'ont besoin d'aucun import.
+function checkPhaserImports() {
+  const offenders = []
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name)
+      if (entry.isDirectory()) { walk(full); continue }
+      if (!entry.name.endsWith('.ts')) continue
+      const src = readFileSync(full, 'utf8')
+      if (/^import Phaser from 'phaser'/m.test(src)) continue
+      const hits = new Set()
+      for (const line of src.split('\n')) {
+        const code = line.replace(/\/\/.*$/, '') // on ignore les commentaires
+        // usage de VALEUR : `Phaser.X` qui n'est PAS précédé de ':' '<' '|' 'as' (= annotation de type)
+        const re = /(^|[^\w:<|])Phaser\.([A-Za-z_$][\w$]*)/g
+        let m
+        while ((m = re.exec(code))) {
+          const before = code.slice(0, m.index + m[1].length).trimEnd()
+          if (/[:<|]$/.test(before) || /\bas$/.test(before)) continue // annotation de type
+          hits.add('Phaser.' + m[2])
+        }
+      }
+      if (hits.size) offenders.push(`${full} → ${[...hits].join(', ')}`)
+    }
+  }
+  walk('src')
+  if (offenders.length) {
+    console.error('\n❌ `Phaser` utilisé à l\'EXÉCUTION sans `import Phaser from \'phaser\'` :')
+    for (const o of offenders) console.error('   ' + o)
+    console.error('\n   tsc ne voit pas ce bug (namespace Phaser global côté types) — il ne casse QU\'À L\'EXÉCUTION.')
+    process.exit(1)
+  }
+}
+checkPhaserImports()
+console.log('garde-fou : aucun usage de Phaser sans import')
