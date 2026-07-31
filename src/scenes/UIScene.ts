@@ -215,18 +215,22 @@ export class UIScene extends Phaser.Scene {
     // ⚠️ L'ORDRE DE CRÉATION COMPTE POUR LES TAPS. Phaser donne la priorité au dernier objet interactif
     // ajouté quand deux zones se superposent. Ici elles ne se superposent pas (vérifié par le test), mais
     // on garde l'ordre attaque → saut → potion pour que ça reste vrai si les rayons grossissent un jour.
+    // ⚠️ fromRight ET PAS R() : les commandes de droite sont COLLÉES au bord, sans marge de sûreté
+    // (« le triangle à droite il faut le coller à droite, pas de marge »). La marge ne sert qu'à esquiver
+    // la caméra de l'iPhone, qui est du côté GAUCHE en paysage.
+    const X = (d: number) => fromRight(d)
     const mkRond = (b: typeof PAD.attaque, couleur: number, alpha: number) =>
-      this.add.circle(R(b.droite), b.y, b.r, couleur, alpha)
+      this.add.circle(X(b.droite), b.y, b.r, couleur, alpha)
         .setInteractive(new Phaser.Geom.Circle(b.r, b.r, b.rTap), Phaser.Geom.Circle.Contains)
 
     const atk = mkRond(PAD.attaque, 0xfb8c00, 0.72)
-    this.add.image(R(PAD.attaque.droite), PAD.attaque.y, 'ui-attack').setDisplaySize(PAD.attaque.r * 1.05, PAD.attaque.r * 1.05)
-    this.add.text(R(PAD.attaque.droite), PAD.attaque.labelY, 'ATTAQUE', { fontSize: '12px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5)
+    this.add.image(X(PAD.attaque.droite), PAD.attaque.y, 'ui-attack').setDisplaySize(PAD.attaque.r * 1.05, PAD.attaque.r * 1.05)
+    this.add.text(X(PAD.attaque.droite), PAD.attaque.labelY, 'ATTAQUE', { fontSize: '12px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5)
     atk.on('pointerdown', () => { this.pressFx(atk); this.game.events.emit('input-attack') })
 
     const jump = mkRond(PAD.saut, 0x1e88e5, 0.62)
-    this.add.image(R(PAD.saut.droite), PAD.saut.y, 'ui-jump').setDisplaySize(PAD.saut.r * 1.05, PAD.saut.r * 1.05)
-    this.add.text(R(PAD.saut.droite), PAD.saut.labelY, 'SAUT', { fontSize: '12px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5)
+    this.add.image(X(PAD.saut.droite), PAD.saut.y, 'ui-jump').setDisplaySize(PAD.saut.r * 1.05, PAD.saut.r * 1.05)
+    this.add.text(X(PAD.saut.droite), PAD.saut.labelY, 'SAUT', { fontSize: '12px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5)
     jump.on('pointerdown', () => { this.pressFx(jump); this.game.events.emit('input-jump-down') })
     jump.on('pointerup', () => this.game.events.emit('input-jump-up'))
     jump.on('pointerout', () => this.game.events.emit('input-jump-up'))
@@ -234,8 +238,8 @@ export class UIScene extends Phaser.Scene {
     // POTION : déplacée du bas-GAUCHE au bas-droite, ce qui libère tout le quart bas-gauche pour le
     // joystick. Le compteur « ×N » est collé au bouton, sinon on ne sait pas s'il en reste.
     const potion = mkRond(PAD.potion, 0x8e2f4f, 0.62)
-    this.add.image(R(PAD.potion.droite), PAD.potion.y, 'potion-drop').setDisplaySize(PAD.potion.r * 1.4, PAD.potion.r * 1.4)
-    this.potionText = this.add.text(R(PAD.potion.droite - PAD.potion.r - 4), PAD.potion.y + 12, '', { fontSize: '17px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 0.5)
+    this.add.image(X(PAD.potion.droite), PAD.potion.y, 'potion-drop').setDisplaySize(PAD.potion.r * 1.4, PAD.potion.r * 1.4)
+    this.potionText = this.add.text(X(PAD.potion.droite - PAD.potion.r - 4), PAD.potion.y + 12, '', { fontSize: '17px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 0.5)
     potion.on('pointerdown', () => { this.pressFx(potion); this.game.events.emit('input-potion') })
 
     // bouton inventaire (icône « tenue ») : EN HAUT À GAUCHE, juste à droite du panneau de vie

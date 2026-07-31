@@ -510,9 +510,18 @@ class AudioEngine {
       // plus une tonalité qui PLONGE (l'impact qui s'enfonce). Le joueur l'a demandé aussi comme
       // vérification : s'il l'entend, la détection d'entrée dans l'eau est bonne.
       case 'splash':
-        this.noise(t, 0.26, 0.55, 'lowpass', 1100)
-        this.tone('sine', 420, t, 0.2, 0.4, 120)
-        this.noise(t + 0.04, 0.14, 0.22, 'bandpass', 2600) // les éclaboussures, plus aiguës
+        // ⚠️ NETTEMENT PLUS FORT QUE LA PREMIÈRE VERSION, et ce n'était pas un bug de logique.
+        // Le user l'a redemandé (« je veux aussi que tu me fasses un bruit de plouf quand je rentre dans
+        // l'eau ») alors qu'il partait déjà : une sonde navigateur, qui téléporte le panda dans une nappe
+        // et espionne playSfx, confirme UN appel 'splash' au front montant. Il était simplement trop
+        // discret — pic de 0,55 là où un coup reçu est à 0,72, et il arrive pile au moment où les bulles
+        // démarrent et où la musique s'étouffe : trois sons nouveaux d'un coup, celui-ci passait dessous.
+        // Trois couches franches maintenant : le volume d'eau déplacé (bruit filtré bas), l'impact qui
+        // s'enfonce (tonalité qui plonge) et un sous-grave court qui donne le POIDS du corps.
+        this.noise(t, 0.34, 0.85, 'lowpass', 1100)
+        this.tone('sine', 440, t, 0.24, 0.45, 110)
+        this.tone('sine', 90, t, 0.16, 0.3, 60) // sous-grave : le corps qui entre
+        this.noise(t + 0.05, 0.18, 0.3, 'bandpass', 2600) // les éclaboussures, plus aiguës
         break
       case 'bubble':
         // « BLOP » : UNE bulle qui crève, pas deux. La montée rapide de hauteur fait tout le travail —

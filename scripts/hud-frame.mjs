@@ -18,14 +18,17 @@ import { setTimeout as sleep } from 'node:timers/promises'
 
 const PORT = 5198
 
-// ⚠️ CE GARDE-FOU A DEUX BORNES, PAS UNE — et la borne BASSE est arrivée après coup.
-// Il servait d'abord à empêcher le HUD de flotter au milieu de l'écran (il était à 113 px du bord).
-// Depuis, le user a signalé l'inverse sur iPhone 12 : « avec la caméra de l'iPhone 12 je vois pas tout ».
-// Les coins arrondis et l'îlot de caméra mordent sur les premiers pixels en paysage, et le HUD y était
-// collé à 8 px. Il y a donc une MARGE DE SÛRETÉ assumée (scenes/action-pad-layout.ts : MARGE_SURE).
-// Vérifier seulement « pas trop loin du bord » laisserait re-supprimer cette marge sans rien casser ;
-// vérifier seulement « pas trop près » laisserait revenir le HUD au centre. On borne des deux côtés.
-const MIN_BORD = 16
+// ⚠️ LES DEUX BORDS N'ONT PAS LA MÊME RÈGLE, ET C'EST VOULU.
+//
+// À GAUCHE, deux bornes. La haute empêche le HUD de flotter au milieu de l'écran — il y était, à 113 px du
+// bord. La basse impose une marge de sûreté : « avec la caméra de l'iPhone 12 je vois pas tout », les coins
+// arrondis et l'îlot de caméra mordent sur les premiers pixels en paysage. Borner d'un seul côté laisserait
+// re-dériver dans l'autre sens sans que rien ne le signale.
+//
+// À DROITE, une seule borne, la haute. Les commandes tactiles doivent être COLLÉES au bord : « le triangle
+// à droite il faut le coller à droite, pas de marge ». Y appliquer un minimum ferait échouer le garde-fou
+// sur le comportement DEMANDÉ — c'est arrivé, et c'est ce qui a motivé cette dissymétrie.
+const MIN_LEFT = 10
 const MAX_LEFT = 52
 const MAX_RIGHT = 60
 
@@ -78,8 +81,7 @@ try {
     if (m.bleed === 0) problems.push('aucun débord mesuré : le format de test ne révèle pas le bug')
     if (m.left > MAX_LEFT) problems.push(`HUD décollé du bord GAUCHE : ${m.left} px (max ${MAX_LEFT})`)
     if (m.w - m.right > MAX_RIGHT) problems.push(`HUD décollé du bord DROIT : ${m.w - m.right} px (max ${MAX_RIGHT})`)
-    if (m.left < MIN_BORD) problems.push(`HUD COLLÉ au bord gauche : ${m.left} px (min ${MIN_BORD}) — il passera sous la caméra de l'iPhone`)
-    if (m.w - m.right < MIN_BORD) problems.push(`HUD COLLÉ au bord droit : ${m.w - m.right} px (min ${MIN_BORD})`)
+    if (m.left < MIN_LEFT) problems.push(`HUD COLLÉ au bord gauche : ${m.left} px (min ${MIN_LEFT}) — il passera sous la caméra de l'iPhone`)
   }
 } catch (e) {
   problems.push(`sonde en échec : ${String(e.message).split('\n')[0]}`)

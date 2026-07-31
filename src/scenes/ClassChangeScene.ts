@@ -120,14 +120,12 @@ export class ClassChangeScene extends Phaser.Scene {
     this.chosen = true
     const p = getPlayer()
     changeClass(p, id)
-    const firstSkill = CLASSES[id].skillIds[0]!
-    if (!p.skillLevels[firstSkill]) p.skillLevels[firstSkill] = 1
-    // on GARDE les skills déjà appris/équipés (novice…) : on ajoute juste le 1er skill de la
-    // nouvelle classe dans un slot LIBRE, sans écraser la barre
-    if (!p.equippedSkills.includes(firstSkill)) {
-      const free = p.equippedSkills.indexOf(null)
-      if (free >= 0) p.equippedSkills[free] = firstSkill
-    }
+    // ⚠️ ON N'OFFRE PLUS RIEN AU PASSAGE DE CLASSE, ET C'EST DEMANDÉ : « au passage de classe tu me mets
+    // déjà un skill et tu l'équipes. Ça tu arrêtes, je veux pas ça. »
+    // L'ancien comportement apprenait le premier skill de la nouvelle classe et le posait dans un slot
+    // libre. Le joueur découvrait donc sa classe avec un choix déjà fait à sa place, et un slot occupé
+    // qu'il devait défaire. Les points de compétence sont là pour ça : il apprend ce qu'il veut, quand il
+    // veut, depuis l'arbre des compétences.
     save(p)
     this.finish(`Tu es maintenant ${CLASSES[id].name} !`)
   }

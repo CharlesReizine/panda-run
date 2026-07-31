@@ -76,19 +76,36 @@ describe('tout reste dans le cadre', () => {
     for (const { nom, b } of boutons) expect(b.y, nom).toBeGreaterThan(VUE_H / 2)
   })
 
-  it('le triangle remplit vraiment le quart : il est large et haut', () => {
-    // « tu peux grossir pour que le triangle remplisse le premier quart »
+  it('le triangle reste À PORTÉE DE POUCE : ni minuscule, ni étalé sur tout le quart', () => {
+    // ⚠️ CETTE ASSERTION A ÉTÉ RETOURNÉE, ET C'EST LE POINT INTÉRESSANT. Elle exigeait d'abord un triangle
+    // LARGE (« tu peux grossir pour que le triangle remplisse le premier quart »). Essai fait sur
+    // appareil, le verdict a changé : « il faut rapprocher les touches, là c'est trop chiant ». Un pouce
+    // ne parcourt pas un quart d'écran entre deux actions, il pivote autour de sa base.
+    // On borne donc DES DEUX CÔTÉS : assez grand pour être touchable, assez compact pour rester sous le
+    // pouce. Borner d'un seul côté laisserait re-dériver dans l'autre sens sans que rien ne le signale.
     const largeur = PAD.attaque.droite - PAD.saut.droite + PAD.attaque.rTap + PAD.saut.rTap
     const hauteur = PAD.potion.y - PAD.saut.y + PAD.saut.rTap + PAD.potion.rTap
-    expect(largeur, 'triangle trop étroit').toBeGreaterThan(280)
-    expect(hauteur, 'triangle trop plat').toBeGreaterThan(250)
-    expect(hauteur, 'triangle plus haut que la moitié de l\'écran').toBeLessThanOrEqual(VUE_H / 2 + 20)
+    expect(largeur, 'triangle trop étroit pour être touchable').toBeGreaterThan(200)
+    expect(largeur, 'triangle trop étalé : le pouce doit voyager').toBeLessThan(300)
+    expect(hauteur, 'triangle trop plat').toBeGreaterThan(180)
+    expect(hauteur, 'triangle trop haut : le pouce doit voyager').toBeLessThan(300)
   })
 
-  it('la marge de sûreté écarte le HUD du bord sans le renvoyer au centre', () => {
-    // retour user : « avec la caméra de l'iPhone 12 je vois pas tout »
-    expect(MARGE_SURE).toBeGreaterThanOrEqual(16)
-    expect(MARGE_SURE).toBeLessThanOrEqual(48)
+  it('les commandes de droite sont COLLÉES au bord : aucune marge de sûreté de ce côté', () => {
+    // « le triangle à droite il faut le coller à droite, pas de marge ». On vérifie que le bord extérieur
+    // de la zone tactile la plus à droite arrive tout près du bord, sans le dépasser.
+    for (const k of ['saut', 'potion'] as const) {
+      const b = PAD[k]
+      expect(b.droite - b.rTap, `${k} dépasse du bord`).toBeGreaterThanOrEqual(0)
+      expect(b.droite - b.rTap, `${k} n'est pas collé au bord`).toBeLessThan(28)
+    }
+  })
+
+  it('la marge de sûreté écarte le HUD DE GAUCHE du bord sans manger l\'écran', () => {
+    // « avec la caméra de l'iPhone 12 je vois pas tout » d'un côté, « tu as pas juste décalé légèrement la
+    // vie » de l'autre : la marge doit exister mais rester discrète.
+    expect(MARGE_SURE).toBeGreaterThanOrEqual(8)
+    expect(MARGE_SURE).toBeLessThanOrEqual(20)
   })
 })
 

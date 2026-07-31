@@ -29,6 +29,7 @@ import { LeaderboardScene } from './scenes/LeaderboardScene'
 import { GRAVITY } from './core/platforming'
 import { VIEW_W, VIEW_H } from './core/viewport'
 import { LEVELS } from './data/levels'
+import { audio } from './audio/audio-engine'
 
 // ─── Capture globale des erreurs ────────────────────────────────────────────
 // Sur iPhone il n'y a pas de console : toute exception non gérée doit devenir VISIBLE.
@@ -91,6 +92,10 @@ if (game) {
   // sans qu'on maintienne la liste en double dans un script (une liste recopiée finit désynchronisée, et
   // une sonde qui saute des terrains ne prouve rien). Lecture seule, aucun effet sur le jeu.
   ;(window as unknown as { __pandaLevelIds?: string[] }).__pandaLevelIds = Object.keys(LEVELS)
+  // Moteur audio, pour les sondes de son. Un bug de son est INOBSERVABLE en headless autrement : rien ne
+  // sort d'un contexte Web Audio qu'on puisse lire. Sans ce crochet, la seule façon de savoir si un effet
+  // part vraiment serait de demander au user de tendre l'oreille — c'est exactement ce qu'on veut éviter.
+  ;(window as unknown as { __pandaAudio?: unknown }).__pandaAudio = audio
 }
 
 // Le conteneur #game est dimensionné en CSS PUR (100dvw/100dvh + insets safe-area symétriques,

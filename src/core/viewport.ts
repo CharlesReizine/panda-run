@@ -23,16 +23,33 @@ export const VIEW_H = 540
 // verticalement — mieux que de déformer. Au-dessus de 2,4:1 on arrête d'élargir : au-delà, on
 // dévoilerait tant de terrain que la difficulté en serait changée (on verrait venir tous les mobs).
 const MIN_W = DESIGN_W
-const MAX_W = Math.round(VIEW_H * 2.6) // 1404 — assez large pour coller au format des téléphones
-                                       // récents, ce qui rend l'étirement résiduel imperceptible
+const MAX_W = Math.round(VIEW_H * 2.9) // 1566 — la zone visible d'un iPhone en paysage monte à 2,56:1
+                                       // une fois les barres de Safari retirées ; plafonner à 2,6 aurait
+                                       // laissé revenir des bandes noires sur ces formats.
 
 function computeWidth(): number {
   if (typeof window === 'undefined') return DESIGN_W // tests (env node) : format de référence
-  // On raisonne sur le PLUS GRAND côté / le plus petit : le jeu est verrouillé en paysage (overlay
-  // « tourne ton téléphone » en portrait), donc le format utile est toujours celui du paysage, même
-  // si la page est chargée téléphone à la verticale.
-  const a = Math.max(window.innerWidth, window.innerHeight)
-  const b = Math.min(window.innerWidth, window.innerHeight)
+
+  // ⚠️ ON MESURE LA ZONE RÉELLEMENT DISPONIBLE, PAS LE FORMAT DE L'APPAREIL. C'est la correction d'un
+  // défaut visible sur capture d'écran iPhone 12 : le canvas n'occupait que ~69 % de la largeur, avec de
+  // grosses bandes noires sur les côtés (« tu m'as réduit la largeur du screen »).
+  //
+  // La cause est une incohérence entre DEUX formats. La largeur logique était déduite du format de
+  // l'ÉCRAN (844 / 390 = 2,16), alors que refit() met le canvas à l'échelle de la zone VISIBLE — plus
+  // courte, parce que Safari y prend ses barres (844 / 330 = 2,56). Le facteur d'échelle est donc borné
+  // par la hauteur, et il reste de la largeur inutilisée : mathématiquement, (844/1169) > (330/540), donc
+  // la largeur n'est jamais le facteur limitant et le canvas ne remplit pas l'écran.
+  // En calculant la largeur logique sur la MÊME zone que celle qui sert à la mise à l'échelle, les deux
+  // rapports deviennent égaux et le canvas remplit exactement — sans déformation, puisque c'est le format
+  // logique qui s'adapte, pas l'image qu'on étire.
+  const vv = window.visualViewport
+  const dispoW = vv?.width ?? window.innerWidth
+  const dispoH = vv?.height ?? window.innerHeight
+
+  // Le jeu est verrouillé en paysage (overlay « tourne ton téléphone » en portrait) : le format utile est
+  // toujours celui du paysage, même si la page est chargée téléphone à la verticale — d'où max/min.
+  const a = Math.max(dispoW, dispoH)
+  const b = Math.min(dispoW, dispoH)
   if (!a || !b) return DESIGN_W
   const w = Math.round(VIEW_H * (a / b))
   return Math.min(MAX_W, Math.max(MIN_W, w))
