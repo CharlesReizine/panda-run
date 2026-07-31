@@ -5,14 +5,27 @@ import { xpToNext } from '../core/progression'
 import { audio } from '../audio/audio-engine'
 import type { LevelScene } from './LevelScene'
 import { VIEW_H, VIEW_W, centerCamera, fromLeft, fromRight } from '../core/viewport'
+import { PAD, MARGE_SURE, zoneJoystick } from './action-pad-layout'
 import { HUD_LEFT, centerOf } from './hud-layout'
 
+// ⚠️ TOUT LE HUD PASSE PAR CES DEUX HELPERS, PAS PAR fromLeft/fromRight DIRECTEMENT.
+// Retour du user sur iPhone 12 : « là avec la caméra de l'iPhone 12 je vois pas tout ». Les coins arrondis
+// et l'îlot de caméra mordent sur les premiers pixels en paysage, et le HUD était collé à 8 px du bord.
+// La marge est appliquée ICI, une fois, plutôt qu'ajoutée à chaque coordonnée — un oubli sur une seule
+// aurait fait ressortir un élément sous l'encoche sans que rien ne le signale.
+const L = (x: number) => fromLeft(MARGE_SURE + x)
+const R = (x: number) => fromRight(MARGE_SURE + x)
+
 const BAR_W = 200
-const SLOT_SIZE = 50
-const SLOT_Y = 54 // abaissé pour laisser la place au titre « Pouvoirs » au-dessus des 4 cases
+const SLOT_SIZE = 58 // « tu peux aussi grossir un peu les skills »
+// ⚠️ RANGÉE ABAISSÉE À 82, ET LES NUMÉROS PASSENT DESSOUS. Mesuré sur capture d'écran en 874×402 : à 62,
+// les icônes muet et pause (y 6→27) recouvraient les numéros 1-4 posés au-dessus des cases (y 19→31), et le
+// titre « POUVOIRS » mordait sur le « 3 ». Trois chevauchements invisibles au raisonnement, évidents à la
+// mesure. En descendant la rangée et en mettant les numéros SOUS les cases, chaque bande a sa hauteur.
+const SLOT_Y = 82
+const SLOT_GAP = 68 // espacement : suit la taille des cases pour qu'elles se touchent sans se recouvrir
 // Barre de skills DÉCALÉE VERS LA GAUCHE : les slots empiétaient sur le bouton PAUSE (⏸ à ~908).
 // Le 4e slot (i=3) se termine désormais à ~841px, bien à gauche de PAUSE.
-const SLOT_X0 = 636
 
 export class UIScene extends Phaser.Scene {
   joystick?: VirtualJoystick
@@ -67,7 +80,11 @@ export class UIScene extends Phaser.Scene {
     this.buffDuration = 0
 
     this.input.addPointer(3)
-    this.joystick = new VirtualJoystick(this, new Phaser.Geom.Rectangle(0, 100, 400, 440))
+    // ZONE DU JOYSTICK = TOUT LE QUART BAS-GAUCHE (« la zone à gauche où on contrôle les mouvements du
+    // panda doit être plus grande, tout le quart en bas à gauche ça me choque pas du tout »). C'est la
+    // POTION, déplacée en bas à droite, qui libère la place : elle occupait ce coin.
+    const zj = zoneJoystick(VIEW_W)
+    this.joystick = new VirtualJoystick(this, new Phaser.Geom.Rectangle(zj.x, zj.y, zj.w, zj.h))
 
     // Haut-gauche : panneau semi-opaque (lisibilité sur n'importe quel biome) regroupant
     // niveau + or, puis barres vie (rouge) / énergie (bleue) / XP (jaune) empilées et distinctes.
@@ -76,23 +93,23 @@ export class UIScene extends Phaser.Scene {
     // plus large, donc la coordonnée 8 n'est PAS à 8 px du bord de l'écran mais à 8 + BLEED_X (~111 px
     // sur un iPhone en paysage). Le panneau de vie flottait ainsi au « milieu gauche » — exactement le
     // retour du user. Un HUD se colle à l'ÉCRAN ; seuls les panneaux centrés restent en 480.
-    this.add.rectangle(fromLeft(8), 2, BAR_W + 16, 78, 0x0d1b2a, 0.6).setOrigin(0).setStrokeStyle(1, 0xffffff, 0.25)
-    this.levelText = this.add.text(fromLeft(16), 6, '', { fontSize: '15px', color: '#ffffff', fontStyle: 'bold' })
-    this.goldText = this.add.text(fromLeft(132), 7, '', { fontSize: '13px', color: '#ffd700' })
+    this.add.rectangle(L(8), 2, BAR_W + 16, 78, 0x0d1b2a, 0.6).setOrigin(0).setStrokeStyle(1, 0xffffff, 0.25)
+    this.levelText = this.add.text(L(16), 6, '', { fontSize: '15px', color: '#ffffff', fontStyle: 'bold' })
+    this.goldText = this.add.text(L(132), 7, '', { fontSize: '13px', color: '#ffd700' })
 
-    this.add.rectangle(fromLeft(14), 26, BAR_W + 4, 14, 0x000000, 0.6).setOrigin(0)
-    this.hpBar = this.add.rectangle(fromLeft(16), 27, BAR_W, 12, 0xe53935).setOrigin(0)
-    this.add.rectangle(fromLeft(14), 44, BAR_W + 4, 12, 0x000000, 0.6).setOrigin(0)
-    this.energyBar = this.add.rectangle(fromLeft(16), 46, BAR_W, 8, 0x29b6f6).setOrigin(0)
-    this.add.rectangle(fromLeft(14), 60, BAR_W + 4, 6, 0x000000, 0.6).setOrigin(0)
-    this.xpBar = this.add.rectangle(fromLeft(16), 61, BAR_W, 4, 0xfdd835).setOrigin(0)
+    this.add.rectangle(L(14), 26, BAR_W + 4, 14, 0x000000, 0.6).setOrigin(0)
+    this.hpBar = this.add.rectangle(L(16), 27, BAR_W, 12, 0xe53935).setOrigin(0)
+    this.add.rectangle(L(14), 44, BAR_W + 4, 12, 0x000000, 0.6).setOrigin(0)
+    this.energyBar = this.add.rectangle(L(16), 46, BAR_W, 8, 0x29b6f6).setOrigin(0)
+    this.add.rectangle(L(14), 60, BAR_W + 4, 6, 0x000000, 0.6).setOrigin(0)
+    this.xpBar = this.add.rectangle(L(16), 61, BAR_W, 4, 0xfdd835).setOrigin(0)
 
     // toucher le panneau (barres) ouvre la gestion des skills en jeu — dispo AUSSI en entraînement
     // (on veut y tester/échanger ses skills) : SkillEquip reçoit désormais la clé de scène à reprendre
     // (Level ou Training) et n'écrit pas la sauvegarde en mode training → plus de soft-lock.
-    this.add.rectangle(fromLeft(8), 2, BAR_W + 16, 78, 0xffffff, 0.001).setOrigin(0).setInteractive()
+    this.add.rectangle(L(8), 2, BAR_W + 16, 78, 0xffffff, 0.001).setOrigin(0).setInteractive()
       .on('pointerdown', () => this.openSkillMenu())
-    this.add.text(fromLeft(16), 68, 'compétences ▸', { fontSize: '10px', color: '#b0bec5' })
+    this.add.text(L(16), 68, 'compétences ▸', { fontSize: '10px', color: '#b0bec5' })
 
     // Badge « points à dépenser » : JUSTE à droite du panneau de vie, pastille dorée pulsante
     // avec une flèche qui pointe vers le panneau (où l'on ouvre le menu). Masqué s'il n'y a
@@ -100,7 +117,7 @@ export class UIScene extends Phaser.Scene {
     // badge « point(s) de compétence dispo » : placé SOUS les slots de skills / le bouton Compétences
     // (haut-droite), et non plus près de la barre de vie — c'est là qu'on gère les compétences.
     // rangée réservée (HUD_LEFT) : le badge chevauchait la pastille de buff et le bouton
-    this.spBadge = this.add.container(fromLeft(HUD_LEFT.spBadge.x), centerOf(HUD_LEFT.spBadge).y).setDepth(60)
+    this.spBadge = this.add.container(L(HUD_LEFT.spBadge.x), centerOf(HUD_LEFT.spBadge).y).setDepth(60)
     const badgeBg = this.add.rectangle(76, 0, 152, 32, 0xffca28, 0.97).setStrokeStyle(2, 0x7a4f00, 1)
     const badgeArrow = this.add.text(-4, 0, '◀', { fontSize: '20px', color: '#ffca28', fontStyle: 'bold', stroke: '#3a2600', strokeThickness: 4 }).setOrigin(1, 0.5)
     this.spBadgeText = this.add.text(14, 0, '', { fontSize: '15px', color: '#3a2600', fontStyle: 'bold' }).setOrigin(0, 0.5)
@@ -114,7 +131,7 @@ export class UIScene extends Phaser.Scene {
     // pastille de buff ATK : masquée par défaut, affichée avec un compte à rebours tant que le buff est actif
     // Position issue de HUD_LEFT (scenes/hud-layout.ts) : elle recouvrait le bouton « Compétences ».
     const { y: by, w: bw, h: bh } = HUD_LEFT.buffPill
-    const bx = fromLeft(HUD_LEFT.buffPill.x)
+    const bx = L(HUD_LEFT.buffPill.x)
     const buffBg = this.add.rectangle(bx, by, bw, bh, 0xff8f00, 0.9).setOrigin(0).setStrokeStyle(2, 0xffe082, 0.8)
     const buffLabel = this.add.text(bx + 8, by + 4, '⚔ ATK+', { fontSize: '13px', color: '#3a2600', fontStyle: 'bold' }).setOrigin(0)
     this.buffBar = this.add.rectangle(bx + 2, by + bh - 5, bw - 4, 4, 0xfff176).setOrigin(0)
@@ -122,7 +139,7 @@ export class UIScene extends Phaser.Scene {
     for (const o of this.buffParts) o.setVisible(false)
 
     // bouton muet discret (coin haut-droit), au-dessus des slots de compétences
-    const muteBtn = this.add.text(fromRight(16), 6, audio.isMuted() ? '🔇' : '🔊', { fontSize: '20px' })
+    const muteBtn = this.add.text(R(16), 6, audio.isMuted() ? '🔇' : '🔊', { fontSize: '20px' })
       .setOrigin(1, 0).setDepth(50).setInteractive({ useHandCursor: true })
     muteBtn.on('pointerdown', () => {
       const muted = audio.toggleMute()
@@ -132,7 +149,7 @@ export class UIScene extends Phaser.Scene {
     // bouton pause discret, juste à gauche du mute : ouvre le menu de pause par-dessus le jeu gelé
     // (masqué en entraînement : PauseScene resume/quit sur 'Level' en dur, inadapté à 'Training')
     if (!this.training) {
-      const pauseBtn = this.add.text(fromRight(52), 6, '⏸', { fontSize: '20px' })
+      const pauseBtn = this.add.text(R(52), 6, '⏸', { fontSize: '20px' })
         .setOrigin(1, 0).setDepth(50).setInteractive({ useHandCursor: true })
       pauseBtn.on('pointerdown', () => {
         audio.playSfx('ui-tap')
@@ -143,23 +160,24 @@ export class UIScene extends Phaser.Scene {
       })
     }
 
-    // Haut-droite : les 4 slots de skills côte à côte, décalés à GAUCHE du bouton PAUSE (SLOT_X0).
+    // Haut-droite : les 4 cases de pouvoirs côte à côte, ancrées à DROITE sous le bouton pause.
     // Titre « POUVOIRS » centré au-dessus des 4 cases.
     // les 4 cases sont repérées depuis le BORD DROIT (comme le bouton pause juste au-dessus d'elles),
     // sinon la rangée dérive vers le centre sur un écran large et se décolle du bouton
-    const slotX0 = fromRight(960 - SLOT_X0)
-    this.add.text(slotX0 + 1.5 * 60, SLOT_Y - SLOT_SIZE / 2 - 20, 'POUVOIRS', {
+    // ancrée à droite : la dernière case s'aligne sous le bouton pause, les autres se déduisent
+    const slotX0 = R(38 + 3 * SLOT_GAP)
+    this.add.text(slotX0 + 1.5 * SLOT_GAP, SLOT_Y - SLOT_SIZE / 2 - 18, 'POUVOIRS', {
       fontSize: '13px', color: '#ffd54f', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5)
     for (let i = 0; i < 4; i++) {
-      const x = slotX0 + i * 60
+      const x = slotX0 + i * SLOT_GAP
       // Zone tactile ÉLARGIE au-delà du visuel (60×66 vs 50×50) pour toucher plus facilement au
       // doigt ; 60px = l'espacement des slots → les zones se touchent sans se chevaucher.
       const slot = this.add.rectangle(x, SLOT_Y, SLOT_SIZE, SLOT_SIZE, 0x000000, 0.5)
         .setStrokeStyle(2, 0xffffff, 0.6)
-        .setInteractive(new Phaser.Geom.Rectangle(-5, -16, 60, 84), Phaser.Geom.Rectangle.Contains)
+        .setInteractive(new Phaser.Geom.Rectangle(-5, -5, SLOT_GAP, SLOT_SIZE + 26), Phaser.Geom.Rectangle.Contains)
       slot.on('pointerdown', () => { this.pressFx(slot); this.game.events.emit('input-skill', i) })
-      this.add.text(x, SLOT_Y - SLOT_SIZE / 2 - 8, `${i + 1}`, { fontSize: '11px', color: '#ffd54f' }).setOrigin(0.5)
+      this.add.text(x, SLOT_Y + SLOT_SIZE / 2 + 9, `${i + 1}`, { fontSize: '12px', color: '#ffd54f' }).setOrigin(0.5)
       this.slotIcons.push(this.add.image(x, SLOT_Y, '__DEFAULT').setDisplaySize(SLOT_SIZE - 8, SLOT_SIZE - 8).setVisible(false))
       // overlay de cooldown ANCRÉ À DROITE (origine 1) : on le rétrécit vers la droite (scaleX) au fil
       // de la recharge → il « se dégrise » horizontalement de gauche à droite jusqu'à disparaître.
@@ -171,7 +189,7 @@ export class UIScene extends Phaser.Scene {
     // bouton EXPLICITE « compétences » sous les slots (le clic sur la barre de vie l'ouvre aussi,
     // mais un bouton dédié est bien plus découvrable) — disponible en jeu ET en entraînement.
     const sb0 = centerOf(HUD_LEFT.skillsBtn)
-    const sb = { x: fromLeft(sb0.x), y: sb0.y }
+    const sb = { x: L(sb0.x), y: sb0.y }
     const skillsBtn = this.add.rectangle(sb.x, sb.y, HUD_LEFT.skillsBtn.w, HUD_LEFT.skillsBtn.h, 0x37474f, 0.9)
       .setStrokeStyle(1, 0xffffff, 0.55)
       .setInteractive(new Phaser.Geom.Rectangle(-11, -13, 160, 50), Phaser.Geom.Rectangle.Contains)
@@ -179,42 +197,53 @@ export class UIScene extends Phaser.Scene {
     this.skillsBtnText = this.add.text(sb.x, sb.y, '⚙ Compétences', { fontSize: '12px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5)
     skillsBtn.on('pointerdown', () => { this.pressFx(skillsBtn); this.openSkillMenu() })
 
-    // Bas-droite : contrôles saut / attaque. Zone tactile TRÈS ÉLARGIE au-delà du disque visuel pour
-    // un tap tolérant au doigt — SAUT prioritaire (le plus gros). Le disque ATTAQUE est ajouté APRÈS
-    // le SAUT : dans la zone où leurs hitboxes se recouvrent, c'est ATTAQUE qui prend le tap, donc le
-    // SAUT s'étale surtout vers le coin bas-droite libre sans « voler » les taps de l'attaque.
-    const jump = this.add.circle(fromRight(76), 468, 36, 0x1e88e5, 0.6)
-      .setInteractive(new Phaser.Geom.Circle(36, 36, 66), Phaser.Geom.Circle.Contains)
-    this.add.image(fromRight(76), 468, 'ui-jump').setDisplaySize(34, 34)
-    this.add.text(fromRight(76), 510, 'SAUT', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
+    // ─── BAS-DROITE : LE « V » PIVOTÉ À 90° À GAUCHE, soit un « < » ───────────────────────────────
+    // Demande du user : « en bas à droite je veux pouvoir attaquer, sauter et prendre une potion. Tu mets
+    // ça comme un V qui a pivoté à 90 degrés à gauche. Donc d'abord tu as l'attaque à gauche, au-dessus et
+    // à droite tu mets le saut, et en dessous tu mets la potion. »
+    //
+    //                        ○ SAUT
+    //                       ╱
+    //           ATTAQUE ◉ ─┤
+    //                       ╲
+    //                        ○ POTION
+    //
+    // Géométrie et tailles dans scenes/action-pad-layout.ts, dont le test vérifie que la forme reste un
+    // « < », que les trois zones tactiles ne se recouvrent JAMAIS (un tap qui déclenche la mauvaise action
+    // est le pire défaut possible sur un bouton de saut) et que rien ne sort du cadre.
+    //
+    // ⚠️ L'ORDRE DE CRÉATION COMPTE POUR LES TAPS. Phaser donne la priorité au dernier objet interactif
+    // ajouté quand deux zones se superposent. Ici elles ne se superposent pas (vérifié par le test), mais
+    // on garde l'ordre attaque → saut → potion pour que ça reste vrai si les rayons grossissent un jour.
+    const mkRond = (b: typeof PAD.attaque, couleur: number, alpha: number) =>
+      this.add.circle(R(b.droite), b.y, b.r, couleur, alpha)
+        .setInteractive(new Phaser.Geom.Circle(b.r, b.r, b.rTap), Phaser.Geom.Circle.Contains)
+
+    const atk = mkRond(PAD.attaque, 0xfb8c00, 0.72)
+    this.add.image(R(PAD.attaque.droite), PAD.attaque.y, 'ui-attack').setDisplaySize(PAD.attaque.r * 1.05, PAD.attaque.r * 1.05)
+    this.add.text(R(PAD.attaque.droite), PAD.attaque.labelY, 'ATTAQUE', { fontSize: '12px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5)
+    atk.on('pointerdown', () => { this.pressFx(atk); this.game.events.emit('input-attack') })
+
+    const jump = mkRond(PAD.saut, 0x1e88e5, 0.62)
+    this.add.image(R(PAD.saut.droite), PAD.saut.y, 'ui-jump').setDisplaySize(PAD.saut.r * 1.05, PAD.saut.r * 1.05)
+    this.add.text(R(PAD.saut.droite), PAD.saut.labelY, 'SAUT', { fontSize: '12px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5)
     jump.on('pointerdown', () => { this.pressFx(jump); this.game.events.emit('input-jump-down') })
     jump.on('pointerup', () => this.game.events.emit('input-jump-up'))
     jump.on('pointerout', () => this.game.events.emit('input-jump-up'))
-    const atk = this.add.circle(fromRight(168), 496, 32, 0xfb8c00, 0.7)
-      .setInteractive(new Phaser.Geom.Circle(32, 32, 54), Phaser.Geom.Circle.Contains)
-    this.add.image(fromRight(168), 496, 'ui-attack').setDisplaySize(30, 30)
-    // y=528 et non 534 : avec une origine centrée en police 10, le bas du texte tombait à ~539 pour un
-    // cadre haut de 540 — le libellé était rogné par le bord. Aligné sur SAUT, qui lui tient à 510.
-    this.add.text(fromRight(168), 528, 'ATTAQUE', { fontSize: '10px', color: '#ffffff' }).setOrigin(0.5)
-    atk.on('pointerdown', () => { this.pressFx(atk); this.game.events.emit('input-attack') })
 
-    // Bas-gauche : potion. Zone tactile élargie via un rectangle invisible plus grand que l'icône.
-    // Taille FIXE (indépendante de la résolution native de la texture potion-drop, désormais
-    // issue d'une illustration détourée et non plus d'un dessin 16px) → icône HUD nette et stable.
-    const potion = this.add.image(fromLeft(52), 500, 'potion-drop').setDisplaySize(56, 56)
-    // Zone de tap ramenée DANS le cadre : centrée à 500 sur 100 de haut, elle allait de 450 à 550 pour
-    // un écran haut de 540 → 10 % de la surface tactile tombait hors de l'écran et n'était jamais
-    // atteignable. Même surface utile, mais entièrement cliquable.
-    const potionHit = this.add.rectangle(fromLeft(52), 494, 92, 88, 0xffffff, 0.001).setInteractive({ useHandCursor: true })
-    potionHit.on('pointerdown', () => { this.pressFx(potion); this.game.events.emit('input-potion') })
-    this.potionText = this.add.text(fromLeft(70), 490, '', { fontSize: '16px', color: '#ffffff' })
+    // POTION : déplacée du bas-GAUCHE au bas-droite, ce qui libère tout le quart bas-gauche pour le
+    // joystick. Le compteur « ×N » est collé au bouton, sinon on ne sait pas s'il en reste.
+    const potion = mkRond(PAD.potion, 0x8e2f4f, 0.62)
+    this.add.image(R(PAD.potion.droite), PAD.potion.y, 'potion-drop').setDisplaySize(PAD.potion.r * 1.4, PAD.potion.r * 1.4)
+    this.potionText = this.add.text(R(PAD.potion.droite - PAD.potion.r - 4), PAD.potion.y + 12, '', { fontSize: '17px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 0.5)
+    potion.on('pointerdown', () => { this.pressFx(potion); this.game.events.emit('input-potion') })
 
     // bouton inventaire (icône « tenue ») : EN HAUT À GAUCHE, juste à droite du panneau de vie
     // (masqué en entraînement : InventoryScene resume 'Level' en dur → soft-lock depuis 'Training')
     if (!this.training) {
-      const invBtn = this.add.image(fromLeft(248), 40, 'ui-inventory').setDisplaySize(42, 42).setDepth(50).setInteractive({ useHandCursor: true })
+      const invBtn = this.add.image(L(248), 40, 'ui-inventory').setDisplaySize(42, 42).setDepth(50).setInteractive({ useHandCursor: true })
       invBtn.on('pointerdown', () => { this.pressFx(invBtn); this.openInventoryMenu() })
-      this.add.text(fromLeft(248), 64, 'SAC', { fontSize: '10px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5).setDepth(50)
+      this.add.text(L(248), 64, 'SAC', { fontSize: '10px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5).setDepth(50)
     }
 
     // Écoute des mises à jour émises par la scène de jeu (Level ou Training)
@@ -315,8 +344,8 @@ export class UIScene extends Phaser.Scene {
     // compétence (il démarre sans aucune compétence). On ouvre un petit panneau explicatif au lieu du
     // simple bandeau — le moment idéal pour apprendre le système. Ensuite, bandeau classique.
     if (level === 2 && !this.training) { this.showFirstSkillOnboarding(); return }
-    const bg = this.add.rectangle(fromLeft(14), 118, 372, 28, 0xffb300, 0.95).setOrigin(0)
-    const txt = this.add.text(fromLeft(24), 122, `⭐ NIVEAU ${level} !  +1 compétence · +2 stats`, {
+    const bg = this.add.rectangle(L(14), 118, 372, 28, 0xffb300, 0.95).setOrigin(0)
+    const txt = this.add.text(L(24), 122, `⭐ NIVEAU ${level} !  +1 compétence · +2 stats`, {
       fontSize: '15px', color: '#3a2600', fontStyle: 'bold',
     }).setOrigin(0, 0)
     bg.setScale(0.2, 1)

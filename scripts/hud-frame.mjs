@@ -17,9 +17,17 @@ import { spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 const PORT = 5198
-// tolérances : le HUD a des marges internes assumées, on vérifie qu'il touche le bord, pas qu'il le colle
-const MAX_LEFT = 20
-const MAX_RIGHT = 30
+
+// ⚠️ CE GARDE-FOU A DEUX BORNES, PAS UNE — et la borne BASSE est arrivée après coup.
+// Il servait d'abord à empêcher le HUD de flotter au milieu de l'écran (il était à 113 px du bord).
+// Depuis, le user a signalé l'inverse sur iPhone 12 : « avec la caméra de l'iPhone 12 je vois pas tout ».
+// Les coins arrondis et l'îlot de caméra mordent sur les premiers pixels en paysage, et le HUD y était
+// collé à 8 px. Il y a donc une MARGE DE SÛRETÉ assumée (scenes/action-pad-layout.ts : MARGE_SURE).
+// Vérifier seulement « pas trop loin du bord » laisserait re-supprimer cette marge sans rien casser ;
+// vérifier seulement « pas trop près » laisserait revenir le HUD au centre. On borne des deux côtés.
+const MIN_BORD = 16
+const MAX_LEFT = 52
+const MAX_RIGHT = 60
 
 const preview = spawn('npx', ['vite', 'preview', '--port', String(PORT), '--strictPort'], { stdio: 'ignore' })
 const browser = await chromium.launch()
@@ -70,6 +78,8 @@ try {
     if (m.bleed === 0) problems.push('aucun débord mesuré : le format de test ne révèle pas le bug')
     if (m.left > MAX_LEFT) problems.push(`HUD décollé du bord GAUCHE : ${m.left} px (max ${MAX_LEFT})`)
     if (m.w - m.right > MAX_RIGHT) problems.push(`HUD décollé du bord DROIT : ${m.w - m.right} px (max ${MAX_RIGHT})`)
+    if (m.left < MIN_BORD) problems.push(`HUD COLLÉ au bord gauche : ${m.left} px (min ${MIN_BORD}) — il passera sous la caméra de l'iPhone`)
+    if (m.w - m.right < MIN_BORD) problems.push(`HUD COLLÉ au bord droit : ${m.w - m.right} px (min ${MIN_BORD})`)
   }
 } catch (e) {
   problems.push(`sonde en échec : ${String(e.message).split('\n')[0]}`)
@@ -83,4 +93,4 @@ if (problems.length) {
   for (const p of [...new Set(problems)]) console.error('   ' + p)
   process.exit(1)
 }
-console.log('✔ le HUD colle bien aux deux bords de l\'écran')
+console.log('✔ le HUD est bien aux deux bords, avec sa marge de sûreté')

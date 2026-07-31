@@ -230,7 +230,6 @@ export const ART_IMAGES: ArtImage[] = [
   { name: 'item-carapace-de-tortue.png', w: 128, h: 128 },
   { name: 'item-carapace-du-roi-scarabee.png', w: 128, h: 128 },
   { name: 'item-carapace-scarabee.png', w: 128, h: 128 },
-  { name: 'item-casque-a-plumet.png', w: 128, h: 128 },
   { name: 'item-casque-croc.png', w: 128, h: 128 },
   { name: 'item-casque-de-dragon.png', w: 128, h: 128 },
   { name: 'item-casque-orc.png', w: 128, h: 128 },

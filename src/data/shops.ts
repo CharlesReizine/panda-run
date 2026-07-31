@@ -150,7 +150,6 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
       { itemId: 'masque-de-renard', price: 1250 },
       { itemId: 'mitre-du-clerc', price: 1250 },
       { itemId: 'bandeau-du-moine', price: 1360 },
-      { itemId: 'casque-a-plumet', price: 1380 },
     ],
   },
   morocc: {

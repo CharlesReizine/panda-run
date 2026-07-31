@@ -189,7 +189,6 @@ const list: ItemDef[] = [
   { id: 'heaume-de-bronze', name: 'Heaume de bronze', slot: 'hat', bonus: { def: 4 }, rarity: 'commun', description: 'Un pot de bronze avec deux trous. Ça a sauvé plus de crânes qu\'on ne croit.' },
   { id: 'couronne-de-fleurs', name: 'Couronne de fleurs', slot: 'hat', bonus: { maxHp: 9 }, rarity: 'commun', description: 'Tressée le matin même. Elle fane, mais le moral tient.' },
   { id: 'masque-de-renard', name: 'Masque de renard', slot: 'hat', bonus: { atk: 4, maxHp: 10 }, rarity: 'rare', description: 'Un masque de fête laqué. Derrière, on se sent plus malin.' },
-  { id: 'casque-a-plumet', name: 'Casque à plumet', slot: 'hat', bonus: { def: 7, maxHp: 8 }, rarity: 'rare', description: 'Le plumet blanc dit à tous où se trouve le capitaine. Courageux.' },
   { id: 'mitre-du-clerc', name: 'Mitre du clerc', slot: 'hat', bonus: { maxHp: 30 }, rarity: 'rare', description: 'Une mitre brodée qui impose le silence et prolonge les vieux os.' },
   { id: 'bandeau-du-moine', name: 'Bandeau du moine', slot: 'hat', bonus: { atk: 6, def: 2 }, rarity: 'rare', description: 'Un simple bandeau de toile. Le moine, lui, n\'est pas simple du tout.' },
   { id: 'heaume-du-chevalier', name: 'Heaume du chevalier', slot: 'hat', bonus: { def: 10, maxHp: 22 }, rarity: 'epique', description: 'Visière baissée, on n\'entend plus que son propre souffle et les coups.' },
