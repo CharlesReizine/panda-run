@@ -195,37 +195,94 @@ def prompt_pour(item, alpha: bool = True) -> str:
     )
 
 
-def charger_credentials(chemin_env: Path):
-    """Reconstitue le compte de service Vertex depuis les parts base64 du .env pretto."""
+def deguillemeter(v: str) -> str:
+    """Retire UNE seule paire de guillemets englobants, et rien d'autre.
+
+    ⚠️ SURTOUT PAS str.strip("'\""). C'était le bug : strip() retire les caractères de l'ensemble EN
+    BOUCLE aux deux extrémités. Sur une part valant  '"pk-...": "<base64>",'  il enlevait l'apostrophe
+    englobante PUIS le guillemet d'ouverture de la clé JSON — la concaténation des six parts ne formait
+    donc plus un JSON valide, et le repli base64 avalait les accolades sans se plaindre (b64decode ignore
+    par défaut les caractères hors alphabet) pour rendre des octets aléatoires. Symptôme : « 'utf-8' codec
+    can't decode byte 0xa6 ». Un bug de deux caractères, invisible dans le message d'erreur.
+    """
+    if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+        return v[1:-1]
+    return v
+
+
+def lire_comptes(chemin_env: Path) -> dict:
+    """Reconstitue les comptes de service Vertex depuis les parts du .env.
+
+    ⚠️ LES PARTS SONT DU JSON, PAS DU BASE64 — et se tromper de sens échoue en SILENCE.
+    La variable s'appelle « B64_SERVICE_ACCOUNTS » et un premier jet a donc fait
+    base64.b64decode(concaténation) puis json.loads. C'est l'inverse : la concaténation des six parts
+    forme un OBJET JSON { "nom-du-compte": "<base64 du JSON du compte>", ... } — d'où le pluriel
+    « ACCOUNTS ». Le piège, c'est que b64decode() ignore par défaut tout caractère hors alphabet base64 :
+    il a donc avalé les accolades et les guillemets sans broncher et rendu des octets aléatoires, au lieu
+    de dire « ce n'est pas du base64 ». Symptôme observé : « 'utf-8' codec can't decode byte 0xa6 ».
+    Diagnostic qui a tranché : la part 1 contient «{», «:» et quatre «"» — du JSON, pas du base64.
+
+    On accepte quand même les deux formes : si la concaténation n'est pas du JSON, on retombe sur
+    l'interprétation base64. Ça coûte quatre lignes et couvre une éventuelle rotation de format.
+    """
     if not chemin_env.exists():
         sys.exit(f"❌ fichier d'identifiants introuvable : {chemin_env}\n   (passe --env <chemin>)")
     parts = {}
     for ligne in chemin_env.read_text(encoding="utf-8", errors="replace").splitlines():
-        if not ligne.startswith(PREFIXE_CRED):
+        if ligne.lstrip().startswith("#") or not ligne.startswith(PREFIXE_CRED):
             continue
         cle, _, val = ligne.partition("=")
         suffixe = cle[len(PREFIXE_CRED):].strip()
         if suffixe.isdigit():
-            parts[int(suffixe)] = val.strip().strip("'\"")
+            parts[int(suffixe)] = deguillemeter(val.strip())
     if not parts:
         sys.exit(f"❌ aucune variable {PREFIXE_CRED}* dans {chemin_env}")
     brut = "".join(parts[k] for k in sorted(parts))
+
+    data = None
     try:
-        decode = base64.b64decode(brut)
-        data = json.loads(decode)
-    except Exception as e:  # noqa: BLE001
-        sys.exit(f"❌ les parts {PREFIXE_CRED}* ne se décodent pas en JSON ({e})")
+        data = json.loads(brut)
+    except Exception:  # pas du JSON → peut-être vraiment du base64
+        try:
+            data = json.loads(base64.b64decode(brut))
+        except Exception as e:  # noqa: BLE001
+            sys.exit(
+                f"❌ les {len(parts)} parts {PREFIXE_CRED}* ne se lisent ni en JSON ni en base64 ({e}).\n"
+                "   Le format a peut-être changé : vérifie que les parts se concatènent bien dans l'ordre."
+            )
+    if not isinstance(data, dict):
+        sys.exit("❌ le blob reconstitué n'est pas un objet")
 
-    # Le nom est au pluriel : le blob peut contenir PLUSIEURS comptes. On prend le premier qui en est un.
-    if isinstance(data, dict) and data.get("type") == "service_account":
-        sa = data
-    elif isinstance(data, dict):
-        sa = next((v for v in data.values() if isinstance(v, dict) and v.get("type") == "service_account"), None)
+    # Chaque valeur est soit le JSON du compte, soit son base64.
+    comptes = {}
+    if data.get("type") == "service_account":
+        comptes["(unique)"] = data
+        return comptes
+    for nom, val in data.items():
+        sa = val
+        if isinstance(sa, str):
+            try:
+                sa = json.loads(base64.b64decode(sa))
+            except Exception:
+                continue
+        if isinstance(sa, dict) and sa.get("type") == "service_account":
+            comptes[nom] = sa
+    if not comptes:
+        sys.exit("❌ aucun compte de service exploitable dans le blob reconstitué")
+    return comptes
+
+
+def charger_credentials(chemin_env: Path, compte: str | None):
+    comptes = lire_comptes(chemin_env)
+    if compte:
+        choix = next((n for n in comptes if compte in n), None)
+        if not choix:
+            sys.exit(f"❌ aucun compte ne contient « {compte} ». Disponibles : {', '.join(comptes)}")
     else:
-        sa = None
-    if not sa:
-        sys.exit("❌ aucun compte de service trouvé dans le blob décodé")
-
+        choix = next(iter(comptes))
+        if len(comptes) > 1:
+            print(f"{len(comptes)} comptes disponibles, j'utilise « {choix} » (--compte <nom> pour en choisir un autre)")
+    sa = comptes[choix]
     try:
         from google.oauth2 import service_account
         import google.auth.transport.requests as gart
@@ -235,7 +292,7 @@ def charger_credentials(chemin_env: Path):
         sa, scopes=["https://www.googleapis.com/auth/cloud-platform"]
     )
     creds.refresh(gart.Request())
-    return creds, sa.get("project_id")
+    return creds, sa.get("project_id"), choix
 
 
 def a_deja_de_l_alpha(im) -> bool:
@@ -374,12 +431,19 @@ def main():
     ap.add_argument("--dry", action="store_true", help="affiche les prompts, aucun appel réseau")
     ap.add_argument("--force", action="store_true", help="regénère même si le PNG existe")
     ap.add_argument("--env", type=Path, default=ENV_DEFAUT, help=f"fichier d'identifiants (défaut : {ENV_DEFAUT})")
+    ap.add_argument("--comptes", action="store_true", help="liste les comptes de service disponibles et sort")
+    ap.add_argument("--compte", default=None, help="compte de service à utiliser (sous-chaîne du nom)")
     ap.add_argument("--limit", type=int, default=0, help="s'arrête après N objets")
     ap.add_argument(
         "--dessines", action="store_true",
         help="inclut aussi les chapeaux qui ont déjà un dessin vectoriel (pour les remplacer par une illustration)",
     )
     args = ap.parse_args()
+
+    if args.comptes:
+        for nom, sa in lire_comptes(args.env).items():
+            print(f"  {nom}  →  projet {sa.get('project_id')}")
+        return
 
     filtres = [f for f in args.only if f != "only"]
     items = lire_items()
@@ -411,8 +475,8 @@ def main():
             print(f"\n── item-{it['id']}.png ──\n{prompt_pour(it, alpha=premier[2])}")
         return
 
-    creds, project = charger_credentials(args.env)
-    print(f"Projet Vertex : {project} · région {REGION}")
+    creds, project, compte = charger_credentials(args.env, args.compte)
+    print(f"Compte « {compte} » · projet Vertex {project} · région {REGION}")
     ART.mkdir(parents=True, exist_ok=True)
 
     ok, echecs, modeles_utilises = 0, [], {}
