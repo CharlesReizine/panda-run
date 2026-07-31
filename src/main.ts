@@ -74,24 +74,29 @@ if (game) {
   ;(window as unknown as { __pandaGame?: Phaser.Game }).__pandaGame = game
 }
 
-// On dimensionne le conteneur #game EXACTEMENT sur la zone visible (visualViewport, qui
-// exclut les barres Safari et suit l'encoche en paysage), et on le positionne à son
-// offset. Phaser (Scale.FIT) rentre alors toujours dans du visible → jamais coupé.
-function fitViewport() {
-  const vv = window.visualViewport
-  const w = Math.round(vv?.width ?? window.innerWidth)
-  const h = Math.round(vv?.height ?? window.innerHeight)
-  const el = document.getElementById('game')
-  if (el) {
-    el.style.width = `${w}px`
-    el.style.height = `${h}px`
-    el.style.left = `${Math.round(vv?.offsetLeft ?? 0)}px`
-    el.style.top = `${Math.round(vv?.offsetTop ?? 0)}px`
-  }
+// Le conteneur #game est dimensionné en CSS PUR (100dvw/100dvh + insets safe-area symétriques,
+// cf. index.html) : les unités « dynamic viewport » suivent nativement l'apparition/disparition de la
+// barre d'URL de Safari. On ne mesure PLUS visualViewport en JS pour poser width/height/top/left —
+// c'était la cause du bas coupé et du décentrage sur iPhone : une mesure JS est périmée dès la frame
+// suivante, et écrire ces styles entrait en conflit avec le CSS.
+//
+// Il reste à PRÉVENIR Phaser que la zone a changé, pour qu'il recalcule son échelle : c'est tout ce
+// que fait refit(). Aucun calcul de notre côté, Phaser lit la taille réelle du conteneur.
+function refit() {
   game?.scale.refresh()
 }
+
+window.visualViewport?.addEventListener('resize', refit)
+window.addEventListener('resize', refit)
+// la rotation n'est effective qu'APRÈS l'événement : un seul délai suffit, le CSS a déjà la bonne
+// taille, on ne fait que demander à Phaser de la relire
+window.addEventListener('orientationchange', () => setTimeout(refit, 300))
+window.addEventListener('load', refit)
+window.addEventListener('pageshow', refit) // reprise PWA / bfcache
+refit()
+
 // Crochet de débogage réservé au dev (retiré du build de production par tree-shaking sur
-// import.meta.env.DEV) : permet à un harnais headless de piloter le jeu.
+// import.meta.env.DEV) : permet à un harnais headless (scripts/leak-probe.mjs) de piloter le jeu.
 if (import.meta.env.DEV && game) {
   const g = game
   void import('./state').then(({ setPlayer }) => import('./core/player-state').then(({ newPlayer }) => {
@@ -99,21 +104,9 @@ if (import.meta.env.DEV && game) {
   }))
 }
 
-window.visualViewport?.addEventListener('resize', fitViewport)
-window.visualViewport?.addEventListener('scroll', fitViewport)
-window.addEventListener('resize', () => setTimeout(fitViewport, 150))
-window.addEventListener('orientationchange', () => setTimeout(fitViewport, 300))
-// iOS Safari : la barre d'URL se rétracte APRÈS le chargement → la 1re mesure de hauteur est trop
-// grande et le jeu sort du visible (bas coupé, « auto-scale » foireux vu sur iPhone 12 mini). On
-// re-mesure donc plusieurs fois après le boot, au 'load', et à chaque 'pageshow' (reprise PWA/bfcache).
-window.addEventListener('load', fitViewport)
-window.addEventListener('pageshow', fitViewport)
-for (const d of [80, 250, 600, 1200, 2500]) setTimeout(fitViewport, d)
-fitViewport()
-
 if (game) {
   const g = game
-  g.events.once(Phaser.Core.Events.READY, fitViewport)
+  g.events.once(Phaser.Core.Events.READY, refit)
 
   // ─── Watchdog anti-freeze ──────────────────────────────────────────────────
   // La boucle Phaser émet POST_STEP ('poststep') à chaque frame, tant qu'elle vit.
