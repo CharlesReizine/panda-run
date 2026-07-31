@@ -1,5 +1,10 @@
 // Lecture/écriture de la sauvegarde dans Firestore : un document par joueur, `saves/{pseudoKey}`.
 //
+// ⚠️ PAS PRIVÉE, et c'est inhérent au modèle choisi : le pseudo étant la seule identité, « reprendre
+// ma partie sur un autre téléphone » consiste exactement à lire la sauvegarde d'une clé qu'on ne
+// possède pas. Tout joueur authentifié peut donc lire et écrire n'importe quelle sauvegarde
+// (cf. firestore.rules).
+//
 // LA SAUVEGARDE EST STOCKÉE COMME UNE CHAÎNE JSON, pas comme un objet Firestore. C'est délibéré :
 //   - Firestore REFUSE les champs `undefined` (or PlayerState a plein de champs optionnels :
 //     equipment.hat, quests…), interdit les tableaux imbriqués, et contraint les noms de clés.

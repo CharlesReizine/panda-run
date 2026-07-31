@@ -1,10 +1,10 @@
 // Classement public : un document par joueur dans `players/{pseudoKey}` (le pseudo EST l'identité,
 // cf. cloud/identity.ts).
 //
-// SÉPARÉ de `saves/{pseudoKey}` À DESSEIN. La sauvegarde est PRIVÉE (lisible par son seul propriétaire) et
-// pèse ~10 Ko ; le classement doit être lisible par TOUT LE MONDE et ne contient que la vitrine :
-// pseudo, niveau, classe. Deux collections = deux règles de sécurité distinctes, et surtout on ne
-// diffuse pas l'inventaire de chacun pour afficher un tableau de scores.
+// SÉPARÉ de `saves/{pseudoKey}` À DESSEIN. Une sauvegarde pèse ~10 Ko (inventaire, kills, quêtes…) ;
+// le classement n'a besoin que de la vitrine : pseudo, niveau, classe. Afficher un tableau de scores
+// ne doit pas obliger à télécharger la partie complète de chaque joueur — ni à la rendre publique en
+// lecture anonyme (les saves exigent au moins d'être authentifié, le classement non).
 //
 // ⚠️ L'écriture n'est PAS réservée au propriétaire, et c'est un choix assumé du user : le pseudo étant
 // la seule identité (aucun mot de passe), quiconque le connaît peut écrire cette ligne. Les règles

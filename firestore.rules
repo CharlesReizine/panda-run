@@ -1,22 +1,38 @@
 rules_version = '2';
 
-// Sécurité de panda-run. L'identité vient de l'authentification ANONYME : chaque joueur a un `uid`
-// vérifiable sans avoir jamais tapé de mot de passe. C'est ce qui permet ces règles — sans identité,
-// il faudrait ouvrir l'écriture à tout le monde et n'importe qui pourrait écraser la partie d'un
-// autre ou se déclarer niveau 99 dans le classement.
+// Sécurité de panda-run — À LIRE AVANT DE MODIFIER.
+//
+// MODÈLE CHOISI PAR LE USER : le PSEUDO est la seule identité, il n'y a aucun mot de passe. Les
+// documents sont donc indexés par pseudo (`saves/{pseudoKey}`), PAS par identifiant de compte.
+//
+// CONSÉQUENCE DIRECTE, ASSUMÉE : on ne peut pas restreindre l'accès « à son propre document », parce
+// qu'il n'existe aucun lien vérifiable entre un joueur et un pseudo. Reprendre sa partie sur un autre
+// téléphone consiste très exactement à LIRE la sauvegarde d'une clé qu'on ne possède pas — donc tout
+// joueur authentifié peut lire et écrire n'importe quelle sauvegarde. C'est le prix du « pas de mot de
+// passe », pas un défaut de ces règles.
+//
+// ⚠️ PIÈGE HISTORIQUE : une version précédente exigeait `request.auth.uid == uid`. Avec des documents
+// indexés par pseudo, cette condition est TOUJOURS fausse (l'uid anonyme n'est jamais égal au pseudo)
+// → toutes les écritures étaient refusées et le jeu ne sauvegardait jamais en ligne, en silence.
+// Détecté par scripts/smoke-cloud.mjs. Si un jour on ajoute un code de récupération, on pourra
+// revenir à un vrai contrôle de propriétaire — et il faudra alors réindexer par uid.
+//
+// CE QUI EST QUAND MÊME PROTÉGÉ : l'authentification anonyme est exigée pour toute écriture. Elle
+// n'identifie personne, mais elle empêche de vider la base au curl sans même lancer le jeu, et toute
+// collection non prévue reste fermée.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // SAUVEGARDES — privées : lisibles et écrivables par leur seul propriétaire.
-    match /saves/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+    // SAUVEGARDES — indexées par pseudo. Lecture/écriture pour tout joueur authentifié (cf. ci-dessus).
+    match /saves/{pseudoKey} {
+      allow read, write: if request.auth != null;
     }
 
-    // CLASSEMENT — la vitrine (pseudo, niveau, classe) est publique EN LECTURE, sinon personne ne
-    // pourrait afficher le tableau. L'écriture reste réservée au propriétaire de la ligne.
-    match /players/{uid} {
+    // CLASSEMENT — la vitrine (pseudo, niveau, classe). Lecture PUBLIQUE : sans elle, personne ne
+    // pourrait afficher le tableau. Écriture réservée aux joueurs authentifiés.
+    match /players/{pseudoKey} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null;
     }
 
     // tout le reste est fermé
