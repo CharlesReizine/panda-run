@@ -40,7 +40,7 @@ export const EVOLUTIONS: Partial<Record<ClassId, ClassId>> = {
 }
 
 export function xpToNext(level: number): number {
-  // ⚠️ COEFFICIENT RELEVÉ DE 100 À 116, ET C'EST LA CONTREPARTIE DE TERRAINS PLUS LONGS.
+  // ⚠️ COEFFICIENT REVENU À 100, ET C'EST LA CONTREPARTIE DE TERRAINS PLUS LONGS.
   // Le user a demandé des terrains plus riches (« rajoute des modules, je m'en fous de ton 50 ») : chaque
   // terrain porte donc ~2 modules de plus, donc plus de monstres, donc plus d'XP. Mesuré après coup, le
   // joueur arrivait SUR-NIVEAU face au contenu — trois terrains devenaient triviaux et un boss se

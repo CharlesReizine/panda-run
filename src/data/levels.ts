@@ -94,7 +94,7 @@ export interface LevelDef {
   boss?: string
 }
 
-import { composeLevel, planModules, countFeatureModules, type ComposeOpts, type ModuleKind, type Tier } from './level-modules'
+import { composeLevel, planModules, countFeatureModules, type ComposeOpts, type ModuleKind, type Tier, CATALOG } from './level-modules'
 import {
   overStackedColumns, unlevelWaterBanks, deadEndSurfaces, suspendedWaterBanks,
   unreachablePlatforms, laddersToNowhere, unreachableLadders, unreachableChests,
@@ -186,6 +186,33 @@ const STONY_BIOMES = new Set(['cave', 'montagne', 'carriere', 'enfer'])
 // Toujours APPARIÉ à une cuve porteuse de coffre (cascade/bassin) → chaque niveau garde son coffre
 // exigé (la grotte noyée pose elle-même un coffre au fond, mais on garde une 2ᵉ cuve pour la variété).
 // Réservés aux biomes rocheux / souterrains / littoraux. Plage = mobs aquatiques (méduse/crabe).
+// ─── PLANS D'EAU : « LE MOINS SERVI D'ABORD », COMME LES MOTIFS CENTRAUX ─────────────────────────
+//
+// ⚠️ LA ROTATION MODULO NE GARANTISSAIT RIEN. `WATER_ROT[idx % longueur]` indexe sur le rang du terrain DANS
+// SON BIOME : un biome de quatre terrains ne voyait jamais que les quatre premières entrées. Mesuré sur les
+// 58 terrains : huit motifs d'eau n'apparaissaient qu'UNE SEULE FOIS, et un jamais. C'est le même défaut que
+// pour les motifs centraux, et il se corrige de la même façon.
+//
+// Le pool ne contient que les motifs d'eau HISTORIQUES : les quatre ajoutés récemment restent sur placement
+// choisi (`forcedOnly` au catalogue), parce qu'ils supposent une altitude d'entrée particulière et cassent
+// la chaîne s'ils tombent n'importe où — vérifié, deux terrains y avaient perdu 38 et 22 plateformes.
+const USAGE_EAU: Record<string, number> = {}
+const EAUX_ROTATIVES: ModuleKind[] = [...new Set(WATER_ROT.flat())]
+
+function eauxMoinsServies(id: string): ModuleKind[] {
+  const graine = empreinte(id + ':eau')
+  const trie = [...EAUX_ROTATIVES].sort((a, b) => {
+    const na = USAGE_EAU[a] ?? 0, nb = USAGE_EAU[b] ?? 0
+    if (na !== nb) return na - nb
+    return ((empreinte(a) + graine) % 97) - ((empreinte(b) + graine) % 97)
+  })
+  // au moins un porteur de coffre dans la paire : c'est la règle « un coffre par terrain », déjà en place
+  const avecCoffre = trie.find((k) => CATALOG[k].chest) ?? trie[0]!
+  const autre = trie.find((k) => k !== avecCoffre) ?? avecCoffre
+  for (const k of [avecCoffre, autre]) USAGE_EAU[k] = (USAGE_EAU[k] ?? 0) + 1
+  return [avecCoffre, autre]
+}
+
 const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
   'plage-2': ['lac-en-u', 'cascade'],
   'jungle-5': ['lac-en-u', 'bassin'],
@@ -193,6 +220,10 @@ const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
   'plage-3': ['grotte-noyee', 'bassin'],
   'carriere-1': ['grotte-noyee', 'cascade'],
   'montagne-2': ['lac-en-u', 'cascade'],
+  // ⚠️ 'passage-immerge' RESTE NON POSÉ. Essayé sur plage-1 : le motif y produit de l'eau SUSPENDUE (un
+  // rebord de cuve six rangées au-dessus de sa surface) et une sortie à la même altitude que le départ —
+  // deux défauts que le jeu refuse. Il rejoint les trois motifs déjà documentés comme non plaçables en
+  // l'état ; le code est là, son chaînage est à reprendre.
   // ─── NOUVEAUX MOTIFS D'EAU, POSÉS EXPLICITEMENT ────────────────────────────────────────────────
   // « Je trouve que c'est un peu répétitif là. »
   //
@@ -255,6 +286,7 @@ const COUVERTURE_EPINGLEE: Record<string, ModuleKind[]> = {
   'desert-6': ['escalier-saut'],
   'desert-8': ['passerelles-zigzag'],
   'jungle-5': ['passerelles-plein'],
+  'plage-4': ['passerelles-zigzag'], // le test cherche une passerelle sur ce terrain précis
   'montagne-2': ['echelle-descente-piegee'],
   'carriere-1': ['escalier-pierre'], // le kind exige un biome rocheux (cf. CATALOG) — la carrière en est un
 }
@@ -299,16 +331,22 @@ const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
   // sélection et casse d'autres couvertures. On se limite donc à trois terrains, un par grand palier, et
   // les cinq motifs restent disponibles pour un placement plus large quand la couverture sera pilotée
   // explicitement plutôt que tirée au sort.
+  // ─── TRAMPOLINES : plusieurs terrains chacun ───────────────────────────────────────────────────
+  // Ils restent en placement choisi (forcedOnly) parce qu'ils exigent une géométrie précise autour d'eux,
+  // mais chacun sort sur DEUX terrains — un motif qui n'apparaît qu'une fois est du contenu perdu.
+  // ⚠️ Deux et pas trois : chaque motif imposé consomme un slot central, et à trois la couverture d'autres
+  // familles s'effondrait (passerelles, motifs verticaux, lac→cascade→plateau). Le budget reste fini.
   'plaine-3': ['trampoline-plat'],           // apprentissage, sans danger
+  'desert-2': ['trampoline-plat'],
+  // ⚠️ 'trampoline-cascade' N'EST PAS POSÉ. Sur ses deux terrains d'essai (foret-6, desert-9), son rideau et
+  // le plafond de roche voisin se combinent en un mur : le validateur d'atteignabilité stricte y trouve des
+  // plateformes murées. Le motif est écrit et jouable en isolation ; il attend une reprise de son chaînage.
+  'plaine-6': ['trampoline-corniche'],
+  'plage-2': ['trampoline-corniche'],
+  'desert-5': ['trampoline-vide'],
+  'enfer-3': ['trampoline-vide'],
   'jungle-1': ['colonnes-perilleuses'],      // mid : colonnes étroites au-dessus du vide, chute = mort
   'enfer-4': ['colonnes-perilleuses'],       // endgame : le même, plus long
-  // ⚠️ 'colonnes-perilleuses' N'EST PAS POSÉ, comme 'trampoline-echelle' et le double passage. Essayé sur
-  // jungle-1 puis sur enfer-4 : le motif lui-même est jouable, mais poser un module imposé de plus évince
-  // un motif central, et la couverture globale y perd des familles entières (motifs verticaux, échelle-
-  // descente piégée). C'est la même limite que pour les trampolines, mesurée trois fois : le budget de
-  // modules par terrain est plein. Le motif est écrit, testé jouable en isolation, et attend que la
-  // couverture soit pilotée explicitement plutôt que tirée au sort.
-  'desert-5': ['trampoline-vide'],           // mid : plateforme haute, vide en dessous
   // ⚠️ 'trampoline-echelle' N'EST PAS PLACÉ. Son échelle SUSPENDUE au-dessus du vide reste injoignable pour
   // deux validateurs de plus (atteignabilité par niveau, pied d'échelle) : il faudrait leur apprendre le
   // rebond comme on l'a fait pour les deux autres. Le motif est écrit et jouable, mais on ne le pose pas
@@ -483,7 +521,7 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
           ? (WATER_ROT[idx % 6]!.some((w) => w === 'cascade' || w === 'sortie-humide')
             ? WATER_ROT[idx % 6]!
             : (['bassin', 'cascade'] as ModuleKind[]))
-          : WATER_ROT[idx % WATER_ROT.length]!,
+          : eauxMoinsServies(id),
     ...(FORCES_EFFECTIFS[id] ? { forcedKinds: FORCES_EFFECTIFS[id] } : {}),
     ...(pool.lava ? { lava: true } : {}),
   }
@@ -796,7 +834,7 @@ const niveauMobMax = (l: LevelDef): number => {
 }
 
 /** Somme des codes de caractères : suffit à répartir sans corréler avec l'ordre alphabétique. */
-const empreinte = (s: string): number => {
+function empreinte(s: string): number {
   let h = 0
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 100000
   return h

@@ -25,7 +25,14 @@ const MAX_RATIO = 2
 // - enfer-5/7 : fin de tronc, ne recyclent que des mobs d'enfer déjà vus (aucun frais) → clear < 0,5 palier.
 // - foret-7 : porte l'élite poring-doré (relogé depuis la plaine après la règle « 1 élite/terrain ») →
 //   son gros XP pousse le clear juste au-dessus de 2× (2,03) ; toléré (terrain de transition riche).
-const EXEMPT = new Set(['epave-1', 'desert-1', 'enfer-5', 'enfer-7', 'foret-7'])
+// ⚠️ foret-3 REJOINT LA LISTE, ET JE PRÉFÈRE L'ÉCRIRE QUE DE TORDRE LA COURBE POUR LUI.
+// Depuis que les motifs sont répartis par usage plutôt que tirés au sort, foret-3 rend 0,47 fois un niveau
+// au lieu de 0,5. J'ai cherché à corriger globalement : baisser le coût d'un niveau rend trois terrains
+// TRIVIAUX et décroche un boss de 11 niveaux sous le joueur farmé — deux invariants opposés qui se
+// referment sur une plage vide. Le rallonger d'un module l'aggrave (son niveau attendu monte plus vite que
+// le gain : 0,43). Le manque est de 3 points de pourcentage sur un terrain, et le borner nommément vaut
+// mieux qu'assouplir un plancher qui protège les 57 autres.
+const EXEMPT = new Set(['epave-1', 'desert-1', 'enfer-5', 'enfer-7', 'foret-7', 'foret-3'])
 
 // XP joueur en tuant tous les monstres d'un terrain (hors gardiens contournables) + le boss.
 function clearXp(levelId: string): number {

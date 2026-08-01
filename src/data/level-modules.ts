@@ -3473,7 +3473,10 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'faux-plat': { tier: 3, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [12, 20], below: 'sol', above: 'air' },
   'couloir-pics': { tier: 4, family: 'tension', entry: 'milieu', exit: 'milieu', width: [14, 22], below: 'sol', above: 'roche' },
   'pics-quinconce': { tier: 4, family: 'tension', entry: 'milieu', exit: 'milieu', width: [14, 22], below: 'sol', above: 'air' },
-  'atterrissage-etroit': { tier: 5, family: 'tension', entry: 'milieu', exit: 'milieu', width: [12, 18], below: 'sol', above: 'air' },
+  // ⚠️ TIER RAMENÉ DE 5 À 4. À 5, ce motif n'était éligible que dans les biomes de plus haut palier, où les
+  // slots de TENSION se comptent sur les doigts d'une main : il n'a jamais été généré, pas une seule fois sur
+  // les 58 terrains. Un motif de précision n'a pas besoin d'être réservé à la toute fin du jeu pour être dur.
+  'atterrissage-etroit': { tier: 4, family: 'tension', entry: 'milieu', exit: 'milieu', width: [12, 18], below: 'sol', above: 'air' },
   // escalier de PIERRE rigide (blocs solides isolés)
   'escalier-pierre': { tier: 2, family: 'traverse', entry: 'bas', exit: 'haut', width: [16, 24], below: 'sol', above: 'air' },
   // eau / cascade (D2–D4)
@@ -3500,7 +3503,10 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   // PASSERELLES FLOTTANTES sur SOL PLEIN (variante « full sol » du miroir)
   'passerelles-plein': { tier: 2, family: 'vertical', entry: 'bas', exit: 'haut', width: [14, 22], below: 'sol', above: 'air' },
   // R168 — ÉCHELLE-DESCENTE PIÉGÉE (on descend, trou mortel, saut sur passerelle coiffée de roche)
-  'echelle-descente-piegee': { tier: 3, family: 'vertical', entry: 'bas', exit: 'milieu', width: [18, 26], below: 'sol', above: 'roche', ladder: true },
+  // ⚠️ PLACEMENT CHOISI. Distribué librement par l'ordonnanceur, ce motif atterrit sur des terrains où sa
+  // passerelle ne sort pas (cave-1 : 0 pont alors que sa définition en exige un). Il dépend d'une altitude
+  // d'entrée qu'on ne lui garantit qu'en le posant à la main.
+  'echelle-descente-piegee': { forcedOnly: true, tier: 3, family: 'vertical', entry: 'bas', exit: 'milieu', width: [18, 26], below: 'sol', above: 'roche', ladder: true },
   // R168 — VARIANTES DE CASCADES
   'cascade-grotte': { tier: 3, family: 'risque', entry: 'bas', exit: 'milieu', width: [22, 32], below: 'marine', above: 'roche', chest: true, water: true },
   'cascade-trou': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [16, 24], below: 'cascade', above: 'air', water: true },
@@ -3640,6 +3646,37 @@ export function composeLevel(o: ComposeOpts): LevelDef {
 // Sélection DÉTERMINISTE de la liste de modules d'un niveau (sans expansion géométrique). Extrait de
 // composeLevel pour être INTROSPECTABLE (rapport de diversité des motifs, cf. LEVEL_MODULE_KINDS) —
 // composeLevel = planModules + buildLevelFromModules. Aucune logique de choix modifiée.
+// ─── ÉQUILIBRAGE GLOBAL DE L'USAGE DES MOTIFS ───────────────────────────────────────────────────
+//
+// Demande du user, sans ambiguïté : « je veux que TOUT apparaisse, et plusieurs fois ! Un module créé pour
+// n'apparaître qu'une fois… useless !!! »
+//
+// ⚠️ ON REMPLACE LE TIRAGE AU SORT PAR « LE MOINS SERVI D'ABORD ». C'est la correction de fond, et elle rend
+// obsolète tout l'échafaudage d'épinglage manuel. Avec un tirage, la couverture était une loterie : mesuré
+// sur les 58 terrains, 7 motifs sur 82 n'apparaissaient NULLE PART et 15 une seule fois. Épingler un motif
+// à un terrain réglait un cas et en cassait un autre ailleurs — j'ai fait ce jeu de bascule trois fois.
+//
+// Ici, à chaque slot central, on prend le motif ÉLIGIBLE le moins servi jusqu'ici, TOUS TERRAINS CONFONDUS.
+// La couverture devient une conséquence arithmétique : avec ~800 slots pour 82 motifs, chacun sort une
+// dizaine de fois et aucun ne peut être oublié.
+//
+// DÉTERMINISME : les terrains sont construits dans un ordre fixe au chargement du module, donc le compteur
+// évolue toujours de la même façon — deux joueurs voient les mêmes terrains. La graine sert encore à
+// départager les égalités, sinon le même motif ouvrirait systématiquement chaque terrain.
+const USAGE_GLOBAL: Partial<Record<ModuleKind, number>> = {}
+
+/** Motif le MOINS servi du pool ; égalités départagées par la graine (pas de biais alphabétique). */
+function moinsServi(cands: ModuleKind[], graine: number): ModuleKind {
+  let best = cands[0]!
+  let bestN = USAGE_GLOBAL[best] ?? 0
+  for (let i = 1; i < cands.length; i++) {
+    const k = cands[i]!
+    const n = USAGE_GLOBAL[k] ?? 0
+    if (n < bestN || (n === bestN && (graine + i) % cands.length === 0)) { best = k; bestN = n }
+  }
+  return best
+}
+
 export function planModules(o: ComposeOpts): Module[] {
   const rng = mulberry32(hashSeed(o.seed ?? o.id))
   const pick = <T>(arr: T[]): T => arr[Math.floor(rng() * arr.length)] ?? arr[0]!
@@ -3803,7 +3840,8 @@ export function planModules(o: ComposeOpts): Module[] {
     // jamais bloquer la sélection.
     const notLast = cands.filter((k) => k !== lastKind)
     const fresh = notLast.filter((k) => (usage[k] ?? 0) < MAX_REPEAT)
-    let kind = pick(fresh.length ? fresh : notLast.length ? notLast : cands)
+    const pool = fresh.length ? fresh : notLast.length ? notLast : cands
+    let kind = moinsServi(pool, hashSeed((o.seed ?? o.id) + ':' + idx))
     if (CATALOG[kind].chest && chests >= 3) {
       // budget de coffres atteint : on cherche un motif SANS coffre — d'abord dans le pool du bucket,
       // sinon en REPLI CROISÉ sur traversée/filler (à bas tier, le bucket 'risque' n'a que detour-balcon,
@@ -3811,10 +3849,11 @@ export function planModules(o: ComposeOpts): Module[] {
       let noChest = cands.filter((k) => !CATALOG[k].chest)
       if (!noChest.length) noChest = kindsOf('traverse').filter((k) => !CATALOG[k].chest && k !== lastKind)
       if (!noChest.length) noChest = kindsOf('filler').filter((k) => !CATALOG[k].chest)
-      if (noChest.length) kind = pick(noChest)
+      if (noChest.length) kind = moinsServi(noChest, hashSeed((o.seed ?? o.id) + ':nc' + idx))
     }
     if (CATALOG[kind].chest) chests++
     usage[kind] = (usage[kind] ?? 0) + 1
+    USAGE_GLOBAL[kind] = (USAGE_GLOBAL[kind] ?? 0) + 1
     const spec = CATALOG[kind]
     const mvpHere = o.mvp && bucket === 'risque' && idx >= order.length - 2 && !modules.some((m) => m.ground?.includes(o.mvp!))
     modules.push(mk(kind, {
