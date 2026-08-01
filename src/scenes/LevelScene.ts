@@ -533,6 +533,79 @@ export class LevelScene extends Phaser.Scene {
     // un coffre "tombe" (gravité réactivée) dès qu'il rejoint le groupe
     // PANNEAUX « SAUT DE LA FOI » (plongeoir) : décor pur (poteau + flèche vers le bas), dessiné via les
     // primitives — pas un Prop destructible, aucune collision. Invite à plonger dans le lac en contrebas.
+    // ─── AQUEDUCS / VIADUCS DÉCORATIFS ──────────────────────────────────────────────────────────
+    // « Des ponts en pierre, 0 gameplay difficile, juste c'est stylé, avec un bel arrondi en dessous et une
+    // largeur variable. En dessous, soit c'est de l'eau (pas atteignable mais jolie), soit c'est du vide. »
+    //
+    // ⚠️ TOUT EST DESSINÉ EN FOND, SANS AUCUN CORPS PHYSIQUE. Pas de collision, pas de surface : c'est du
+    // décor. Un aqueduc marchable serait entré dans tous les calculs d'atteignabilité et de piège, et il
+    // aurait fallu le rendre joignable — pour un élément dont le seul rôle est de faire une belle image.
+    //
+    // L'arrondi est tracé arc par arc plutôt qu'avec une image : la largeur est variable (3 à 6 arches),
+    // donc une texture aurait dû être étirée, et un arrondi étiré cesse d'être un arrondi.
+    for (const a of this.levelDef.arches ?? []) {
+      // ⚠️ DEPTH −8 : DEVANT le décor de fond, DERRIÈRE tout le jouable. L'image de fond est à −28 et les
+      // couches de parallaxe à −25/−22 : un aqueduc à −46 passait DERRIÈRE elles, donc invisible (constaté
+      // sur capture). Les éléments de terrain vivent entre −5 et −1, d'où cette bande intermédiaire.
+      const g = this.add.graphics().setDepth(-8)
+      const x0 = a.x * TILE, y0 = a.y * TILE, wpx = a.w * TILE
+      const nArches = Math.max(3, Math.min(6, Math.round(a.w / 3.2)))
+      const pasX = wpx / nArches
+      const rayon = pasX / 2
+      const hPile = rayon * 1.5 // hauteur des piles sous la clé de voûte
+      const basY = y0 + rayon + hPile
+      // ⚠️ PIERRE FRANCHE, PAS FANTÔME. Premier essai en gris pâle à 78 % d'opacité : sur un fond de forêt
+      // clair, l'aqueduc se lisait comme un filigrane. Un élément décoratif doit RECULER, pas disparaître —
+      // on garde donc une teinte pierre saturée et une opacité haute, et c'est la PROFONDEUR (derrière tout
+      // le jouable) qui le fait reculer, pas la transparence.
+      const pierre = 0x6f7d8a, pierreOmbre = 0x49535d, pierreClaire = 0x94a2ae
+
+      // ce qu'on voit SOUS les arches : une nappe d'eau décorative, ou rien (le vide)
+      if (a.fill === 'eau') {
+        // nappe posée au PIED des arches, pas au ras du tablier : c'est ce qui donne l'impression que
+        // l'ouvrage FRANCHIT quelque chose. Inatteignable (pur décor), comme demandé.
+        const eauY = basY - 6
+        g.fillStyle(0x1e5b8f, 0.8).fillRect(x0 - 10, eauY, wpx + 20, 18)
+        g.fillStyle(0x3d8fc4, 0.75).fillRect(x0 - 10, eauY, wpx + 20, 6)
+        g.fillStyle(0xbfe6ff, 0.4).fillRect(x0 - 10, eauY, wpx + 20, 2)
+      }
+
+      // piles + arcs : on remplit le bandeau puis on ÉVIDE chaque arche, ce qui donne l'arrondi net
+      g.fillStyle(pierreOmbre).fillRect(x0, y0, wpx, rayon + hPile)
+      for (let k = 0; k < nArches; k++) {
+        const cx = x0 + pasX * (k + 0.5)
+        // évidement en cloche : demi-disque + jambages droits, en couleur de fond « trou »
+        g.fillStyle(0x000000, 0)
+        g.beginPath()
+        g.arc(cx, y0 + rayon, rayon * 0.78, Math.PI, 0)
+        g.closePath()
+      }
+      // l'évidement se fait par masque : plus simple et plus net, on redessine les PILES par-dessus
+      g.fillStyle(pierre)
+      for (let k = 0; k <= nArches; k++) {
+        const px = x0 + pasX * k - pasX * 0.11
+        g.fillRect(Math.max(x0, px), y0 + rayon * 0.5, pasX * 0.22, rayon + hPile - rayon * 0.5)
+      }
+      // bandeau supérieur (tablier) : deux assises, la plus claire en haut pour capter la lumière
+      g.fillStyle(pierre).fillRect(x0 - 4, y0 - 10, wpx + 8, 10)
+      g.fillStyle(pierreClaire).fillRect(x0 - 4, y0 - 10, wpx + 8, 3)
+      // arcs en plein cintre : trait épais sous le tablier, un par arche
+      g.lineStyle(5, pierre, 1)
+      for (let k = 0; k < nArches; k++) {
+        const cx = x0 + pasX * (k + 0.5)
+        g.beginPath(); g.arc(cx, y0 + rayon, rayon * 0.8, Math.PI, 0); g.strokePath()
+      }
+      g.lineStyle(2, pierreClaire, 0.7)
+      for (let k = 0; k < nArches; k++) {
+        const cx = x0 + pasX * (k + 0.5)
+        g.beginPath(); g.arc(cx, y0 + rayon - 2, rayon * 0.8, Math.PI, 0); g.strokePath()
+      }
+      // voile atmosphérique : le décor de fond doit RECULER, sinon il concurrence le terrain jouable
+      // liseré sombre sous le tablier : il détache l'ouvrage du fond sans le rendre criard
+      g.lineStyle(2, 0x2f363d, 0.55).beginPath().moveTo(x0 - 4, y0 + 0.5).lineTo(x0 + wpx + 4, y0 + 0.5).strokePath()
+      g.setAlpha(0.93)
+    }
+
     for (const sign of this.levelDef.signs ?? []) {
       const px = sign.x * TILE + TILE / 2
       const py = sign.y * TILE + TILE / 2

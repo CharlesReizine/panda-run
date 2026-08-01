@@ -29,6 +29,16 @@ export interface LevelDef {
   // PANNEAUX décoratifs (plongeoir « saut de la foi ») : poteau + flèche vers le bas, dessinés en
   // primitives par LevelScene. Aucune collision, aucun drop — pur décor indiquant où plonger.
   signs?: { x: number; y: number }[]
+  // AQUEDUCS / VIADUCS — PUREMENT DÉCORATIFS, AUCUNE COLLISION, AUCUN GAMEPLAY.
+  // Demande du user : « rajoute des ponts en pierre (0 gameplay difficile, juste c'est stylé) avec un bel
+  // arrondi en dessous et une largeur variable. En dessous, soit c'est de l'eau (pas atteignable mais
+  // jolie), soit c'est du vide. »
+  // ⚠️ CANAL DISTINCT DES PLATEFORMES ET DES PONTS, ET C'EST TOUT L'INTÉRÊT. Un aqueduc posé dans les
+  // `bridges` deviendrait une surface marchable, donc un objet de gameplay : il entrerait dans tous les
+  // calculs d'atteignabilité et de piège, et il faudrait le rendre joignable. Ici il vit dans le décor de
+  // fond, derrière le terrain — on ne peut ni le toucher ni monter dessus, il ne fait que de la belle image.
+  // `y` = rangée du TABLIER ; `fill` = ce qu'on voit sous les arches.
+  arches?: { x: number; y: number; w: number; fill: 'eau' | 'vide' }[]
   // spikes = danger ; water = plan d'eau. Pour les PICS, `top` = rangée de la surface qui PORTE les
   // pics (dessus d'une corniche/plateforme en hauteur) ; absent → pics au SOL (rétrocompat exacte).
   // Les pics infligent les mêmes dégâts et se chevauchent pareil, quelle que soit la hauteur.
@@ -729,6 +739,29 @@ function attribuerPaliersDeCoffre(l: LevelDef): void {
   })
 }
 
+/**
+ * Pose un aqueduc décoratif dans le fond de certains terrains.
+ *
+ * ⚠️ DANS LE DÉCOR DE FOND, JAMAIS DANS LA ZONE DE JEU. Le tablier est placé haut au-dessus de la
+ * silhouette marchable (10 à 15 rangées) : de là, il ne peut croiser aucune plateforme, aucun monstre et
+ * aucun trajet — donc aucun validateur n'a à le connaître, et il ne peut rien casser. C'est la contrepartie
+ * d'un élément « purement esthétique » : il doit être inoffensif PAR CONSTRUCTION, pas par prudence.
+ *
+ * Déterministe (empreinte de l'identifiant) : deux joueurs voient le même viaduc au même endroit.
+ */
+function poserAqueduc(l: LevelDef): void {
+  const h = empreinte(l.id + ':arche')
+  if (h % 100 < 45) return // un peu moins d'un terrain sur deux : un viaduc partout n'est plus un événement
+  const groundRow = Math.max(0, (l.heightTiles ?? 30) - 3)
+  // largeur VARIABLE (demandée) : de 9 à 20 tuiles, soit 3 à 6 arches
+  const w = 9 + (h % 12)
+  const x = 3 + ((h >> 5) % Math.max(1, l.widthTiles - w - 6))
+  const y = groundRow - (10 + ((h >> 9) % 6))
+  if (y < 2) return
+  l.arches = [{ x, y, w, fill: (h >> 3) % 2 === 0 ? 'eau' : 'vide' }]
+}
+
 for (const l of list) attribuerPaliersDeCoffre(l)
+for (const l of list) poserAqueduc(l)
 
 export const LEVELS: Record<string, LevelDef> = Object.fromEntries(list.map((l) => [l.id, l]))
