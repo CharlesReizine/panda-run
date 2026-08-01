@@ -23,14 +23,14 @@ const n = (k: ModuleKind) => compte[k] ?? 0
 // Motifs délibérément NON posés, chacun pour une raison vérifiée et écrite. Cette liste est un INVENTAIRE
 // de dette, pas une dérogation : le test échoue aussi si l'un d'eux se met à apparaître (il faudra alors
 // retirer la ligne) ou si un motif non listé disparaît.
-const NON_POSES: Record<string, string> = {
-  'passage-immerge': 'produit de l\'eau suspendue et une sortie à l\'altitude du départ (essayé sur plage-1)',
-  'trampoline-cascade': 'son rideau et le plafond de roche voisin murent des plateformes (foret-6, desert-9)',
-  'trampoline-echelle': 'écarté sur demande du user',
-  'cascade-saut-ange': 'chaînage d\'altitude non résolu (perchoir haut)',
-  'cascade-large-pierre': 'idem',
-  'lacs-cascade-descente': 'le validateur ne modélise pas la chute : les lacs du haut sont injoignables',
-}
+// ⚠️ CETTE LISTE EST VIDE, ET C'EST L'ABOUTISSEMENT. Elle a compté jusqu'à six motifs « écrits mais jamais
+// posés », chacun avec sa raison. Le user a tranché : « c'est quoi les tous inventoriés, c'est hors de
+// question ». Les six ont donc été repris un par un — et aucun n'était réellement injouable, tous étaient
+// MAL DÉCLARÉS : un déversoir de 3 rangées annoncé comme cascade remontable, un lac sans berge d'un côté,
+// une échelle suspendue là où une corniche suffisait, une sortie de module au sommet d'un rideau qui rendait
+// tout l'aval injoignable. Le validateur ne refusait pas des motifs difficiles, il refusait des motifs
+// incohérents. On garde la structure du test : si un motif redevient non plaçable, il faudra l'écrire ici.
+const NON_POSES: Record<string, string> = {}
 
 describe('tout le catalogue est joué', () => {
   it('aucun motif n\'est oublié, hors dette inventoriée', () => {
@@ -41,6 +41,14 @@ describe('tout le catalogue est joué', () => {
   it('la dette ne contient aucune entrée périmée', () => {
     const perimes = Object.keys(NON_POSES).filter((k) => n(k as ModuleKind) > 0)
     expect(perimes, `à retirer de NON_POSES : ${perimes.join(', ')}`).toEqual([])
+  })
+
+  it('AUCUN motif n\'est oublié — zéro, pas « presque zéro »', () => {
+    // Le user a refusé net l'idée d'un inventaire de motifs non posés : « c'est quoi les tous inventoriés,
+    // c'est hors de question ». Les six qui restaient ont donc été repris, et aucun n'était injouable — tous
+    // étaient MAL DÉCLARÉS (un déversoir de 3 rangées annoncé comme cascade remontable, un lac sans berge
+    // d'un côté, une échelle suspendue là où une corniche suffisait). Ce test interdit le retour d'un oubli.
+    expect(tous.filter((k) => n(k) === 0)).toEqual([])
   })
 
   it('la GRANDE MAJORITÉ des motifs sort plusieurs fois', () => {

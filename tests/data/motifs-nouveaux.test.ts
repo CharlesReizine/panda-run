@@ -46,10 +46,13 @@ describe('les motifs longtemps retenus sont enfin posés', () => {
     expect(terrainsAvec(k).length, `${k} n'est généré nulle part`).toBeGreaterThan(0)
   })
 
-  it('« trampoline-echelle » reste écarté, sur demande', () => {
-    // « trampoline échelle, oublie pour le moment »
+  it('« trampoline-echelle » est posé lui aussi : plus aucun motif écarté', () => {
+    // Écarté un temps (« oublie pour le moment »), puis réclamé (« je veux retrouver TOUS les motifs »).
+    // Il a fallu poser son échelle sur une corniche au lieu de la suspendre : deux validateurs sur trois ne
+    // modélisent pas le rebond et la déclaraient « pied dans le vide ». La sensation est la même — on saute
+    // dans le vide pour attraper l'échelle — mais elle se vérifie.
     expect(CATALOG['trampoline-echelle'], 'le motif a disparu du catalogue').toBeDefined()
-    expect(kindsUtilises.has('trampoline-echelle')).toBe(false)
+    expect(terrainsAvec('trampoline-echelle').length).toBeGreaterThan(0)
   })
 })
 

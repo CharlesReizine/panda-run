@@ -7,7 +7,7 @@ describe('progression', () => {
   it('courbe croissante', () => {
     // le coût du niveau 1 suit le coefficient de la courbe (relevé quand les terrains ont été rallongés :
     // plus de monstres par terrain, donc plus d'XP, donc un niveau doit coûter davantage)
-    expect(xpToNext(1)).toBe(116)
+    expect(xpToNext(1)).toBe(122)
     expect(xpToNext(2)).toBeGreaterThan(xpToNext(1))
   })
 

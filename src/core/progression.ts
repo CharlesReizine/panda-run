@@ -40,14 +40,14 @@ export const EVOLUTIONS: Partial<Record<ClassId, ClassId>> = {
 }
 
 export function xpToNext(level: number): number {
-  // ⚠️ COEFFICIENT REVENU À 100, ET C'EST LA CONTREPARTIE DE TERRAINS PLUS LONGS.
+  // ⚠️ COEFFICIENT RELEVÉ DE 100 À 122, ET C'EST LA CONTREPARTIE DE TERRAINS PLUS LONGS.
   // Le user a demandé des terrains plus riches (« rajoute des modules, je m'en fous de ton 50 ») : chaque
   // terrain porte donc ~2 modules de plus, donc plus de monstres, donc plus d'XP. Mesuré après coup, le
   // joueur arrivait SUR-NIVEAU face au contenu — trois terrains devenaient triviaux et un boss se
   // retrouvait 12 niveaux sous le joueur farmé, deux invariants d'équilibrage que le jeu vérifie.
   // Rallonger les terrains sans toucher à la courbe d'XP, c'est offrir des niveaux gratuits : on remonte
   // donc le coût d'un niveau d'autant, et la progression retombe là où elle était calibrée.
-  return Math.floor(116 * Math.pow(level, 1.5))
+  return Math.floor(122 * Math.pow(level, 1.5))
 }
 
 export function grantXp(p: PlayerState, amount: number): { levelsGained: number } {

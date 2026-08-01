@@ -220,6 +220,22 @@ const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
   'plage-3': ['grotte-noyee', 'bassin'],
   'carriere-1': ['grotte-noyee', 'cascade'],
   'montagne-2': ['lac-en-u', 'cascade'],
+  // ─── SECONDE OCCURRENCE DE CHAQUE MOTIF À PLACEMENT CHOISI ─────────────────────────────────────
+  // Ces motifs exigent une géométrie précise autour d'eux, donc l'ordonnanceur ne les distribue pas : ils
+  // sortiraient n'importe où et casseraient la chaîne. Mais un motif qui n'apparaît qu'une fois est du
+  // contenu perdu — on les pose donc deux fois chacun, sur des terrains vérifiés.
+  'desert-3': ['passage-immerge', 'bassin'],
+  // ⚠️ PAS EN ENFER pour le saut de l'ange : ses cuves y deviennent de la LAVE, donc plonger tue et la
+  // corniche de plongée n'a plus d'issue — le validateur y voit un piège sans retour, et il a raison.
+  'cimetiere-2': ['cascade-saut-ange', 'bassin'],
+  'montagne-1': ['lacs-cascade-descente', 'bassin'],
+  'foret-5': ['puits', 'cascade'],
+  'jungle-2': ['boyau-immerge', 'cascade'],
+  'desert-6': ['cascade-w', 'bassin'],
+  'plage-1': ['passage-immerge', 'bassin'],
+  'foret-1': ['cascade-saut-ange', 'bassin'],
+  'desert-1': ['cascade-large-pierre', 'bassin'],
+  'jungle-1': ['lacs-cascade-descente', 'bassin'],
   // ⚠️ 'passage-immerge' RESTE NON POSÉ. Essayé sur plage-1 : le motif y produit de l'eau SUSPENDUE (un
   // rebord de cuve six rangées au-dessus de sa surface) et une sortie à la même altitude que le départ —
   // deux défauts que le jeu refuse. Il rejoint les trois motifs déjà documentés comme non plaçables en
@@ -245,12 +261,10 @@ const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
   // sans intérêt). Sur cimetiere-1 le module tombe plus court et passe.
   'cimetiere-1': ['cascade-deux-passages-g', 'cascade'],
   'jungle-4': ['boyau-tresor-retour', 'cascade'],
-  'cimetiere-2': ['boyau-tresor-retour', 'cascade'],
   // R171 — GROTTE SOUS-MARINE garantie TÔT (retour joueur : « 7-8 niveaux sans en voir »). On en pose
   // une dans les tout premiers terrains de plaine ET de forêt (biomes early), plus un lac-en-u forêt →
   // on en croise une dès les premiers niveaux, et elles deviennent nettement plus fréquentes.
   'plaine-4': ['grotte-noyee', 'cascade'],
-  'foret-1': ['grotte-noyee', 'bassin'],
   'foret-4': ['lac-en-u', 'cascade'],
   // R171 — LAC → CASCADE → PLATEAU épinglé à un terrain early pour le sortir tôt et souvent.
   'plaine-6': ['lac-cascade-plateau', 'cascade'],
@@ -259,13 +273,23 @@ const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
   // très rarement, car appendues en fin de WATER_ROT que peu de biomes atteignent par `idx % len`).
   // cascade-trou / cascade-trouee ne portent pas de coffre → appariées à une cuve à coffre (bassin).
   'foret-3': ['cascade-grotte', 'cascade'],
-  'jungle-1': ['cascade-large', 'bassin'],
-  'montagne-1': ['cascade-trou', 'bassin'],
   'jungle-3': ['cascade-cul-de-sac', 'cascade'],
   'plage-4': ['cascade-trouee', 'bassin'],
-  'jungle-2': ['cascade-w', 'bassin'], // NOUVEAU motif : cascade en W (rideaux mortels + îlot central)
   // NB : motifs 'cascade-saut-ange' et 'cascade-large-pierre' définis (builder + META) mais PAS encore
   // placés — leur chaînage d'altitude (perchoir/exit haut) casse la composition ; à raffiner avant pose.
+  // ─── SECONDE OCCURRENCE : aucun motif ne doit sortir une seule fois ────────────────────────────
+  'plaine-2': ['cascade-bassin', 'bassin'],
+  'foret-7': ['cascade-w', 'bassin'],
+  'desert-8': ['cascade-large-pierre', 'bassin'],
+  // ⚠️ LE DOUBLE PASSAGE RESTE À UNE OCCURRENCE PAR VARIANTE (Névé pour la version droite, Tombes pour la
+  // gauche), soit deux dans le jeu. Une troisième pose a été essayée sur enfer-4 puis desert-4 : dans les
+  // deux cas la chaîne casse (colonnes à 4 paliers, passerelle injoignable, piège sans retour). Le motif est
+  // haut de 14 rangées et exige un voisinage compatible ; il ne se pose pas partout, et forcer une troisième
+  // occurrence casserait un terrain pour un gain de variété nul.
+  // dernières occurrences uniques comblées : aucun motif ne doit sortir une seule fois
+  'plaine-3': ['boyau-tresor-retour', 'cascade'],
+  'foret-2': ['cascade-grotte', 'cascade'],
+  'enfer-3': ['petit-pont', 'bassin'],
 }
 
 // Motifs NON-eau IMPOSÉS par terrain (ComposeOpts.forcedKinds) : gros motifs signature qu'on place à la
@@ -342,6 +366,16 @@ const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
   // le plafond de roche voisin se combinent en un mur : le validateur d'atteignabilité stricte y trouve des
   // plateformes murées. Le motif est écrit et jouable en isolation ; il attend une reprise de son chaînage.
   'plaine-6': ['trampoline-corniche'],
+  'jungle-3': ['trampoline-cascade'],
+  'plage-3': ['trampoline-echelle'],
+  'enfer-7': ['echelles-zigzag'],
+  // ⚠️ 'echelle-exposee' A ÉTÉ ÉVINCÉ par les secondes occurrences : chaque motif imposé prend un slot de
+  // tension, et cette famille n'en a que quelques-uns sur tout le jeu. On l'épingle donc à son tour — c'est
+  // la limite du budget, pas un défaut de l'ordonnanceur.
+  'enfer-1': ['echelle-exposee'],
+  'carriere-1': ['echelle-descente-piegee'],
+  'foret-6': ['trampoline-cascade'],
+  'montagne-1': ['trampoline-echelle'],
   'plage-2': ['trampoline-corniche'],
   'desert-5': ['trampoline-vide'],
   'enfer-3': ['trampoline-vide'],

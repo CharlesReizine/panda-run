@@ -518,48 +518,65 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     }
     case 'trampoline-echelle': {
       // 4) « Trampoline qui permet d'atteindre une échelle en T, et en dessous c'est le vide. »
-      // L'échelle est SUSPENDUE (hung) : son pied flotte au-dessus du vide, on ne l'atteint qu'au rebond.
+      //
+      // ⚠️ L'ÉCHELLE N'EST PLUS SUSPENDUE, SON PIED REPOSE SUR UNE CORNICHE. Une échelle « hung » exige que
+      // son pied soit atteignable, et deux validateurs sur trois ne modélisent pas le rebond : ils la
+      // déclaraient « pied dans le vide ». Une corniche étroite au-dessus du vide, atteinte au rebond, donne
+      // exactement la même sensation — on saute dans le vide pour attraper l'échelle — et se vérifie.
       const alt = Math.max(entryAlt, 3)
       const bw = bank
-      p.platforms.push({ x: 0, alt, w: bw + 4 })
+      p.platforms.push({ x: 0, alt, w: bw + 3 })
       p.trampolines.push({ x: bw + 1, alt: alt + 1 })
-      for (let gx = bw + 4; gx < w - bw; gx += 3) p.gaps.push({ x: gx, w: Math.min(3, w - bw - gx) })
-      // échelle suspendue : sommet haut, pied à portée du sommet du rebond
-      const hEch = Math.min(MAX_LADDER_TILES, Math.max(MIN_LADDER_TILES, 6))
-      const sommet = alt + 11
-      p.ladders.push({ x: bw + 7, topAlt: sommet, h: hEch, hung: true })
-      // palier de sortie 2 rangées sous le sommet de l'échelle, puis berge droite à la même altitude
-      p.platforms.push({ x: bw + 8, alt: sommet - 2, w: 5 })
-      p.platforms.push({ x: w - bw, alt: sommet - 2, w: bw })
-      placeBirds(sommet + 2)
-      p.exitAlt = sommet - 2
+      const trouX = bw + 3
+      p.gaps.push({ x: trouX, w: 3 })
+      // corniche étroite au-dessus du vide : c'est elle qu'on vise au rebond
+      const percheX = trouX + 3
+      const percheAlt = alt + 7
+      p.platforms.push({ x: percheX, alt: percheAlt, w: 3 })
+      // échelle posée sur la corniche, montant vers le palier de sortie (2 rangées sous son sommet)
+      const h = Math.max(MIN_LADDER_TILES, Math.min(MAX_LADDER_TILES, 7))
+      p.ladders.push({ x: percheX + 1, topAlt: percheAlt + h, h })
+      p.platforms.push({ x: percheX + 2, alt: percheAlt + h - 2, w: 5 })
+      p.platforms.push({ x: w - bw, alt: percheAlt + h - 2, w: bw })
+      placeBirds(percheAlt + h + 2)
+      p.exitAlt = percheAlt + h - 2
       break
     }
     case 'trampoline-cascade': {
       // 5) « Trampoline qui permet de dépasser un vide et d'atteindre une cascade. »
-      // La cascade est REMONTABLE (pas de noyade) : le rebond sert à FRANCHIR le vide et à s'accrocher au
-      // rideau, la montée se finit à la nage. `bottomAlt` recueille l'eau dans un bassin — sans lui, la
-      // cascade couvrirait le vide mortel d'un rideau d'eau, ce qui rendrait le danger illisible.
+      //
+      // ⚠️ RÉÉCRIT APRÈS AVOIR MURÉ UN TERRAIN ENTIER. La première version creusait un vide de six tuiles
+      // puis posait le rideau et une corniche haute : sur foret-6, quarante-six plateformes se retrouvaient
+      // injoignables et deux coffres inatteignables. La cause n'était pas le rebond mais la CHAÎNE — le vide
+      // était trop long pour la seule voie restante une fois le rebond consommé, et le module suivant se
+      // raccrochait dans le vide.
+      // Ici : un vide COURT (3 tuiles, franchi au rebond ou au saut), une vasque solide au pied du rideau, et
+      // la corniche de sortie posée EN HAUT du rideau, atteignable à la nage. Trois voies, aucune obligatoire.
       const alt = Math.max(entryAlt, 3)
       const bw = bank
-      p.platforms.push({ x: 0, alt, w: bw + 4 })
+      p.platforms.push({ x: 0, alt, w: bw + 3 })
       p.trampolines.push({ x: bw + 1, alt: alt + 1 })
-      const trouG = bw + 4
-      const casX = Math.min(w - bw - 4, trouG + 6)
-      for (let gx = trouG; gx < casX; gx += 3) p.gaps.push({ x: gx, w: Math.min(3, casX - gx) })
-      // 12 rangées au minimum : une cascade remontable plus courte que ~4× le panda ne se lit pas comme
-      // une cascade (règle vérifiée par tests/levels/reachable). Le rebond porte à ~12 rangées, donc on
-      // accroche le rideau à mi-hauteur et on finit à la nage — c'est exactement l'usage voulu.
-      const top = alt + 13
+      const trouX = bw + 3
+      p.gaps.push({ x: trouX, w: 3 })
+      const casX = trouX + 3
+      const top = alt + 13 // rideau remontable : 13 rangées, la hauteur minimale d'une cascade
+      p.platforms.push({ x: casX, alt, w: 4 }) // vasque solide au pied : le rideau ne tombe pas dans le vide
       p.waters.push({ x: casX, w: 4, kind: 'cascade', bankAlt: top, bottomAlt: alt })
-      // bassin de réception au pied de la cascade : le vide s'arrête là où l'eau tombe
-      p.platforms.push({ x: casX, alt, w: 4 })
-      // corniche de sortie en haut de la cascade + son coffre (récompense de la remontée)
-      p.platforms.push({ x: casX + 4, alt: top, w: Math.max(4, w - bw - (casX + 4)) })
-      p.props.push({ kind: 'coffre', x: casX + 5, alt: top + 1 })
-      p.platforms.push({ x: w - bw, alt: top, w: bw })
-      placeBirds(top + 3)
-      p.exitAlt = top
+      // ⚠️ LE CHEMIN PRINCIPAL RESTE À PLAT, LA CASCADE EST UN BONUS. Faire sortir le module EN HAUT du
+      // rideau rendait tout l'aval du terrain injoignable : la seule voie était de remonter 13 rangées à la
+      // nage, et le validateur — comme un joueur qui rate — n'y voyait pas de passage. Trente-six plateformes
+      // et deux coffres perdus sur foret-6. Le rideau grimpe donc vers une corniche à TRÉSOR, en cul-de-sac,
+      // et la route continue au niveau d'entrée. Le trampoline sert à franchir le vide, pas à sortir.
+      const suiteX = casX + 4
+      p.platforms.push({ x: suiteX, alt, w: Math.max(4, w - bw - suiteX) })
+      // ⚠️ LA CORNICHE EST À CÔTÉ DE LA COLONNE, PAS DESSUS. Posée au-dessus du rideau (même x), le
+      // validateur ne la reconnaissait pas comme « haut de cascade » et la déclarait injoignable : son
+      // modèle relie le PIED au sommet ADJACENT, pas à ce qui coiffe la colonne.
+      p.platforms.push({ x: casX + 4, alt: top, w: 5 }) // corniche du haut : récompense de la remontée
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: casX + 6, alt: top + 1 })
+      p.platforms.push({ x: w - bw, alt, w: bw })
+      placeBirds(top + 2)
+      p.exitAlt = alt
       break
     }
     case 'corniche-vide':
@@ -1030,6 +1047,13 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const ww = Math.max(6, w - rampW - 3)
       p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt: highBank, openSide: 'right' })
       // corniche de SORTIE latérale, basse, collée au bord droit ouvert de l'eau (on émerge par là)
+      // ⚠️ DEUX CORNICHES À DROITE, PAS UNE. La sortie latérale basse suffisait à la jouabilité, mais le bord
+      // DROIT du lac restait « désaxé » : sa berge est déclarée à `highBank` alors que la seule surface
+      // voisine était la corniche de sortie, vingt-huit rangées plus bas. Le jeu appelle ça de l'eau
+      // suspendue et le refuse — à raison : rien n'indiquait où commence ni où finit la cuve. On pose donc
+      // AUSSI un rebord à la hauteur de la berge, purement structurel. C'est ce détail qui a tenu ce motif
+      // hors du jeu depuis sa création.
+      p.platforms.push({ x: wx + ww, alt: highBank, w: 2 })
       p.platforms.push({ x: wx + ww, alt: outAlt, w: Math.max(3, w - (wx + ww)) })
       placeBirds(highBank + 2)
       p.exitAlt = outAlt
@@ -2833,7 +2857,11 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const perchX = x + 4 // perchoir JOINTIF au bord droit de la colonne
       p.platforms.push({ x: perchX, alt: T, w: 3 }) // perchoir en surplomb
       p.signs.push({ x: perchX + 1, alt: T + 1 }) // PANNEAU flèche vers le bas → « saute ici »
-      const basinX = perchX + 3
+      // ⚠️ BERGE GAUCHE AU NIVEAU DU BASSIN. Sans elle, le voisin de gauche du bassin était le PERCHOIR, seize
+      // rangées plus haut : le validateur y voyait un « rebord désaxé », c'est-à-dire une cuve dont le bord ne
+      // correspond à aucune surface marchable. C'est ce défaut qui a tenu ce motif hors du jeu jusqu'ici.
+      p.platforms.push({ x: perchX + 3, alt: A, w: 2 })
+      const basinX = perchX + 5
       const basinW = Math.max(5, w - basinX - 2)
       p.waters.push({ x: basinX, w: basinW, kind: basinKind, bankAlt: A }) // BASSIN d'atterrissage (visible en contrebas)
       if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: basinX + Math.floor(basinW / 2) })
@@ -2975,34 +3003,44 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
 
     // ─── ESCALIER DE LACS DESCENDANT : on grimpe à un lac perché, l'eau se déverse de lac en lac vers le bas ──
     case 'lacs-cascade-descente': {
-      const low = Math.max(1, entryAlt)
+      // ESCALIER DE LACS QUI DESCEND : on grimpe un rideau jusqu'à un lac perché, puis on redescend de lac en
+      // lac par des déversoirs. C'était l'un des motifs « écrits mais jamais posés » — pas parce qu'il était
+      // injouable, mais parce qu'il était MAL DÉCLARÉ, sur trois points qui se cumulaient :
+      //   · ses déversoirs de 3 rangées étaient déclarés « cascade », or une cascade remontable doit en faire
+      //     12 au minimum ; trois rangées, c'est un déversoir, donc un bassin ;
+      //   · ses lacs n'avaient de berge que d'un côté, ce que le validateur appelle un « rebord désaxé » ;
+      //   · il sortait à l'altitude d'entrée, alors qu'un motif de DESCENTE doit descendre.
+      const haut = Math.max(4, entryAlt)
       const steps = 3
-      const peak = low + cascadeRise(rng) // sommet atteint en grimpant une cascade
+      const peak = haut + 13 // rideau de montée : 13 rangées, la hauteur minimale d'une cascade remontable
       let x = 0
-      p.platforms.push({ x, alt: low, w: 2 }); x += 2 // berge d'accès basse
-      // MONTÉE : une cascade remontable jusqu'au lac perché
-      p.waters.push({ x, w: 3, kind: 'cascade', bankAlt: peak, bottomAlt: low }); x += 3
-      p.platforms.push({ x, alt: peak, w: 1 }); x += 1 // corniche d'émergence
-      // DESCENTE : lacs en MARCHES qui descendent (chaque marche ≤ 3 rangées → atteignable au saut depuis le bas)
+      p.platforms.push({ x, alt: haut, w: bank }); x += bank
+      p.waters.push({ x, w: 3, kind: 'cascade', bankAlt: peak, bottomAlt: haut })
+      p.platforms.push({ x, alt: haut, w: 3 }) // vasque au pied du rideau
+      x += 3
+      p.platforms.push({ x, alt: peak, w: 3 }) // corniche d'émergence en haut
+      x += 3
       let alt = peak
       for (let i = 0; i < steps; i++) {
         const lakeW = 3
-        p.waters.push({ x, w: lakeW, kind: basinKind, bankAlt: alt }) // lac de la marche
-        if (basinKind !== 'lave' && i === steps - 1) p.props.push({ kind: 'coffre', x: x + Math.floor(lakeW / 2) })
-        x += lakeW
-        const lower = Math.max(low, alt - 3)
-        // rideau de cascade qui déverse ce lac dans le suivant (plus bas), reposant sur la marche basse
-        p.waters.push({ x, w: 2, kind: 'cascade', bankAlt: alt, bottomAlt: lower })
-        p.platforms.push({ x: x + 2, alt: lower, w: 1 }) // berge de la marche inférieure
-        x += 2 + 1
-        alt = lower
+        // BERGES DES DEUX CÔTÉS : c'est ce qui manquait. Un lac dont un bord ne correspond à aucune surface
+        // marchable est un « rebord désaxé », et le jeu le refuse — à raison, on ne saurait pas d'où y entrer.
+        p.platforms.push({ x, alt, w: 2 })
+        p.waters.push({ x: x + 2, w: lakeW, kind: basinKind, bankAlt: alt })
+        if (basinKind !== 'lave' && i === steps - 1) p.props.push({ kind: 'coffre', x: x + 2 + Math.floor(lakeW / 2) })
+        x += 2 + lakeW
+        const bas = Math.max(1, alt - 3)
+        p.platforms.push({ x, alt, w: 2 })        // berge droite du lac, à SON altitude
+        p.platforms.push({ x: x + 2, alt: bas, w: 3 }) // marche inférieure
+        x += 2 + 3
+        alt = bas
       }
-      p.platforms.push({ x, alt, w: Math.max(1, w - x) }) // berge de SORTIE basse
+      // sortie NETTEMENT plus bas que l'entrée : c'est un motif de descente
+      p.platforms.push({ x, alt, w: Math.max(bank, w - x) })
+      placeBirds(peak + 2)
       p.exitAlt = alt
       break
     }
-
-    // ─── LAC → CASCADE → PLATEAU : lac horizontal, puis cascade remontable vers un plateau EN HAUT ──
     case 'lac-cascade-plateau': {
       // Un bout de LAC marine HORIZONTAL (coffre au fond), puis à sa FIN une CASCADE remontable qu'on
       // remonte (~3-4 sauts de hauteur) vers un PLATEAU en HAUT (sortie haute). Une RAMPE de paliers
