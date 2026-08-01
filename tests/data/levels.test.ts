@@ -55,10 +55,17 @@ describe('niveaux et carte', () => {
       expect(l.props, l.id).toBeDefined()
       const ground = l.props!.filter((p) => !estCoffre(p.kind))
       const chests = l.props!.filter((p) => estCoffre(p.kind))
+      // ⚠️ LE PLAFOND SUIT LA LONGUEUR DU TERRAIN. Il était figé à 4, hérité de terrains plus courts : en
+      // rallongeant les terrains (autorisation explicite du user, « rajoute des modules, je m'en fous de ton
+      // 50 »), un terrain de 300 tuiles se retrouvait à 5 touffes d'herbe et échouait — alors que c'est
+      // exactement le comportement voulu, davantage de décor sur davantage de terrain. Ce qu'il faut
+      // vérifier est une DENSITÉ raisonnable, pas un compte absolu.
       expect(ground.length, l.id).toBeGreaterThanOrEqual(2)
-      expect(ground.length, l.id).toBeLessThanOrEqual(4)
+      const plafond = Math.max(4, Math.ceil(l.widthTiles / 60))
+      expect(ground.length, `${l.id} (largeur ${l.widthTiles})`).toBeLessThanOrEqual(plafond)
       expect(chests.length, l.id).toBeGreaterThanOrEqual(1)
-      expect(chests.length, l.id).toBeLessThanOrEqual(3)
+      // même raisonnement que pour le décor : un terrain rallongé porte un coffre de plus, et c'est voulu.
+      expect(chests.length, `${l.id} (largeur ${l.widthTiles})`).toBeLessThanOrEqual(Math.max(3, Math.ceil(l.widthTiles / 90)))
       for (const p of l.props!) expect(PROPS[p.kind], `${l.id}:${p.kind}`).toBeDefined()
     }
   })

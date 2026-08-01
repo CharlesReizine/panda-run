@@ -1496,44 +1496,1110 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       //
       // Le choix est FAUX-VRAI, et c'est le sel du motif : le passage du bas est un cul-de-sac récompensé,
       // celui du haut est la vraie route. On ne le sait qu'en essayant — d'où le mob qui garde le trésor.
-      // « L'autre sens » = le côté des passages par rapport à l'eau ; un vrai miroir gauche-droite mettrait
+      // « L'autre sens » = le côté des passages par rapport au rideau ; un vrai miroir gauche-droite mettrait
       // la sortie à gauche, à contresens de la progression du terrain.
       //
-      // ⚠️ BASSIN ET NON RIDEAU REMONTABLE, ET C'EST UN ARBITRAGE ENTRE DEUX RÈGLES DU JEU QUI SE
-      // CONTREDISAIENT ICI. Une cascade remontable doit faire AU MOINS 12 rangées (en dessous, elle ne se
-      // lit pas comme une cascade) ; or la silhouette du jeu interdit d'empiler plus de TROIS paliers dans
-      // une même zone. Monter de 12 rangées jusqu'au tunnel demandait cinq corniches — quatre paliers de
-      // trop, signalés sur quatre terrains. Le tunnel est donc à 6 rangées (deux corniches, trois paliers),
-      // et l'eau devient un BASSIN au pied des passages : le motif garde sa lecture — eau, deux ouvertures,
-      // un vrai chemin et un faux — sans enfreindre l'une ou l'autre des deux règles.
+      // ⚠️ MOTIF DÉLIBÉRÉMENT HAUT, SUR AUTORISATION EXPLICITE : « fais un truc très haut c'est top », « une
+      // grande cascade pour descendre ou une grande échelle, ça me choque pas ». Le rideau fait 14 rangées et
+      // le tunnel est à son sommet. Cela dépasse la silhouette « collines » (≤ 3 paliers empilés) que le jeu
+      // s'impose ailleurs : les terrains qui portent ce motif sont donc déclarés HAUTS (cf. TERRAINS_HAUTS
+      // dans data/levels), et c'est la seule exception — ailleurs la règle tient.
       const passagesAGauche = m.kind === 'cascade-deux-passages-g'
       const A = Math.max(entryAlt, 2)
-      const T = A + 6 // tunnel : deux corniches au-dessus de la cavité
+      const T = A + 14 // sommet du rideau ET plancher du tunnel
       const bw = bank
-      const eauW = 4
-      const zoneW = Math.max(9, w - 2 * bw - eauW - 1)
-      const zoneX = passagesAGauche ? bw : bw + eauW
-      const eauX = passagesAGauche ? bw + zoneW : bw
+      // ⚠️ ZONE PLAFONNÉE À 15 TUILES. La règle « anti-ennui » du jeu refuse toute bande plate vide de plus
+      // de 16 : au-delà, le plancher de la cavité en formait une à lui seul (20 tuiles sur cimetiere-1). Ce
+      // qui dépasse est rendu aux berges, donc au chaînage avec les modules voisins.
+      const zoneW = Math.min(15, Math.max(10, w - 2 * bw - 3))
+      const zoneX = passagesAGauche ? bw : bw + 3
+      const casX = passagesAGauche ? bw + zoneW : bw
 
-      p.platforms.push({ x: 0, alt: A, w: bw })                     // berge d'entrée
-      p.waters.push({ x: eauX, w: eauW, kind: basinKind, bankAlt: A }) // bassin au pied des passages
+      p.platforms.push({ x: 0, alt: A, w: bw })
 
-      // CAVITÉ DU BAS : cul-de-sac récompensé. Le plancher du tunnel, six rangées plus haut, lui sert de
-      // toit — inutile d'ajouter une dalle de roche, qui écraserait le dégagement sous les corniches.
+      // RIDEAU : 14 rangées, remontable à la nage, recueilli dans une vasque au pied (pas de vide mortel).
+      p.waters.push({ x: casX, w: 2, kind: 'cascade', bankAlt: T, bottomAlt: A })
+      p.platforms.push({ x: casX, alt: A, w: 2 })
+
+      // CAVITÉ DU BAS : cul-de-sac récompensé. Le plancher du tunnel lui sert de toit — pas de seconde dalle,
+      // qui écraserait le dégagement (essayé : « plafond de grotte trop bas » sur jungle-4).
+      const cavW = Math.min(6, zoneW - 2)
+      p.platforms.push({ x: zoneX, alt: A, w: zoneW, solid: true })
+      // ⚠️ SOCLE DE ROCHE JUSQU'AU SOL SOUS LA CAVITÉ. Sans lui, le sol du monde restait visible et NU sous
+      // le module : une bande plate vide de 20 tuiles au ras du niveau, que la règle « anti-ennui » refuse.
+      // C'est exactement ce qu'elle est censée attraper — un couloir de sol sans rien dessus — et meubler la
+      // surface pour la faire taire aurait masqué le vrai problème : la cavité ne reposait sur rien.
+      if (A - 1 >= 0) p.rocks.push({ x: zoneX, altBot: 0, altTop: A - 1, w: zoneW, solid: true })
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: zoneX + Math.floor(cavW / 2), alt: A + 1 })
+      const garde = groundMobs.find((id) => !MONSTERS[id]?.aquatic && !MONSTERS[id]?.aerial)
+      if (garde) p.spawns.push({ monsterId: garde, x: zoneX + 1, alt: A })
+
+      // GRANDE ÉCHELLE cavité → tunnel : c'est la voie « sèche », en plus de la remontée du rideau. Elle est
+      // longue, et c'est assumé (« une grande échelle, ça me choque pas ») ; son sommet porte un palier deux
+      // rangées plus bas, comme l'exige le validateur.
+      const hEch = Math.min(MAX_LADDER_TILES, T - A)
+      p.ladders.push({ x: zoneX + zoneW - 2, topAlt: A + hEch, h: hEch })
+      p.platforms.push({ x: zoneX + zoneW - 4, alt: A + hEch - 2, w: 4 })
+
+      // TUNNEL DU HAUT : la vraie route, sous un plafond de roche, jusqu'à la sortie.
+      // ⚠️ LE TUNNEL EST EN DEUX PALIERS, ET CE N'EST PAS UN CAPRICE. D'un seul tenant il formait une bande
+      // PLATE de 20 tuiles, et le jeu refuse toute bande plate vide de plus de 16 (règle « anti-ennui », qui
+      // existe pour éviter les couloirs sans intérêt). Une marche d'une rangée au milieu suffit à casser la
+      // bande, et accessoirement le tunnel se lit mieux.
+      const moitie = Math.floor(zoneW / 2)
+      p.platforms.push({ x: zoneX, alt: T, w: moitie, solid: true })
+      p.platforms.push({ x: zoneX + moitie, alt: T + 1, w: zoneW - moitie, solid: true })
+      p.rocks.push({ x: zoneX, altBot: T + 1 + CAVE_CLEARANCE, altTop: T + 1 + CAVE_CLEARANCE + CAVE_CEILING_THICK, w: zoneW, solid: true })
+      // ⚠️ UN MOB DANS LE TUNNEL, ET C'EST LA RÈGLE « ANTI-ENNUI » QUI L'EXIGE : le jeu refuse une bande plate
+      // VIDE de plus de 16 tuiles. Le plafonnement de la zone n'a pas suffi (la bande mesurée restait à 20 en
+      // comptant les raccords), et un couloir long et vide est de toute façon la définition de l'ennui. Le
+      // tunnel est la VRAIE route du motif : y poster un garde a du sens en plus de régler la règle.
+      if (garde) p.spawns.push({ monsterId: garde, x: zoneX + Math.floor(zoneW * 0.6), alt: T + 1 })
+      // ⚠️ ET UN PIÈGE SUR LE PALIER HAUT, parce que le garde ne suffit pas toujours : selon le biome, le
+      // pool de monstres au sol peut être vide (cimetiere-1 n'en avait aucun d'éligible), et la bande plate
+      // redevenait vide — 20 tuiles au ras du tunnel, refusées par la règle « anti-ennui ». Des flammes ne
+      // dépendent d'aucun pool, et sur la VRAIE route du motif un piège a du sens : le raccourci se paie.
+      p.spikes.push({ x: zoneX + moitie + 2, w: 2, alt: T + 1 })
+
+      p.platforms.push({ x: w - bw, alt: T + 1, w: bw })
+      placeBirds(T + 4)
+      p.exitAlt = T + 1
+      break
+    }
+    case 'boyau-tresor-retour': {
+      // 4) « Un passage sous-marin qui permet d'accéder à une grotte avec un trésor, mais il faut REVENIR
+      // EN ARRIÈRE pour avancer. »
+      //
+      // ⚠️ LE CUL-DE-SAC EST LE MOTIF, PAS UN DÉFAUT — mais il ne doit jamais devenir un PIÈGE. Le lac est
+      // ouvert des DEUX côtés (`openSide: 'both'`) : on entre, on ressort par où l'on veut. Un boyau à sens
+      // unique aurait enfermé le joueur dans la grotte, exactement ce qu'un validateur appelle « coincé
+      // vivant » — et ce que le user a signalé comme le pire défaut d'un terrain.
+      const A = Math.max(entryAlt, 3)
+      const bw = bank
+      p.platforms.push({ x: 0, alt: A, w: bw })
+      const lacX = bw
+      const lacW = Math.max(6, Math.floor(w * 0.4))
+      p.waters.push({ x: lacX, w: lacW, kind: basinKind === 'lave' ? 'lave' : 'marine', bankAlt: A, openSide: 'both' })
+      // grotte à trésor au FOND du lac, sous un toit de roche : on y descend en nageant
+      const grotteX = lacX + Math.floor(lacW / 2)
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: grotteX })
+      p.rocks.push({ x: grotteX - 1, altBot: A - 3, altTop: A - 2, w: 4, solid: true }) // avancée rocheuse : la grotte est COUVERTE
+      // berge de sortie à la MÊME altitude : on ressort du lac et on repart — le trésor est un détour
+      p.platforms.push({ x: lacX + lacW, alt: A, w: Math.max(bw, w - (lacX + lacW)) })
+      placeBirds(A + 4)
+      p.exitAlt = A
+      break
+    }
+    case 'colonnes-perilleuses': {
+      // 5) « Des zones de saut sur des colonnes de pierre pas larges et de hauteurs différentes, et long
+      // (genre casse-gueule, et tu tombes tu meurs). »
+      //
+      // ⚠️ LES HAUTEURS VARIENT DE ±1 RANGÉE ENTRE DEUX COLONNES VOISINES, PAS PLUS. Un premier jet allait de
+      // −2 à +2, soit un écart de 4 rangées entre deux colonnes consécutives : 128 px de montée pour 96 px
+      // d'écart horizontal, c'est à la limite exacte de la parabole de saut. Le validateur a déclaré cinquante
+      // plateformes injoignables sur enfer-4 et signalé des pièges sans retour. Le danger doit venir de la
+      // PRÉCISION et de la répétition, jamais d'un saut qui n'est pas franchissable — sinon ce n'est plus
+      // casse-gueule, c'est cassé.
+      const A = Math.max(entryAlt, 4)
+      const bw = bank
+      p.platforms.push({ x: 0, alt: A, w: bw })
+      const droite = w - bw
+      for (let gx = bw; gx < droite; gx += 3) p.gaps.push({ x: gx, w: Math.min(3, droite - gx) })
+      const dents = [0, 1, 2, 1, 0, -1]
+      let cx = bw + 2
+      let k = 0
+      while (cx + 2 < droite) {
+        p.platforms.push({ x: cx, alt: Math.max(2, A + dents[k % dents.length]!), w: 2 })
+        cx += 5 // 2 tuiles de colonne + 3 de vide : saut simple, sans marge de confort
+        k++
+      }
+      p.platforms.push({ x: droite, alt: A, w: bw })
+      placeBirds(A + 4)
+      p.exitAlt = A
+      break
+    }
+    case 'corniche-vide':
+    case 'crete': {
+      // corniches/arête larges au-dessus d'un trou mortel + oiseaux. Berges solides à l'entrée/sortie,
+      // VIDE (trous dans le sol) sur toute la zone centrale, corniches suspendues CONTIGUËS (hgap ≤3,
+      // reliées de berge à berge → chaîne atteignable) à alt ~courant, légère ondulation.
+      const alt = Math.max(entryAlt, m.kind === 'crete' ? 4 : 3)
+      const bw = bank
+      p.platforms.push({ x: 0, alt, w: bw }) // berge gauche
+      const rightBergeX = w - bw
+      // trou mortel sous toute la zone centrale (tranches de 3 tuiles, chacune franchissable)
+      for (let gx = bw; gx < rightBergeX; gx += 3) p.gaps.push({ x: gx, w: Math.min(3, rightBergeX - gx) })
+      // corniches larges 4, hgap 3 → chaîne saut simple ; dernière corniche flush à la berge droite
+      let x = bw
+      let toggle = 0
+      const pw = 4
+      while (x + pw < rightBergeX) {
+        const calt = Math.max(2, alt - (toggle % 2))
+        // clampe la largeur pour finir juste avant la berge droite
+        const pwn = Math.min(pw, rightBergeX - x)
+        p.platforms.push({ x, alt: calt, w: pwn })
+        x += pwn + 3 // gap de 3 (≤ saut simple) jusqu'à la corniche suivante
+        toggle++
+      }
+      // corniche de raccord flush à la berge droite si le dernier saut serait trop long
+      if (rightBergeX - x > 0 && rightBergeX - x <= 4) p.platforms.push({ x, alt, w: rightBergeX - x })
+      p.platforms.push({ x: rightBergeX, alt, w: bw }) // berge droite
+      placeBirds(alt + 3)
+      p.exitAlt = alt
+      break
+    }
+    case 'bassin': {
+      // cuve marine profonde en VALLÉE : berges hautes reliées par rampes, eau profonde au milieu
+      // (murs rigides posés par le moteur), pont à trou central, coffre au FOND (plongée/apnée,
+      // noyade). Berges 4 rangées au-dessus de l'entrée → eau vraiment profonde.
+      const bankAlt = entryAlt + 4
+      const rampW = 5
+      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt)) // berge gauche montante
+      const wx = rampW, ww = w - 2 * rampW
+      p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt })
+      // pont à bankAlt en 2 segments avec un trou central de 3 tuiles (on plonge par le trou)
+      const holeL = wx + Math.floor(ww / 2) - 1
+      if (holeL - wx > 0) p.bridges.push({ x: wx, alt: bankAlt, w: holeL - wx })
+      if (wx + ww - (holeL + 3) > 0) p.bridges.push({ x: holeL + 3, alt: bankAlt, w: wx + ww - (holeL + 3) })
+      // BERGE DROITE au MÊME niveau que la gauche (surface d'eau horizontale) : corniche plate flush
+      // à l'eau à bankAlt, PUIS redescente. Sans ce palier plat, la rampe amorçait sa descente dès le
+      // bord de l'eau → rebord droit plus bas que le gauche (retour user « rebord gauche + haut »).
+      const rbx = wx + ww
+      const flatW = Math.min(bank, Math.max(1, w - rbx - 1))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, exitAlt)) // berge droite descendante
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) }) // au fond (sol) — jamais dans la lave
+      placeBirds(bankAlt + 2)
+      break
+    }
+    case 'cascade': {
+      // cascade claire REMONTABLE (bleu clair, pas de noyade) : depuis la corniche BASSE on saute dans
+      // la colonne et le courant ASCENDANT nous porte vers la corniche HAUTE + coffre secret. Une
+      // RAMPE DE PALIERS parallèle garantit l'accès à la corniche haute au saut simple (reachable.test) ;
+      // la cascade est le raccourci fun.
+      const low = Math.max(entryAlt, 1)
+      const top = low + cascadeRise(rng) // cascade HAUTE (≥ 4× le panda) : plus jamais franchissable au saut
+      // allocation séquentielle : corniche basse | colonne (2) | ÉCHELLE parallèle + jetée | corniche
+      // haute (5) | rampe de redescente. La rampe montante ne tient plus (une cascade de 4× le panda
+      // dépasse ce qu'un escalier de paliers peut couvrir en largeur) → une échelle donne l'accès garanti.
+      const L = Math.max(4, Math.floor(w * 0.22))
+      const cornW = 5
+      p.platforms.push({ x: 0, alt: low, w: L }) // corniche basse d'accès
+      p.waters.push({ x: L, w: 4, kind: 'cascade', bankAlt: top }) // colonne LARGE (2×) : on la GRIMPE (chute mortelle au fond)
+      // plus d'échelle parallèle (retour joueur) : la corniche haute est JOINTIVE au bord droit de la
+      // colonne, on émerge dessus en grimpant la cascade (connecteur vertical, cf. level-validator).
+      const topX = L + 4
+      p.platforms.push({ x: topX, alt: top, w: cornW }) // corniche haute (sortie de cascade)
+      p.props.push({ kind: 'coffre', x: topX + 2, alt: top + 1 }) // coffre POSÉ sur la corniche (1 rangée au-dessus)
+      const downStart = topX + cornW
+      if (w - downStart >= 1) p.platforms.push(...ramp(downStart, w - downStart, top, exitAlt)) // redescente vers la sortie
+      placeBirds(top + 2)
+      break
+    }
+    case 'grotte': {
+      // VRAI TUNNEL FERMÉ (phase 2b) : roche PLEINE au-dessus ET en dessous de la surface marchable.
+      // - sol de roche marchable à `alt` ;
+      // - remplissage plein SOUS le sol (de la surface jusqu'au bas du monde) → « tout pierre dessous » ;
+      // - PLAFOND DE ROCHE au-dessus, laissant un dégagement CAVE_CLEARANCE (> saut confortable) pour
+      //   qu'on traverse le boyau sans se cogner (plafond sans collision, purement visuel).
+      const alt = Math.max(entryAlt, 2)
+      if (alt >= 1) p.platforms.push({ x: 0, alt, w })
+      // socle plein sous la surface (jusqu'au niveau du sol du monde ; le reste est fermé par le sol)
+      if (alt - 1 >= 1) p.rocks.push({ x: 0, altBot: 1, altTop: alt - 1, w })
+      // PLAFOND DE ROCHE VARIÉ (dents/marches/vagues) au lieu d'une dalle plate
+      pushVariedCeiling(p, w, alt, Math.floor(rng() * CEILING_VARIANTS))
+      p.exitAlt = alt
+      break
+    }
+    case 'volee': {
+      // plein air envahi d'oiseaux, abris épars au sol. Surface à alt courant, quelques plateformes-abris.
+      const alt = entryAlt
+      if (alt >= 1) p.platforms.push({ x: 0, alt, w })
+      const shelters = spread(w, 3)
+      shelters.forEach((sx, i) => p.platforms.push({ x: Math.max(0, sx - 2), alt: alt + 3 + (i % 2), w: 4 }))
+      placeBirds(alt + 4)
+      p.exitAlt = alt
+      break
+    }
+
+    // ─── PHASE 2 — FILLERS / respiration (D1) ────────────────────────────────────────────────
+    case 'ligne-droite':
+    case 'couloir-large': {
+      const alt = entryAlt
+      if (alt >= 1) p.platforms.push({ x: 0, alt, w })
+      // ⚠️ UN COULOIR LARGE NE DOIT PAS ÊTRE NU. Il ne posait qu'une dalle plate de sa largeur entière :
+      // dès que la répartition des monstres ne lui en donnait aucun, il devenait une bande plate VIDE de
+      // 20 tuiles, que la règle « anti-ennui » refuse à juste titre. Le cas est apparu en rallongeant les
+      // terrains (plus de modules, monstres répartis plus finement). On y sème du décor destructible : ça
+      // meuble, ça donne des matières, et ça ne change rien à la jouabilité du couloir.
+      for (const t of [0.35, 0.62]) p.props.push({ kind: 'herbe', x: Math.floor(w * t), alt: alt + 1 })
+      placeBirds(alt + 2)
+      p.exitAlt = alt
+      break
+    }
+    case 'marche': {
+      // une marche simple qui monte de 2-3 rangées à mi-parcours
+      const alt = entryAlt
+      const step = Math.min(SIMPLE_JUMP_ROWS, 2 + Math.floor(rng() * 2))
+      const half = Math.floor(w / 2)
+      if (alt >= 1) p.platforms.push({ x: 0, alt, w: half })
+      p.platforms.push({ x: half, alt: alt + step, w: w - half })
+      p.exitAlt = alt + step
+      break
+    }
+    case 'descente-douce': {
+      const alt = entryAlt
+      const drop = Math.min(SIMPLE_JUMP_ROWS, 2 + Math.floor(rng() * 2))
+      const toAlt = Math.max(0, alt - drop)
+      p.platforms.push(...ramp(0, w, alt, toAlt))
+      p.exitAlt = toAlt
+      break
+    }
+    case 'balcon': {
+      // plateau + balcon surélevé (bonus optionnel), sortie = entrée
+      const alt = Math.max(1, entryAlt)
+      p.platforms.push({ x: 0, alt, w })
+      p.platforms.push({ x: Math.floor(w / 3), alt: alt + SIMPLE_JUMP_ROWS, w: Math.max(4, Math.floor(w / 3)) })
+      placeBirds(alt + 4)
+      p.exitAlt = alt
+      break
+    }
+    case 'echelle-tranquille': {
+      // F6 : montée par UNE échelle unique, palier de sortie jusqu'au bord droit
+      const xLad = Math.max(3, Math.floor(w * 0.4))
+      p.exitAlt = poseLadder(p, xLad, entryAlt, 0, xLad + 3, w)
+      break
+    }
+    case 'double-sol': {
+      // F8 : 2 étages plats reliés par une échelle, MÊME sortie que l'entrée (l'étage haut = bonus)
+      const alt = Math.max(1, entryAlt)
+      p.platforms.push({ x: 0, alt, w }) // sol bas, pleine largeur = chemin principal
+      const xLad = Math.max(3, Math.floor(w * 0.35))
+      const topAlt = alt + LADDER_H
+      p.ladders.push({ x: xLad, topAlt, h: LADDER_H })
+      p.platforms.push({ x: xLad, alt: topAlt - 2, w: Math.max(4, Math.floor(w / 2)) }) // étage haut
+      p.exitAlt = alt
+      break
+    }
+
+    // ─── PHASE 2 — TRAVERSÉE horizontale (D1–D3) ─────────────────────────────────────────────
+    case 'gap-grandissant':
+    case 'ilots-reguliers':
+    case 'ilots-irreguliers':
+    case 'triple-saut': {
+      // sol à alt courant coupé de TROUS mortels (≤3 tuiles chacun, franchissables). Le motif change
+      // le rythme des trous : croissant, régulier, irrégulier, ou triple saut serré.
+      const alt = Math.max(1, entryAlt)
+      const bank = 3
+      p.platforms.push({ x: 0, alt, w: bank })
+      let x = bank
+      let i = 0
+      const maxGaps = m.kind === 'triple-saut' ? 3 : 99
+      while (x < w - bank - 2 && i < maxGaps) {
+        let gw: number
+        if (m.kind === 'gap-grandissant') gw = Math.min(1 + i, 3)
+        else if (m.kind === 'ilots-irreguliers') gw = 1 + ((i * 2 + 1) % 3)
+        else if (m.kind === 'triple-saut') gw = 3
+        else gw = 2
+        gw = Math.min(gw, 3, w - bank - x - 2)
+        if (gw <= 0) break
+        p.gaps.push({ x, w: gw }); x += gw
+        const iw = m.kind === 'ilots-irreguliers' ? 3 + (i % 3) : 4
+        const sw = Math.min(iw, w - bank - x)
+        if (sw <= 0) break
+        p.platforms.push({ x, alt, w: sw }); x += sw
+        i++
+      }
+      p.platforms.push({ x: Math.max(x, w - bank), alt, w: bank }) // berge droite
+      placeBirds(alt + 2)
+      p.exitAlt = alt
+      break
+    }
+    case 'petit-pont': {
+      // F5 : pont au-dessus d'un bassin marine peu profond. Le pont a un TROU central (3 tuiles,
+      // franchissable au saut) par lequel on PLONGE pour le petit trésor du fond puis on RESSORT —
+      // sans le trou, le coffre du fond serait injoignable (bassin scellé). Bassin peu profond →
+      // plongée/remontée triviale (survivable).
+      const bankAlt = entryAlt + 2
+      const rampW = 4
+      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt))
+      const wx = rampW, ww = w - 2 * rampW // eau entre les DEUX berges de largeur rampW (surface plane)
+      p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt })
+      const holeL = wx + Math.floor(ww / 2) - 1 // trou central de 3 tuiles : on plonge par là
+      if (holeL - wx > 0) p.bridges.push({ x: wx, alt: bankAlt, w: holeL - wx })
+      if (wx + ww - (holeL + 3) > 0) p.bridges.push({ x: holeL + 3, alt: bankAlt, w: wx + ww - (holeL + 3) })
+      // berge droite AU MÊME niveau que la gauche (rebords à niveau), puis redescente
+      const rbx = wx + ww
+      const flatW = Math.min(bank, Math.max(1, w - rbx - 1))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, entryAlt))
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) }) // petit trésor au fond du bassin
+      p.exitAlt = entryAlt
+      break
+    }
+    case 'trou-filet':
+    case 'pas-japonais': {
+      // pas de pierre (bridges) au-dessus d'une cuve marine : rater = tomber à l'eau (nage), pas mourir
+      const bankAlt = Math.max(entryAlt, 2)
+      const bank = 3
+      p.platforms.push({ x: 0, alt: bankAlt, w: bank })
+      const wx = bank, ww = Math.max(6, w - 2 * bank)
+      p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt })
+      const stepW = m.kind === 'pas-japonais' ? 2 : 3
+      let x = wx
+      while (x < wx + ww) {
+        const sw = Math.min(stepW, wx + ww - x)
+        if (sw <= 0) break
+        p.bridges.push({ x, alt: bankAlt, w: sw })
+        x += sw + 3
+      }
+      p.platforms.push({ x: wx + ww, alt: bankAlt, w: bank })
+      placeBirds(bankAlt + 2)
+      p.exitAlt = bankAlt
+      break
+    }
+
+    // ─── PHASE 2 — VERTICAL / étages (D2–D4) ─────────────────────────────────────────────────
+    case 'zigzag': {
+      // plateformes alternées contiguës (monte de 2, redescend de 1 → progression en dents de scie)
+      const alt = Math.max(1, entryAlt)
+      const seg = 4
+      let x = 0, a = alt, i = 0
+      while (x < w) {
+        const sw = Math.min(seg, w - x)
+        if (sw <= 0) break
+        p.platforms.push({ x, alt: a, w: sw })
+        x += sw
+        a = Math.max(1, i % 2 === 0 ? a + 2 : a - 1)
+        i++
+      }
+      p.exitAlt = a
+      break
+    }
+    case 'descente-controlee': {
+      // paliers descendants réguliers (chute contrôlée corniche → corniche)
+      const alt = entryAlt
+      const drop = Math.max(5, Math.abs(m.rise ?? 8))
+      const toAlt = Math.max(0, alt - drop)
+      p.platforms.push(...ramp(0, w, alt, toAlt))
+      placeBirds(alt + 2)
+      p.exitAlt = toAlt
+      break
+    }
+    case 'cage-echelles': {
+      // V18 : 2 échelles + paliers en lacet (quinconce)
+      p.exitAlt = poseTower(p, w, entryAlt, 2)
+      break
+    }
+    case 'tour-creuse': {
+      // V21 : puits, plateformes en quinconce reliées par échelles (3 étages)
+      p.exitAlt = poseTower(p, w, entryAlt, 3)
+      break
+    }
+    case 'echelle-vs-sauts': {
+      // V19 : deux routes vers le même palier — échelle (gauche) OU escalier de sauts (droite)
+      const xLad = Math.max(3, Math.floor(w * 0.25))
+      const rx = Math.floor(w * 0.5)
+      const landAlt = poseLadder(p, xLad, entryAlt, 0, rx, rx)
+      p.platforms.push(...ramp(rx, w - rx, entryAlt, landAlt)) // escalier alternatif à droite
+      p.exitAlt = landAlt
+      break
+    }
+
+    // ─── PHASE 2 — RISQUE / récompense (D2–D4) ───────────────────────────────────────────────
+    case 'chemin-double': {
+      // R23 : route HAUTE continue (sûre) + route BASSE à trous (rapide, risquée)
+      const lowAlt = Math.max(1, entryAlt)
+      const highAlt = lowAlt + SIMPLE_JUMP_ROWS
+      p.platforms.push({ x: 0, alt: lowAlt, w: 4 })
+      let x = 4
+      while (x < w - 4) {
+        const gw = Math.min(2, w - 4 - x)
+        if (gw <= 0) break
+        p.gaps.push({ x, w: gw }); x += gw
+        const sw = Math.min(4, w - 4 - x)
+        if (sw <= 0) break
+        p.platforms.push({ x, alt: lowAlt, w: sw }); x += sw
+      }
+      p.platforms.push({ x: Math.max(x, w - 4), alt: lowAlt, w: 4 })
+      p.platforms.push({ x: 2, alt: highAlt, w: Math.max(6, w - 4) }) // corniche haute continue
+      p.exitAlt = lowAlt
+      break
+    }
+    case 'fausse-sortie': {
+      // R28 : chemin continu + leurre surélevé sans issue (cul-de-sac à observer)
+      const alt = Math.max(1, entryAlt)
+      p.platforms.push({ x: 0, alt, w })
+      p.platforms.push({ x: Math.floor(w / 3), alt: alt + SIMPLE_JUMP_ROWS, w: 5 }) // leurre
+      p.exitAlt = alt
+      break
+    }
+    case 'detour-balcon': {
+      // R26 : chemin principal au sol + balcon-trésor optionnel via échelle (sortie = entrée)
+      const alt = Math.max(1, entryAlt)
+      p.platforms.push({ x: 0, alt, w })
+      const xLad = Math.max(3, Math.floor(w * 0.4))
+      const topAlt = alt + LADDER_H
+      p.ladders.push({ x: xLad, topAlt, h: LADDER_H })
+      const balcAlt = topAlt - 2
+      p.platforms.push({ x: xLad, alt: balcAlt, w: Math.max(4, Math.floor(w / 3)) })
+      p.props.push({ kind: 'coffre', x: xLad + 2, alt: balcAlt + 1 })
+      p.exitAlt = alt
+      break
+    }
+    case 'tresor-bassin': {
+      // R25 : cuve marine avec coffre au FOND (détour aquatique) — reprend le motif bassin
+      const bankAlt = entryAlt + 4
+      const rampW = 5
+      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt))
+      const wx = rampW, ww = w - 2 * rampW // eau entre les DEUX berges (surface plane, rebords à niveau)
+      p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt })
+      const holeL = wx + Math.floor(ww / 2) - 1
+      if (holeL - wx > 0) p.bridges.push({ x: wx, alt: bankAlt, w: holeL - wx })
+      if (wx + ww - (holeL + 3) > 0) p.bridges.push({ x: holeL + 3, alt: bankAlt, w: wx + ww - (holeL + 3) })
+      // berge droite AU MÊME niveau que la gauche, puis redescente
+      const rbx = wx + ww
+      const flatW = Math.min(bank, Math.max(1, w - rbx - 1))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, entryAlt))
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) })
+      placeBirds(bankAlt + 2)
+      break
+    }
+
+    // ─── PHASE 2 — TENSION / précision (D3–D5, sans pics — voir NOTE) ─────────────────────────
+    case 'echelle-exposee': {
+      // P30 : échelle exposée, il faut SORTIR DU BON CÔTÉ (palier à droite ; leurre court à gauche)
+      const xLad = Math.max(4, Math.floor(w * 0.5))
+      const landAlt = poseLadder(p, xLad, entryAlt, 0, xLad + 3, w)
+      p.platforms.push({ x: Math.max(0, xLad - 6), alt: landAlt, w: 3 }) // leurre gauche (cul-de-sac)
+      p.exitAlt = landAlt
+      break
+    }
+
+    // ─── PHASE 2b — TENSION à PICS (pics rendus sur TOUTE surface élevée) ─────────────────────
+    case 'faux-plat': {
+      // T16 : corniche plate (en hauteur) semée de PICS ISOLÉS à enjamber. Surface pleine + pics
+      // d'1 tuile posés SUR la corniche à intervalles réguliers → on saute par-dessus.
+      const alt = Math.max(1, entryAlt)
+      p.platforms.push({ x: 0, alt, w })
+      for (const sx of spread(w, 3)) p.spikes.push({ x: sx, w: 1, alt })
+      p.exitAlt = alt
+      break
+    }
+    case 'couloir-pics': {
+      // P29 : couloir avec PLAFOND DE ROCHE (roche au-dessus) et LITS DE PICS sur la corniche : on
+      // enchaîne des sauts par-dessus les lits, dégagement > saut sous le plafond.
+      const alt = Math.max(2, entryAlt)
+      p.platforms.push({ x: 0, alt, w })
+      pushVariedCeiling(p, w, alt, Math.floor(rng() * CEILING_VARIANTS)) // plafond de roche varié
+      let x = 3
+      while (x < w - 4) { p.spikes.push({ x, w: 2, alt }); x += 6 } // lit de 2 pics + 4 tuiles libres
+      p.exitAlt = alt
+      break
+    }
+    case 'pics-quinconce': {
+      // P31 : pics en QUINCONCE — lits de pics au sol de la corniche alternés avec des mini-corniches
+      // surélevées elles aussi coiffées de pics → on slalome en hauteur.
+      const alt = Math.max(1, entryAlt)
+      p.platforms.push({ x: 0, alt, w })
+      let x = 3, hi = false
+      while (x < w - 4) {
+        if (hi) { p.platforms.push({ x, alt: alt + 2, w: 3 }); p.spikes.push({ x, w: 3, alt: alt + 2 }) }
+        else p.spikes.push({ x, w: 2, alt })
+        x += 5; hi = !hi
+      }
+      p.exitAlt = alt
+      break
+    }
+    case 'atterrissage-etroit': {
+      // P32 : atterrissages ÉTROITS (1 case) encadrés de pics — précision de saut en hauteur.
+      const alt = Math.max(2, entryAlt)
+      p.platforms.push({ x: 0, alt, w: 3 }) // berge d'entrée
+      let x = 3
+      while (x < w - 4) {
+        p.spikes.push({ x, w: 1, alt })
+        p.platforms.push({ x: x + 1, alt, w: 1 }) // atterrissage d'une seule tuile
+        p.spikes.push({ x: x + 2, w: 1, alt })
+        x += 4
+      }
+      p.platforms.push({ x: Math.max(x, w - 3), alt, w: 3 }) // berge de sortie
+      p.exitAlt = alt
+      break
+    }
+
+    // ─── ESCALIER DE PIERRE (marches RIGIDES) ────────────────────────────────────────────────
+    case 'escalier-pierre': {
+      // Marches de PIERRE PLEINES et ISOLÉES (un trou d'air entre chaque) : collision pleine → on ne
+      // les traverse PAS (ni par le bas), mais l'isolement empêche tout coincement (aucune arête
+      // interne où se wedger). On monte bloc par bloc (écart +STEP_RISE rangées, GAP tuiles → saut
+      // simple garanti et reachable). Le fond est du SOL PLEIN : rater un saut = retomber au sol,
+      // jamais de piège. Contraste avec les marches de TERRE (rampes one-way traversables par le bas).
+      const STEP_RISE = 2 // +2 rangées par marche (avec un trou de GAP=2 tuiles → CONFORTABLEMENT franchissable)
+      const GAP = 2
+      const stepW = 4
+      const pitch = stepW + GAP // 6 tuiles par marche
+      const from = Math.max(1, entryAlt)
+      // autant de marches que la largeur en contient (≥2), la DERNIÈRE étant un large palier qui
+      // rejoint le bord droit du module (contigu au module suivant → chaînage reachable).
+      const count = Math.max(2, Math.min(5, Math.floor((w - stepW) / pitch) + 1))
+      let x = 0
+      for (let i = 0; i < count; i++) {
+        const alt = from + i * STEP_RISE
+        const last = i === count - 1
+        const bw = last ? Math.max(stepW, w - x) : stepW // dernier bloc élargi jusqu'au bord droit
+        p.platforms.push({ x, alt, w: bw, solid: true }) // bloc de PIERRE rigide
+        x += pitch
+      }
+      p.exitAlt = from + (count - 1) * STEP_RISE
+      break
+    }
+
+    // ─── PHASE 2 — EAU / cascade (D2–D4) ─────────────────────────────────────────────────────
+    case 'sortie-humide': {
+      // E40 : sortie derrière une cascade — reprend exactement le motif cascade (plateforme collée
+      // à GAUCHE et à DROITE du rideau, courant DESCENDANT qu'on remonte en maintenant HAUT)
+      const low = Math.max(entryAlt, 1)
+      const top = low + cascadeRise(rng) // cascade HAUTE (≥ 4× le panda)
+      const L = Math.max(4, Math.floor(w * 0.22))
+      const cornW = 5
+      p.platforms.push({ x: 0, alt: low, w: L }) // corniche basse collée à gauche du rideau
+      p.waters.push({ x: L, w: 4, kind: 'cascade', bankAlt: top }) // rideau LARGE (2×) : on GRIMPE la colonne
+      // corniche de sortie JOINTIVE au bord droit du rideau (on émerge en grimpant, plus d'échelle)
+      const topX = L + 4
+      p.platforms.push({ x: topX, alt: top, w: cornW })
+      p.props.push({ kind: 'coffre', x: topX + 2, alt: top + 1 })
+      const downStart = topX + cornW
+      if (w - downStart >= 1) p.platforms.push(...ramp(downStart, w - downStart, top, exitAlt))
+      placeBirds(top + 2)
+      break
+    }
+
+    // ─── PASSAGE SOUS-MARIN : plonger par le HAUT, ressortir sur le CÔTÉ immergé ──────────────
+    case 'passage-immerge': {
+      // Lac marine dont la paroi DROITE est OUVERTE (openSide) : on plonge depuis la berge gauche
+      // HAUTE (par le haut du lac) puis, apnée rallongée (§1) aidant, on nage/descend et on RESSORT
+      // sur le CÔTÉ par l'ouverture immergée → une corniche BASSE de la zone suivante (on ne remonte
+      // pas par le haut). Le fond est du sol plein ; des poissons (cercles rouges) dérivent dans l'eau.
+      const highBank = entryAlt + 5 // berge gauche HAUTE : le point de plongée
+      const outAlt = Math.max(1, Math.min(entryAlt, 3)) // sortie latérale BASSE (joignable du sol côté validateur)
+      const rampW = 4
+      p.platforms.push(...ramp(0, rampW, entryAlt, highBank)) // rampe d'accès à la berge haute
+      const wx = rampW
+      const ww = Math.max(6, w - rampW - 3)
+      p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt: highBank, openSide: 'right' })
+      // corniche de SORTIE latérale, basse, collée au bord droit ouvert de l'eau (on émerge par là)
+      p.platforms.push({ x: wx + ww, alt: outAlt, w: Math.max(3, w - (wx + ww)) })
+      placeBirds(highBank + 2)
+      p.exitAlt = outAlt
+      break
+    }
+
+    // ─── LAC EN U : plonger, nager SOUS LA ROCHE, ressortir à la MÊME hauteur ─────────────────
+    case 'lac-en-u': {
+      // Corniche d'ENTRÉE à hauteur H (bankAlt) → colonne d'eau qui DESCEND → TUNNEL immergé au fond
+      // sous un PLAFOND DE ROCHE (collision, comme une grotte) : au milieu on NE PEUT PAS remonter à
+      // la surface → on nage sous la roche → colonne qui REMONTE → corniche de SORTIE à la MÊME
+      // hauteur H. En U symétrique. Rebords des deux colonnes AU MÊME niveau (règle rebords).
+      const bankAlt = entryAlt + 3 // berges rehaussées → U assez profond (surface à bankAlt, fond = sol)
+      const rampW = 3
+      const colW = 3 // largeur des colonnes verticales OUVERTES (on y atteint la surface : descente/montée)
+      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt)) // rampe d'accès → corniche gauche à bankAlt
+      const wx = rampW
+      const ww = Math.max(2 * colW + 4, w - 2 * rampW) // eau entre les deux berges (≥ 2 colonnes + tunnel)
+      p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt }) // cuve close (murs posés par le moteur), surface plane
+      // PLAFOND DE ROCHE SUBMERGÉ au MILIEU (entre les 2 colonnes) : de ceilBotAlt à la surface bankAlt,
+      // collision pleine → impossible de faire surface au milieu, on nage dessous. Tunnel = eau sous
+      // ceilBotAlt jusqu'au fond. POCHE(S) D'AIR : si le milieu est large, on ménage des trous dans le
+      // plafond (on y refait surface pour respirer) → traversée toujours tenable dans l'apnée (5 s).
+      // toit du tunnel : eau libre du fond jusqu'à ceilBotAlt (le panda nage dessous). Borné pour
+      // garder À LA FOIS un dégagement de nage (≥ 2 rangées) et une roche assez épaisse (≥ 2 rangées).
+      const ceilBotAlt = Math.min(4, Math.max(2, bankAlt - 2))
+      const midX = wx + colW
+      const midW = ww - 2 * colW
+      const maxRock = 7 // longueur de roche max entre deux poches d'air (borne la nage en apnée)
+      const airGap = 2
+      let rx = midX
+      while (rx < midX + midW) {
+        const seg = Math.min(maxRock, midX + midW - rx)
+        p.rocks.push({ x: rx, altBot: ceilBotAlt, altTop: bankAlt, w: seg, solid: true }) // plafond de roche immergé
+        rx += seg + airGap // saute une POCHE D'AIR (colonnes ouvertes où l'on refait surface)
+      }
+      // berge droite (corniche de SORTIE) AU MÊME niveau H que l'entrée, puis retour à l'altitude de sortie
+      const rbx = wx + ww
+      const flatW = Math.min(bank, Math.max(1, w - rbx - 1))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, exitAlt))
+      // MONSTRES AQUATIQUES proportionnels à la SURFACE d'eau (petit U → 1-2, grand → plus). Placés
+      // SANS y → posés au FOND (immergés) : ils nagent (aquatic, pas de noyade) ; jamais de terrestre.
+      if (groundMobs.length) {
+        const area = ww * bankAlt
+        const nAqua = Math.max(1, Math.min(4, Math.round(area / 70)))
+        spread(ww, nAqua).forEach((ax, i) => p.spawns.push({ monsterId: groundMobs[i % groundMobs.length]!, x: wx + ax }))
+      }
+      placeBirds(bankAlt + 2)
+      p.exitAlt = exitAlt
+      break
+    }
+
+    // ─── GROTTE-TUNNEL : boyau de roche PLUS LONG et VARIÉ (roche dessus ET dessous) ──────────
+    case 'grotte-tunnel': {
+      // Vrai tunnel fermé, comme 'grotte', mais avec un RELIEF de sol (petit ressaut) et un plafond
+      // ondulant tiré parmi les 5 profils → deux grottes ne se ressemblent jamais. Le dégagement sous
+      // le plafond reste > saut (on ne se cogne pas). Réservé aux biomes rocheux/souterrains.
+      const alt = Math.max(entryAlt, 2)
+      // sol en deux paliers : plat, puis un ressaut d'1 marche à mi-parcours (relief de caverne)
+      const step = 1 + (Math.floor(rng() * 2)) // 1 ou 2 rangées de ressaut
+      const half = Math.floor(w / 2)
+      p.platforms.push({ x: 0, alt, w: half })
+      p.platforms.push({ x: half, alt: alt + step, w: w - half })
+      // socle plein sous les deux paliers (grotte « tout pierre dessous »)
+      if (alt - 1 >= 1) p.rocks.push({ x: 0, altBot: 1, altTop: alt - 1, w })
+      // PLAFOND DE ROCHE VARIÉ calé sur le palier le PLUS HAUT (dégagement garanti partout)
+      pushVariedCeiling(p, w, alt + step, Math.floor(rng() * CEILING_VARIANTS))
+      p.exitAlt = alt + step
+      break
+    }
+
+    // ─── GROTTE SOUS-MARINE EN U : lac en U NOYÉ SOUS UN TOIT DE ROCHE, coffre au fond ────────
+    case 'grotte-noyee': {
+      // Grotte inondée : comme 'lac-en-u' (on plonge, on nage sous un plafond de roche IMMERGÉ au
+      // milieu, on remonte à la MÊME hauteur H de l'autre côté) MAIS coiffée d'un TOIT DE ROCHE au-
+      // dessus de la surface de l'eau (grotte noyée fermée). Coffre AU FOND = récompense de plongée.
+      const bankAlt = entryAlt + 3
+      const rampW = 3
+      const colW = 3
+      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt)) // rampe → corniche gauche à bankAlt
+      const wx = rampW
+      const ww = Math.max(2 * colW + 4, w - 2 * rampW)
+      p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt }) // cuve close, surface plane
+      // PLAFOND IMMERGÉ au MILIEU (force la plongée : impossible de faire surface au centre)
+      const ceilBotAlt = Math.min(4, Math.max(2, bankAlt - 2))
+      const midX = wx + colW
+      const midW = ww - 2 * colW
+      const maxRock = 7
+      const airGap = 2
+      let rx = midX
+      while (rx < midX + midW) {
+        const seg = Math.min(maxRock, midX + midW - rx)
+        p.rocks.push({ x: rx, altBot: ceilBotAlt, altTop: bankAlt, w: seg, solid: true })
+        rx += seg + airGap
+      }
+      // TOIT DE ROCHE au-DESSUS de la surface (grotte noyée) : plafond varié calé sur bankAlt, avec
+      // un dégagement > saut au-dessus de la surface → on entre/ressort sans se cogner au plafond.
+      pushVariedCeiling(p, w, bankAlt, Math.floor(rng() * CEILING_VARIANTS))
+      // berge droite (corniche de SORTIE) à la MÊME hauteur H, puis retour à l'altitude de sortie
+      const rbx = wx + ww
+      const flatW = Math.min(bank, Math.max(1, w - rbx - 1))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, exitAlt))
+      // COFFRE AU FOND (jamais dans la lave) : plongée récompensée
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) })
+      // monstres AQUATIQUES au fond (comme lac-en-u) — jamais de terrestre au-dessus de l'eau
+      if (groundMobs.length) {
+        const nAqua = Math.max(1, Math.min(3, Math.round((ww * bankAlt) / 80)))
+        spread(ww, nAqua).forEach((ax, i) => p.spawns.push({ monsterId: groundMobs[i % groundMobs.length]!, x: wx + ax }))
+      }
+      p.exitAlt = exitAlt
+      break
+    }
+
+    // ─── PASSERELLES FLOTTANTES EN ZIGZAG ASCENDANT ───────────────────────────────────────────
+    case 'passerelles-zigzag': {
+      // Plateformes SUSPENDUES qui montent en alternant GAUCHE / DROITE : on saute en haut à gauche,
+      // puis en haut à droite, puis gauche… pour grimper. Deux colonnes fixes (xL, xR) : chaque saut
+      // monte de STEP_RISE=2 rangées (< saut ≈ 4) avec un écart horizontal de 2 tuiles (≤ portée de
+      // saut confortable) → toujours FRANCHISSABLE. Le tout AU-DESSUS DU VIDE (passerelles flottantes :
+      // rater un saut = chute mortelle, jamais coincé vivant → pas de socle plein sous la travée). La
+      // dernière passerelle est un PALIER LARGE jusqu'au bord droit (raccord au module suivant, au
+      // sommet). ≤ 3 passerelles empilées par colonne (silhouette collines respectée, le vide ne
+      // compte pas comme palier).
+      const base = Math.max(1, entryAlt)
+      const STEP_RISE = 2
+      const pw = 3
+      const gapX = 2 // écart horizontal entre les deux colonnes (≤ portée de saut à +2 rangées)
+      const xL = bank
+      const xR = xL + pw + gapX
+      const steps = 4 + Math.floor(rng() * 2) // 5 à 6 passerelles empilées (≤ 3 par colonne)
+      // berge SOLIDE d'entrée à gauche (raccord au module précédent, à l'altitude d'entrée)
+      p.platforms.push({ x: 0, alt: base, w: bank })
+      let top = base
+      for (let k = 0; k <= steps; k++) {
+        const alt = base + k * STEP_RISE
+        const x = k % 2 === 0 ? xL : xR // alterne gauche / droite
+        const isLast = k === steps
+        const pwk = isLast ? Math.max(pw, w - x) : pw // dernière = palier large → sortie au sommet
+        p.platforms.push({ x, alt, w: pwk })
+        top = alt
+      }
+      // TROUS mortels sous toute la travée des passerelles (tranches ≤ 3 → chacune franchissable, mais
+      // on ne les franchit pas : on grimpe les passerelles). Retire le socle → passerelles FLOTTANTES.
+      for (let gx = bank; gx < w; gx += 3) p.gaps.push({ x: gx, w: Math.min(3, w - gx) })
+      p.exitAlt = top
+      break
+    }
+
+    // ─── PASSERELLES FLOTTANTES sur SOL PLEIN (variante « full sol » du miroir sous les passerelles) ──
+    case 'passerelles-plein': {
+      // Mêmes passerelles alternées gauche/droite que 'passerelles-zigzag', mais AU-DESSUS D'UN SOL
+      // PLEIN continu : rater un saut = retomber sur le sol (pas de chute mortelle). Sol plein SOUS la
+      // travée → fini le « miroir bizarre » (le sol ne suit plus la fréquence des passerelles). On
+      // PLAFONNE à 4 passerelles (2 par colonne) : sol (1) + 2 passerelles = 3 paliers max (silhouette).
+      const base = Math.max(1, entryAlt)
+      p.platforms.push({ x: 0, alt: base, w }) // SOL PLEIN pleine largeur (retombée sûre, jamais mortel)
+      // passerelles flottantes en DENTS DE SCIE, chacune sur une COLONNE DISTINCTE (gauche→droite) →
+      // sol (1) + AU PLUS 1 passerelle par colonne = 2 paliers (silhouette respectée). La dernière est
+      // un large palier surélevé (raccord de la montée). Sol PLEIN dessous → plus de « miroir bizarre ».
+      const pw = 3
+      const scie = [base + 2, base + 4, base + 3, base + 4] // monte, redescend, remonte
+      let x = bank
+      let top = base
+      for (let i = 0; i < scie.length && x + pw < w; i++) {
+        const isLast = i === scie.length - 1 || x + 2 * (pw + 1) >= w
+        const pwk = isLast ? Math.max(pw, w - x) : pw
+        p.platforms.push({ x, alt: scie[i]!, w: pwk })
+        top = scie[i]!
+        if (isLast) break
+        x += pw + 1 // colonne suivante (1 tuile d'écart → jamais de chevauchement de colonnes)
+      }
+      p.exitAlt = top
+      break
+    }
+
+    // ─── PLONGEOIR « SAUT DE LA FOI » : perchoir TRÈS HAUT + panneau, on plonge à l'aveugle dans le lac ──
+    case 'plongeoir': {
+      // On grimpe jusqu'à un perchoir TRÈS HAUT en surplomb du lac (montée VARIÉE : échelle OU escalier
+      // de plateformes selon la graine → « pas toujours échelle puis saut »), un PANNEAU (flèche vers le
+      // bas) invite au saut, le BASSIN est VISIBLE en contrebas (télégraphie) ; on plonge à l'aveugle et
+      // on tombe dans le LAC ALIGNÉ pile sous le point de saut (atterrissage dans l'EAU garanti). Le
+      // plongeoir est PLUS HAUT qu'avant (bankAlt+9..11 en mode échelle) → vrai saut de la foi.
+      const bankAlt = Math.max(2, entryAlt)
+      const rampW = 3
+      const ladderMode = Math.floor(rng() * 2) === 0 // 0 = ÉCHELLE (perchoir très haut) · 1 = PLATEFORMES
+      const approachW = ladderMode ? rampW + 1 : Math.max(9, Math.floor(w * 0.4))
+      const wx = approachW
+      const ww = Math.max(8, w - approachW - rampW)
+      // hauteur du perchoir : très haut par l'échelle ; par les plateformes, dérivée de la place dispo
+      // (paliers ≤ 3, chacun +3) → toujours plusieurs sauts au-dessus de l'eau, jamais de débordement.
+      const paliers = Math.max(1, Math.min(3, Math.floor((approachW - 3) / 3)))
+      const boardAlt = bankAlt + (ladderMode ? 9 + Math.floor(rng() * 3) : 3 * paliers)
+      if (ladderMode) {
+        // MONTÉE PAR ÉCHELLE : berge plate → jetée au ras de l'eau → longue échelle → plongeoir en surplomb.
+        p.platforms.push({ x: 0, alt: bankAlt, w: wx }) // berge gauche (colonne wx-1 = bankAlt : banc à niveau)
+        const h = Math.min(MAX_LADDER_TILES, boardAlt - bankAlt + 2) // pied bankAlt, palier (top-2) = boardAlt
+        p.platforms.push({ x: wx, alt: bankAlt, w: 2 }) // jetée (pied de l'échelle)
+        p.ladders.push({ x: wx, topAlt: bankAlt + h, h })
+        p.platforms.push({ x: wx, alt: boardAlt, w: 4 }) // PLONGEOIR en surplomb
+      } else {
+        // MONTÉE PAR PLATEFORMES : escalier de paliers (≤3) sur le SOL PLEIN à gauche jusqu'à une
+        // plateforme de lancement à boardAlt ; puis SAUT (hgap 1) sur le PLONGEOIR qui déborde le lac.
+        p.platforms.push({ x: 0, alt: bankAlt, w: 2 }) // berge d'entrée
+        p.platforms.push(...ramp(2, 3 * paliers, bankAlt, boardAlt)) // escalier jusqu'à la plateforme de lancement
+        p.platforms.push({ x: wx - 1, alt: bankAlt, w: 1 }) // berge du lac EN CREUX (banc gauche à niveau)
+        p.platforms.push({ x: wx, alt: boardAlt, w: 4 }) // PLONGEOIR en surplomb (atteint au saut depuis le lancement)
+      }
+      p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt })
+      // PANNEAU (poteau + flèche vers le bas) au BOUT du plongeoir, au-dessus de l'eau libre → « saute ici »
+      p.signs.push({ x: wx + 3, alt: boardAlt + 1 })
+      // berge droite AU MÊME niveau (surface horizontale), puis redescente vers la sortie
+      const rbx = wx + ww
+      const flatW = Math.min(bank, Math.max(1, w - rbx))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, exitAlt))
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) }) // au fond (plongée)
+      placeBirds(boardAlt + 2)
+      p.exitAlt = exitAlt
+      break
+    }
+
+    // ─── PUITS : cuve marine ÉTROITE et PROFONDE (margelle de pierre), distinct du BASSIN large ────
+    case 'puits': {
+      const bankAlt = entryAlt + 4 // profond
+      const ww = 3 // ÉTROIT (le bassin, lui, est large)
+      const side = Math.max(3, Math.floor((w - ww) / 2))
+      p.platforms.push(...ramp(0, side, entryAlt, bankAlt)) // montée gauche jusqu'à la margelle
+      const wx = side
+      p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt })
+      // MARGELLE : rebords de pierre à NIVEAU de chaque côté (berges égales → validateur berges).
+      const rbx = wx + ww
+      const flatW = Math.min(3, Math.max(1, w - rbx))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, exitAlt))
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + 1 }) // au fond du puits
+      placeBirds(bankAlt + 2)
+      p.exitAlt = exitAlt
+      break
+    }
+
+    // ─── CASCADE-BASSIN : une cascade remontable qui TOMBE dans un bassin marine (coffre au fond) ──
+    case 'cascade-bassin': {
+      const low = Math.max(1, entryAlt)
+      const bankAlt = low + 2
+      const rampW = 3
+      p.platforms.push(...ramp(0, rampW, low, bankAlt)) // berge gauche vers la surface du bassin
+      const wx = rampW
+      const bw = Math.max(5, Math.floor((w - rampW) * 0.4)) // BASSIN (large-ish)
+      p.waters.push({ x: wx, w: bw, kind: basinKind, bankAlt })
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(bw / 2) })
+      const rbx = wx + bw
+      p.platforms.push({ x: rbx, alt: bankAlt, w: 2 }) // berge droite du bassin à niveau
+      // CASCADE remontable qui alimente le bassin : colonne juste à droite, montant vers une corniche
+      // haute. Une rampe de paliers garantit l'accès à la corniche (reachable), la cascade = le raccourci.
+      const top = bankAlt + cascadeRise(rng) // cascade HAUTE (≥ 4× le panda)
+      const colX = rbx + 2
+      p.waters.push({ x: colX, w: 4, kind: 'cascade', bankAlt: top }) // colonne LARGE (2×) : on la GRIMPE
+      // corniche JOINTIVE au bord droit de la colonne (émergence de la grimpe), plus d'échelle parallèle
+      const cornX = colX + 4
+      const cw = Math.max(3, Math.min(5, w - cornX))
+      p.platforms.push({ x: cornX, alt: top, w: cw })
+      const downStart = cornX + cw
+      if (w - downStart > 0) p.platforms.push(...ramp(downStart, w - downStart, top, exitAlt))
+      placeBirds(top + 2)
+      p.exitAlt = exitAlt
+      break
+    }
+
+    // ─── BOYAU IMMERGÉ (eau-passage) : tunnel marine OUVERT sur le côté, traversé À LA NAGE ────────
+    case 'boyau-immerge': {
+      // Cuve marine dont la paroi DROITE est OUVERTE (openSide) : on plonge par une colonne d'eau à
+      // gauche, on nage SOUS un plafond de roche immergé (impossible de faire surface au milieu), puis
+      // on RESSORT par le côté ouvert sur une corniche À NIVEAU (banc égal → cuve NON suspendue).
+      const bankAlt = entryAlt + 3
+      const rampW = 3
+      const colW = 3
+      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt)) // accès à la corniche gauche (surface)
+      const wx = rampW
+      const ww = Math.max(2 * colW + 4, w - 2 * rampW)
+      p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt, openSide: 'right' })
+      // plafond de roche IMMERGÉ au milieu (force la nage sous la surface, comme lac-en-u)
+      const ceilBotAlt = Math.min(4, Math.max(2, bankAlt - 2))
+      const midX = wx + colW
+      const midW = ww - 2 * colW
+      const maxRock = 7
+      const airGap = 2
+      let rx = midX
+      while (rx < midX + midW) {
+        const seg = Math.min(maxRock, midX + midW - rx)
+        p.rocks.push({ x: rx, altBot: ceilBotAlt, altTop: bankAlt, w: seg, solid: true })
+        rx += seg + airGap
+      }
+      // SORTIE latérale par le bord OUVERT (droite), corniche À NIVEAU (banc égal), puis vers la sortie
+      const rbx = wx + ww
+      const flatW = Math.min(bank, Math.max(1, w - rbx))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, exitAlt))
+      // MONSTRES AQUATIQUES au fond (comme lac-en-u) — jamais de terrestre au-dessus de l'eau
+      if (groundMobs.length) {
+        const nAqua = Math.max(1, Math.min(3, Math.round((ww * bankAlt) / 80)))
+        spread(ww, nAqua).forEach((ax, i) => p.spawns.push({ monsterId: groundMobs[i % groundMobs.length]!, x: wx + ax }))
+      }
+      placeBirds(bankAlt + 2)
+      p.exitAlt = exitAlt
+      break
+    }
+
+    // ─── GROTTE DE DÉPART SOUTERRAINE : boyau de roche fermé, bassin immergé à FRANCHIR À LA NAGE ──
+    case 'grotte-depart': {
+      // Module de SPAWN souterrain : plancher de roche PLEIN à gauche (le panda apparaît à mi-portée,
+      // sur le solide), puis un bassin marine dont le milieu est coiffé d'un PLAFOND DE ROCHE IMMERGÉ
+      // (on ne fait pas surface au centre → on NAGE dessous pour avancer), et un TOIT DE ROCHE au-dessus
+      // de tout (grotte fermée : roche jusqu'au plafond). Corniche de sortie à droite, à niveau.
+      const alt = Math.max(entryAlt, 3)
+      const solidW = Math.max(Math.floor(w * 0.55), Math.floor(w / 2) + 2) // plancher solide couvre le milieu (spawn)
+      p.platforms.push({ x: 0, alt, w: solidW }) // plancher de spawn (marchable, plein)
+      if (alt - 1 >= 1) p.rocks.push({ x: 0, altBot: 1, altTop: alt - 1, w }) // « tout pierre dessous »
+      const colW = 3
+      const wx = solidW
+      const ww = Math.max(2 * colW + 2, w - solidW - 3)
+      p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt: alt })
+      // PLAFOND IMMERGÉ au milieu du bassin (force la plongée)
+      const ceilBotAlt = Math.max(1, Math.min(alt - 1, alt - 2))
+      const midX = wx + colW
+      const midW = Math.max(0, ww - 2 * colW)
+      let rx = midX
+      while (rx < midX + midW) {
+        const seg = Math.min(6, midX + midW - rx)
+        p.rocks.push({ x: rx, altBot: ceilBotAlt, altTop: alt, w: seg, solid: true })
+        rx += seg + 2
+      }
+      // corniche de sortie à droite, À NIVEAU (banc égal)
+      const rbx = wx + ww
+      p.platforms.push({ x: rbx, alt, w: Math.max(3, w - rbx) })
+      // TOIT DE ROCHE au-dessus de tout (grotte fermée continue, roche jusqu'au plafond)
+      pushVariedCeiling(p, w, alt, Math.floor(rng() * CEILING_VARIANTS))
+      p.exitAlt = alt
+      break
+    }
+
+    // ─── CHAÎNES VERTICALES VARIÉES ───────────────────────────────────────────────────────────────
+    case 'echelle-trou-echelle': {
+      // On grimpe une 1ʳᵉ échelle jusqu'à un palier, on franchit un TROU mortel au saut, puis on grimpe
+      // une 2ᵉ échelle décalée jusqu'au sommet. Deux étages d'escalade séparés par un vide franchissable.
+      const base = Math.max(1, entryAlt)
+      const half = Math.max(8, Math.floor(w / 2))
+      const land1 = poseLadder(p, 2, base, 0, 4, half - 3) // pied gauche + échelle 1 → palier1 (s'arrête avant le trou)
+      p.gaps.push({ x: half - 3, w: 3 }) // TROU mortel entre le palier1 et le pied de l'échelle 2
+      const top = poseLadder(p, half + 1, land1, half, w - half, w) // pied droit à land1 + échelle 2 → sommet
+      p.exitAlt = top
+      break
+    }
+    case 'echelle-zigzag': {
+      // Une échelle mène à une suite de PASSERELLES en zigzag gauche-droite (montée puis redescente)
+      // AU-DESSUS DU VIDE, jusqu'à la sortie. On grimpe, puis on slalome de passerelle en passerelle.
+      const base = Math.max(1, entryAlt)
+      const landAlt = poseLadder(p, 2, base, 0, 5, 7) // échelle → petit palier de départ du zigzag
+      const pw = 3
+      let x = 7
+      let a = landAlt
+      const seq = [2, 2, -2, -2, 2] // monter, monter, redescendre, redescendre, remonter (dents de scie)
+      for (const d of seq) {
+        if (x + pw > w) break
+        a = Math.max(1, a + d)
+        p.bridges.push({ x, alt: a, w: pw })
+        x += pw + 2 // écart horizontal 2 (≤ portée de saut)
+      }
+      // palier de sortie SOLIDE au bout (raccord au module suivant)
+      const outX = Math.min(w - 4, x)
+      p.platforms.push({ x: outX, alt: a, w: Math.max(4, w - outX) })
+      // VIDE mortel sous toute la travée du zigzag (rater = chute) — passerelles flottantes
+      for (let gx = 7; gx < outX; gx += 3) p.gaps.push({ x: gx, w: Math.min(3, outX - gx) })
+      p.exitAlt = a
+      break
+    }
+    case 'echelles-decalees': {
+      // Deux échelles nettement DÉCALÉES horizontalement, reliées par un large palier intermédiaire
+      // (montée franche : on grimpe à gauche, on marche jusqu'à droite, on regrimpe). Pas de quinconce serré.
+      const base = Math.max(1, entryAlt)
+      const mid = Math.max(7, Math.floor(w / 2))
+      const land1 = poseLadder(p, 2, base, 0, 5, mid) // échelle 1 (gauche) → palier land1 (2..mid)
+      const top = poseLadder(p, mid + 1, land1, mid, w - mid, w) // pied (mid..w) à land1 + échelle 2 (droite) → sommet
+      p.exitAlt = top
+      break
+    }
+
+    // ─── ÉCHELLE-DESCENTE PIÉGÉE : on descend, TROU mortel en bas, saut sur passerelle coiffée de roche ──
+    case 'echelle-descente-piegee': {
+      // On MONTE jusqu'au sommet de l'échelle (palier d'accès), on DESCEND l'échelle jusqu'à un petit
+      // pied près du sol, un TROU MORTEL barre la route → il faut SAUTER sur une PASSERELLE latérale
+      // COIFFÉE DE ROCHE (inaccessible par le haut : le toit de roche empêche d'y tomber d'en haut ;
+      // seul le saut depuis le pied l'atteint), avec un dégagement de saut confortable sous la roche.
+      const h = LADDER_H
+      const footAlt = 1
+      const topAlt = footAlt + h
+      const palierAlt = topAlt - 2 // palier d'accès au sommet de l'échelle (règle du décalage pieds)
+      const upW = Math.max(5, Math.floor(w * 0.32))
+      p.platforms.push({ x: 0, alt: entryAlt, w: bank }) // berge d'entrée
+      p.platforms.push(...ramp(bank, upW, entryAlt, palierAlt)) // rampe d'accès au sommet de l'échelle
+      const ladX = bank + upW + 1
+      p.platforms.push({ x: ladX - 2, alt: palierAlt, w: 4 }) // palier haut (on descend d'ici)
+      p.ladders.push({ x: ladX, topAlt, h })
+      p.platforms.push({ x: ladX - 1, alt: footAlt, w: 3 }) // pied de l'échelle (près du sol)
+      const gapX = ladX + 2
+      const gapW = 3
+      p.gaps.push({ x: gapX, w: gapW }) // TROU MORTEL juste après le pied
+      const passX = gapX + gapW
+      const passAlt = footAlt + 1
+      p.bridges.push({ x: passX, alt: passAlt, w: 4 }) // PASSERELLE latérale (saut depuis le pied)
+      // TOIT DE ROCHE au-dessus de la passerelle (inaccessible par le haut), dégagement de saut ≥ CAVE_CLEARANCE
+      p.rocks.push({ x: passX, altBot: passAlt + CAVE_CLEARANCE, altTop: passAlt + CAVE_CLEARANCE + 2, w: 4, solid: true })
+      const outX = passX + 4
+      if (w - outX > 0) p.platforms.push(...ramp(outX, w - outX, passAlt, exitAlt)) // sortie
+      p.exitAlt = exitAlt
+      break
+    }
+
+    // ─── CASCADE → GROTTE SOUS-MARINE : le rideau tombe (lucarne) dans un bassin sous toit de roche ──
+    case 'cascade-plus-haute': {
+      // 1) « Une cascade et une grotte (ça existe déjà) mais j'aimerais que la cascade aille PLUS HAUT que
+      // l'entrée de la grotte. »
+      // La différence avec 'cascade-grotte' est petite mais elle change tout à la lecture : le rideau part
+      // d'une corniche SUPÉRIEURE à la bouche de la grotte, donc on le voit tomber DEVANT l'entrée. On monte
+      // la cascade au-delà du plancher de la grotte, et le passage haut est encore au-dessus.
+      const A = Math.max(entryAlt, 2)
+      // ⚠️ HAUTEURS CONTRAINTES PAR LA RÈGLE DES CASCADES REMONTABLES : un rideau de moins de 12 rangées
+      // (≈ 4× le panda) ne se lit pas comme une cascade et le test le refuse. Le rideau va donc de `A` à
+      // `sommet`, soit 13 rangées, et la bouche de la grotte se place à mi-chemin — ce qui donne bien
+      // l'effet demandé : la cascade DÉPASSE l'entrée de la grotte.
+      const T = A + 5              // plancher de la grotte, au-dessus de l'entrée
+      const sommet = A + 13        // le rideau dépasse la bouche de la grotte de 8 rangées
+      let x = 0
+      p.platforms.push({ x, alt: A, w: bank }); x += bank
+      // rideau : de `sommet` jusqu'au niveau d'entrée (il recueille dans un petit bassin, pas dans le vide)
+      p.waters.push({ x, w: 2, kind: 'cascade', bankAlt: sommet, bottomAlt: A })
+      p.platforms.push({ x, alt: A, w: 2 }) // vasque au pied du rideau
+      const caveX = x + 2
+      const floorW = Math.max(bank, w - caveX - bank)
+      p.platforms.push({ x: caveX, alt: T, w: floorW, solid: true })     // plancher de la grotte
+      if (T - 1 >= 0) p.rocks.push({ x: caveX, altBot: 0, altTop: T - 1, w: floorW, solid: true })
+      p.rocks.push({ x: caveX, altBot: T + CAVE_CLEARANCE, altTop: sommet - 1, w: Math.min(floorW, 6), solid: true })
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + 1, alt: T + 1 })
+      const gardien = groundMobs.find((id) => !MONSTERS[id]?.aquatic && !MONSTERS[id]?.aerial)
+      if (gardien) p.spawns.push({ monsterId: gardien, x: caveX + 3, alt: T })
+      // passage de sortie EN HAUT du rideau
+      p.platforms.push({ x: w - bank, alt: sommet, w: bank })
+      // relais d'accès au sommet : on grimpe la cascade, mais on garde une corniche d'appui
+      p.platforms.push({ x: caveX + floorW, alt: sommet - 3, w: Math.max(3, w - bank - (caveX + floorW)) })
+      placeBirds(sommet + 2)
+      p.exitAlt = sommet
+      break
+    }
+    case 'cascade-deux-passages':
+    case 'cascade-deux-passages-g': {
+      // 2) et 3) « Une cascade avec deux passages sur la droite. Celui du haut est un tunnel et celui du bas
+      // c'est juste une petite cavité avec un mob et un trésor. » Puis : « pareil mais dans l'autre sens. »
+      //
+      // Le choix est FAUX-VRAI, et c'est le sel du motif : le passage du bas est un cul-de-sac récompensé,
+      // celui du haut est la vraie route. On ne le sait qu'en essayant — d'où le mob qui garde le trésor.
+      // « L'autre sens » = le côté des passages par rapport au rideau ; un vrai miroir gauche-droite mettrait
+      // la sortie à gauche, à contresens de la progression du terrain.
+      //
+      // ⚠️ MOTIF DÉLIBÉRÉMENT HAUT, SUR AUTORISATION EXPLICITE : « fais un truc très haut c'est top », « une
+      // grande cascade pour descendre ou une grande échelle, ça me choque pas ». Le rideau fait 14 rangées et
+      // le tunnel est à son sommet. Cela dépasse la silhouette « collines » (≤ 3 paliers empilés) que le jeu
+      // s'impose ailleurs : les terrains qui portent ce motif sont donc déclarés HAUTS (cf. TERRAINS_HAUTS
+      // dans data/levels), et c'est la seule exception — ailleurs la règle tient.
+      const passagesAGauche = m.kind === 'cascade-deux-passages-g'
+      const A = Math.max(entryAlt, 2)
+      const T = A + 14 // sommet du rideau ET plancher du tunnel
+      const bw = bank
+      const zoneW = Math.max(10, w - 2 * bw - 3)
+      const zoneX = passagesAGauche ? bw : bw + 3
+      const casX = passagesAGauche ? bw + zoneW : bw
+
+      p.platforms.push({ x: 0, alt: A, w: bw })
+
+      // RIDEAU : 14 rangées, remontable à la nage, recueilli dans une vasque au pied (pas de vide mortel).
+      p.waters.push({ x: casX, w: 2, kind: 'cascade', bankAlt: T, bottomAlt: A })
+      p.platforms.push({ x: casX, alt: A, w: 2 })
+
+      // CAVITÉ DU BAS : cul-de-sac récompensé. Le plancher du tunnel lui sert de toit — pas de seconde dalle,
+      // qui écraserait le dégagement (essayé : « plafond de grotte trop bas » sur jungle-4).
       const cavW = Math.min(6, zoneW - 2)
       p.platforms.push({ x: zoneX, alt: A, w: zoneW, solid: true })
       if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: zoneX + Math.floor(cavW / 2), alt: A + 1 })
       const garde = groundMobs.find((id) => !MONSTERS[id]?.aquatic && !MONSTERS[id]?.aerial)
       if (garde) p.spawns.push({ monsterId: garde, x: zoneX + 1, alt: A })
 
-      // deux corniches de montée vers le tunnel (trois paliers en tout : cavité, corniche, tunnel)
-      p.platforms.push({ x: zoneX + Math.floor(zoneW * 0.45), alt: A + 3, w: 3 })
+      // GRANDE ÉCHELLE cavité → tunnel : c'est la voie « sèche », en plus de la remontée du rideau. Elle est
+      // longue, et c'est assumé (« une grande échelle, ça me choque pas ») ; son sommet porte un palier deux
+      // rangées plus bas, comme l'exige le validateur.
+      const hEch = Math.min(MAX_LADDER_TILES, T - A)
+      p.ladders.push({ x: zoneX + zoneW - 2, topAlt: A + hEch, h: hEch })
+      p.platforms.push({ x: zoneX + zoneW - 4, alt: A + hEch - 2, w: 4 })
 
       // TUNNEL DU HAUT : la vraie route, sous un plafond de roche, jusqu'à la sortie.
       p.platforms.push({ x: zoneX, alt: T, w: zoneW, solid: true })
       p.rocks.push({ x: zoneX, altBot: T + CAVE_CLEARANCE, altTop: T + CAVE_CLEARANCE + CAVE_CEILING_THICK, w: zoneW, solid: true })
 
-      p.platforms.push({ x: w - bw, alt: T, w: bw }) // sortie en haut
+      p.platforms.push({ x: w - bw, alt: T, w: bw })
       placeBirds(T + 3)
       p.exitAlt = T
       break

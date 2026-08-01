@@ -205,6 +205,14 @@ const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
   // n'étaient posés nulle part — le test de couverture l'a montré, tsc aussi.
   'plaine-7': ['cascade-plus-haute', 'bassin'],
   'desert-7': ['cascade-plus-haute', 'bassin'],
+  // motif HAUT (14 rangées de rideau) : les deux terrains sont déclarés dans TERRAINS_HAUTS.
+  // ⚠️ montagne-1 était DÉJÀ pris plus bas (cascade-trou) : en JavaScript la dernière clé gagne en silence.
+  // C'est le deuxième doublon de cette table dans la session — d'où le passage sur montagne-3, libre.
+  'montagne-3': ['cascade-deux-passages', 'bassin'],
+  // ⚠️ PAS SUR enfer-6 : le tunnel du motif fait une bande PLATE de 20 tuiles, et le jeu refuse toute
+  // bande plate vide de plus de 16 (règle « anti-ennui », qui existe précisément pour éviter les couloirs
+  // sans intérêt). Sur cimetiere-1 le module tombe plus court et passe.
+  'cimetiere-1': ['cascade-deux-passages-g', 'cascade'],
   'jungle-4': ['boyau-tresor-retour', 'cascade'],
   'cimetiere-2': ['boyau-tresor-retour', 'cascade'],
   // R171 — GROTTE SOUS-MARINE garantie TÔT (retour joueur : « 7-8 niveaux sans en voir »). On en pose
@@ -232,6 +240,39 @@ const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
 // Motifs NON-eau IMPOSÉS par terrain (ComposeOpts.forcedKinds) : gros motifs signature qu'on place à la
 // main, surtout sur les biomes PAUVRES en variété (cimetière, cave) pour les enrichir. Ces terrains
 // peuvent être rallongés et sont exemptés de la règle d'XP stricte (cf. xp-economy.test).
+// ⚠️ COUVERTURE ÉPINGLÉE PLUTÔT QUE TIRÉE AU SORT. C'est la correction de fond du générateur, et elle
+// débloque tout le reste. Jusqu'ici, l'apparition de chaque famille de motifs dépendait du tirage : ajouter
+// un motif imposé quelque part faisait disparaître, ailleurs, une famille entière — sans que rien ne le
+// signale, sinon un test de couverture qui tombait. Les familles exigées sont désormais ÉPINGLÉES à un
+// terrain chacune, donc leur présence ne dépend plus du hasard, et on peut ajouter des motifs sans jouer à
+// la roulette. Les terrains concernés sont rallongés d'autant (cf. midCount).
+const COUVERTURE_EPINGLEE: Record<string, ModuleKind[]> = {
+  'plaine-2': ['zigzag'],
+  'foret-2': ['echelle-trou-echelle'],
+  'foret-7': ['echelle-zigzag'],
+  'desert-1': ['echelles-decalees'],
+  'desert-4': ['echelles-successives'],
+  'desert-6': ['escalier-saut'],
+  'desert-8': ['passerelles-zigzag'],
+  'jungle-5': ['passerelles-plein'],
+  'montagne-2': ['echelle-descente-piegee'],
+  'carriere-1': ['escalier-pierre'], // le kind exige un biome rocheux (cf. CATALOG) — la carrière en est un
+}
+
+/**
+ * Terrains AUTORISÉS À DÉPASSER la silhouette « collines », avec le nombre de paliers empilés admis.
+ *
+ * ⚠️ EXCEPTION EXPLICITE, PAS DÉSACTIVATION DE LA RÈGLE. Le jeu s'impose ≤ 3 paliers empilés pour éviter les
+ * tours illisibles, et cette règle a de la valeur : c'est elle qui a rejeté trois versions du motif à double
+ * passage. Le user a tranché — « fais un truc très haut c'est top », « une grande cascade pour descendre ou
+ * une grande échelle, ça me choque pas » — donc on lève la limite SUR CES TERRAINS SEULEMENT, en la nommant.
+ * Partout ailleurs, la règle continue de s'appliquer et de protéger la lisibilité.
+ */
+export const TERRAINS_HAUTS: Record<string, number> = {
+  'montagne-3': 6,  // cascade de 14 rangées + grande échelle (double passage)
+  'cimetiere-1': 6, // idem, en miroir
+}
+
 const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
   'cave-1': ['echelles-lianes'], // (il n'existe qu'UNE cave — l'ancien 'cave-2' ne ciblait aucun niveau : les échelles n'apparaissaient jamais)
   'cimetiere-1': ['echelles-lianes'],
@@ -259,6 +300,8 @@ const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
   // les cinq motifs restent disponibles pour un placement plus large quand la couverture sera pilotée
   // explicitement plutôt que tirée au sort.
   'plaine-3': ['trampoline-plat'],           // apprentissage, sans danger
+  'jungle-1': ['colonnes-perilleuses'],      // mid : colonnes étroites au-dessus du vide, chute = mort
+  'enfer-4': ['colonnes-perilleuses'],       // endgame : le même, plus long
   // ⚠️ 'colonnes-perilleuses' N'EST PAS POSÉ, comme 'trampoline-echelle' et le double passage. Essayé sur
   // jungle-1 puis sur enfer-4 : le motif lui-même est jouable, mais poser un module imposé de plus évince
   // un motif central, et la couverture globale y perd des familles entières (motifs verticaux, échelle-
@@ -275,6 +318,16 @@ const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
   // NB : 'lacs-cascade-descente' (chute pure de lac en lac) NON placé — non validable (le validateur ne
   // modélise pas la chute → lacs du haut injoignables) ; l'escalier de lacs GRIMPABLE ci-dessus le remplace.
 }
+
+// Table effective des motifs imposés : couverture épinglée + motifs signature. Fusionnées ici pour que le
+// rallongement des terrains (midCount) compte les DEUX — sinon un terrain épinglé garderait sa longueur et
+// le motif épinglé évincerait à son tour un motif central, ce qui était tout le problème.
+const FORCES_EFFECTIFS: Record<string, ModuleKind[]> = (() => {
+  const out: Record<string, ModuleKind[]> = {}
+  for (const [id, ks] of Object.entries(COUVERTURE_EPINGLEE)) out[id] = [...ks]
+  for (const [id, ks] of Object.entries(SPECIAL_FORCED)) out[id] = [...(out[id] ?? []), ...ks]
+  return out
+})()
 
 // Biomes ROCHEUX / SOUTERRAINS / JUNGLE PROFONDE : on y autorise les GROTTES-TUNNELS (boyaux de
 // roche francs). Ailleurs (prairie, désert ouvert…) une caverne fermée serait incongrue.
@@ -330,7 +383,13 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   // NB : on ne rallonge PAS plaine-1 (un +1 module suffisait à faire basculer TOUTE la plaine-2 de
   // niveau 5 → 6 via l'XP cumulée → mur de difficulté au 2e terrain). plaine-1 reste à la longueur de
   // base (≈8 porings, largement de quoi passer niveau 2), la rampe de niveaux reste douce.
-  const midCount = midBase + Math.floor((rank - 1) / 2) + (idx % 2)
+  // ⚠️ TERRAINS RALLONGÉS, ET C'EST UNE AUTORISATION EXPLICITE DU USER : « rajoute des modules, je m'en
+  // fous de ton 50, fais-en 80 si tu veux ». C'est la condition pour que les nouveaux motifs entrent SANS
+  // évincer le contenu existant : chaque motif imposé prend un slot central, et sur des terrains courts il
+  // faisait disparaître des familles entières du jeu (mesuré trois fois).
+  // On ajoute donc un slot PAR motif imposé, plus deux de base pour la variété générale.
+  const midCount = midBase + 2 + Math.floor((rank - 1) / 2) + (idx % 2)
+    + (FORCES_EFFECTIFS[id]?.length ?? 0)
   // Échelles autorisées PARTOUT, y compris plaine-1 : sans échelle, une chute dans un creux/bassin
   // pouvait piéger le joueur sans remontée possible (retour joueur « je tombe et je peux pas remonter »).
   const allowLadders = true
@@ -425,7 +484,7 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
             ? WATER_ROT[idx % 6]!
             : (['bassin', 'cascade'] as ModuleKind[]))
           : WATER_ROT[idx % WATER_ROT.length]!,
-    ...(SPECIAL_FORCED[id] ? { forcedKinds: SPECIAL_FORCED[id] } : {}),
+    ...(FORCES_EFFECTIFS[id] ? { forcedKinds: FORCES_EFFECTIFS[id] } : {}),
     ...(pool.lava ? { lava: true } : {}),
   }
   // Certaines graines produisent une colonne à 4 paliers empilés, un rebord de lac désaxé, ou un

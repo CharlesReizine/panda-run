@@ -29,18 +29,18 @@ export interface RecipeDef {
 }
 
 export const RECIPES: RecipeDef[] = [
-  { id: 'craft-casque-croc', resultItemId: 'casque-croc', level: 5, materials: { 'gelee-slime': 4, 'cuir-souple': 3, 'croc-de-loup': 1 }, gold: 80 },
-  { id: 'craft-baton-lumineux', resultItemId: 'baton-lumineux', level: 8, materials: { 'bois-brut': 4, 'herbe-tendre': 3, 'spore-lumineuse': 2, 'chapeau-champi': 1 }, gold: 120 },
-  { id: 'craft-chapeau-du-magicien', resultItemId: 'chapeau-du-magicien', level: 15, materials: { 'cuir-souple': 6, 'minerai-fer': 4, 'croc-de-loup': 2 }, gold: 760 },
   // PALIER 15 — sans elle, la forge n'avait RIEN d'aussi fort que la vitrine à ce palier (48 contre
   // 52) : forger y aurait été un détour coûteux pour un résultat inférieur. Une arbalète se fabrique.
+  // HAUT DE GAMME DU PALIER, BASCULÉ EN EXCLUSIVITÉ FORGE. Sans eux la forge restait SOUS la vitrine
+  // à trois paliers (19, 25 et 38) : forger y aurait été un détour coûteux pour un résultat inférieur.
+  { id: 'craft-casque-croc', resultItemId: 'casque-croc', level: 5, materials: { 'gelee-slime': 4, 'cuir-souple': 3, 'croc-de-loup': 1 }, gold: 80 },
+  { id: 'craft-baton-lumineux', resultItemId: 'baton-lumineux', level: 8, materials: { 'bois-brut': 4, 'herbe-tendre': 3, 'spore-lumineuse': 2, 'chapeau-champi': 1 }, gold: 120 },
   { id: 'craft-arbalete', resultItemId: 'arbalete', level: 15, materials: { 'bois-brut': 6, 'cuir-souple': 4, 'croc-de-loup': 2 }, gold: 480 },
+  { id: 'craft-chapeau-du-magicien', resultItemId: 'chapeau-du-magicien', level: 17, materials: { 'cuir-souple': 6, 'minerai-fer': 4, 'croc-de-loup': 2 }, gold: 760 },
   { id: 'craft-plastron-fer', resultItemId: 'plastron-fer', level: 17, materials: { 'minerai-fer': 4, 'lingot-cuivre': 2, 'cuir-souple': 3 }, gold: 240 },
   { id: 'craft-epee-fer-forgee', resultItemId: 'epee-fer-forgee', level: 19, materials: { 'minerai-fer': 5, 'bois-brut': 3, 'pierre-brute': 2 }, gold: 280 },
   { id: 'craft-heaume-du-chevalier', resultItemId: 'heaume-du-chevalier', level: 19, materials: { 'cuir-souple': 6, 'minerai-fer': 4, 'croc-de-loup': 2 }, gold: 720 },
   { id: 'craft-amulette-de-l-aube', resultItemId: 'amulette-de-l-aube', level: 19, materials: { 'lingot-cuivre': 6, 'pierre-brute': 4, 'gemme-brute': 2, 'trefle-chance': 1 }, gold: 840 },
-  // HAUT DE GAMME DU PALIER, BASCULÉ EN EXCLUSIVITÉ FORGE. Sans eux la forge restait SOUS la vitrine
-  // à trois paliers (19, 25 et 38) : forger y aurait été un détour coûteux pour un résultat inférieur.
   { id: 'craft-masse-etoilee', resultItemId: 'masse-etoilee', level: 19, materials: { 'minerai-fer': 6, 'pierre-brute': 4, 'croc-de-loup': 2 }, gold: 320 },
   { id: 'craft-amulette-gemme', resultItemId: 'amulette-gemme', level: 21, materials: { 'lingot-cuivre': 3, 'pierre-brute': 3, 'gemme-brute': 1 }, gold: 200 },
   { id: 'craft-sabre-de-samourai', resultItemId: 'sabre-de-samourai', level: 25, materials: { 'minerai-fer': 6, 'pierre-brute': 4, 'dard-de-scorpion': 2 }, gold: 520 },

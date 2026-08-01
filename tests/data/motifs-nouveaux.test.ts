@@ -32,18 +32,24 @@ describe('les motifs posés sont réellement générés', () => {
   })
 })
 
-describe('les motifs écrits mais NON posés restent disponibles', () => {
-  // Trois motifs sont écrits et jouables en isolation mais pas placés : le budget de modules par terrain
-  // est plein, et en poser un de plus évince un motif central au point de faire disparaître des familles
-  // entières du jeu. Ce test documente cet état et empêche qu'ils soient supprimés par mégarde.
-  const enAttente: ModuleKind[] = ['cascade-deux-passages', 'cascade-deux-passages-g', 'colonnes-perilleuses', 'trampoline-echelle']
+describe('les motifs longtemps retenus sont enfin posés', () => {
+  // ⚠️ CE BLOC AFFIRMAIT L'INVERSE, ET C'EST LE POINT INTÉRESSANT. Trois motifs étaient écrits mais NON
+  // posés : le budget de modules par terrain était plein, et en poser un de plus faisait disparaître des
+  // familles entières du jeu. Deux changements ont levé le blocage, tous deux autorisés explicitement :
+  // les terrains ont été RALLONGÉS (« rajoute des modules, je m'en fous de ton 50 ») et la couverture des
+  // familles est désormais ÉPINGLÉE au lieu d'être tirée au sort — donc en ajouter un n'en supprime plus
+  // un autre. Le motif à double passage a en plus reçu le droit d'être TRÈS HAUT (« fais un truc très haut
+  // c'est top »), avec une exception nommée à la règle de silhouette.
+  const desormaisPoses: ModuleKind[] = ['cascade-deux-passages', 'cascade-deux-passages-g', 'colonnes-perilleuses']
 
-  it.each(enAttente)('%s existe au catalogue', (k) => {
-    expect(CATALOG[k], `${k} a disparu du catalogue`).toBeDefined()
+  it.each(desormaisPoses)('%s est bien généré quelque part', (k) => {
+    expect(terrainsAvec(k).length, `${k} n'est généré nulle part`).toBeGreaterThan(0)
   })
 
-  it('ils ne sont PAS posés — les poser casse la couverture globale', () => {
-    for (const k of enAttente) expect(kindsUtilises.has(k), `${k} est posé alors qu'il ne valide pas`).toBe(false)
+  it('« trampoline-echelle » reste écarté, sur demande', () => {
+    // « trampoline échelle, oublie pour le moment »
+    expect(CATALOG['trampoline-echelle'], 'le motif a disparu du catalogue').toBeDefined()
+    expect(kindsUtilises.has('trampoline-echelle')).toBe(false)
   })
 })
 
