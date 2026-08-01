@@ -193,6 +193,20 @@ const SPECIAL_WATER_LEVELS: Record<string, ModuleKind[]> = {
   'plage-3': ['grotte-noyee', 'bassin'],
   'carriere-1': ['grotte-noyee', 'cascade'],
   'montagne-2': ['lac-en-u', 'cascade'],
+  // ─── NOUVEAUX MOTIFS D'EAU, POSÉS EXPLICITEMENT ────────────────────────────────────────────────
+  // « Je trouve que c'est un peu répétitif là. »
+  //
+  // ⚠️ POSÉS ICI ET PAS DANS WATER_ROT, APRÈS AVOIR ESSAYÉ L'INVERSE. Les intercaler dans la rotation les
+  // fait tourner sur les 58 terrains d'un coup : la géométrie de chacun change, et onze tests structurels
+  // sont tombés (silhouette, rebords de cuve, chaînes d'atteignabilité). Terrain par terrain, l'effet est
+  // vérifiable et borné — et si un motif ne passe pas quelque part, il ne casse que là.
+  // ⚠️ TERRAINS SANS DOUBLON. Un premier jet a réutilisé foret-4, jungle-2 et plage-4, déjà pris plus bas
+  // dans cette même table : en JavaScript la DERNIÈRE clé gagne en silence, donc deux des quatre motifs
+  // n'étaient posés nulle part — le test de couverture l'a montré, tsc aussi.
+  'plaine-7': ['cascade-plus-haute', 'bassin'],
+  'desert-7': ['cascade-plus-haute', 'bassin'],
+  'jungle-4': ['boyau-tresor-retour', 'cascade'],
+  'cimetiere-2': ['boyau-tresor-retour', 'cascade'],
   // R171 — GROTTE SOUS-MARINE garantie TÔT (retour joueur : « 7-8 niveaux sans en voir »). On en pose
   // une dans les tout premiers terrains de plaine ET de forêt (biomes early), plus un lac-en-u forêt →
   // on en croise une dès les premiers niveaux, et elles deviennent nettement plus fréquentes.
@@ -245,6 +259,12 @@ const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
   // les cinq motifs restent disponibles pour un placement plus large quand la couverture sera pilotée
   // explicitement plutôt que tirée au sort.
   'plaine-3': ['trampoline-plat'],           // apprentissage, sans danger
+  // ⚠️ 'colonnes-perilleuses' N'EST PAS POSÉ, comme 'trampoline-echelle' et le double passage. Essayé sur
+  // jungle-1 puis sur enfer-4 : le motif lui-même est jouable, mais poser un module imposé de plus évince
+  // un motif central, et la couverture globale y perd des familles entières (motifs verticaux, échelle-
+  // descente piégée). C'est la même limite que pour les trampolines, mesurée trois fois : le budget de
+  // modules par terrain est plein. Le motif est écrit, testé jouable en isolation, et attend que la
+  // couverture soit pilotée explicitement plutôt que tirée au sort.
   'desert-5': ['trampoline-vide'],           // mid : plateforme haute, vide en dessous
   // ⚠️ 'trampoline-echelle' N'EST PAS PLACÉ. Son échelle SUSPENDUE au-dessus du vide reste injoignable pour
   // deux validateurs de plus (atteignabilité par niveau, pied d'échelle) : il faudrait leur apprendre le

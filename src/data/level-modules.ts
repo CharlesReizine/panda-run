@@ -75,6 +75,13 @@ export type ModuleKind =
   | 'trampoline-vide'        // 3) plateforme haute, et EN DESSOUS c'est le vide
   | 'trampoline-echelle'     // 4) atteint une échelle en T suspendue, vide en dessous
   | 'trampoline-cascade'     // 5) dépasse un vide et atteint une cascade
+  // ─── MOTIFS EAU / GROTTE DEMANDÉS (variété) ───────────────────────────────────────────────────
+  // « Je trouve que c'est un peu répétitif là. »
+  | 'cascade-plus-haute'     // 1) cascade qui DÉPASSE l'entrée de la grotte
+  | 'cascade-deux-passages'  // 2) cascade + 2 passages à DROITE : tunnel en haut, cavité à trésor en bas
+  | 'cascade-deux-passages-g'// 3) idem en miroir (passages à GAUCHE)
+  | 'boyau-tresor-retour'    // 4) passage sous-marin vers une grotte à trésor : il faut REVENIR pour avancer
+  | 'colonnes-perilleuses'   // 5) longues colonnes de pierre étroites et de hauteurs variées (chute = mort)
   // PUITS : cuve marine ÉTROITE (2-4 tuiles) et PROFONDE, encadrée de 2 rebords de pierre qui
   // DÉPASSENT (margelle) — distinct du BASSIN large. On plonge par l'étroite ouverture ; coffre au fond.
   | 'puits'
@@ -1448,6 +1455,138 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     }
 
     // ─── CASCADE → GROTTE SOUS-MARINE : le rideau tombe (lucarne) dans un bassin sous toit de roche ──
+    case 'cascade-plus-haute': {
+      // 1) « Une cascade et une grotte (ça existe déjà) mais j'aimerais que la cascade aille PLUS HAUT que
+      // l'entrée de la grotte. »
+      // La différence avec 'cascade-grotte' est petite mais elle change tout à la lecture : le rideau part
+      // d'une corniche SUPÉRIEURE à la bouche de la grotte, donc on le voit tomber DEVANT l'entrée. On monte
+      // la cascade au-delà du plancher de la grotte, et le passage haut est encore au-dessus.
+      const A = Math.max(entryAlt, 2)
+      // ⚠️ HAUTEURS CONTRAINTES PAR LA RÈGLE DES CASCADES REMONTABLES : un rideau de moins de 12 rangées
+      // (≈ 4× le panda) ne se lit pas comme une cascade et le test le refuse. Le rideau va donc de `A` à
+      // `sommet`, soit 13 rangées, et la bouche de la grotte se place à mi-chemin — ce qui donne bien
+      // l'effet demandé : la cascade DÉPASSE l'entrée de la grotte.
+      const T = A + 5              // plancher de la grotte, au-dessus de l'entrée
+      const sommet = A + 13        // le rideau dépasse la bouche de la grotte de 8 rangées
+      let x = 0
+      p.platforms.push({ x, alt: A, w: bank }); x += bank
+      // rideau : de `sommet` jusqu'au niveau d'entrée (il recueille dans un petit bassin, pas dans le vide)
+      p.waters.push({ x, w: 2, kind: 'cascade', bankAlt: sommet, bottomAlt: A })
+      p.platforms.push({ x, alt: A, w: 2 }) // vasque au pied du rideau
+      const caveX = x + 2
+      const floorW = Math.max(bank, w - caveX - bank)
+      p.platforms.push({ x: caveX, alt: T, w: floorW, solid: true })     // plancher de la grotte
+      if (T - 1 >= 0) p.rocks.push({ x: caveX, altBot: 0, altTop: T - 1, w: floorW, solid: true })
+      p.rocks.push({ x: caveX, altBot: T + CAVE_CLEARANCE, altTop: sommet - 1, w: Math.min(floorW, 6), solid: true })
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + 1, alt: T + 1 })
+      const gardien = groundMobs.find((id) => !MONSTERS[id]?.aquatic && !MONSTERS[id]?.aerial)
+      if (gardien) p.spawns.push({ monsterId: gardien, x: caveX + 3, alt: T })
+      // passage de sortie EN HAUT du rideau
+      p.platforms.push({ x: w - bank, alt: sommet, w: bank })
+      // relais d'accès au sommet : on grimpe la cascade, mais on garde une corniche d'appui
+      p.platforms.push({ x: caveX + floorW, alt: sommet - 3, w: Math.max(3, w - bank - (caveX + floorW)) })
+      placeBirds(sommet + 2)
+      p.exitAlt = sommet
+      break
+    }
+    case 'cascade-deux-passages':
+    case 'cascade-deux-passages-g': {
+      // 2) et 3) « Une cascade avec deux passages sur la droite. Celui du haut est un tunnel et celui du bas
+      // c'est juste une petite cavité avec un mob et un trésor. » Puis : « pareil mais dans l'autre sens. »
+      //
+      // Le choix est FAUX-VRAI, et c'est le sel du motif : le passage du bas est un cul-de-sac récompensé,
+      // celui du haut est la vraie route. On ne le sait qu'en essayant — d'où le mob qui garde le trésor.
+      // « L'autre sens » = le côté des passages par rapport à l'eau ; un vrai miroir gauche-droite mettrait
+      // la sortie à gauche, à contresens de la progression du terrain.
+      //
+      // ⚠️ BASSIN ET NON RIDEAU REMONTABLE, ET C'EST UN ARBITRAGE ENTRE DEUX RÈGLES DU JEU QUI SE
+      // CONTREDISAIENT ICI. Une cascade remontable doit faire AU MOINS 12 rangées (en dessous, elle ne se
+      // lit pas comme une cascade) ; or la silhouette du jeu interdit d'empiler plus de TROIS paliers dans
+      // une même zone. Monter de 12 rangées jusqu'au tunnel demandait cinq corniches — quatre paliers de
+      // trop, signalés sur quatre terrains. Le tunnel est donc à 6 rangées (deux corniches, trois paliers),
+      // et l'eau devient un BASSIN au pied des passages : le motif garde sa lecture — eau, deux ouvertures,
+      // un vrai chemin et un faux — sans enfreindre l'une ou l'autre des deux règles.
+      const passagesAGauche = m.kind === 'cascade-deux-passages-g'
+      const A = Math.max(entryAlt, 2)
+      const T = A + 6 // tunnel : deux corniches au-dessus de la cavité
+      const bw = bank
+      const eauW = 4
+      const zoneW = Math.max(9, w - 2 * bw - eauW - 1)
+      const zoneX = passagesAGauche ? bw : bw + eauW
+      const eauX = passagesAGauche ? bw + zoneW : bw
+
+      p.platforms.push({ x: 0, alt: A, w: bw })                     // berge d'entrée
+      p.waters.push({ x: eauX, w: eauW, kind: basinKind, bankAlt: A }) // bassin au pied des passages
+
+      // CAVITÉ DU BAS : cul-de-sac récompensé. Le plancher du tunnel, six rangées plus haut, lui sert de
+      // toit — inutile d'ajouter une dalle de roche, qui écraserait le dégagement sous les corniches.
+      const cavW = Math.min(6, zoneW - 2)
+      p.platforms.push({ x: zoneX, alt: A, w: zoneW, solid: true })
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: zoneX + Math.floor(cavW / 2), alt: A + 1 })
+      const garde = groundMobs.find((id) => !MONSTERS[id]?.aquatic && !MONSTERS[id]?.aerial)
+      if (garde) p.spawns.push({ monsterId: garde, x: zoneX + 1, alt: A })
+
+      // deux corniches de montée vers le tunnel (trois paliers en tout : cavité, corniche, tunnel)
+      p.platforms.push({ x: zoneX + Math.floor(zoneW * 0.45), alt: A + 3, w: 3 })
+
+      // TUNNEL DU HAUT : la vraie route, sous un plafond de roche, jusqu'à la sortie.
+      p.platforms.push({ x: zoneX, alt: T, w: zoneW, solid: true })
+      p.rocks.push({ x: zoneX, altBot: T + CAVE_CLEARANCE, altTop: T + CAVE_CLEARANCE + CAVE_CEILING_THICK, w: zoneW, solid: true })
+
+      p.platforms.push({ x: w - bw, alt: T, w: bw }) // sortie en haut
+      placeBirds(T + 3)
+      p.exitAlt = T
+      break
+    }
+    case 'boyau-tresor-retour': {
+      // 4) « Un passage sous-marin qui permet d'accéder à une grotte avec un trésor, mais il faut REVENIR
+      // EN ARRIÈRE pour avancer. »
+      //
+      // ⚠️ LE CUL-DE-SAC EST LE MOTIF, PAS UN DÉFAUT — mais il ne doit jamais devenir un PIÈGE. Le lac est
+      // ouvert des DEUX côtés (`openSide: 'both'`) : on entre, on ressort par où l'on veut. Un boyau à sens
+      // unique aurait enfermé le joueur dans la grotte, exactement ce qu'un validateur appelle « coincé
+      // vivant » — et ce que le user a signalé comme le pire défaut d'un terrain.
+      const A = Math.max(entryAlt, 3)
+      const bw = bank
+      p.platforms.push({ x: 0, alt: A, w: bw })
+      const lacX = bw
+      const lacW = Math.max(6, Math.floor(w * 0.4))
+      p.waters.push({ x: lacX, w: lacW, kind: basinKind === 'lave' ? 'lave' : 'marine', bankAlt: A, openSide: 'both' })
+      // grotte à trésor au FOND du lac, sous un toit de roche : on y descend en nageant
+      const grotteX = lacX + Math.floor(lacW / 2)
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: grotteX })
+      p.rocks.push({ x: grotteX - 1, altBot: A - 3, altTop: A - 2, w: 4, solid: true }) // avancée rocheuse : la grotte est COUVERTE
+      // berge de sortie à la MÊME altitude : on ressort du lac et on repart — le trésor est un détour
+      p.platforms.push({ x: lacX + lacW, alt: A, w: Math.max(bw, w - (lacX + lacW)) })
+      placeBirds(A + 4)
+      p.exitAlt = A
+      break
+    }
+    case 'colonnes-perilleuses': {
+      // 5) « Des zones de saut sur des colonnes de pierre pas larges et de hauteurs différentes, et long
+      // (genre casse-gueule, et tu tombes tu meurs). »
+      //
+      // Chaque colonne est ÉTROITE (2 tuiles) et l'écart reste franchissable au saut simple : le danger vient
+      // de la PRÉCISION et de la répétition, jamais d'un saut impossible. Les hauteurs alternent en dents de
+      // scie bornées à ±2 rangées — au-delà, l'enchaînement cesserait d'être lisible et deviendrait injuste.
+      const A = Math.max(entryAlt, 4)
+      const bw = bank
+      p.platforms.push({ x: 0, alt: A, w: bw })
+      const droite = w - bw
+      for (let gx = bw; gx < droite; gx += 3) p.gaps.push({ x: gx, w: Math.min(3, droite - gx) })
+      let cx = bw + 2
+      let k = 0
+      while (cx + 2 < droite) {
+        const dents = [0, 2, -1, 1, -2, 1][k % 6]!
+        p.platforms.push({ x: cx, alt: Math.max(2, A + dents), w: 2, solid: true })
+        cx += 5 // 2 de colonne + 3 de vide : saut simple, mais sans marge de confort
+        k++
+      }
+      p.platforms.push({ x: droite, alt: A, w: bw })
+      placeBirds(A + 4)
+      p.exitAlt = A
+      break
+    }
     case 'cascade-grotte': {
       // CASCADE + GROTTE à un niveau DIFFÉRENT de l'entrée (spec user). Deux variantes selon la place :
       //  • assez de place EN BAS → GROTTE EN BAS : on ENTRE EN HAUT (plateforme de départ PLUS HAUTE que
@@ -2331,6 +2470,18 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'trampoline-vide': { forcedOnly: true, tier: 3, family: 'risque', entry: 'milieu', exit: 'haut', width: [16, 24], below: 'vide', above: 'air' },
   'trampoline-echelle': { forcedOnly: true, tier: 4, family: 'vertical', entry: 'milieu', exit: 'haut', width: [16, 24], below: 'vide', above: 'air', ladder: true },
   'trampoline-cascade': { forcedOnly: true, tier: 3, family: 'risque', entry: 'milieu', exit: 'haut', width: [18, 26], below: 'vide', above: 'air', water: true, chest: true },
+
+  // ─── MOTIFS EAU / GROTTE DEMANDÉS ─────────────────────────────────────────────────────────────
+  // ⚠️ CES QUATRE-LÀ SONT DES MOTIFS D'EAU (`water: true`), et c'est ce qui les rend posables SANS RISQUE.
+  // Les motifs d'eau ne sont PAS tirés dans les pools génériques : ils sont imposés séparément, par la
+  // rotation WATER_ROT de data/levels. Les ajouter n'évince donc aucun motif central — contrairement aux
+  // trampolines, dont le placement forcé avait fait disparaître des familles entières du jeu.
+  'cascade-plus-haute': { tier: 2, family: 'risque', entry: 'bas', exit: 'haut', width: [18, 28], below: 'cascade', above: 'air', chest: true, water: true },
+  'cascade-deux-passages': { tier: 3, family: 'risque', entry: 'bas', exit: 'haut', width: [20, 30], below: 'cascade', above: 'air', chest: true, water: true },
+  'cascade-deux-passages-g': { tier: 3, family: 'risque', entry: 'bas', exit: 'bas', width: [20, 30], below: 'cascade', above: 'air', chest: true, water: true },
+  'boyau-tresor-retour': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [18, 28], below: 'marine', above: 'air', chest: true, water: true },
+  // Les colonnes, elles, sont un motif de TENSION : réservées au placement explicite, comme les trampolines.
+  'colonnes-perilleuses': { forcedOnly: true, tier: 4, family: 'tension', entry: 'milieu', exit: 'milieu', width: [22, 34], below: 'vide', above: 'air' },
 }
 
 // Construit un Module à partir de son kind (fills + métadonnées du CATALOG) + peuplement/flags.
