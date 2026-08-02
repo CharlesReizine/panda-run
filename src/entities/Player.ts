@@ -350,10 +350,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       const cos = Math.cos(this.rotation), sin = Math.sin(this.rotation)
       this.hatImage.setPosition(this.x + ox * cos - oy * sin, this.y + ox * sin + oy * cos)
       this.hatImage.setFlipX(flip === -1)
+      this.hatImage.setDepth(this.depth + 1) // même raison que pour l'arme, ci-dessous
       this.hatImage.setRotation(this.rotation)
       this.hatImage.setScale(this.hatScale * Math.abs(this.scaleX), this.hatScale * Math.abs(this.scaleY))
     }
     if (this.weaponImage) {
+      // ─── EN NAGE, ON RANGE L'ARME ─────────────────────────────────────────────────────────────
+      // Retour du user : « quand on nage, à la limite fais pas le display d'arme, sauf si j'attaque ».
+      // Un panda qui fait la brasse en tenant son arc à bout de patte, c'est le genre de détail qui
+      // saute aux yeux : la pose de nage a ses deux pattes devant, l'arme n'a nulle part où être tenue.
+      // Elle réapparaît le temps du coup (attackSwing ≠ 0) puis se range à nouveau — on ne perd donc
+      // rien de la lisibilité du combat aquatique.
+      // ⚠️ LES GROSSES ÉPÉES GARDENT LEUR PROPRE RÈGLE (masquées au repos, révélées au balayage) : on
+      // ne touche pas à leur visibilité ici, sinon les deux logiques se marchent dessus et l'épée
+      // clignote — c'est précisément le « parfois il s'affiche, parfois non » qu'on cherche à éviter.
+      if (!this.weaponIsBig) {
+        const range = this.swimming && this.attackSwing === 0
+        this.weaponImage.setVisible(!range)
+        this.weaponGlow?.setVisible(!range)
+      }
       // décalage avant propre à la classe (bâton du mage/sorcier poussé nettement devant le panda)
       const fwd = WEAPON_FWD_X[getPlayer().classId] ?? 0
       // ⚠️ L'ARME SUIT L'INCLINAISON DU PANDA, exactement comme le chapeau. Elle ne la suivait pas : son
@@ -367,6 +382,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       const cosW = Math.cos(this.rotation), sinW = Math.sin(this.rotation)
       const wx = this.x + ox * cosW - oy * sinW
       const wy = this.y + ox * sinW + oy * cosW
+      // ⚠️ LA PROFONDEUR SE RESYNCHRONISE À CHAQUE FRAME. Elle était fixée UNE FOIS à la création, à
+      // partir de celle du panda du moment ; dès que le panda change de plan (entrée dans l'eau, dos à
+      // une plateforme, effets qui empilent des couches), l'arme restait à son ancienne profondeur et
+      // passait DERRIÈRE le décor — d'où « l'arc, parfois il s'affiche et parfois non ». Elle n'était
+      // jamais masquée, elle était recouverte.
+      this.weaponImage.setDepth(this.depth + 1)
+      this.weaponGlow?.setDepth(this.depth)
       this.weaponImage.setPosition(wx, wy)
       this.weaponImage.setFlipX(flip === -1)
       // arme tenue en biais dans la patte (pas plantée à la verticale dans la tête) ; l'angle suit

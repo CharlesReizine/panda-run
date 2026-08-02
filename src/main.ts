@@ -100,6 +100,14 @@ if (game) {
   // sort d'un contexte Web Audio qu'on puisse lire. Sans ce crochet, la seule façon de savoir si un effet
   // part vraiment serait de demander au user de tendre l'oreille — c'est exactement ce qu'on veut éviter.
   ;(window as unknown as { __pandaAudio?: unknown }).__pandaAudio = audio
+  // État du joueur, pour les sondes : plusieurs écrans (la ville, par exemple) lisent le nœud courant
+  // au lieu de recevoir un paramètre. Sans ce crochet, une sonde ne peut pas ouvrir Morocc — elle
+  // ouvrait la ville générique et j'ai cru le bug corrigé alors que je regardais un autre écran.
+  void import('./state').then(({ getPlayer }) => {
+    ;(window as unknown as { __pandaEtatJoueur?: () => unknown }).__pandaEtatJoueur = () => {
+      try { return getPlayer() } catch { return null }
+    }
+  })
 }
 
 // Le conteneur #game est dimensionné en CSS PUR (100dvw/100dvh + insets safe-area symétriques,

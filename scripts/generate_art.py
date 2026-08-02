@@ -410,20 +410,60 @@ def detacher(png_bytes: bytes, slot: str = "weapon") -> "object":
 # sans angle ». Dans un jeu de plateforme vu de côté, un objet en perspective jure avec tout le reste — le
 # panda, les mobs et le décor sont dessinés à plat. D'où l'insistance : coupe latérale, aucune ellipse.
 DECORS = {
+    # ⚠️ CE N'EST PLUS UN TRAMPOLINE DE FOIRE, ET C'EST LE TROISIÈME JET. Le premier était un rendu 3D
+    # trois-quarts ; le deuxième, à plat, était juste — mais l'objet lui-même jurait : un engin de sport
+    # occidental au milieu d'un jeu kawaii asiatique. Le user a trouvé la bonne image à la place :
+    # « on pourrait avoir plutôt du linge qui sèche sur un drap, dans la même charte graphique un peu
+    # kawaii asiatique qu'on a là, genre linges blancs ». Un drap tendu entre deux perches, c'est la même
+    # mécanique (une toile qui rend l'énergie) dans le vocabulaire du jeu.
     "trampoline": (
-        "Un trampoline vu STRICTEMENT DE PROFIL, de côté, en 2D PLATE comme un sprite de jeu de plateforme : "
-        "AUCUNE perspective, AUCUN angle, on ne voit PAS le dessus de la toile, la toile se réduit à une LIGNE "
-        "vue de côté. LARGE et BAS (environ deux fois plus large que haut). Cadre en BOIS clair verni, pieds "
-        "obliques, toile en TISSU tendu bleu vif vue par la tranche, ressorts métalliques entre la toile et le "
-        "cadre. La toile est légèrement BOMBÉE vers le haut, au repos."
+        "Un grand DRAP BLANC tendu entre deux perches de BAMBOU plantées dans le sol, comme du linge qui "
+        "sèche dans une cour japonaise. Vu STRICTEMENT DE PROFIL, de côté, en 2D PLATE comme un sprite de "
+        "jeu de plateforme : AUCUNE perspective, AUCUN angle, on ne voit PAS le dessus du drap. LARGE et "
+        "BAS (environ deux fois plus large que haut). Le drap est blanc cassé, très légèrement BOMBÉ vers "
+        "le haut, avec de fins plis d'ombre bleutés et deux petites pinces à linge en bois aux coins. "
+        "Perches de bambou vert clair avec leurs nœuds."
     ),
     "trampoline-saut": (
-        "Le MÊME trampoline vu STRICTEMENT DE PROFIL, de côté, en 2D PLATE, AUCUNE perspective, AUCUN angle, "
-        "on ne voit PAS le dessus de la toile. Même cadre en BOIS clair, même toile en TISSU bleu vue par la "
-        "tranche, mais ÉCRASÉ : la toile est profondément CREUSÉE vers le bas en cuvette, les ressorts sont "
-        "ÉTIRÉS, de petites lignes de vitesse montrent l'impact. Personne dessus."
+        "Le MÊME drap blanc tendu entre deux perches de BAMBOU, vu STRICTEMENT DE PROFIL, de côté, en 2D "
+        "PLATE, AUCUNE perspective, AUCUN angle. Mais le drap est ÉCRASÉ : profondément CREUSÉ vers le bas "
+        "en cuvette, les perches de bambou ploient vers l'intérieur, le tissu se plisse fortement et de "
+        "petites lignes de vitesse marquent l'impact. Personne dessus."
     ),
 }
+
+
+# ─── FONDS DE VILLE (plein cadre, sans transparence) ────────────────────────────────────────────────
+#
+# ⚠️ RIEN À VOIR AVEC LES DÉCORS : un fond de ville n'est pas un objet détouré, c'est une IMAGE ENTIÈRE
+# de 1024×1024 qu'on ne recadre pas et dont on ne retire pas le fond. Passer par le pipeline des décors
+# la découperait sur son contenu et la réduirait à 256 px — exactement ce qu'il ne faut pas.
+#
+# Retour du user : « Morocc, la ville est dégueulasse VS Prontera où ça va — genre c'est pas une image,
+# c'est tout dessiné à la main, moche ». Les deux SONT des illustrations, dans le même style ; la
+# différence est la DENSITÉ. Prontera a des allées, une place pavée, des remparts, des arbres, des
+# bannières — un lieu. Morocc est une étendue de sable vide avec une fontaine au milieu et quatre
+# palmiers aux angles. Le prompt ci-dessous vise la même richesse, pas un autre style.
+FONDS = {
+    "town-morroc-bg": (
+        "Vue de dessus en légère plongée (trois-quarts aérien) d'une PLACE DE SOUK marocaine animée, "
+        "occupant TOUTE l'image, cadrage carré. Au centre, une grande place pavée de mosaïque ocre et "
+        "turquoise avec une fontaine à vasques. QUATRE larges allées de terre battue partent du centre "
+        "vers les quatre coins, bordées de murets d'adobe et de palmiers. Entre les allées, des îlots de "
+        "marché : tapis étalés, jarres, cageots d'épices colorées, auvents à rayures rouges et blanches "
+        "tendus sur des perches, lanternes suspendues à des potences de bois, petits bancs. Au fond, un "
+        "palais à dômes et arches en fer à cheval derrière un rempart crénelé, et des dunes. Lumière de "
+        "fin d'après-midi, ombres douces. AUCUN personnage, AUCUN animal, AUCUNE lettre ni chiffre."
+    ),
+}
+
+
+def prompt_fond(nom: str) -> str:
+    return (
+        f"{STYLE} {FONDS[nom]} "
+        "Illustration PLEINE IMAGE, aucun cadre, aucune bordure, aucun fond transparent — l'image "
+        "remplit entièrement le carré."
+    )
 
 
 def prompt_decor(nom: str) -> str:
@@ -505,7 +545,9 @@ def generer(creds, project, item) -> tuple:
             f"https://{REGION}-aiplatform.googleapis.com/v1/projects/{project}"
             f"/locations/{REGION}/publishers/google/models/{modele}:{methode}"
         )
-        prompt = prompt_decor(item["id"]) if item.get("decor") else prompt_pour(item, alpha=alpha)
+        prompt = (prompt_fond(item["id"]) if item.get("fond")
+                  else prompt_decor(item["id"]) if item.get("decor")
+                  else prompt_pour(item, alpha=alpha))
         if methode == "generateContent":
             corps = {
                 "contents": [{"role": "user", "parts": [{"text": prompt}]}],
@@ -841,6 +883,8 @@ def main():
     ap.add_argument("--repair-only", nargs="*", default=None, metavar="ID",
                     help="retire la plaque de fond de ces objets précis (contourne la détection), puis sort")
     ap.add_argument("--repair", action="store_true", help="avec --audit : retire les plaques de fond détectées")
+    ap.add_argument("--fond", action="store_true",
+                    help="génère les FONDS de ville plein cadre (1024×1024, sans transparence)")
     ap.add_argument("--decor", action="store_true",
                     help="génère les DÉCORS de terrain (trampoline…) au lieu du catalogue d'objets")
     ap.add_argument("--comptes", action="store_true", help="liste les comptes de service disponibles et sort")
@@ -874,6 +918,33 @@ def main():
         return
 
     filtres = [f for f in args.only if f != "only"]
+    if args.fond:
+        from PIL import Image
+        import io as _io
+        creds, project, compte = charger_credentials(args.env, args.compte)
+        print(f"Compte « {compte} » · projet Vertex {project} · région {REGION}")
+        for nom in FONDS:
+            if args.only and not any(f in nom for f in args.only if f != "only"):
+                continue
+            cible = ART / f"{nom}.png"
+            if args.dry:
+                print(f"\n── {nom}.png ──\n{prompt_fond(nom)}")
+                continue
+            if cible.exists() and not args.force:
+                print(f"{nom} : déjà là (--force pour remplacer)")
+                continue
+            print(f"{nom} … ", end="", flush=True)
+            try:
+                brut, modele = generer(creds, project, {"id": nom, "name": nom, "slot": "fond", "fond": True})
+                im = Image.open(_io.BytesIO(brut)).convert("RGB")  # plein cadre : pas d'alpha, pas de recadrage
+                if im.size != (1024, 1024):
+                    im = im.resize((1024, 1024), Image.LANCZOS)
+                im.save(cible)
+                print(f"ok ({modele})")
+            except Exception as e:  # noqa: BLE001
+                print(f"ÉCHEC — {str(e)[:200]}")
+        return
+
     if args.decor and args.repair:
         # Rattrapage des fichiers DÉJÀ écrits : même nettoyage, sans repasser par le réseau.
         from PIL import Image

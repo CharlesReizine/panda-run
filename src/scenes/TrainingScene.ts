@@ -13,7 +13,7 @@ import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 import { installUiClickSound } from '../ui/click-sound'
 
 // PAGE D'ENTRAÎNEMENT : on incarne n'importe quelle classe (base + évolutions), MANA infini, TOUS
-// les skills débloqués au rang max. Un gros Poring-boss encaisse sans mourir et frappe pour 0, des
+// les skills débloqués au rang max. Un grand arbre-boss ENRACINÉ encaisse sans mourir et frappe pour 0, des
 // corbeaux volent et « attaquent » pour 0 — impossible de mourir. Réutilise toute la machinerie de
 // LevelScene (sol, joueur, skills, HUD) via l'héritage + le drapeau `training`.
 
@@ -103,10 +103,22 @@ export class TrainingScene extends LevelScene {
     const gy = this.groundTopY()
     const width = this.levelDef.widthTiles * TILE
 
-    const bossDef = MONSTERS['roi-gloopy']!
-    const dummy = new Enemy(this, width * 0.62, gy - 60, bossDef)
-    dummy.invincible = true
-    dummy.baseScale = 1.8 // « gros » Poring, bien plus imposant que le joueur
+    // ─── LE MANNEQUIN EST UN ARBRE, IMMOBILE ET IMMORTEL ──────────────────────────────────────
+    //
+    // Demande du user : « en entraînement, j'aimerais que le boss soit un grand monstre boss genre arbre
+    // immobile et avec vie infinie ».
+    //
+    // ⚠️ IMMOBILE, ET PAS SEULEMENT LENT. Le Poring-roi d'avant rebondissait dans toute l'arène : on
+    // passait son temps à le courser au lieu d'essayer ses sorts, ce qui est le seul but de cet écran.
+    // On l'enracine donc pour de bon (`root` sur une durée absurde plutôt qu'un drapeau de plus : c'est
+    // le mécanisme d'entrave que le moteur connaît déjà, avec son rendu et ses règles). Un arbre qui ne
+    // bouge pas, c'est aussi une CIBLE : on peut mesurer ses dégâts, tester une portée, enchaîner un
+    // combo — impossible sur une balle sauteuse.
+    const bossDef = MONSTERS['seigneur-liane']! // archimage sylvestre : la silhouette d'arbre du jeu
+    const dummy = new Enemy(this, width * 0.66, gy - 90, bossDef)
+    dummy.invincible = true // « vie infinie » : il encaisse et affiche les dégâts sans jamais tomber
+    dummy.baseScale = 2.2 // GRAND : il domine l'arène, on voit où l'on tape
+    dummy.root(10 ** 9) // enraciné pour la durée de la session
     this.enemies.add(dummy)
 
     const crowDef = MONSTERS['corbeau']!

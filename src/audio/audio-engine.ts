@@ -122,6 +122,9 @@ class AudioEngine {
   // Atténuation temporaire de la musique (sous l'eau). Multiplie le volume au lieu de le remplacer,
   // pour ne jamais écraser le réglage utilisateur.
   private duck = 1
+  // Tension : 0 = calme, 1 = danger immédiat. Pilote le volume et la brillance de la musique (cf.
+  // setTension) — c'est ce qui fait que la bande-son RÉAGIT au lieu de tourner en boucle indifférente.
+  private tension = 0
   // facteur de volume de l'effet en cours (cf. playSfx) : 1 sauf pour les ambiances distantes
   private sfxScale = 1
 
@@ -222,8 +225,33 @@ class AudioEngine {
   }
 
   // Niveau du bus musique = volume de référence × réglage utilisateur × atténuation (ducking).
+  /**
+   * Règle la TENSION de la bande-son : 0 au calme, 1 quand le danger est là.
+   *
+   * ⚠️ ON NE CHANGE PAS DE MORCEAU, ON CHANGE SA COULEUR. Enchaîner deux pistes demanderait un second
+   * flux média (coûteux sur mobile), une synchronisation, et surtout ça s'entend comme une coupure. Ici
+   * on réutilise le bus musique déjà en place — celui du « sous l'eau » : la tension MONTE le volume et
+   * OUVRE le filtre (plus de présence, plus d'aigus, la piste avance vers l'auditeur), le calme le
+   * referme. Le même morceau paraît alors sourd et lointain quand on explore, franc et proche quand on
+   * se bat. C'est le levier le moins cher pour que l'ambiance existe, et il ne coûte pas un octet d'audio.
+   *
+   * Le ducking sous-marin reste prioritaire : sous l'eau, tout est étouffé, danger ou pas.
+   */
+  setTension(t: number) {
+    const cible = Math.max(0, Math.min(1, t))
+    if (Math.abs(cible - this.tension) < 0.02) return
+    this.tension = cible
+    this.applyMusicLevel()
+    if (this.musicFilter && this.ctx && this.duck === 1) {
+      // 2200 Hz au calme → 5200 Hz en plein danger : la piste s'ouvre au lieu de monter en volume seul
+      this.musicFilter.frequency.setTargetAtTime(2200 + 3000 * cible, this.ctx.currentTime, 0.5)
+    }
+  }
+
   private applyMusicLevel() {
-    const level = MUSIC_VOLUME * this.volume * this.duck
+    // la tension ajoute jusqu'à +35 % de présence ; sous l'eau (duck < 1) elle ne s'applique pas
+    const tension = this.duck === 1 ? 1 + 0.35 * this.tension : 1
+    const level = MUSIC_VOLUME * this.volume * this.duck * tension
     if (this.musicGain && this.ctx) {
       // rampe courte : un saut de gain claque, et on veut que la baisse s'ENTENDE comme une immersion
       this.musicGain.gain.setTargetAtTime(level, this.ctx.currentTime, 0.1)

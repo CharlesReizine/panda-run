@@ -146,7 +146,13 @@ const THEME_EUROPEEN: ThemeConfig = {
 // Morroc — cité marocaine du désert : souk aux boutiques dispersées en biais, palais à dôme et
 // arches en fond, palmiers, lanternes suspendues, auvents à rayures, sol d'adobe ocre.
 const THEME_MAROCAIN: ThemeConfig = {
-  worldW: 1024, worldH: 1024, // map carrée (town-morroc-bg 1024²) → aucune déformation
+  // ⚠️ LES FICHIERS S'APPELLENT town-morocc-* ET PAS town-morroc-*. Le nœud de la carte est « morocc » et
+  // la scène charge `town-${townId}-…` : avec l'ancienne orthographe (un R, un C), AUCUN de ces fichiers
+  // n'était trouvé. La ville retombait donc sur la map GÉNÉRIQUE — une place verte européenne — teintée
+  // en ocre, avec les maisons à colombage de Prontera teintées elles aussi. D'où « Morocc est dégueulasse
+  // VS Prontera où ça va, genre c'est pas une image, c'est tout dessiné à la main » : l'illustration
+  // existait depuis le début, elle n'était simplement jamais chargée. Une lettre.
+  worldW: 1024, worldH: 1024, // map carrée (town-morocc-bg 1024²) → aucune déformation
   buildings: [ // positions dictées par le user via l'outil de placement (monde 1024²)
     { id: 'potions', name: BUILDING_NAME.potions, x: 177, y: 298, w: 152, h: 100 },
     { id: 'armes', name: BUILDING_NAME.armes, x: 886, y: 281, w: 152, h: 100 },
@@ -413,8 +419,10 @@ export class TownScene extends Phaser.Scene {
     const bgW = Math.max(cfg.worldW, VIEW_W)
     const bg = this.add.image(bgW / 2, cfg.worldH / 2, key).setDepth(-10)
     bg.setDisplaySize(bgW, cfg.worldH)
-    // Pour la cité des sables (Morroc), on réchauffe la map générique (verte) vers l'ocre du désert.
-    if (cfg.buildingTint !== 0xffffff) bg.setTint(cfg.buildingTint)
+    // ⚠️ ON NE TEINTE QUE LE REPLI. Réchauffer vers l'ocre n'a de sens que sur la map GÉNÉRIQUE (verte) :
+    // appliquée à l'illustration propre de la ville, la teinte la salit — c'est elle qui donnait à Morocc
+    // son air de dessin bricolé une fois l'illustration retrouvée.
+    if (key === 'town-bg' && cfg.buildingTint !== 0xffffff) bg.setTint(cfg.buildingTint)
   }
 
   // Décors procéduraux (fontaines, arbres, palmiers, bannières, auvents, pavés…) RETIRÉS : la map de la

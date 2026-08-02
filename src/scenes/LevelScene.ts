@@ -36,6 +36,7 @@ import { makeJag } from '../art/jagged-ring'
 import { CastBar } from '../entities/cast-bar'
 import { skillSfx } from '../audio/skill-sfx'
 import { flammeGain, flammeIntervalle, flammeAudible, FLAMME_PORTEE } from '../core/flame-ambience'
+import { PORTEE_MENACE, lisser, tensionDe } from '../core/tension'
 
 // TRAMPOLINE : largeur à l'écran. 108 px ≈ 3,4 tuiles, soit trois fois le premier jet — « est pas assez
 // large, fait ×3 ». Seule la LARGEUR est imposée : la hauteur suit les proportions du dessin (cf.
@@ -143,6 +144,12 @@ export class LevelScene extends Phaser.Scene {
   // On range donc le décor STATIQUE en tranches verticales et on ne rend visibles que celles qui
   // touchent la vue. Le travail par frame se réduit à comparer deux entiers ; on ne touche aux objets
   // que lorsque la tranche visible CHANGE.
+  // ─── AMBIANCE : LA MUSIQUE SUIT LE DANGER ─────────────────────────────────────────────────────
+  // Le calcul est dans core/tension.ts (pur, testé) ; ici on ne fait que l'alimenter et le lisser.
+  private tensionCourante = 0
+  private tensionCible = 0
+  private tensionDepuis = 0
+  private derniereBlessure = -99999
   private tranchesDecor = new Map<number, Phaser.GameObjects.GameObject[]>()
   private trancheMin = 1
   private trancheMax = -1
@@ -953,6 +960,21 @@ export class LevelScene extends Phaser.Scene {
           this.add.tileSprite(wx * TILE, collideTopPx, TILE, collideH, 'basin-wall').setOrigin(0, 0).setDepth(-2)
           this.addStaticBand(basinWalls, wx * TILE, collideTopPx, TILE, collideH)
         }
+        // ─── FOND DE PIERRE ───────────────────────────────────────────────────────────────────
+        // Retour du user : « il y a des bassins sans fond en pierre et c'est pas bon. »
+        //
+        // ⚠️ LA CUVE N'ÉTAIT FERMÉE QUE SUR LES CÔTÉS. Le fond, lui, était simplement « le sol du
+        // monde » — c'est-à-dire l'herbe ou le sable du biome, vus à travers l'eau. Résultat : une
+        // baignoire aux parois de roche posée sur une pelouse. On tapisse donc le fond de la même
+        // pierre que les parois, sur les deux dernières rangées.
+        //
+        // Profondeur −4, comme les plateformes, et posé APRÈS elles : à profondeur égale Phaser
+        // départage par ordre d'ajout, donc la pierre couvre l'herbe. La nappe d'eau (−3) passe
+        // par-dessus et la teinte — le fond se lit sous l'eau au lieu d'être plaqué dessus, ce qui
+        // serait le cas à la profondeur des parois (−2).
+        const solPx = this.groundRow * TILE
+        const epaisseur = Math.max(TILE, (waterBottom + 1) * TILE - solPx)
+        this.add.tileSprite(xPx, solPx, wPx, epaisseur, 'basin-wall').setOrigin(0, 0).setDepth(-4)
         // déco posée sur la SURFACE du sol (fond du lac) — l'eau recouvre désormais le sol plein
         this.addBasinBottomDeco(hz.x, hz.x + hz.w - 1, this.groundRow - 1)
         // POISSONS : de gros cercles ROUGES qui dérivent dans le bassin (placeholder décoratif, sans
@@ -1753,6 +1775,7 @@ export class LevelScene extends Phaser.Scene {
     // le faire tomber (fini le petit saut à chaque contact / après un stomp qui traverse le monstre).
     this.player.setVelocityX(-this.player.facing * 200)
     audio.playSfx('player-hit')
+    this.derniereBlessure = this.time.now // la musique reste tendue quelques secondes après l'échange
   }
 
   // MORT HUMILIANTE du joueur : propulsion en cloche à l'OPPOSÉ de l'attaquant + spin (physique
@@ -4675,6 +4698,43 @@ export class LevelScene extends Phaser.Scene {
   }
 
   /**
+   * Alimente la bande-son : à quel point le joueur est-il en danger, là, maintenant ?
+   *
+   * ⚠️ ON NE RECALCULE PAS À CHAQUE FRAME. Parcourir les ennemis soixante fois par seconde pour une
+   * valeur qui met une demi-seconde à bouger est du gaspillage pur — et c'est exactement le genre de
+   * coût qui s'accumule sans qu'on le voie. Quatre fois par seconde suffit largement ; le LISSAGE, lui,
+   * tourne à chaque frame, sinon la musique avancerait par paliers audibles.
+   */
+  private majTension(delta: number) {
+    this.tensionDepuis += delta
+    if (this.tensionDepuis >= 250) {
+      this.tensionDepuis = 0
+      const cx = this.player.x
+      let plusProche = Infinity
+      let proches = 0
+      let elite = false
+      for (const obj of this.enemies.getChildren()) {
+        const e = obj as Enemy
+        if (!e.active) continue
+        const d = Math.abs(e.x - cx)
+        if (d > PORTEE_MENACE) continue
+        proches++
+        if (e.monster.mvp || e.monster.boss) elite = true
+        else plusProche = Math.min(plusProche, d)
+      }
+      this.tensionCible = tensionDe({
+        distMobProche: plusProche,
+        mobsProches: proches,
+        eliteProche: elite,
+        fractionPv: Math.max(0, Math.min(1, this.player.hp / Math.max(1, this.player.stats.maxHp))),
+        toucheRecemment: this.time.now - this.derniereBlessure < 4000,
+      })
+    }
+    this.tensionCourante = lisser(this.tensionCourante, this.tensionCible, delta)
+    audio.setTension(this.tensionCourante)
+  }
+
+  /**
    * Fait exister les monstres proches, retire ceux qui s'éloignent.
    *
    * PORTÉE : trois largeurs d'écran, comme demandé. Assez large pour qu'un monstre soit toujours en place
@@ -4712,6 +4772,7 @@ export class LevelScene extends Phaser.Scene {
   update(_time: number, delta: number) {
     this.majTranchesVisibles()
     this.majMonstresProches()
+    this.majTension(delta)
     // barre de chargement du panda : au-dessus de sa tête, elle se démonte seule à la fin
     this.playerCast?.update(this.time.now, this.player.x, this.player.y - this.player.displayHeight / 2 - 8)
     this.eliteAmbience()
