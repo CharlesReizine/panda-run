@@ -77,7 +77,7 @@ const WEAPON_TILT_DEG: Record<string, number> = {
 // classes. Le BÂTON du mage/sorcier est long : au repos comme à l'attaque il doit DÉPASSER devant le
 // panda, pas rester collé au corps → on le pousse nettement vers l'avant. Les autres classes gardent
 // l'ancrage patte avant standard (0).
-const WEAPON_FWD_X: Record<string, number> = { mage: 13, sorcier: 13, archer: 10, chasseur: 10 }
+const WEAPON_FWD_X: Record<string, number> = { mage: 13, sorcier: 13, archer: 17, chasseur: 17 }
 // Décalage VERTICAL supplémentaire (px, négatif = vers le haut) par classe.
 //
 // ⚠️ L'ARC EST UN CAS À PART, ET ÇA SE VOIT SUR CAPTURE. Tenu à l'ancrage standard, il tombe pile sur le
