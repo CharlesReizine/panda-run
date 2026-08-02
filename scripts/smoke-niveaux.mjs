@@ -52,7 +52,7 @@ try {
       ...porte((l) => (l.arches ?? []).length),
       ...porte((l) => (l.hazards ?? []).some((h) => h.kind === 'water')),
       ...porte((l) => l.boss),
-      ...ids.filter((_, i) => i % 5 === 0),
+      ...ids, // TOUS les terrains : l'échantillon ne prouvait rien sur ceux qu'il sautait
     ])
     return [...choisis]
   })

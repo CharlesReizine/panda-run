@@ -5,23 +5,27 @@ import { audio } from '../audio/audio-engine'
 import type { MonsterDef } from '../core/types'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 import { installUiClickSound } from '../ui/click-sound'
-import { renderMonsterCard } from './monster-card'
+import { renderMonsterCard, textureMonstre } from './monster-card'
 import { INTRO, INTRO_ROW } from './level-intro-layout'
+import { RAYON_INFO, grilleMonstres } from './intro-grille-layout'
 
 // Écran de présentation d'un NOUVEAU terrain : montré une seule fois par levelId (la première
 // entrée), il présente les monstres du niveau AVANT de lancer le jeu. Reçoit les mêmes données que la
 // scène 'Level' et les lui transmet à l'identique.
 //
-// ⚠️ UN MONSTRE PAR PAGE, AVEC LA FICHE DU BESTIAIRE — et c'est le cœur du correctif.
-// Cet écran entassait tous les monstres du terrain dans une grille de petites cartes, avec pour chacune
-// image + badge + nom + butin complet + compétences. Sur un terrain à 4 monstres ça faisait des cartes
-// de ~90 px de large : le butin passait sous les compétences, les compétences sous le bord.
-// Retour user : « là ça déborde complet et c'est pas le format que je veux ».
-// Une grille ne peut PAS contenir cette information : il y en a trop. On affiche donc UNE fiche à la
-// fois, dans le format explicitement demandé (quatre quarts), avec une navigation ‹ ›. Le rendu vient
-// de scenes/monster-card.ts, partagé avec le bestiaire, dont la géométrie est vérifiée par un test sur
-// le vrai roster — le débordement est donc impossible par construction, et les deux écrans ne peuvent
-// plus diverger.
+// ⚠️ UNE GRILLE DE VIGNETTES, ET LA FICHE DERRIÈRE UN « i ». Demande du user : « des images juste de
+// tous les monstres + leur niveau et si élite ou pas, et juste un petit "i" à côté avec la sous-page
+// dédiée ».
+//
+// Cet écran a déjà été une grille, et elle a échoué : elle entassait pour CHAQUE monstre image + nom +
+// butin + compétences, et sur quatre espèces les cartes tombaient à 90 px de large (« là ça déborde
+// complet »). On était donc passé à une fiche par page, avec navigation ‹ ›. La grille revient parce que
+// son CONTENU a changé : quatre informations minuscules par monstre, et tout le détail derrière le « i ».
+// Ce n'est pas un retour en arrière — c'est ce qui rend la grille tenable.
+//
+// La fiche détaillée reste EXACTEMENT la même (scenes/monster-card.ts, partagée avec le bestiaire) :
+// les deux écrans ne peuvent pas diverger, et sa géométrie est vérifiée par un test sur le vrai roster.
+// La grille l'est aussi, par tests/scenes/intro-grille.test.ts — sur le roster réel, terrain par terrain.
 interface IntroData {
   levelId: string
   fromNode: string
@@ -53,13 +57,14 @@ export function isLevelSeen(levelId: string): boolean {
 export class LevelIntroScene extends Phaser.Scene {
   private intro!: IntroData
   private monsters: MonsterDef[] = []
-  private page = 0
+  /** index du monstre dont la fiche est ouverte ; null = on est sur la grille */
+  private fiche: number | null = null
 
   constructor() { super('LevelIntro') }
 
   init(data: IntroData) {
     this.intro = data
-    this.page = 0
+    this.fiche = null
   }
 
   create() {
@@ -92,30 +97,62 @@ export class LevelIntroScene extends Phaser.Scene {
 
     if (this.monsters.length === 0) {
       this.add.text(480, 260, 'Aucun monstre répertorié.', { fontSize: '18px', color: '#b0bec5' }).setOrigin(0.5)
+    } else if (this.fiche === null) {
+      this.grille()
     } else {
-      // fiche RÉVÉLÉE : tout l'intérêt de cet écran est de décrire les monstres avant de les croiser.
-      // Pas de compteur de victoires ici (il vaut 0 par définition sur un terrain jamais joué).
-      renderMonsterCard(this, this.monsters[this.page]!)
-      this.navRow()
+      // fiche détaillée d'UN monstre — celle du bestiaire, à l'identique. Pas de compteur de victoires
+      // ici (il vaut 0 par définition sur un terrain jamais joué).
+      renderMonsterCard(this, this.monsters[this.fiche]!)
+      this.rowBtn(INTRO_ROW.prev.x, '◀ Retour', 0x37474f, () => { this.fiche = null; this.render() })
     }
 
     this.startButton()
   }
 
-  // Rangée du bas : ‹ Préc. · « Monstre i/n » · Suiv. ›. Positions figées dans level-intro-layout.ts,
-  // dont le test garantit qu'elles ne se recouvrent pas et n'empiètent pas sur la fiche.
-  private navRow() {
-    const n = this.monsters.length
-    if (n <= 1) return
-    if (this.page > 0) {
-      this.rowBtn(INTRO_ROW.prev.x, '◀ Préc.', 0x37474f, () => { this.page--; this.render() })
-    }
-    this.add.text(INTRO_ROW.counter.x, INTRO.navY, `Monstre ${this.page + 1}/${n}`, {
-      fontSize: '15px', color: '#b0bec5',
-    }).setOrigin(0.5)
-    if (this.page < n - 1) {
-      this.rowBtn(INTRO_ROW.next.x, 'Suiv. ▶', 0x37474f, () => { this.page++; this.render() })
-    }
+  /**
+   * La grille : une vignette par monstre, son niveau, son statut d'élite, et un « i » vers sa fiche.
+   *
+   * ⚠️ LA VIGNETTE PASSE PAR `textureMonstre`, pas par `m.tex`. Les variantes (Scorpionnet, Gobelinou,
+   * tous les géants) n'ont pas d'art propre : elles réutilisent celui de leur base via `artFrom`. Lire
+   * la texture en direct laissait ces monstres SANS IMAGE — c'est le bug du Scorpionnet, et la fonction
+   * partagée existe précisément pour qu'il ne puisse pas revenir par une autre porte.
+   */
+  private grille() {
+    const cells = grilleMonstres(this.monsters.length)
+    this.monsters.forEach((m, i) => {
+      const c = cells[i]!
+      const elite = !!m.mvp || !!m.boss
+      // cadre : bordure dorée pour un élite ou un boss — l'information « si élite ou pas » se lit d'un
+      // coup d'œil, avant même le libellé.
+      this.add.rectangle(c.x, c.y, c.taille, c.taille, 0x1c2431, 1)
+        .setStrokeStyle(elite ? 3 : 2, elite ? 0xffd54f : 0x37474f)
+      const tex = textureMonstre(this, m)
+      if (this.textures.exists(tex)) {
+        const img = this.add.image(c.x, c.y, tex)
+        const src = this.textures.get(tex).getSourceImage()
+        const k = Math.min((c.taille - 14) / src.width, (c.taille - 14) / src.height)
+        img.setScale(k)
+      } else {
+        this.add.circle(c.x, c.y, c.taille * 0.3, m.color ?? 0x90a4ae)
+      }
+      // niveau + nom, sous la vignette
+      this.add.text(c.x, c.niveauY, `Nv ${m.level}`, {
+        fontSize: '15px', color: elite ? '#ffd54f' : '#eceff1', fontStyle: 'bold',
+      }).setOrigin(0.5, 0)
+      this.add.text(c.x, c.niveauY + 17, m.name, { fontSize: '11px', color: '#90a4ae' })
+        .setOrigin(0.5, 0).setWordWrapWidth(c.taille + 16)
+      if (elite) {
+        this.add.text(c.x, c.y - c.taille / 2 + 2, m.boss ? 'BOSS' : 'ÉLITE', {
+          fontSize: '11px', color: '#1c2431', backgroundColor: '#ffd54f',
+          fontStyle: 'bold', padding: { x: 5, y: 1 },
+        }).setOrigin(0.5, 0)
+      }
+      // le « i » : cercle discret en haut à droite de la vignette, zone tactile généreuse
+      const info = this.add.circle(c.infoX, c.infoY, RAYON_INFO, 0x263238).setStrokeStyle(2, 0x80cbc4)
+      this.add.text(c.infoX, c.infoY, 'i', { fontSize: '15px', color: '#80cbc4', fontStyle: 'bold' }).setOrigin(0.5)
+      info.setInteractive(new Phaser.Geom.Circle(RAYON_INFO, RAYON_INFO, RAYON_INFO + 8), Phaser.Geom.Circle.Contains)
+      info.on('pointerdown', () => { this.fiche = i; this.render() })
+    })
   }
 
   private rowBtn(x: number, label: string, bg: number, onTap: () => void) {
