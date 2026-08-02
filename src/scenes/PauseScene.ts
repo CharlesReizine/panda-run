@@ -27,7 +27,15 @@ export class PauseScene extends Phaser.Scene {
   }
 
   private resumeGame() {
-    this.scene.resume('Level')
+    // ⚠️ ON NE REPREND QUE CE QUI EXISTE. `scene.resume('Level')` sur une scène jamais démarrée réveille
+    // un rendu sans contexte — « Cannot read properties of null (reading 'drawImage') », page morte.
+    // En jeu normal la pause vient toujours d'un terrain, donc le cas ne se produit pas ; mais une
+    // interface ne doit pas dépendre du chemin par lequel on y est arrivé, et la sonde d'écrans, elle,
+    // l'ouvre directement. Repli : retour à la carte, qui est toujours un état valide.
+    const jeu = this.scene.manager.getScenes(false)
+      .find((sc) => (sc.scene.key === 'Level' || sc.scene.key === 'Training') && sc.scene.isPaused())
+    if (!jeu) { this.scene.start('WorldMap'); this.scene.stop('Pause'); return }
+    this.scene.resume(jeu.scene.key)
     this.scene.resume('UI')
     this.scene.stop('Pause')
   }

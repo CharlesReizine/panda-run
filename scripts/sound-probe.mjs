@@ -58,12 +58,22 @@ try {
       // dizaines de frames à se stabiliser sous l'eau après le repositionnement. La sonde annonçait donc
       // « aucune bulle » sur un jeu parfaitement sain — un faux positif coûte la confiance qu'on met dans
       // la sonde, ce qui est bien pire que pas de sonde du tout. 2,5 s = quatre bulles attendues.
-      await new Promise((r) => setTimeout(r, 2500))
+      // ⚠️ ON MAINTIENT LE PANDA SOUS L'EAU PENDANT TOUTE LA MESURE. Le poser une fois ne suffit pas :
+      // la poussée le fait remonter, un mob le pousse, et il passe la moitié du temps la tête hors de
+      // l'eau — la sonde concluait alors « aucune bulle » sur un jeu parfaitement sain. On mesure ce
+      // qu'on prétend mesurer : des bulles PENDANT une apnée, pas pendant une baignade agitée.
+      for (let i = 0; i < 25; i++) {
+        sc.player.setPosition(w.x + w.width / 2, w.y + w.height / 2)
+        sc.player.body.setVelocity(0, 0)
+        await new Promise((r) => setTimeout(r, 100))
+      }
       audio.playSfx = orig
       const b = sc.player.body
       return { levelId, splash: appels.filter((a) => a === 'splash').length, bulles: appels.filter((a) => a === 'bubble').length, tous: [...new Set(appels)],
         diag: { cuve: { x: Math.round(w.x), y: Math.round(w.y), w: Math.round(w.width), h: Math.round(w.height) },
-                tete: Math.round(b.top), immerge: b.top >= w.y + 4, inWater: sc.player.inWater } }
+                tete: Math.round(b.top), immerge: b.top >= w.y + 4, inWater: sc.player.inWater,
+                accum: Math.round(sc.bubbleAccumMs ?? -1), souffle: Math.round(sc.breathMs ?? -1),
+                pv: Math.round(sc.player.hp), vivant: sc.player.active } }
     }
     return { err: 'aucun terrain avec de l\'eau' }
   })

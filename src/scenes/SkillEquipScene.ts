@@ -45,8 +45,11 @@ export class SkillEquipScene extends Phaser.Scene {
 
   private close() {
     if (this.standalone) {
-      // ouvert depuis le menu : il n'y a aucune scène de jeu en pause à reprendre
-      this.scene.start(this.levelKey)
+      // ⚠️ ON REVIENT AU MENU, PAS AU TERRAIN. Ouvert depuis le menu, cet écran n'a aucune partie en
+      // pause derrière lui : `scene.start('Level')` démarrait alors un terrain SANS données, donc avec
+      // `levelDef` indéfini — « Cannot read properties of undefined (reading 'id') », écran mort. Le
+      // bouton disait « Reprendre » et il n'y avait rien à reprendre : c'est le retour au menu.
+      this.scene.start('Menu')
       return
     }
     this.scene.resume(this.levelKey)
@@ -257,7 +260,8 @@ export class SkillEquipScene extends Phaser.Scene {
       this.input.on('pointerup', () => { dragging = false })
     }
 
-    btn(480, 508, 'Reprendre ▶', 0x33691e, () => this.close())
+    // libellé honnête : « Reprendre » n'a de sens que s'il y a une partie en pause derrière
+    btn(480, 508, this.standalone ? '◀ Menu' : 'Reprendre ▶', 0x33691e, () => this.close())
   }
 
   private kindLabel(s: SkillDef): string {

@@ -67,5 +67,30 @@ export async function top(limitTo = 50): Promise<LeaderEntry[]> {
       out.push({ key: d.id, pseudo: v.pseudo, level: v.level, classId: String(v.classId ?? 'novice'), updatedAt: Number(v.updatedAt ?? 0) })
     }
   })
-  return out
+  return unParJoueur(out)
+}
+
+/**
+ * UNE LIGNE PAR JOUEUR : on garde l'entrée la plus RÉCENTE de chaque pseudo.
+ *
+ * ⚠️ POURQUOI CE FILTRE EXISTE. Retour du user : « j'ai changé de classe et ça me fait deux lignes dans
+ * le classement, moi archer et moi chasseur ». La clé du document est pourtant le pseudo, donc une
+ * évolution de classe RÉÉCRIT la même ligne — sauf que d'anciennes lignes, écrites avant que la clé ne
+ * soit normalisée, traînent encore dans la collection sous une casse ou une ponctuation différentes.
+ * Elles ne seront jamais réécrites, seulement oubliées : personne ne les met à jour, donc personne ne les
+ * corrige. Le classement doit s'en protéger à la LECTURE — c'est le seul endroit qui voit le doublon.
+ *
+ * On compare sur le pseudo NORMALISÉ, et on garde la plus récente : c'est celle qui reflète la partie
+ * en cours, et son niveau est de toute façon le plus élevé.
+ */
+function unParJoueur(entries: LeaderEntry[]): LeaderEntry[] {
+  const meilleur = new Map<string, LeaderEntry>()
+  for (const e of entries) {
+    const cle = e.pseudo.trim().toLowerCase()
+    const deja = meilleur.get(cle)
+    if (!deja || e.updatedAt > deja.updatedAt || (e.updatedAt === deja.updatedAt && e.level > deja.level)) {
+      meilleur.set(cle, e)
+    }
+  }
+  return [...meilleur.values()].sort((a, b) => b.level - a.level)
 }

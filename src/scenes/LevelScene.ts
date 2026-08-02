@@ -38,9 +38,11 @@ import { skillSfx } from '../audio/skill-sfx'
 import { flammeGain, flammeIntervalle, flammeAudible, FLAMME_PORTEE } from '../core/flame-ambience'
 import { PORTEE_MENACE, lisser, tensionDe } from '../core/tension'
 
-// TRAMPOLINE : largeur à l'écran. 108 px ≈ 3,4 tuiles, soit trois fois le premier jet — « est pas assez
-// large, fait ×3 ». Seule la LARGEUR est imposée : la hauteur suit les proportions du dessin (cf.
-// poseTrampoline), et la zone de rebond se cale sur la hauteur RÉELLEMENT affichée.
+// TRAMPOLINE : largeur à l'écran. 136 px ≈ 4,3 tuiles — d'abord porté à 108 (« est pas assez large,
+// fait ×3 »), puis élargi encore sur retour (« tu peux le faire un peu plus grand »). Seule la LARGEUR
+// est imposée : la hauteur suit les proportions du dessin (cf. poseTrampoline), et la zone de rebond se
+// cale sur la hauteur RÉELLEMENT affichée — une constante de hauteur se serait désynchronisée du dessin
+// à la première illustration livrée dans un autre format, ce qui est exactement ce qui est arrivé.
 // Tranches de culling : 480 px (une demi-largeur d'écran) est le bon compromis — assez fin pour que la
 // tranche visible ne traîne pas trop d'objets hors cadre, assez large pour que la liste ne change qu'une
 // fois toutes les ~40 frames de course. La marge évite qu'un objet apparaisse pile au bord.
@@ -54,7 +56,7 @@ const LARGEUR_TRANCHE = 480
 // ~150 objets au lieu de ~100, contre 600 sans culling.
 const MARGE_TRANCHE = 1000
 
-const TRAMPO_W = 108
+const TRAMPO_W = 136
 
 /** Texture du trampoline, illustrée si elle a été générée, procédurale sinon. */
 function texTrampoline(scene: Phaser.Scene, ecrase: boolean): string {
@@ -100,7 +102,15 @@ const CHARGE_FULL_MS = 850
 // (breathMaxMs = 5000 + 250·niveau, cf. core/breath.ts). BREATH_BASE_MS ne sert que d'initialisation
 // avant que la scène ne connaisse le joueur ; toutes les bornes réelles passent par this.breathMax().
 const BREATH_RECHARGE_MULT = 3 // le souffle se recharge 3× plus vite qu'il ne se vide (retour surface = répit rapide)
-const DROWN_DPS = 4 // PV perdus par seconde une fois le souffle épuisé — adouci (rythme de noyade plus doux)
+// ⚠️ LA NOYADE EST UN CHRONOMÈTRE, PAS UN TAUX DE DÉGÂTS. Une fois l'oxygène à zéro, on tient CINQ
+// SECONDES — le même délai pour tout le monde, parce que c'est ce qui rend le danger lisible : on sait
+// combien de temps il reste, indépendamment de sa fiche de personnage. Ce qui progresse avec le niveau,
+// c'est la RÉSERVE d'air (cf. core/breath), pas la résistance à la noyade.
+const SURVIE_APNEE_MS = 5000
+
+// Énergie rendue par monstre abattu. Volontairement FAIBLE (« mais qui reste faible ») : de quoi
+// enchaîner un sort de plus quand on nettoie un groupe, pas de quoi jouer sans jamais regarder sa barre.
+const GAIN_ENERGIE_KILL = 6
 const DROWN_TICK_MS = 300 // cadence des ticks de noyade : perte régulière, jamais d'un coup
 // Cadence des bulles, VISUELLES ET SONORES à la fois (le son est joué dans emitBubble).
 // 170 ms donnait ~6 bulles par seconde : une mitraillette. Le joueur veut « blop… une demi-seconde…
@@ -1725,6 +1735,19 @@ export class LevelScene extends Phaser.Scene {
   // (couleur DISTINCTE du rouge subi, plus chaude quand le coup est gros/critique). Léger et non
   // bloquant : un JITTER x/y aléatoire + un léger délai étalent les hits simultanés pour qu'ils ne
   // se superposent pas, et un plafond limite le nombre de chiffres à l'écran (perf multi-hits).
+  /**
+   * Chiffre BLEU d'énergie rendue — même grammaire visuelle que les dégâts (rouge) et les soins (vert).
+   *
+   * Il monte moins haut et s'efface plus vite que les autres : c'est une information de confort, pas un
+   * événement. Une récompense discrète doit se voir sans réclamer l'attention au milieu d'un combat.
+   */
+  showEnergyNumber(x: number, y: number, amount: number) {
+    const t = this.add.text(x, y, `+${amount}`, {
+      fontSize: '15px', color: '#4dd0e1', fontStyle: 'bold', stroke: '#06232b', strokeThickness: 3,
+    }).setOrigin(0.5).setDepth(9)
+    this.tweens.add({ targets: t, y: y - 26, alpha: 0, duration: 620, ease: 'Cubic.out', onComplete: () => t.destroy() })
+  }
+
   showDamageNumber(x: number, y: number, amount: number, taken: boolean) {
     const amt = Math.round(amount)
     if (amt <= 0 || this.activeDamageNumbers >= 28) return
@@ -1902,12 +1925,23 @@ export class LevelScene extends Phaser.Scene {
         this.bubbleAccumMs -= BUBBLE_INTERVAL_MS
         this.emitBubble(body.top, rect!.top) // bulles émises à la tête, remontent jusqu'à la SURFACE
       }
-      // souffle épuisé : noyade douce par ticks réguliers (jamais de mort d'un seul coup)
+      // ─── UNE FOIS L'OXYGÈNE ÉPUISÉ : CINQ SECONDES, QUEL QUE SOIT LE NIVEAU ─────────────────
+      //
+      // Demande du user : « une fois la barre d'oxygène épuisée tu tiens 5 secondes, et ça, ça n'évolue
+      // pas — par contre la barre d'oxygène augmente avec les niveaux ».
+      //
+      // ⚠️ CE N'EST PLUS UN NOMBRE DE POINTS DE VIE PAR SECONDE, C'EST UN DÉLAI. L'ancien modèle
+      // retirait 4 PV/s : un personnage de haut niveau, avec dix fois plus de PV, pouvait rester une
+      // minute sous l'eau sans risque — la noyade devenait décorative exactement là où l'apnée est le
+      // plus tentante. En dégâts PROPORTIONNELS aux PV max, le compte à rebours dure cinq secondes pour
+      // tout le monde, du novice au chasseur. Ce qui progresse avec le niveau, c'est le temps AVANT le
+      // compte à rebours (la barre d'oxygène, cf. core/breath), et c'est la seule progression voulue.
       if (this.breathMs <= 0) {
         this.drownAccumMs += delta
+        const parTick = (this.player.stats.maxHp * DROWN_TICK_MS) / (SURVIE_APNEE_MS)
         while (this.drownAccumMs >= DROWN_TICK_MS) {
           this.drownAccumMs -= DROWN_TICK_MS
-          this.drownTick((DROWN_DPS * DROWN_TICK_MS) / 1000)
+          this.drownTick(Math.max(1, Math.round(parTick)))
         }
       }
     } else {
@@ -2523,6 +2557,15 @@ export class LevelScene extends Phaser.Scene {
     // relâche) passent tous par là — c'était le même 'skill' copié quatre fois.
     audio.playSfx(skillSfx(skill))
     this.announceSkill(skill.name)
+    // ⚠️ TOUT SORT QUI ENVOIE UNE FLÈCHE MONTRE L'ARC. Demande du user : « pour l'archer, il faut que
+    // toutes les attaques qui utilisent des flèches et l'arc fassent visuellement voir l'arc quand on
+    // les active ». L'arme ne sort désormais que pour frapper (elle est rangée le reste du temps) : sans
+    // cette ligne, l'archer décochait ses sorts les mains vides — la flèche partait de nulle part.
+    // C'est posé ICI, au point de lancement COMMUN à toutes les compétences, plutôt que dans chacune :
+    // une compétence ajoutée demain hérite du geste sans qu'on y pense.
+    // ('zone' et 'channel' sont sortis plus haut : ils s'engagent au moment de la confirmation, où le
+    // geste est déclenché à part — sinon l'archer banderait son arc en ouvrant le réticule.)
+    if (skill.kind === 'projectile' || skill.kind === 'trap') this.player.playAttack()
 
     const { maxHp } = this.player.stats
     const atk = this.player.stats.atk * this.player.outgoingMult()
@@ -3301,13 +3344,28 @@ export class LevelScene extends Phaser.Scene {
   // rayon est IMMOBILISÉ (root) et mordu (dégâts), puis le piège claque et disparaît. S'il n'est
   // pas déclenché, il s'efface au bout de ~14 s.
   private castTrap(skill: SkillDef, color: number, mult: number) {
-    const gx = this.player.x, gy = this.groundRow * TILE - 6
+    // ⚠️ LE PIÈGE SE POSE AUX PIEDS DU PANDA, PAS SUR LE SOL DU MONDE. Retour du user : « le sort piège à
+    // mâchoires ne fait rien, visuellement je ne vois pas de piège et du coup ça ne bloque personne ».
+    // Il était posé à `groundRow`, c'est-à-dire tout au fond de la carte : dès que le panda se trouvait
+    // sur une plateforme — c'est-à-dire presque toujours, et d'autant plus depuis que les terrains ont
+    // du relief — le piège tombait des dizaines de rangées plus bas, hors de vue et hors de portée du
+    // moindre ennemi. Le sort marchait ; il s'armait juste dans le vide.
+    const gx = this.player.x
+    const pieds = (this.player.body as Phaser.Physics.Arcade.Body).bottom
+    const gy = pieds - 6
     const atk = this.player.stats.atk * this.player.outgoingMult()
-    const trap = this.add.image(gx, gy, 'fx-trap').setDepth(2).setScale(1.05)
+    // ⚠️ ÉCHELLE 1,7 ET NON 1,05 : la texture ne fait que 56×34 px, soit moins de deux tuiles. Posée à
+    // l'échelle 1, elle se perd dans l'herbe — « visuellement je ne vois pas de piège ». Un piège qu'on
+    // ne voit pas ne se pose pas volontairement : on le lâche au hasard et on croit que le sort est mort.
+    const trap = this.add.image(gx, gy, 'fx-trap').setDepth(3).setScale(1.7)
     this.physics.add.existing(trap, true) // corps statique = emprise de la texture (large piège au sol)
     // petit clignotement d'armement + pose
-    this.aoeRing(gx, gy, 34, color)
-    this.tweens.add({ targets: trap, scaleX: 1.15, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+    this.aoeRing(gx, gy, 44, color)
+    this.tweens.add({ targets: trap, scaleX: 1.85, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+    // lueur pulsante SOUS le piège : c'est elle qui le rend repérable une fois posé, y compris de loin
+    const veille = this.add.image(gx, gy, 'ring').setTint(color).setDepth(2)
+      .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.4).setDisplaySize(90, 44)
+    this.tweens.add({ targets: veille, alpha: 0.12, scale: veille.scale * 1.3, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
     let sprung = false
     const spring = (enemy: Enemy) => {
       if (sprung || !enemy.active) return
@@ -3320,11 +3378,18 @@ export class LevelScene extends Phaser.Scene {
       this.screenShake(0.004, 120)
       audio.playSfx('hit')
       // mâchoires qui claquent (léger sursaut) puis disparition
+      veille.destroy()
       this.tweens.add({ targets: trap, scaleY: 0.4, alpha: 0, duration: 260, onComplete: () => trap.destroy() })
     }
     this.physics.add.overlap(trap, this.enemies, (_t, e) => spring(e as Enemy))
     // filet de sécurité : le piège non déclenché s'efface après un temps
-    this.time.delayedCall(14000, () => { if (!sprung && trap.active) { this.tweens.killTweensOf(trap); this.tweens.add({ targets: trap, alpha: 0, duration: 300, onComplete: () => trap.destroy() }) } })
+    this.time.delayedCall(14000, () => {
+      if (sprung || !trap.active) return
+      this.tweens.killTweensOf(trap)
+      this.tweens.killTweensOf(veille)
+      veille.destroy()
+      this.tweens.add({ targets: trap, alpha: 0, duration: 300, onComplete: () => trap.destroy() })
+    })
   }
 
   // ===== Visée de zone (infra RÉUTILISABLE — archer & futur mage : météores / mur de flamme) =====
@@ -3400,6 +3465,9 @@ export class LevelScene extends Phaser.Scene {
     this.game.events.emit('skill-cooldown', slot, this.time.now + skill.cooldownMs, skill.cooldownMs)
     audio.playSfx(skillSfx(skill))
     this.announceSkill(skill.name)
+    // le geste part À LA CONFIRMATION, pas à l'ouverture du réticule : l'archer bande son arc au moment
+    // où la pluie de flèches est lancée, pas pendant qu'il vise (cf. la note au point de lancement commun)
+    this.player.playAttack()
     const p = getPlayer()
     const rank = p.skillLevels[skill.id] ?? 1
     const mult = skillDamageMult(skill, rank)
@@ -3796,6 +3864,10 @@ export class LevelScene extends Phaser.Scene {
   }
 
   // Muzzle-flash de la mitraillette (fx-mitraillette) : éclair de bouche bref à la main.
+  // ⚠️ L'IMAGE SOURCE A ÉTÉ RETOURNÉE HORIZONTALEMENT (retour du user). Sa gerbe de flèches partait vers
+  // la GAUCHE, donc à l'endroit quand le panda regarde à gauche et à l'envers le reste du temps — c'est
+  // l'orientation par défaut qui comptait, pas le code de flip, qui lui était correct. Corriger le
+  // fichier plutôt que le flip garde la règle simple : une image de sort regarde toujours vers l'avant.
   private mitrailletteFx(x: number, y: number, f: 1 | -1) {
     if (this.textures.exists('fx-mitraillette')) {
       const m = this.add.image(x, y, 'fx-mitraillette').setDepth(7).setBlendMode(Phaser.BlendModes.ADD).setFlipX(f === -1).setScale(0.9).setAlpha(0.95)
@@ -4531,6 +4603,13 @@ export class LevelScene extends Phaser.Scene {
     p.monstersKilled += 1
     recordKill(p, e.monster.id)
     const { levelsGained } = grantXp(p, playerXpGain(e.monster))
+    // ─── UN PEU D'ÉNERGIE POUR CHAQUE MONSTRE ABATTU ──────────────────────────────────────────
+    // « Pourquoi pas avoir un peu de regen mana (écrit en bleu) quand on tue un mob, mais qui reste
+    // faible. » C'est la contrepartie de la régénération passive divisée par deux : on ne punit pas le
+    // joueur qui SE BAT, on punit celui qui lance des sorts dans le vide. Un élite en rend le double —
+    // il coûte bien plus que le double à abattre.
+    const rendu = this.player.gagnerEnergie(e.monster.mvp || e.monster.boss ? GAIN_ENERGIE_KILL * 2 : GAIN_ENERGIE_KILL)
+    if (rendu > 0) this.showEnergyNumber(e.x, e.y - 26, rendu)
     this.events.emit('enemy-loot', e) // consommé en Task 13
     if (levelsGained > 0) {
       this.player.refreshStats()
@@ -4699,12 +4778,23 @@ export class LevelScene extends Phaser.Scene {
     const t0 = Math.floor((cam.scrollX - MARGE_TRANCHE) / LARGEUR_TRANCHE)
     const t1 = Math.floor((cam.scrollX + cam.width + MARGE_TRANCHE) / LARGEUR_TRANCHE)
     if (t0 === this.trancheMin && t1 === this.trancheMax) return
+    // ⚠️ ON MASQUE D'ABORD, ON RÉVÈLE ENSUITE — ET ON RÉVÈLE TOUTE LA FENÊTRE, PAS SEULEMENT CE QUI
+    // VIENT D'ENTRER. C'est la correction du « sol qui disparaît ».
+    //
+    // Un objet large (la bande de sol d'un module fait souvent 30 tuiles) appartient à PLUSIEURS
+    // tranches. L'ancienne version masquait tout ce qui était dans une tranche sortante, puis ne
+    // révélait que les tranches nouvellement entrées : un objet à cheval sur une tranche qui sort et une
+    // tranche qui reste se retrouvait masqué sans que rien ne le rallume. D'où des pans de terrain qui
+    // s'évanouissaient d'un coup, avec un bord vertical net — et le trampoline qui semblait flotter,
+    // parce que la plateforme qui le portait avait disparu.
+    //
+    // Re-révéler toute la fenêtre est idempotent et ne coûte rien : quatre à cinq tranches, et seulement
+    // quand la fenêtre change (une fois toutes les ~40 frames de course).
     for (let t = this.trancheMin; t <= this.trancheMax; t++) {
       if (t >= t0 && t <= t1) continue
       for (const o of this.tranchesDecor.get(t) ?? []) (o as Phaser.GameObjects.Image).setVisible(false)
     }
     for (let t = t0; t <= t1; t++) {
-      if (t >= this.trancheMin && t <= this.trancheMax) continue
       for (const o of this.tranchesDecor.get(t) ?? []) (o as Phaser.GameObjects.Image).setVisible(true)
     }
     this.trancheMin = t0

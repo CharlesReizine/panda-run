@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import { CLASSES } from '../data/classes'
 import { skillsOf } from '../data/skills'
-import { changeClass, canEvolveClass, evolveClass, EVOLUTIONS } from '../core/progression'
+import { canChangeClass, changeClass, canEvolveClass, evolveClass, EVOLUTIONS } from '../core/progression'
 import { getPlayer } from '../state'
 import { save } from '../core/save'
 import type { ClassDef, ClassId } from '../core/types'
@@ -117,8 +117,11 @@ export class ClassChangeScene extends Phaser.Scene {
 
   private choose(id: ClassId) {
     if (this.chosen) return
-    this.chosen = true
     const p = getPlayer()
+    // même garde que pour l'évolution : `changeClass` lève quand les conditions ne sont pas réunies, et
+    // une exception depuis un gestionnaire de bouton s'affiche au joueur en pleine page.
+    if (!canChangeClass(p) || id === 'novice') return
+    this.chosen = true
     changeClass(p, id)
     // ⚠️ ON N'OFFRE PLUS RIEN AU PASSAGE DE CLASSE, ET C'EST DEMANDÉ : « au passage de classe tu me mets
     // déjà un skill et tu l'équipes. Ça tu arrêtes, je veux pas ça. »
@@ -132,8 +135,14 @@ export class ClassChangeScene extends Phaser.Scene {
 
   private evolve() {
     if (this.chosen) return
-    this.chosen = true
     const p = getPlayer()
+    // ⚠️ ON VÉRIFIE AVANT D'AGIR. `evolveClass` LÈVE quand les conditions ne sont pas réunies (mauvaise
+    // classe, niveau trop bas) — c'est un bon garde-fou côté modèle, mais depuis un gestionnaire de
+    // bouton une exception non rattrapée remonte jusqu'à l'overlay d'erreur JS : le joueur voit une
+    // stack trace en plein écran là où il attendait, au pire, un bouton qui ne fait rien. L'écran ne
+    // devrait de toute façon pas proposer l'évolution dans ce cas ; ceci en est la preuve, pas l'excuse.
+    if (!canEvolveClass(p)) return
+    this.chosen = true
     const to = evolveClass(p)
     save(p)
     this.finish(`Tu es maintenant ${CLASSES[to].name} !`)

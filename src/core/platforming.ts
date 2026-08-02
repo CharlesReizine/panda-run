@@ -89,61 +89,51 @@ export function canReach(surfaceRow: number, b: Plat, hgapTiles: number): boolea
   return hgapTiles * TILE <= dxReachPx
 }
 
-// ─── REBOND DE TRAMPOLINE : LE MÊME MODÈLE, AVEC UNE AUTRE VITESSE ─────────────────────────────
+// ─── REBOND DE TRAMPOLINE : TROIS PALIERS, RÉGLÉS À L'OREILLE DU USER ──────────────────────────
 //
-// Un trampoline propulse le panda TROIS FOIS plus haut qu'un saut normal, et lui donne un contrôle
-// latéral élargi pendant tout le vol (cf. Player.bounce / TRAMBO_SPEED_MULT).
+// Demande, après essai : « le premier fait la hauteur d'un saut normal, le deuxième 2, le troisième
+// 2,5 × la hauteur normale ». Avant, le PREMIER rebond valait déjà trois sauts et le troisième montait à
+// 24 tuiles : « c'est nawak, c'est juste trop trop haut ». Le trampoline ne doit pas être un ascenseur,
+// c'est une mécanique qu'on APPREND — on rebondit une fois pour comprendre, deux pour viser, trois pour
+// atteindre ce qu'on ne pouvait pas.
 //
-// ⚠️ LA VITESSE SE MULTIPLIE PAR √3, PAS PAR 3. La hauteur vaut v²/2g : tripler la vitesse multiplierait
-// la hauteur par NEUF. C'est la même erreur qui guette dans le validateur que dans le moteur, donc les
-// deux lisent la MÊME constante — sinon un motif jouable serait déclaré injouable, ou l'inverse.
-export const BOUNCE_SPEED = JUMP_SPEED * Math.sqrt(3)
+// ⚠️ CONSÉQUENCE À NE PAS MANQUER : LE MINIMUM N'EST PLUS CE QUI GARANTIT L'ATTEIGNABILITÉ.
+// Tant que le premier rebond valait 3 sauts, les validateurs pouvaient supposer le minimum et déclarer
+// atteignable une corniche posée au-dessus d'un trampoline. À 1 saut, cette supposition rendrait la
+// moitié des motifs à trampoline infranchissables sur le papier. C'est donc le PLAFOND qu'ils supposent
+// désormais (cf. canReachByBounce) : le joueur peut toujours enchaîner trois rebonds, il retombe sur le
+// tapis entre chaque. La garantie change de nature — « atteignable d'un bond » devient « atteignable en
+// s'y reprenant » — et c'est exactement le geste que le motif demande.
+export const BOUNCE_SPEED = JUMP_SPEED // premier rebond : la hauteur d'un saut normal
 export const BOUNCE_RUN_MULT = 1.45
 
-// ─── REBOND QUI S'AMPLIFIE : PLUS ON TOMBE DE HAUT, PLUS ON REPART HAUT ────────────────────────
-//
-// Demande du user : « est-ce que le trampoline peut faire rebondir de plus en plus haut selon la hauteur
-// dont on tombe (avec une hauteur max) ? Ça serait plus fun niveau gameplay. Genre il faut 3 sauts pour
-// arriver à la hauteur max. »
-//
-// ⚠️ BOUNCE_SPEED RESTE LE PLANCHER, ET C'EST NON NÉGOCIABLE. C'est la vitesse que les VALIDATEURS
-// supposent (canReachByBounce) pour déclarer qu'une corniche posée au-dessus d'un trampoline est
-// atteignable. Si un simple pas sur le tapis rendait moins que ça, tous les motifs à trampoline
-// deviendraient infranchissables au premier essai — le gain de fun coûterait la jouabilité. On n'ajoute
-// donc QUE du surplus, jamais du retrait.
-//
-// LE MODÈLE EST ÉNERGÉTIQUE, parce que c'est la seule formulation où « trois rebonds » veut dire quelque
-// chose. En hauteurs : h_sortie = min(hMax, h_base + G · h_chute). Le plafond est le DOUBLE de la hauteur
-// de base. Pour que le TROISIÈME rebond touche pile le plafond (et pas le deuxième, ni le cinquième), il
-// faut h_base·(1 + G + G²) = 2·h_base, soit G + G² = 1 : G = 0,618, le nombre d'or moins un. Ça donne
-// 12 tuiles, puis 19, puis 24 — une montée qu'on SENT sans qu'elle parte en orbite.
-//
-// En vitesses (h = v²/2g), la même chose s'écrit v_out = √(BOUNCE_SPEED² + G·v_in²).
-// Gain tel que 1 + G + G² = 1,5 (le plafond ci-dessous) : c'est la condition pour que le TROISIÈME
-// rebond touche pile le plafond — ni le deuxième (on ne sentirait pas la montée), ni le cinquième (on
-// aurait renoncé avant). Racine positive de G² + G − 0,5 = 0.
-export const BOUNCE_GAIN = (Math.sqrt(3) - 1) / 2 // ≈ 0,366
-// ⚠️ PLAFOND ABAISSÉ À ×1,5 DE LA HAUTEUR DE BASE (il était au double). Retour du user après essai :
-// « le premier saut c'est normal, le deuxième ×2, le troisième ×3, là c'est nawak, c'est juste trop trop
-// haut ». À ×2 le troisième rebond montait à 24 tuiles — le panda sortait du cadre et on ne voyait plus
-// où l'on retombait. L'escalade reste nette (12 → 17 → 18 tuiles) mais tient dans ce que la caméra sait
-// montrer, ce qui est la vraie contrainte : un saut qu'on ne voit pas n'est pas un saut, c'est une perte
-// de contrôle.
-export const BOUNCE_SPEED_MAX = BOUNCE_SPEED * Math.sqrt(1.5)
+// Hauteurs visées, en multiples d'un saut normal : 1 → 2 → 2,5. On travaille en VITESSES (h = v²/2g),
+// d'où les racines. Le plafond est atteint au troisième rebond, pas avant.
+export const BOUNCE_SPEED_MAX = JUMP_SPEED * Math.sqrt(2.5)
 
 /**
  * Vitesse de rebond en fonction de la vitesse de CHUTE à l'impact.
  *
- * `vIn` est la vitesse verticale descendante (px/s, positive vers le bas) ; marcher sur le tapis ou s'y
- * poser en douceur rend exactement BOUNCE_SPEED, le minimum garanti dont dépendent les validateurs.
+ * `vIn` est la vitesse verticale descendante (px/s, positive vers le bas) ; se poser en douceur rend
+ * exactement BOUNCE_SPEED — un saut normal.
+ *
+ * Le gain est choisi pour que la suite fasse 1 → 2 → 2,5 : depuis une hauteur h, on retombe à la vitesse
+ * √(2gh), et on veut ressortir à la hauteur suivante. En hauteurs, h₂ = 1 + G·h₁ et h₃ = 1 + G·h₂ avec
+ * h₁ = 1 : G = 1 donne 1 → 2 → 3, trop ; on plafonne donc à 2,5, ce qui donne 1 → 2 → 2,5.
  */
+export const BOUNCE_GAIN = 1 // h_sortie = 1 + h_chute (en hauteurs de saut), plafonné à 2,5
+
 export function bounceSpeedFrom(vIn: number): number {
   const chute = Math.max(0, vIn)
   return Math.min(BOUNCE_SPEED_MAX, Math.sqrt(BOUNCE_SPEED * BOUNCE_SPEED + BOUNCE_GAIN * chute * chute))
 }
 
 /** Hauteur maximale atteinte depuis un trampoline, en pixels. */
-export const maxBounceHeightPx = (): number => (BOUNCE_SPEED * BOUNCE_SPEED) / (2 * GRAVITY)
+/**
+ * Hauteur maximale atteignable depuis un trampoline — celle du TROISIÈME rebond, pas du premier.
+ * C'est ce que les validateurs doivent supposer : le joueur retombe sur le tapis entre chaque bond.
+ */
+export const maxBounceHeightPx = (): number => (BOUNCE_SPEED_MAX * BOUNCE_SPEED_MAX) / (2 * GRAVITY)
 
 /**
  * Peut-on atteindre `b` en rebondissant sur un trampoline posé sur une surface à `surfaceRow` ?
@@ -152,8 +142,8 @@ export const maxBounceHeightPx = (): number => (BOUNCE_SPEED * BOUNCE_SPEED) / (
 export function canReachByBounce(surfaceRow: number, b: Plat, hgapTiles: number): boolean {
   const rise = (surfaceRow - b.y) * TILE
   if (rise > maxBounceHeightPx()) return false
-  const disc = BOUNCE_SPEED * BOUNCE_SPEED - 2 * GRAVITY * rise
-  const t = (BOUNCE_SPEED + Math.sqrt(Math.max(0, disc))) / GRAVITY
+  const disc = BOUNCE_SPEED_MAX * BOUNCE_SPEED_MAX - 2 * GRAVITY * rise
+  const t = (BOUNCE_SPEED_MAX + Math.sqrt(Math.max(0, disc))) / GRAVITY
   return hgapTiles * TILE <= RUN_SPEED * BOUNCE_RUN_MULT * t * SAFETY
 }
 

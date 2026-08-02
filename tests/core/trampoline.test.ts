@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { canReach, canReachByBounce, maxJumpHeightPx, maxBounceHeightPx, BOUNCE_SPEED, BOUNCE_RUN_MULT } from '../../src/core/platforming'
+import { canReach, canReachByBounce, maxJumpHeightPx, maxBounceHeightPx, BOUNCE_SPEED, BOUNCE_SPEED_MAX, BOUNCE_RUN_MULT } from '../../src/core/platforming'
 import { JUMP_SPEED } from '../../src/core/platforming'
 import { LEVELS } from '../../src/data/levels'
 
@@ -15,14 +15,20 @@ import { LEVELS } from '../../src/data/levels'
 // très visible à l'écran. Et le moteur comme les validateurs doivent lire la MÊME constante, sinon un
 // motif jouable serait déclaré injouable, ou l'inverse.
 
-describe('trois fois plus haut, pas neuf', () => {
-  it('la hauteur de rebond vaut TROIS fois celle d\'un saut', () => {
-    expect(maxBounceHeightPx() / maxJumpHeightPx()).toBeCloseTo(3, 5)
+describe('un saut, puis deux, puis deux et demi', () => {
+  // ⚠️ CE BLOC DISAIT « TROIS FOIS PLUS HAUT » ET C'EST LE RÉGLAGE QUI A CHANGÉ, PAS LE PRINCIPE.
+  // Le premier rebond valait trois sauts d'emblée ; le user a tranché après essai : « le premier fait la
+  // hauteur d'un saut normal, le deuxième 2, le troisième 2,5 ». Ce que ces tests protègent reste le
+  // même — qu'on raisonne en HAUTEURS et pas en vitesses (h = v²/2g : doubler la vitesse quadruple la
+  // hauteur), et que le moteur et les validateurs lisent la MÊME constante.
+  it('le premier rebond vaut UN saut, le plafond deux et demi', () => {
+    expect(BOUNCE_SPEED / JUMP_SPEED).toBeCloseTo(1, 5)
+    expect(maxBounceHeightPx() / maxJumpHeightPx()).toBeCloseTo(2.5, 5)
   })
 
-  it('la vitesse de rebond est √3 fois la vitesse de saut, pas 3 fois', () => {
-    expect(BOUNCE_SPEED / JUMP_SPEED).toBeCloseTo(Math.sqrt(3), 5)
-    expect(BOUNCE_SPEED / JUMP_SPEED).toBeLessThan(2)
+  it('la hauteur suit le CARRÉ de la vitesse — le plafond est √2,5, pas 2,5', () => {
+    expect(BOUNCE_SPEED_MAX / JUMP_SPEED).toBeCloseTo(Math.sqrt(2.5), 5)
+    expect(BOUNCE_SPEED_MAX / JUMP_SPEED).toBeLessThan(2)
   })
 
   it('il porte aussi plus LOIN latéralement', () => {

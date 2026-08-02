@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  BOUNCE_GAIN, BOUNCE_SPEED, BOUNCE_SPEED_MAX, GRAVITY, TILE, bounceSpeedFrom, maxJumpHeightPx,
+  BOUNCE_SPEED, BOUNCE_SPEED_MAX, GRAVITY, TILE, bounceSpeedFrom, maxJumpHeightPx,
 } from '../../src/core/platforming'
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -31,22 +31,19 @@ describe('rebond de trampoline proportionnel à la chute', () => {
     }
   })
 
-  it('le premier rebond vaut trois fois un saut normal', () => {
-    expect(hauteur(bounceSpeedFrom(0)) / maxJumpHeightPx()).toBeCloseTo(3, 5)
-  })
-
-  it('TROIS rebonds enchaînés atteignent le plafond — pas deux', () => {
+  it('le premier rebond vaut UN saut normal, le deuxième 2, le troisième 2,5', () => {
+    // Réglage dicté par le user après essai : « le premier fait la hauteur d'un saut normal, le deuxième
+    // 2, le troisième 2,5 × la hauteur normale ». Avant, le premier valait déjà 3 sauts et le troisième
+    // montait à 24 tuiles — « c'est nawak, juste trop trop haut ».
+    const saut = maxJumpHeightPx()
     const h1 = hauteur(bounceSpeedFrom(0))
     const h2 = hauteur(bounceSpeedFrom(vitesseDeChuteDepuis(h1)))
     const h3 = hauteur(bounceSpeedFrom(vitesseDeChuteDepuis(h2)))
-    const plafond = hauteur(BOUNCE_SPEED_MAX)
-
-    expect(h2).toBeGreaterThan(h1 * 1.25) // la montée se VOIT dès le deuxième
-    // …mais elle n'y est pas encore. La marge est plus serrée qu'avant : le plafond ayant baissé (×2 →
-    // ×1,5 de la hauteur de base, sur retour du user), le deuxième rebond en est mécaniquement plus près.
-    expect(h2).toBeLessThan(plafond * 0.96)
-    expect(h3).toBeCloseTo(plafond, 0) // le troisième touche le plafond
+    expect(h1 / saut).toBeCloseTo(1, 5)
+    expect(h2 / saut).toBeCloseTo(2, 5)
+    expect(h3 / saut).toBeCloseTo(2.5, 5)
   })
+
 
   it('le plafond tient : au-delà, rebondir encore ne monte plus', () => {
     const plafond = hauteur(BOUNCE_SPEED_MAX)
@@ -55,17 +52,11 @@ describe('rebond de trampoline proportionnel à la chute', () => {
     expect(h).toBeCloseTo(plafond, 6)
   })
 
-  it('le gain place la saturation au TROISIÈME rebond, par construction', () => {
-    // 1 + G + G² doit valoir exactement le plafond (×1,5 de la hauteur de base) : c'est cette égalité
-    // qui fait que le troisième rebond touche le plafond, ni le deuxième ni le cinquième. Écrit ici
-    // parce que la formule seule ne dit pas d'où sort 0,366 — et parce que le plafond a déjà bougé une
-    // fois (il était au double, le user a trouvé ça « nawak, juste trop trop haut »).
-    expect(1 + BOUNCE_GAIN + BOUNCE_GAIN * BOUNCE_GAIN).toBeCloseTo(1.5, 10)
-  })
 
   it('le plafond reste dans une échelle jouable, pas en orbite', () => {
+    // 2,5 sauts ≈ 10 tuiles : on voit encore où l'on retombe, ce qui est la vraie contrainte.
     const tuiles = hauteur(BOUNCE_SPEED_MAX) / TILE
-    expect(tuiles).toBeGreaterThan(14)
-    expect(tuiles).toBeLessThan(22)
+    expect(tuiles).toBeGreaterThan(8)
+    expect(tuiles).toBeLessThan(13)
   })
 })

@@ -85,7 +85,11 @@ export function evolveClass(p: PlayerState): ClassId {
   if (!canEvolveClass(p)) throw new Error('évolution impossible')
   const to = EVOLUTIONS[p.classId]!
   p.classId = to
-  const firstSkill = CLASSES[to].skillIds[0]!
-  if (!p.skillLevels[firstSkill]) p.skillLevels[firstSkill] = 1
+  // ⚠️ AUCUNE COMPÉTENCE OFFERTE À L'ÉVOLUTION. On posait d'office un point sur le premier sort de la
+  // nouvelle classe : « je viens de passer chasseur et j'avais déjà un point sur un skill de classe 2,
+  // retire ça — quand on change de classe on a 0 skill de la nouvelle classe ».
+  // Le cadeau semblait accueillant ; il volait en réalité le premier choix du joueur, qui est justement
+  // le moment intéressant d'une évolution. Les points investis dans la classe de base RESTENT où ils
+  // sont : ils ont payé pour des sorts qu'on continue d'utiliser, ils ne se recyclent pas.
   return to
 }

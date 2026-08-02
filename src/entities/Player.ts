@@ -34,7 +34,14 @@ const MAX_ENERGY = 100
 // skill (10-45) → l'énergie se rechargeait plus vite qu'on ne la dépensait et les skills étaient
 // « gratuits ». À 8/s, enchaîner des skills VIDE bel et bien la jauge : l'énergie redevient une
 // vraie ressource à gérer.
-const ENERGY_REGEN_PER_SEC = 8
+// ⚠️ 4 ET NON 8 : LA RÉGÉNÉRATION PASSIVE EST DIVISÉE PAR DEUX. Retour du user : « le regen de mana doit
+// être plus lent, là je peux enchaîner les skills sans problème ». À 8/s la barre se remplissait plus vite
+// qu'on ne la vidait : les cooldowns devenaient la seule limite, et l'énergie ne voulait plus rien dire.
+// Une ressource qui ne manque jamais n'est pas une ressource.
+//
+// La contrepartie est ailleurs, et elle est délibérée : TUER rend de l'énergie (cf. LevelScene.onEnemyDied).
+// On ne punit donc pas le joueur qui se bat — on punit celui qui enchaîne les sorts dans le vide.
+const ENERGY_REGEN_PER_SEC = 4
 const REGEN_COMBAT_LOCK_MS = 3000 // délai « hors combat » après un coup reçu avant que la régén passive reprenne
 const ENERGY_PER_BASIC_HIT = 6
 const DIVE_SPEED = 1400 // vitesse de piqué vertical du Plongeon (px/s)
@@ -85,7 +92,9 @@ const WEAPON_FWD_X: Record<string, number> = { mage: 13, sorcier: 13, archer: 17
 // personnage, pas comme une arme tenue. Retour du user : « on voit que l'arc ça va pas du tout, il faut
 // le décaler légèrement sur le côté et sur le haut. » On le pousse donc vers l'avant (WEAPON_FWD_X) ET
 // vers le haut, à hauteur de poitrine, là où une main le tiendrait vraiment.
-const WEAPON_UP_Y: Record<string, number> = { archer: -13, chasseur: -13 }
+// −8 et non −13 : remonté d'abord pour décoller l'arc du ventre, puis redescendu de cinq pixels sur
+// retour (« l'arc quand je tire, tu peux baisser très légèrement, là c'est juste au-dessus de la main »).
+const WEAPON_UP_Y: Record<string, number> = { archer: -8, chasseur: -8 }
 // Signature visuelle d'arme par CLASSE : échelle de base + couleur de lueur propres. Deux classes à
 // silhouette proche (sabreur/chevalier, mage/sorcier, archer/chasseur) restent alors nettement
 // distinctes — taille ET couleur de halo. La lueur est un halo additif DERRIÈRE l'arme (elle ne
@@ -851,6 +860,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Renvoie l'INTENSITÉ (0 = rebond minimum, 1 = plafond) : l'appelant s'en sert pour que le son et
     // l'effet suivent la puissance. Un rebond deux fois plus haut qui sonne pareil ne se ressent pas.
     return Phaser.Math.Clamp((v - BOUNCE_SPEED) / (BOUNCE_SPEED_MAX - BOUNCE_SPEED), 0, 1)
+  }
+
+  /**
+   * Rend un peu d'énergie — appelé quand un monstre meurt.
+   *
+   * Renvoie ce qui a RÉELLEMENT été rendu (0 si la barre était pleine) : l'appelant n'affiche le chiffre
+   * bleu que s'il y a quelque chose à montrer, sinon on ferait clignoter « +0 » à chaque kill.
+   */
+  gagnerEnergie(n: number): number {
+    const avant = this.energy
+    this.energy = Math.min(this.maxEnergy, this.energy + n)
+    return Math.round(this.energy - avant)
   }
 
   /** Le panda est-il dans la phase aérienne d'un rebond (contrôle latéral élargi) ? */

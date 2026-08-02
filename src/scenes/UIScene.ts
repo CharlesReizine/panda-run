@@ -264,7 +264,14 @@ export class UIScene extends Phaser.Scene {
     // joystick. Le compteur « ×N » est collé au bouton, sinon on ne sait pas s'il en reste.
     const potion = mkRond(PAD.potion, 0x8e2f4f, 0.62)
     this.add.image(X(PAD.potion.droite), PAD.potion.y, 'potion-drop').setDisplaySize(PAD.potion.r * 1.4, PAD.potion.r * 1.4)
-    this.potionText = this.add.text(X(PAD.potion.droite - PAD.potion.r - 4), PAD.potion.y + 12, '', { fontSize: '17px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 0.5)
+    // ⚠️ LE COMPTEUR EST SUR LA FIOLE, PLUS À CÔTÉ. Il était posé à DROITE du bouton, donc dans les
+    // derniers pixels de l'écran : « là ça déborde à droite de l'écran et c'est crade ». Et pour cause —
+    // les commandes de droite sont COLLÉES au bord (règle assumée, cf. action-pad-layout), donc tout ce
+    // qu'on ajoute à leur droite sort du cadre. Sur la fiole, le nombre est lisible, ne dépend plus de la
+    // largeur de l'écran, et suit le bouton où qu'il aille.
+    this.potionText = this.add.text(X(PAD.potion.droite), PAD.potion.y + PAD.potion.r - 6, '', {
+      fontSize: '18px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 4,
+    }).setOrigin(0.5)
     potion.on('pointerdown', () => { this.pressFx(potion); this.game.events.emit('input-potion') })
 
     // bouton inventaire (icône « tenue ») : EN HAUT À GAUCHE, juste à droite du panneau de vie
@@ -437,9 +444,17 @@ export class UIScene extends Phaser.Scene {
     this.perfFrames++
     if (time - this.perfDepuis >= 1000) {
       const ips = Math.round((this.perfFrames * 1000) / (time - this.perfDepuis))
-      const lvl = this.scene.get('Level') as LevelScene | undefined
-      const objets = lvl?.children?.list.length ?? 0
-      const corps = lvl ? lvl.physics.world.bodies.size + lvl.physics.world.staticBodies.size : 0
+      // ⚠️ ON PREND LA SCÈNE DE JEU ACTIVE, PAS 'Level' EN DUR — ET ON VÉRIFIE QUE SON MONDE EXISTE.
+      // `scene.get('Level')` renvoie TOUJOURS l'instance, même quand elle n'a jamais démarré : son
+      // `physics.world` vaut alors null. C'est ce qui plantait l'écran d'ENTRAÎNEMENT, qui tourne dans
+      // sa propre scène ('Training') et laisse 'Level' à l'arrêt — « Cannot read properties of null
+      // (reading 'bodies') », à chaque frame, écran noir. Le témoin de performance n'a aucune raison de
+      // pouvoir tuer une scène : il lit ce qui existe, ou il n'affiche rien.
+      const jeu = this.scene.manager.getScenes(true)
+        .find((sc) => sc.scene.key === 'Level' || sc.scene.key === 'Training') as LevelScene | undefined
+      const monde = jeu?.physics?.world ?? null
+      const objets = jeu?.children?.list.length ?? 0
+      const corps = monde ? monde.bodies.size + monde.staticBodies.size : 0
       this.perfText.setText(`${ips} ips · ${objets} obj · ${corps} corps`)
       this.perfText.setColor(ips >= 45 ? '#8fa3b0' : ips >= 25 ? '#ffb74d' : '#ef5350')
       this.perfFrames = 0

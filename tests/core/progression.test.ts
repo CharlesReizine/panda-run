@@ -55,8 +55,11 @@ describe('progression', () => {
     const to = evolveClass(p)
     expect(to).toBe('chevalier')
     expect(p.classId).toBe('chevalier')
-    // 1er nouveau skill débloqué au rang 1
-    expect(p.skillLevels[CLASSES.chevalier.skillIds[0]!]).toBe(1)
+    // ⚠️ AUCUNE COMPÉTENCE OFFERTE : on partait avec un point d'office sur le premier sort de la
+    // nouvelle classe, le user l'a fait retirer (« quand on change de classe on a 0 skill de la nouvelle
+    // classe »). Le cadeau volait le premier choix du joueur, qui est le moment intéressant d'une
+    // évolution. Ce test garde la propriété dans l'autre sens : rien n'est débloqué tout seul.
+    expect(p.skillLevels[CLASSES.chevalier.skillIds[0]!] ?? 0).toBe(0)
     // plus d'évolution possible après le 2e palier
     expect(canEvolveClass(p)).toBe(false)
     expect(() => evolveClass(p)).toThrow()

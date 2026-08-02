@@ -71,10 +71,40 @@ export class WorldMapScene extends Phaser.Scene {
       const radius = RADIUS[n.type]
       const color = interactive ? NODE_COLORS[n.type] : LOCKED_COLOR
 
+      // ─── DEUX HALOS DIFFÉRENTS : « JAMAIS FAIT » ET « DÉJÀ FAIT » ───────────────────────────
+      //
+      // Retour du user : « il faut prévoir un truc visuellement sur la carte pour faire apparaître en
+      // surbrillance les cartes accessibles mais où je ne suis pas encore allé — ça devrait grossir,
+      // réduire par exemple. Là ce n'est pas toujours clair. Et fais peut-être rayonner moins loin les
+      // terrains déjà découverts, mais rayonner un peu les terrains accessibles. »
+      //
+      // ⚠️ TOUT CE QUI EST JOUABLE PULSAIT PAREIL — c'était le défaut. Un terrain déjà bouclé et un
+      // terrain jamais vu portaient exactement le même halo : la carte disait « tu peux y aller » là où
+      // le joueur cherchait « où dois-je aller ». Le ✓ existait bien, mais il faut le LIRE, alors qu'un
+      // mouvement se repère du coin de l'œil.
+      //
+      // Le NEUF respire largement (halo ample, cycle lent, il grossit puis se réduit) ; le DÉJÀ FAIT
+      // garde une lueur discrète, deux fois plus serrée et bien plus sourde — présent, jamais attirant.
       if (interactive) {
-        // halo pulsant derrière l'icône pour signaler « c'est jouable »
-        const halo = this.add.circle(n.x, n.y, radius + 8, NODE_COLORS[n.type], 0.25)
-        this.tweens.add({ targets: halo, scale: 1.35, alpha: 0, yoyo: true, repeat: -1, duration: 900 })
+        const neuf = !done
+        const halo = this.add.circle(n.x, n.y, radius + (neuf ? 12 : 5), NODE_COLORS[n.type], neuf ? 0.32 : 0.12)
+        this.tweens.add({
+          targets: halo,
+          scale: neuf ? 1.55 : 1.12,
+          alpha: neuf ? 0.06 : 0.04,
+          yoyo: true, repeat: -1,
+          duration: neuf ? 1100 : 1600,
+          ease: 'Sine.inOut',
+        })
+        if (neuf) {
+          // un second anneau, plus fin et décalé d'un demi-cycle : l'onde double se remarque de loin
+          // sans clignoter — c'est le « grossir/réduire » demandé, appliqué au seul cas qui compte.
+          const onde = this.add.circle(n.x, n.y, radius + 4, 0xffffff, 0.18)
+          this.tweens.add({
+            targets: onde, scale: 1.9, alpha: 0, yoyo: false, repeat: -1,
+            duration: 1400, ease: 'Cubic.out',
+          })
+        }
       }
 
       // VILLES : aucun dessin — l'illustration de la carte de fond montre déjà clairement la ville
