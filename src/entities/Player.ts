@@ -7,7 +7,7 @@ import { SKILLS } from '../data/skills'
 import { ITEMS, rarityColor } from '../data/items'
 import { displayedWeaponType, isBigWeapon, weaponTextureKeys } from '../core/equip'
 import { PANDA_BODY, PANDA_HEAD_ANCHORS } from './player-body'
-import { JUMP_SPEED, RUN_SPEED, GRAVITY } from '../core/platforming'
+import { JUMP_SPEED, RUN_SPEED, GRAVITY, BOUNCE_SPEED, BOUNCE_SPEED_MAX, bounceSpeedFrom } from '../core/platforming'
 import { MAX_SKILL_RANK } from '../core/player-state'
 import { drawAura, makeJag } from '../art/jagged-ring'
 
@@ -77,7 +77,15 @@ const WEAPON_TILT_DEG: Record<string, number> = {
 // classes. Le BÂTON du mage/sorcier est long : au repos comme à l'attaque il doit DÉPASSER devant le
 // panda, pas rester collé au corps → on le pousse nettement vers l'avant. Les autres classes gardent
 // l'ancrage patte avant standard (0).
-const WEAPON_FWD_X: Record<string, number> = { mage: 13, sorcier: 13 }
+const WEAPON_FWD_X: Record<string, number> = { mage: 13, sorcier: 13, archer: 10, chasseur: 10 }
+// Décalage VERTICAL supplémentaire (px, négatif = vers le haut) par classe.
+//
+// ⚠️ L'ARC EST UN CAS À PART, ET ÇA SE VOIT SUR CAPTURE. Tenu à l'ancrage standard, il tombe pile sur le
+// VENTRE du panda : la corde traverse le torse et l'arme se lit comme un accessoire posé sur le
+// personnage, pas comme une arme tenue. Retour du user : « on voit que l'arc ça va pas du tout, il faut
+// le décaler légèrement sur le côté et sur le haut. » On le pousse donc vers l'avant (WEAPON_FWD_X) ET
+// vers le haut, à hauteur de poitrine, là où une main le tiendrait vraiment.
+const WEAPON_UP_Y: Record<string, number> = { archer: -13, chasseur: -13 }
 // Signature visuelle d'arme par CLASSE : échelle de base + couleur de lueur propres. Deux classes à
 // silhouette proche (sabreur/chevalier, mage/sorcier, archer/chasseur) restent alors nettement
 // distinctes — taille ET couleur de halo. La lueur est un halo additif DERRIÈRE l'arme (elle ne
@@ -348,8 +356,17 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.weaponImage) {
       // décalage avant propre à la classe (bâton du mage/sorcier poussé nettement devant le panda)
       const fwd = WEAPON_FWD_X[getPlayer().classId] ?? 0
-      const wx = this.x + (WEAPON_OFFSET_X + fwd) * flip
-      const wy = this.y + WEAPON_OFFSET_Y
+      // ⚠️ L'ARME SUIT L'INCLINAISON DU PANDA, exactement comme le chapeau. Elle ne la suivait pas : son
+      // ancrage était un offset BRUT, calculé dans le repère de l'écran. En nage, le panda pique du nez
+      // (jusqu'à ±90° dans une colonne d'eau) — le chapeau tournait avec lui, l'arme restait plantée à
+      // l'horizontale à côté du corps. Retour du user : « les armes doivent tourner aussi (comme les
+      // chapeaux) quand on nage. » On pivote donc le vecteur d'ancrage par la rotation courante, et on
+      // ajoute cette rotation à l'angle de l'arme.
+      const ox = (WEAPON_OFFSET_X + fwd) * flip
+      const oy = WEAPON_OFFSET_Y + (WEAPON_UP_Y[getPlayer().classId] ?? 0)
+      const cosW = Math.cos(this.rotation), sinW = Math.sin(this.rotation)
+      const wx = this.x + ox * cosW - oy * sinW
+      const wy = this.y + ox * sinW + oy * cosW
       this.weaponImage.setPosition(wx, wy)
       this.weaponImage.setFlipX(flip === -1)
       // arme tenue en biais dans la patte (pas plantée à la verticale dans la tête) ; l'angle suit
@@ -358,7 +375,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       // angle de repos (tilt) + offset de swing d'attaque, le tout mirroré par le flip pour que
       // l'arme fende toujours vers l'avant quel que soit le sens du regard. L'ARC fait EXCEPTION : il
       // reste DROIT/horizontal (rot 0) — pas d'inclinaison de repos ni de swing d'épée au tir.
-      const rot = this.weaponIsBow ? 0 : (Phaser.Math.DegToRad(tilt) + this.attackSwing) * flip
+      const rot = this.rotation + (this.weaponIsBow ? 0 : (Phaser.Math.DegToRad(tilt) + this.attackSwing) * flip)
       this.weaponImage.setRotation(rot)
       // le halo colle rigidement à l'arme (même position/flip/rotation)
       if (this.weaponGlow) {
@@ -789,17 +806,22 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // vitesse verticale du 2e saut : modeste au rang 1 (DOUBLE_JUMP_MIN_FRAC du 1er), atteint la
   // pleine hauteur du 1er saut au rang max (interpolation linéaire sur le rang investi)
   /**
-   * Rebond sur un trampoline : trois fois la hauteur d'un saut normal, et contrôle latéral accru
-   * pendant la montée.
+   * Rebond sur un trampoline : au MINIMUM trois fois la hauteur d'un saut normal, davantage si l'on
+   * arrive vite — jusqu'au double au bout de trois rebonds enchaînés (cf. bounceSpeedFrom). Contrôle
+   * latéral accru pendant toute la montée.
    *
    * Le compteur de sauts est REMIS À ZÉRO : le rebond ne consomme pas le saut, et un double-saut appris
    * reste disponible au sommet — c'est ce qui rend l'engin amusant plutôt que scripté.
    */
-  bounce(): void {
-    this.setVelocityY(JUMP_VELOCITY * Math.SQRT2 * Math.SQRT1_2 * Math.sqrt(3))
+  bounce(vitesseChute = 0): number {
+    const v = bounceSpeedFrom(vitesseChute)
+    this.setVelocityY(-v)
     this.jumpsUsed = 0
     this.tramboUntil = this.scene.time.now + TRAMBO_AIR_MS
     this.scene.events.emit('player-bounce')
+    // Renvoie l'INTENSITÉ (0 = rebond minimum, 1 = plafond) : l'appelant s'en sert pour que le son et
+    // l'effet suivent la puissance. Un rebond deux fois plus haut qui sonne pareil ne se ressent pas.
+    return Phaser.Math.Clamp((v - BOUNCE_SPEED) / (BOUNCE_SPEED_MAX - BOUNCE_SPEED), 0, 1)
   }
 
   /** Le panda est-il dans la phase aérienne d'un rebond (contrôle latéral élargi) ? */

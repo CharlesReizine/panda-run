@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { PROPS } from '../../src/data/props'
+import { PROPS, estCoffre } from '../../src/data/props'
+import { LEVELS } from '../../src/data/levels'
+import { groundRowFor } from '../../src/core/platforming'
 import { MATERIALS } from '../../src/data/materials'
 import { ITEMS } from '../../src/data/items'
 
@@ -73,5 +75,43 @@ describe('données props', () => {
 
   it('hp positifs', () => {
     for (const p of Object.values(PROPS)) expect(p.hp).toBeGreaterThan(0)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// AUCUN PROP N'EST ENCHÂSSÉ DANS LA MATIÈRE
+//
+// Retour du user sur Vallon : « y a un trésor qui est collé à de la pierre et c'est bizarre ». Un prop
+// sans altitude était lâché à `groundRow − 1` sans regarder ce qui s'y trouvait ; quand une dalle de
+// roche occupait cette rangée, le coffre finissait dedans. Quatre coffres sur 132 étaient dans ce cas.
+//
+// Le test parcourt TOUS les terrains parce que le défaut n'était visible que sur quatre d'entre eux :
+// une vérification par échantillon serait passée à côté, et c'est exactement ce qui s'est produit —
+// personne ne l'a vu avant que le user tombe dessus en jouant.
+describe('les props se posent sur la surface, jamais dedans', () => {
+  const dansLaMatiere = (l: (typeof LEVELS)[string], pr: { x: number; y?: number }) => {
+    const y = pr.y ?? groundRowFor(l.heightTiles) - 1
+    return (l.rockBands ?? []).some((r) => pr.x >= r.x && pr.x < r.x + r.w && y >= r.y && y < r.y + r.h)
+      || l.platforms.some((p) => pr.x >= p.x && pr.x < p.x + p.w && p.y === y)
+  }
+
+  it('aucun coffre n\'est enchâssé dans la roche ou dans une plateforme', () => {
+    const fautifs: string[] = []
+    for (const l of Object.values(LEVELS)) {
+      for (const pr of (l.props ?? []).filter((p) => estCoffre(p.kind))) {
+        if (dansLaMatiere(l, pr)) fautifs.push(`${l.id} : ${pr.kind} en x${pr.x} y${pr.y}`)
+      }
+    }
+    expect(fautifs, fautifs.slice(0, 6).join(' | ')).toEqual([])
+  })
+
+  it('aucun prop posé au sol ne tombe sur un trou mortel', () => {
+    const fautifs: string[] = []
+    for (const l of Object.values(LEVELS)) {
+      for (const pr of (l.props ?? []).filter((p) => p.y === undefined)) {
+        if ((l.gaps ?? []).some((g) => pr.x >= g.x && pr.x < g.x + g.w)) fautifs.push(`${l.id} ${pr.kind} x${pr.x}`)
+      }
+    }
+    expect(fautifs, fautifs.slice(0, 6).join(' | ')).toEqual([])
   })
 })

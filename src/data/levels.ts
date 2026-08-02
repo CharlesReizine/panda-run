@@ -460,6 +460,20 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   // évincer le contenu existant : chaque motif imposé prend un slot central, et sur des terrains courts il
   // faisait disparaître des familles entières du jeu (mesuré trois fois).
   // On ajoute donc un slot PAR motif imposé, plus deux de base pour la variété générale.
+  // ⚠️ LE ×2 DEMANDÉ N'EST PAS ENCORE ICI, ET LA RAISON EST MESURÉE, PAS SUPPOSÉE.
+  // Demande du user : « doubler la largeur de chacun des terrains pour que le jeu soit plus long et plus
+  // intéressant (quitte à baisser l'XP générée), ça permettra d'utiliser plus de motifs. » L'intention est
+  // juste — la longueur d'un terrain EST le budget de motifs, et à 10 slots centraux l'ordonnanceur
+  // « le moins servi d'abord » ne peut pas faire tourner 82 motifs sans radoter.
+  //
+  // Mais les terrains sont RECONSTRUITS À CHAQUE DÉMARRAGE, et la génération essaie jusqu'à 81 graines
+  // par terrain jusqu'à en trouver une qui satisfasse les quinze invariants. Doubler la largeur double le
+  // coût d'une tentative ET la probabilité qu'elle échoue : mesuré, on passe de ~11 s à 44 s de génération
+  // (30 s avant le premier pixel dans le navigateur). Livrer ça, ce serait échanger un jeu plus riche
+  // contre un jeu qui ne démarre plus.
+  //
+  // Le ×2 attend donc la seule correction qui le rende gratuit : PRÉCALCULER les terrains à la
+  // construction du bundle au lieu de les régénérer sur le téléphone du joueur. C'est le prochain lot.
   const midCount = midBase + 2 + Math.floor((rank - 1) / 2) + (idx % 2)
     + (FORCES_EFFECTIFS[id]?.length ?? 0)
   // Échelles autorisées PARTOUT, y compris plaine-1 : sans échelle, une chute dans un creux/bassin
@@ -576,15 +590,22 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   // reliefs et placements). SEUIL ADAPTATIF : on vise 16 tuiles de plat vide max ; si AUCUNE graine
   // propre ne passe sur ce terrain (contrainte trop dure), on assouplit à 18 puis 20 — le garde-fou
   // reste TOUJOURS actif, on tolère juste une bande un peu plus longue plutôt qu'une génération cassée.
+  // ⚠️ L'ORDRE DE CETTE CHAÎNE EST UN CHOIX DE PERFORMANCE, PAS UNE LISTE AU FIL DE LA PLUME.
+  // `&&` court-circuite : dès qu'un invariant tombe, on ne paie pas les suivants. Or ils ne coûtent pas
+  // du tout la même chose — mesuré sur le plus grand terrain (715 tuiles) : oversizedGaps, monstersInRock
+  // ou startExitProblems sont à ~0 ms quand unreachableChests coûte 11,7 ms, unreachableLadders 5,9 et
+  // unreachablePlatforms 5,8. Comme la génération essaie jusqu'à 81 graines par terrain et que la plupart
+  // sont rejetées, l'ordre décide du temps de démarrage du jeu. On met donc les quasi-gratuits en tête et
+  // les parcours d'atteignabilité en dernier : même verdict, une fraction du coût.
   const cleanAt = (l: LevelDef, maxFlat: number): boolean =>
-    overStackedColumns(l, 3).length === 0 && unlevelWaterBanks(l).length === 0
-    && suspendedWaterBanks(l).length === 0 && deadEndSurfaces(l).length === 0
-    && unreachablePlatforms(l).length === 0 && laddersToNowhere(l).length === 0
-    && unreachableLadders(l).length === 0 && unreachableChests(l).length === 0
-    && oversizedGaps(l).length === 0 && oversizedLadders(l).length === 0
-    && monstersOffSurface(l, isAerial).length === 0 && monstersInRock(l).length === 0
-    && startExitProblems(l).length === 0 && caveCeilingClearance(l).length === 0
-    && longEmptyFlats(l, maxFlat).length === 0
+    oversizedGaps(l).length === 0 && oversizedLadders(l).length === 0
+    && monstersInRock(l).length === 0 && startExitProblems(l).length === 0
+    && laddersToNowhere(l).length === 0 && monstersOffSurface(l, isAerial).length === 0
+    && unlevelWaterBanks(l).length === 0 && suspendedWaterBanks(l).length === 0
+    && caveCeilingClearance(l).length === 0 && overStackedColumns(l, 3).length === 0
+    && longEmptyFlats(l, maxFlat).length === 0 && deadEndSurfaces(l).length === 0
+    && unreachablePlatforms(l).length === 0 && unreachableLadders(l).length === 0
+    && unreachableChests(l).length === 0
   const salts = [`${id}-${ending}`, ...Array.from({ length: 80 }, (_, i) => `${id}-${ending}-${i}`)]
   let chosen = salts[0]!
   let level = composeLevel({ ...base, seed: chosen })

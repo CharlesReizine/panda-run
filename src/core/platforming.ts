@@ -100,6 +100,39 @@ export function canReach(surfaceRow: number, b: Plat, hgapTiles: number): boolea
 export const BOUNCE_SPEED = JUMP_SPEED * Math.sqrt(3)
 export const BOUNCE_RUN_MULT = 1.45
 
+// ─── REBOND QUI S'AMPLIFIE : PLUS ON TOMBE DE HAUT, PLUS ON REPART HAUT ────────────────────────
+//
+// Demande du user : « est-ce que le trampoline peut faire rebondir de plus en plus haut selon la hauteur
+// dont on tombe (avec une hauteur max) ? Ça serait plus fun niveau gameplay. Genre il faut 3 sauts pour
+// arriver à la hauteur max. »
+//
+// ⚠️ BOUNCE_SPEED RESTE LE PLANCHER, ET C'EST NON NÉGOCIABLE. C'est la vitesse que les VALIDATEURS
+// supposent (canReachByBounce) pour déclarer qu'une corniche posée au-dessus d'un trampoline est
+// atteignable. Si un simple pas sur le tapis rendait moins que ça, tous les motifs à trampoline
+// deviendraient infranchissables au premier essai — le gain de fun coûterait la jouabilité. On n'ajoute
+// donc QUE du surplus, jamais du retrait.
+//
+// LE MODÈLE EST ÉNERGÉTIQUE, parce que c'est la seule formulation où « trois rebonds » veut dire quelque
+// chose. En hauteurs : h_sortie = min(hMax, h_base + G · h_chute). Le plafond est le DOUBLE de la hauteur
+// de base. Pour que le TROISIÈME rebond touche pile le plafond (et pas le deuxième, ni le cinquième), il
+// faut h_base·(1 + G + G²) = 2·h_base, soit G + G² = 1 : G = 0,618, le nombre d'or moins un. Ça donne
+// 12 tuiles, puis 19, puis 24 — une montée qu'on SENT sans qu'elle parte en orbite.
+//
+// En vitesses (h = v²/2g), la même chose s'écrit v_out = √(BOUNCE_SPEED² + G·v_in²).
+export const BOUNCE_GAIN = (Math.sqrt(5) - 1) / 2 // 0,618 — trois rebonds pour saturer, cf. ci-dessus
+export const BOUNCE_SPEED_MAX = BOUNCE_SPEED * Math.SQRT2 // plafond : le double de la hauteur de base
+
+/**
+ * Vitesse de rebond en fonction de la vitesse de CHUTE à l'impact.
+ *
+ * `vIn` est la vitesse verticale descendante (px/s, positive vers le bas) ; marcher sur le tapis ou s'y
+ * poser en douceur rend exactement BOUNCE_SPEED, le minimum garanti dont dépendent les validateurs.
+ */
+export function bounceSpeedFrom(vIn: number): number {
+  const chute = Math.max(0, vIn)
+  return Math.min(BOUNCE_SPEED_MAX, Math.sqrt(BOUNCE_SPEED * BOUNCE_SPEED + BOUNCE_GAIN * chute * chute))
+}
+
 /** Hauteur maximale atteinte depuis un trampoline, en pixels. */
 export const maxBounceHeightPx = (): number => (BOUNCE_SPEED * BOUNCE_SPEED) / (2 * GRAVITY)
 

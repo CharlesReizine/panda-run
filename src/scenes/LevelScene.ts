@@ -39,6 +39,12 @@ import { flammeGain, flammeIntervalle, flammeAudible, FLAMME_PORTEE } from '../c
 // TRAMPOLINE : largeur à l'écran. 108 px ≈ 3,4 tuiles, soit trois fois le premier jet — « est pas assez
 // large, fait ×3 ». Seule la LARGEUR est imposée : la hauteur suit les proportions du dessin (cf.
 // poseTrampoline), et la zone de rebond se cale sur la hauteur RÉELLEMENT affichée.
+// Tranches de culling : 480 px (une demi-largeur d'écran) est le bon compromis — assez fin pour que la
+// tranche visible ne traîne pas trop d'objets hors cadre, assez large pour que la liste ne change qu'une
+// fois toutes les ~40 frames de course. La marge évite qu'un objet apparaisse pile au bord.
+const LARGEUR_TRANCHE = 480
+const MARGE_TRANCHE = 160
+
 const TRAMPO_W = 108
 
 /** Texture du trampoline, illustrée si elle a été générée, procédurale sinon. */
@@ -119,6 +125,29 @@ export class LevelScene extends Phaser.Scene {
   // Murs de flamme (Mage/Sorcier) : barrières statiques temporaires qui bloquent + brûlent les ennemis
   private flameWalls!: Phaser.Physics.Arcade.StaticGroup
   private trampolines!: Phaser.Physics.Arcade.StaticGroup
+  // ─── CULLING DU DÉCOR : NE PAS DESSINER CE QUI EST HORS ÉCRAN ─────────────────────────────────
+  //
+  // Retour du user : « je fais un terrain du début, c'est très rapide ; un de la fin, très lent ; et
+  // quand je reviens au début, très rapide. » Le coût suit donc le TERRAIN, pas la durée de session —
+  // ce n'est pas une fuite (mesuré : tas, textures et listeners restent plats sur 14 terrains).
+  //
+  // ⚠️ PHASER NE FAIT AUCUN CULLING DE LA LISTE D'AFFICHAGE. Vérifié dans les sources : `Camera.cull()`
+  // n'est appelé que par les couches de tilemap ; pour tout le reste, CHAQUE objet de la scène est
+  // parcouru, transformé et soumis au batch à chaque frame, qu'il soit à l'écran ou à 300 tuiles de là.
+  // Un terrain de fin porte ~600 objets pour ~60 visibles : 90 % du travail par frame est jeté par le
+  // GPU après coup. Sur un Mac ça se voit à peine (2 ms) ; sur un iPhone, où chaque objet coûte bien
+  // plus cher côté CPU, c'est exactement le ralentissement décrit — et il est CONSTANT pour un terrain
+  // donné, ce qui explique qu'il disparaisse en revenant sur un terrain court.
+  //
+  // On range donc le décor STATIQUE en tranches verticales et on ne rend visibles que celles qui
+  // touchent la vue. Le travail par frame se réduit à comparer deux entiers ; on ne touche aux objets
+  // que lorsque la tranche visible CHANGE.
+  private tranchesDecor = new Map<number, Phaser.GameObjects.GameObject[]>()
+  private trancheMin = 1
+  private trancheMax = -1
+
+  /** Un tir touche la pierre : il s'y écrase (ou détone). Partagé par tous les colliders de matière. */
+  private stopNetPierre!: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback
   private trampolineVisuels = new Map<Phaser.GameObjects.GameObject, Phaser.GameObjects.Image>()
   private nextBounceAt = 0
   private platforms!: Phaser.Physics.Arcade.StaticGroup
@@ -493,8 +522,10 @@ export class LevelScene extends Phaser.Scene {
         if (body.bottom > z.y + 18) return               // il est passé DESSOUS : pas de rebond
         if (this.time.now < this.nextBounceAt) return     // anti-rebond multiple sur une même frame
         this.nextBounceAt = this.time.now + 220
-        this.player.bounce()
-        audio.playSfx('schloung') // pas le 'jump' générique : un trampoline a son propre bruit
+        // LA VITESSE DE CHUTE FAIT LA PUISSANCE DU REBOND : on la lit AVANT que bounce() l'écrase.
+        const force = this.player.bounce(body.velocity.y)
+        // le son suit la puissance — un rebond deux fois plus haut qui sonne pareil ne se ressent pas
+        audio.playSfx('schloung', 0.8 + 0.5 * force) // pas le 'jump' générique : le trampoline a son bruit
         // détente visuelle du tapis + onde, pour que le rebond se VOIE autant qu'il se sente.
         // Deux DESSINS distincts (repos / écrasé) plutôt qu'un simple écrasement d'échelle : une toile
         // qu'on comprime ne rétrécit pas, elle se CREUSE — les ressorts s'allongent, le cadre ne bouge pas.
@@ -505,7 +536,7 @@ export class LevelScene extends Phaser.Scene {
             if (visuel.active) poseTrampoline(visuel, texTrampoline(this, false))
           })
         }
-        this.aoeRing(z.x, z.y + 6, 34, 0x64b5f6)
+        this.aoeRing(z.x, z.y + 6, 34 + 30 * force, 0x64b5f6) // l'onde grossit avec la puissance
       })
     }
 
@@ -540,6 +571,33 @@ export class LevelScene extends Phaser.Scene {
     // mandragore) réactivent explicitement la gravité APRÈS l'ajout au groupe.
     this.enemyProjectiles = this.physics.add.group({ allowGravity: false })
     this.playerProjectiles = this.physics.add.group({ allowGravity: false })
+
+    // ─── AUCUN TIR NE TRAVERSE LA PIERRE ──────────────────────────────────────────────────────────
+    //
+    // Retour du user : « je veux qu'aucune attaque ne passe à travers la pierre, graphiquement c'est
+    // bizarre sinon. »
+    //
+    // ⚠️ LA RÈGLE EST POSÉE SUR LES GROUPES, PAS PROJECTILE PAR PROJECTILE. Quelques tirs (flèche
+    // explosive, bambou en cloche, mandragore) déclaraient chacun leur propre collider au moment du
+    // lancer : tous les AUTRES — boules de feu, flèches simples, tirs des mobs — traversaient la roche
+    // sans rien heurter. Chaque nouvelle compétence repartait avec le même oubli. En s'abonnant une fois
+    // pour toutes aux deux GROUPES, un tir ne peut plus échapper à la règle, quelle que soit la
+    // compétence qui l'a créé.
+    //
+    // On ne prend QUE la matière pleine (roche, marches de pierre, parois de cuve) : les marches de
+    // TERRE sont one-way, on les franchit par le bas — une flèche qui s'y écraserait par en dessous
+    // serait aussi absurde que celle qui traverse le rocher.
+    this.stopNetPierre = (projObj) => {
+      const pj = projObj as Projectile
+      if (!pj.active) return
+      if (pj.explosive) { this.doArrowExplosion(pj); return } // la flèche explosive DÉTONE au contact
+      this.impactFx(pj.x, pj.y, 0xcfd8dc) // éclat de poussière de pierre
+      pj.destroy()
+    }
+    for (const grp of [this.playerProjectiles, this.enemyProjectiles]) {
+      this.physics.add.collider(grp, platforms, this.stopNetPierre)
+      this.physics.add.collider(grp, solidWalls, this.stopNetPierre)
+    }
 
     this.pickups = this.physics.add.group()
     this.physics.add.collider(this.pickups, platforms)
@@ -899,6 +957,9 @@ export class LevelScene extends Phaser.Scene {
     // l'escalier de lacs n'a PAS de paroi interne (openSide), donc rien n'y bloque la traversée.
     this.physics.add.collider(this.player, basinWalls)
     this.physics.add.collider(this.enemies, basinWalls, undefined, groundedEnemy)
+    // les parois de cuve sont de la pierre elles aussi : les tirs s'y écrasent (cf. stopNetPierre)
+    this.physics.add.collider(this.playerProjectiles, basinWalls, this.stopNetPierre)
+    this.physics.add.collider(this.enemyProjectiles, basinWalls, this.stopNetPierre)
 
     this.addAirPockets()
 
@@ -1087,6 +1148,12 @@ export class LevelScene extends Phaser.Scene {
     })
     this.game.events.emit('hud-refresh')
     this.showTutoOnce()
+
+    // ⚠️ EN TOUT DERNIER : le rangement du décor en tranches lit la liste d'affichage COMPLÈTE. Placé
+    // plus haut, il manquerait tout ce que la suite de create() ajoute — et ces objets-là resteraient
+    // dessinés en permanence, ce qui viderait le culling de son intérêt sans que rien ne le signale.
+    this.rangerLeDecor()
+    this.majTranchesVisibles()
   }
 
   // Tuto d'intro : panneau non bloquant rappelant les contrôles, fermé d'un tap.
@@ -4546,7 +4613,60 @@ export class LevelScene extends Phaser.Scene {
     this.eliteSfxAt = this.time.now + 2600 // le motif dure ~0,8 s : on laisse respirer entre deux
   }
 
+  /**
+   * Range le décor statique en tranches de LARGEUR_TRANCHE px le long de l'axe X.
+   *
+   * Appelé UNE FOIS en fin de create(), quand tout le terrain est posé. On ne prend que ce qui ne bouge
+   * pas et ne s'étend pas : pas de fond (il couvre tout le terrain, le masquer ferait un trou), pas
+   * d'objet épinglé à l'écran, pas de corps dynamique (mobs, ramassables — ils changeraient de tranche).
+   */
+  private rangerLeDecor() {
+    this.tranchesDecor.clear()
+    this.trancheMin = 1
+    this.trancheMax = -1
+    for (const o of this.children.list) {
+      const go = o as Phaser.GameObjects.Image
+      if (typeof go.getBounds !== 'function') continue
+      if (go.scrollFactorX !== 1) continue        // épinglé à l'écran (voile, HUD de scène)
+      // ⚠️ ON N'EMBARQUE QUE CE QUI EST DÉJÀ VISIBLE. Certains objets sont volontairement invisibles —
+      // la zone de déclenchement du trampoline, par exemple. Les ranger ici reviendrait à les RÉVÉLER
+      // dès qu'ils entrent dans la vue : le culling ne doit jamais rendre visible ce que le jeu a caché.
+      if (!go.visible) continue
+      // rien de MOBILE : un objet qui se déplace changerait de tranche sans qu'on le sache
+      const corps = (go as unknown as { body?: { physicsType?: number } }).body
+      if (corps && corps.physicsType !== Phaser.Physics.Arcade.STATIC_BODY) continue
+      const b = go.getBounds()
+      if (b.width <= 0 || b.width > 4000) continue // fond / grande nappe : jamais masqué
+      const t0 = Math.floor(b.left / LARGEUR_TRANCHE)
+      const t1 = Math.floor(b.right / LARGEUR_TRANCHE)
+      for (let t = t0; t <= t1; t++) {
+        const l = this.tranchesDecor.get(t)
+        if (l) l.push(o); else this.tranchesDecor.set(t, [o])
+      }
+      go.setVisible(false) // tout part caché ; la première frame révèle la tranche visible
+    }
+  }
+
+  /** Ne laisse visibles que les tranches touchant la vue. Ne fait rien tant que la vue ne change pas. */
+  private majTranchesVisibles() {
+    const cam = this.cameras.main
+    const t0 = Math.floor((cam.scrollX - MARGE_TRANCHE) / LARGEUR_TRANCHE)
+    const t1 = Math.floor((cam.scrollX + cam.width + MARGE_TRANCHE) / LARGEUR_TRANCHE)
+    if (t0 === this.trancheMin && t1 === this.trancheMax) return
+    for (let t = this.trancheMin; t <= this.trancheMax; t++) {
+      if (t >= t0 && t <= t1) continue
+      for (const o of this.tranchesDecor.get(t) ?? []) (o as Phaser.GameObjects.Image).setVisible(false)
+    }
+    for (let t = t0; t <= t1; t++) {
+      if (t >= this.trancheMin && t <= this.trancheMax) continue
+      for (const o of this.tranchesDecor.get(t) ?? []) (o as Phaser.GameObjects.Image).setVisible(true)
+    }
+    this.trancheMin = t0
+    this.trancheMax = t1
+  }
+
   update(_time: number, delta: number) {
+    this.majTranchesVisibles()
     // barre de chargement du panda : au-dessus de sa tête, elle se démonte seule à la fin
     this.playerCast?.update(this.time.now, this.player.x, this.player.y - this.player.displayHeight / 2 - 8)
     this.eliteAmbience()

@@ -3349,6 +3349,33 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   spawns.length = 0
   spawns.push(...cleanedSpawns)
 
+  // ─── AUCUN DÉCOR, AUCUN COFFRE ENCHÂSSÉ DANS LA PIERRE ────────────────────────────────────────
+  //
+  // Retour du user sur Vallon : « y a un trésor qui est collé à de la pierre et c'est bizarre ».
+  //
+  // Un prop sans altitude signifie « pose-le au sol » — le générateur d'un motif dit « un coffre par
+  // ici » sans connaître la géométrie assemblée, et c'est légitime. Mais la rangée du sol n'est pas
+  // toujours libre : une dalle de roche (socle de mesa, seuil de grotte) peut l'occuper, et le coffre
+  // se retrouvait dedans. Quatre coffres sur 132 étaient dans ce cas, dont celui de Vallon.
+  //
+  // ⚠️ ON DÉPLACE LE PROP DE CÔTÉ, ON NE LUI INVENTE PAS UNE ALTITUDE. Premier essai : remonter le prop
+  // au-dessus de la pile de pierre. Ça marchait à l'écran et ça cassait tout le reste — « sans altitude »
+  // est un CONTRAT que lisent aussi le rendu, le validateur d'atteignabilité des coffres et le test
+  // d'invariants (un coffre est soit au sol, soit exactement une rangée au-dessus d'une plateforme).
+  // Lui donner une altitude arbitraire faisait échouer la sélection de graine sur 81 tentatives, et le
+  // terrain retombait sur une géométrie non validée. Glisser d'une colonne préserve tous les contrats.
+  const solRock = (x: number) =>
+    rockBands.some((r) => x >= r.x && x < r.x + r.w && groundRow - 1 >= r.y && groundRow - 1 < r.y + r.h)
+  const trouEn = (x: number) => gaps.some((g) => x >= g.x && x < g.x + g.w)
+  const malPose = (x: number) => solRock(x) || trouEn(x)
+  for (const pr of props) {
+    if (pr.y !== undefined || !malPose(pr.x)) continue
+    for (let d = 1; d <= 14; d++) {
+      if (pr.x - d >= 1 && !malPose(pr.x - d)) { pr.x -= d; break }
+      if (pr.x + d < totalWidth - 1 && !malPose(pr.x + d)) { pr.x += d; break }
+    }
+  }
+
   // AU PLUS UN ÉLITE (mvp) par terrain (retour user : « un terrain avec deux élites c'est trop »).
   // On garde le PREMIER mob élite rencontré et on retire les élites suivants (ex. plaine tardive qui
   // sortait à la fois l'angeling du pool ET le poring doré du slot mvp).

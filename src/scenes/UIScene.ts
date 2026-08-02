@@ -43,6 +43,9 @@ export class UIScene extends Phaser.Scene {
   private buffParts: (Phaser.GameObjects.Rectangle | Phaser.GameObjects.Text)[] = []
   private buffBar!: Phaser.GameObjects.Rectangle
   private buffUntil = 0
+  private perfText!: Phaser.GameObjects.Text
+  private perfFrames = 0
+  private perfDepuis = 0
   private buffDuration = 0
   // badge « points à dépenser » : pastille dorée pulsante collée au panneau de vie
   private spBadge!: Phaser.GameObjects.Container
@@ -78,6 +81,8 @@ export class UIScene extends Phaser.Scene {
     this.buffParts = []
     this.buffUntil = 0
     this.buffDuration = 0
+    this.perfFrames = 0
+    this.perfDepuis = 0
 
     this.input.addPointer(3)
     // ZONE DU JOYSTICK = TOUT LE QUART BAS-GAUCHE (« la zone à gauche où on contrôle les mouvements du
@@ -93,6 +98,26 @@ export class UIScene extends Phaser.Scene {
     // plus large, donc la coordonnée 8 n'est PAS à 8 px du bord de l'écran mais à 8 + BLEED_X (~111 px
     // sur un iPhone en paysage). Le panneau de vie flottait ainsi au « milieu gauche » — exactement le
     // retour du user. Un HUD se colle à l'ÉCRAN ; seuls les panneaux centrés restent en 480.
+    // ─── TÉMOIN DE PERFORMANCE ────────────────────────────────────────────────────────────────
+    //
+    // Retour du user : « j'ai joué à Gorge et Ravin, ça va très très très lentement. »
+    //
+    // ⚠️ CE TÉMOIN EXISTE PARCE QUE JE NE REPRODUIS PAS LE PROBLÈME. Mesuré sur les 58 terrains en
+    // navigateur : temps de frame uniforme (~28 ms partout, Gorge et Ravin compris), et sur 14 terrains
+    // enchaînés, tas, textures, listeners et objets restent PLATS — l'ancienne fuite ne revient pas.
+    // Le ralentissement est donc propre à l'appareil (throttling thermique, mode économie d'énergie,
+    // Safari en arrière-plan…) ou à un contenu que mes sondes ne créent pas. Deviner un correctif ici
+    // reviendrait à toucher au hasard : une capture d'écran prise PENDANT le ralentissement tranche.
+    //
+    // Discret (gris, 10 px, coin haut-gauche sous le panneau) et quasi gratuit : un compteur incrémenté
+    // par frame, rafraîchi une fois par seconde. Il affiche les images/s et ce qui pourrait expliquer
+    // une chute — nombre d'objets affichés et de corps physiques dans le terrain.
+    // ⚠️ EN BAS À GAUCHE, pas sous le panneau de vie : à 82 px il passait derrière le bouton
+    // « Compétences » (constaté sur capture). Le coin bas-gauche est occupé par le joystick, mais celui-ci
+    // est invisible tant qu'on n'y pose pas le pouce — la ligne reste lisible sur une capture.
+    this.perfText = this.add.text(L(10), VIEW_H - 13, '', { fontSize: '10px', color: '#8fa3b0' })
+      .setOrigin(0, 0).setDepth(60)
+
     this.add.rectangle(L(8), 2, BAR_W + 16, 78, 0x0d1b2a, 0.6).setOrigin(0).setStrokeStyle(1, 0xffffff, 0.25)
     this.levelText = this.add.text(L(16), 6, '', { fontSize: '15px', color: '#ffffff', fontStyle: 'bold' })
     this.goldText = this.add.text(L(132), 7, '', { fontSize: '13px', color: '#ffd700' })
@@ -408,6 +433,19 @@ export class UIScene extends Phaser.Scene {
   }
 
   update(time: number) {
+    // témoin de perf : une addition par frame, un formatage par seconde
+    this.perfFrames++
+    if (time - this.perfDepuis >= 1000) {
+      const ips = Math.round((this.perfFrames * 1000) / (time - this.perfDepuis))
+      const lvl = this.scene.get('Level') as LevelScene | undefined
+      const objets = lvl?.children?.list.length ?? 0
+      const corps = lvl ? lvl.physics.world.bodies.size + lvl.physics.world.staticBodies.size : 0
+      this.perfText.setText(`${ips} ips · ${objets} obj · ${corps} corps`)
+      this.perfText.setColor(ips >= 45 ? '#8fa3b0' : ips >= 25 ? '#ffb74d' : '#ef5350')
+      this.perfFrames = 0
+      this.perfDepuis = time
+    }
+
     // l'énergie change en continu (régén) : on la lit directement sur le Player plutôt
     // que via un événement par frame
     const pl = (this.scene.get(this.levelKey) as LevelScene | undefined)?.player
