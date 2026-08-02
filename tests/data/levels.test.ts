@@ -223,7 +223,13 @@ describe('début accessible + déclustering', () => {
     expect(crowsAt('plaine-1').length, 'plaine-1 : zéro corbeau').toBe(0)
     for (const id of ['plaine-2', 'plaine-3']) {
       const crows = crowsAt(id).map((s) => s.x).sort((a, b) => a - b)
-      expect(crows.length, `${id}: trop de corbeaux`).toBeLessThanOrEqual(4)
+      // ⚠️ LE PLAFOND EST UNE DENSITÉ, PAS UN NOMBRE. Les terrains ont doublé de longueur : quatre
+      // corbeaux sur 250 tuiles et quatre sur 550, ce n'est pas la même expérience. Ce qui protège le
+      // début de jeu, c'est de ne pas croiser de nuée — donc un corbeau toutes ~70 tuiles au plus, plus
+      // l'espacement minimal vérifié juste en dessous. Un nombre fixe aurait rendu ces terrains DEUX
+      // FOIS plus cléments que voulu à mesure qu'ils s'allongent.
+      const plafondCorbeaux = Math.max(4, Math.round(LEVELS[id]!.widthTiles / 70))
+      expect(crows.length, `${id}: trop de corbeaux (plafond ${plafondCorbeaux})`).toBeLessThanOrEqual(plafondCorbeaux)
       // ESPACÉS : jamais deux corbeaux collés (pas de nuée piqueuse) — au moins la marge de déclustering.
       for (let i = 1; i < crows.length; i++) {
         expect(crows[i]! - crows[i - 1]!, `${id}: corbeaux en nuée`).toBeGreaterThanOrEqual(MIN_SPAWN_SPACING)

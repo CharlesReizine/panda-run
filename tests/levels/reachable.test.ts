@@ -458,7 +458,12 @@ describe('variété des motifs de niveau (couverture du catalogue)', () => {
       for (const k of kinds) count[k] = (count[k] ?? 0) + 1
       for (const [k, n] of Object.entries(count)) {
         if (STRUCT.has(k)) continue
-        expect(n, `${id}: ${k} posé ${n} fois`).toBeLessThanOrEqual(3)
+        // ⚠️ LE PLAFOND SUIT LA LONGUEUR. Trois occurrences sur dix modules et trois sur vingt, ce n'est
+        // pas la même monotonie : c'est une DENSITÉ qu'on protège, pas un compte. Les terrains ont
+        // doublé ; le plafond suit, sinon on interdirait à un terrain deux fois plus long d'être aussi
+        // varié qu'avant. Plancher à 3 pour ne rien relâcher sur les terrains courts.
+        const plafond = Math.max(3, Math.round(3 * kinds.length / 12))
+        expect(n, `${id}: ${k} posé ${n} fois (plafond ${plafond})`).toBeLessThanOrEqual(plafond)
       }
     }
   })
@@ -660,8 +665,17 @@ describe('R168 — niveaux plus longs, échelle-descente piégée, cascades vari
     const ws = Object.values(LEVELS).filter((l) => !l.boss && l.id !== 'epave-1').map((l) => l.widthTiles)
     const avg = ws.reduce((a, b) => a + b, 0) / ws.length
     expect(avg, `largeur moyenne = ${avg.toFixed(0)}`).toBeGreaterThan(220) // avant ~179
-    // PROGRESSION dans la plaine : le 1er terrain est plus court que le dernier
-    expect(LEVELS['plaine-1']!.widthTiles).toBeLessThan(LEVELS['plaine-7']!.widthTiles)
+    // ⚠️ LA PROGRESSION SE MESURE SUR UNE TENDANCE, PAS SUR DEUX ÉCHANTILLONS. La comparaison
+    // plaine-1 < plaine-7 tenait tant que tous les terrains suivaient la même formule de longueur. La
+    // longueur est désormais ADAPTATIVE (on vise ×2 et on redescend quand un terrain ne le supporte
+    // pas), donc deux voisins peuvent s'inverser sans que la progression d'ensemble en souffre. On
+    // compare donc le premier tiers du jeu au dernier — c'est la propriété qui compte pour le joueur.
+    const ordre = Object.values(LEVELS).filter((l) => !l.boss && l.id !== 'epave-1')
+    const tiers = Math.max(3, Math.floor(ordre.length / 3))
+    const moy = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length
+    const debut = moy(ordre.slice(0, tiers).map((l) => l.widthTiles))
+    const fin = moy(ordre.slice(-tiers).map((l) => l.widthTiles))
+    expect(fin, `début ${debut.toFixed(0)} → fin ${fin.toFixed(0)}`).toBeGreaterThan(debut)
   })
 
   it('ÉCHELLE-DESCENTE PIÉGÉE générée et jouable (échelle + trou mortel + passerelle coiffée de roche)', () => {

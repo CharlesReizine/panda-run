@@ -189,6 +189,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // true quand l'arme AFFICHÉE est un ARC : l'arc reste DROIT/horizontal (aucune inclinaison de repos
   // ni swing d'attaque, contrairement aux épées/bâtons). Calculé à chaque refreshWeapon.
   private weaponIsBow = false
+  // Jusqu'à quand l'arme reste visible après une attaque. Les tirs (arc, bâton) n'ont PAS de balayage
+  // — `attackSwing` reste à zéro — donc sans cette fenêtre l'arc n'apparaîtrait jamais.
+  private armeVisibleJusqua = 0
   // Halo de classe derrière l'arme (montée en gamme) : même texture que l'arme, teintée de la couleur
   // de classe, en fondu additif, échelle un peu plus grande → lueur qui suit rigidement l'arme.
   private weaponGlow: Phaser.GameObjects.Image | null = null
@@ -355,19 +358,21 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.hatImage.setScale(this.hatScale * Math.abs(this.scaleX), this.hatScale * Math.abs(this.scaleY))
     }
     if (this.weaponImage) {
-      // ─── EN NAGE, ON RANGE L'ARME ─────────────────────────────────────────────────────────────
-      // Retour du user : « quand on nage, à la limite fais pas le display d'arme, sauf si j'attaque ».
-      // Un panda qui fait la brasse en tenant son arc à bout de patte, c'est le genre de détail qui
-      // saute aux yeux : la pose de nage a ses deux pattes devant, l'arme n'a nulle part où être tenue.
-      // Elle réapparaît le temps du coup (attackSwing ≠ 0) puis se range à nouveau — on ne perd donc
-      // rien de la lisibilité du combat aquatique.
-      // ⚠️ LES GROSSES ÉPÉES GARDENT LEUR PROPRE RÈGLE (masquées au repos, révélées au balayage) : on
-      // ne touche pas à leur visibilité ici, sinon les deux logiques se marchent dessus et l'épée
-      // clignote — c'est précisément le « parfois il s'affiche, parfois non » qu'on cherche à éviter.
+      // ─── L'ARME NE SORT QUE POUR FRAPPER ──────────────────────────────────────────────────────
+      // Retour du user, élargi après essai : d'abord « quand on nage, fais pas le display d'arme sauf si
+      // j'attaque », puis « l'arme quand on se déplace doit être invisible et n'apparaître que quand on
+      // attaque, c'est moche sinon ».
+      //
+      // ⚠️ CE N'EST PLUS UNE EXCEPTION DE NAGE, C'EST LA RÈGLE. Une arme collée en permanence à la patte
+      // suit mal les poses (course, saut, échelle, brasse) : elle flotte à côté du corps au lieu d'être
+      // tenue. Les grosses épées appliquaient DÉJÀ cette règle depuis longtemps, avec leur propre
+      // mécanique de révélation au balayage — on ne fait donc qu'étendre à l'arc et au bâton ce qui
+      // valait pour la lame, et le code des grosses épées reste seul maître de leur visibilité (sans
+      // quoi les deux logiques se marchent dessus et l'arme clignote).
       if (!this.weaponIsBig) {
-        const range = this.swimming && this.attackSwing === 0
-        this.weaponImage.setVisible(!range)
-        this.weaponGlow?.setVisible(!range)
+        const auRepos = this.attackSwing === 0 && this.scene.time.now >= this.armeVisibleJusqua
+        this.weaponImage.setVisible(!auRepos)
+        this.weaponGlow?.setVisible(!auRepos)
       }
       // décalage avant propre à la classe (bâton du mage/sorcier poussé nettement devant le panda)
       const fwd = WEAPON_FWD_X[getPlayer().classId] ?? 0
@@ -542,6 +547,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // No-op sans arme (novice). L'ampleur suit un peu la classe (épée = grand arc franc).
   swingWeapon() {
     if (!this.weaponImage) return
+    // même pour un tir sans balayage : l'arme se montre le temps du geste
+    this.armeVisibleJusqua = this.scene.time.now + 420
     // Grosse épée : n'apparaît QUE pendant le coup (révélée ici, rétractée à la fin du retour au
     // repos). Les autres armes (arc/bâton) restent visibles en permanence.
     const big = this.weaponIsBig

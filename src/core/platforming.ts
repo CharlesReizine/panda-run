@@ -119,8 +119,17 @@ export const BOUNCE_RUN_MULT = 1.45
 // 12 tuiles, puis 19, puis 24 — une montée qu'on SENT sans qu'elle parte en orbite.
 //
 // En vitesses (h = v²/2g), la même chose s'écrit v_out = √(BOUNCE_SPEED² + G·v_in²).
-export const BOUNCE_GAIN = (Math.sqrt(5) - 1) / 2 // 0,618 — trois rebonds pour saturer, cf. ci-dessus
-export const BOUNCE_SPEED_MAX = BOUNCE_SPEED * Math.SQRT2 // plafond : le double de la hauteur de base
+// Gain tel que 1 + G + G² = 1,5 (le plafond ci-dessous) : c'est la condition pour que le TROISIÈME
+// rebond touche pile le plafond — ni le deuxième (on ne sentirait pas la montée), ni le cinquième (on
+// aurait renoncé avant). Racine positive de G² + G − 0,5 = 0.
+export const BOUNCE_GAIN = (Math.sqrt(3) - 1) / 2 // ≈ 0,366
+// ⚠️ PLAFOND ABAISSÉ À ×1,5 DE LA HAUTEUR DE BASE (il était au double). Retour du user après essai :
+// « le premier saut c'est normal, le deuxième ×2, le troisième ×3, là c'est nawak, c'est juste trop trop
+// haut ». À ×2 le troisième rebond montait à 24 tuiles — le panda sortait du cadre et on ne voyait plus
+// où l'on retombait. L'escalade reste nette (12 → 17 → 18 tuiles) mais tient dans ce que la caméra sait
+// montrer, ce qui est la vraie contrainte : un saut qu'on ne voit pas n'est pas un saut, c'est une perte
+// de contrôle.
+export const BOUNCE_SPEED_MAX = BOUNCE_SPEED * Math.sqrt(1.5)
 
 /**
  * Vitesse de rebond en fonction de la vitesse de CHUTE à l'impact.

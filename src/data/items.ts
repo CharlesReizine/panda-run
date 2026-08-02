@@ -224,7 +224,11 @@ export function rarityColor(rarity: Rarity = 'commun'): number {
 // à l'arrivée (plusieurs allers-retours de farm), épique réservé au mid-game, légendaire au-dessus de
 // ce que rapporte le jeu entier une fois — c'est un OBJECTIF, pas un achat.
 export const RARITY_PRICE: Record<Rarity, number> = {
-  commun: 300,
+  // 320 : ce barème sert de prix aux objets JAMAIS vendus en ville (forgés, butin), et il doit tomber
+  // dans la fourchette des prix affichés pour sa rareté. Le revenu du jeu a monté avec des terrains deux
+  // fois plus longs, les prix de Prontera ont suivi (+30 %), et 300 est passé sous le moins cher des
+  // communs en vitrine — un objet forgé se serait revendu moins cher que le pire article du marché.
+  commun: 320,
   rare: 1500,
   epique: 6500,
   legendaire: 30000,

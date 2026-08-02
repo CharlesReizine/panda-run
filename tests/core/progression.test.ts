@@ -7,7 +7,10 @@ describe('progression', () => {
   it('courbe croissante', () => {
     // le coût du niveau 1 suit le coefficient de la courbe (relevé quand les terrains ont été rallongés :
     // plus de monstres par terrain, donc plus d'XP, donc un niveau doit coûter davantage)
-    expect(xpToNext(1)).toBe(122)
+    // 235 : le coefficient suit la LONGUEUR et la DENSITÉ des terrains, qui viennent de doubler. Trouvé par
+    // bissection contre les invariants d'équilibrage — au-dessus le joueur arrive sous-niveau, en dessous
+    // des terrains deviennent triviaux. Valeur provisoire : le user a remis la passe d'équilibrage à plus tard.
+    expect(xpToNext(1)).toBe(235)
     expect(xpToNext(2)).toBeGreaterThan(xpToNext(1))
   })
 

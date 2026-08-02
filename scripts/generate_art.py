@@ -410,25 +410,26 @@ def detacher(png_bytes: bytes, slot: str = "weapon") -> "object":
 # sans angle ». Dans un jeu de plateforme vu de côté, un objet en perspective jure avec tout le reste — le
 # panda, les mobs et le décor sont dessinés à plat. D'où l'insistance : coupe latérale, aucune ellipse.
 DECORS = {
-    # ⚠️ CE N'EST PLUS UN TRAMPOLINE DE FOIRE, ET C'EST LE TROISIÈME JET. Le premier était un rendu 3D
-    # trois-quarts ; le deuxième, à plat, était juste — mais l'objet lui-même jurait : un engin de sport
-    # occidental au milieu d'un jeu kawaii asiatique. Le user a trouvé la bonne image à la place :
-    # « on pourrait avoir plutôt du linge qui sèche sur un drap, dans la même charte graphique un peu
-    # kawaii asiatique qu'on a là, genre linges blancs ». Un drap tendu entre deux perches, c'est la même
-    # mécanique (une toile qui rend l'énergie) dans le vocabulaire du jeu.
+    # ⚠️ QUATRIÈME JET, ET LE DÉFAUT EST TOUJOURS LE MÊME : LA POSE, PAS LE SUJET. Le modèle a compris
+    # « linge qui sèche » et a dessiné un drap PENDU à une corde, vertical, comme une bannière. Or ce
+    # drap est un TRAMPOLINE : ce qu'on doit lire, c'est une toile TENDUE À L'HORIZONTALE entre deux
+    # perches basses, comme la bâche que tendent les pompiers — sinon l'objet ne dit pas qu'on saute
+    # dessus. On décrit donc la POSE avant la matière, et on nomme l'objet de référence.
     "trampoline": (
-        "Un grand DRAP BLANC tendu entre deux perches de BAMBOU plantées dans le sol, comme du linge qui "
-        "sèche dans une cour japonaise. Vu STRICTEMENT DE PROFIL, de côté, en 2D PLATE comme un sprite de "
-        "jeu de plateforme : AUCUNE perspective, AUCUN angle, on ne voit PAS le dessus du drap. LARGE et "
-        "BAS (environ deux fois plus large que haut). Le drap est blanc cassé, très légèrement BOMBÉ vers "
-        "le haut, avec de fins plis d'ombre bleutés et deux petites pinces à linge en bois aux coins. "
-        "Perches de bambou vert clair avec leurs nœuds."
+        "Une toile de tissu BLANC tendue À PLAT, HORIZONTALEMENT, entre deux perches de BAMBOU basses "
+        "plantées dans le sol de part et d'autre — comme la bâche tendue des pompiers, ou un hamac tiré "
+        "bien à plat. La toile est TENDUE et légèrement BOMBÉE VERS LE HAUT en son milieu ; elle ne pend "
+        "PAS, elle ne flotte PAS, ce n'est PAS un drap suspendu à une corde. Vue STRICTEMENT DE PROFIL, "
+        "de côté, en 2D PLATE comme un sprite de jeu de plateforme : aucune perspective, aucun angle. "
+        "LARGE et BAS : environ trois fois plus large que haut. Cordelettes de chanvre attachant la toile "
+        "aux perches, petits plis d'ombre bleutés dans le tissu, bambou vert clair avec ses nœuds."
     ),
     "trampoline-saut": (
-        "Le MÊME drap blanc tendu entre deux perches de BAMBOU, vu STRICTEMENT DE PROFIL, de côté, en 2D "
-        "PLATE, AUCUNE perspective, AUCUN angle. Mais le drap est ÉCRASÉ : profondément CREUSÉ vers le bas "
-        "en cuvette, les perches de bambou ploient vers l'intérieur, le tissu se plisse fortement et de "
-        "petites lignes de vitesse marquent l'impact. Personne dessus."
+        "La MÊME toile de tissu blanc tendue à l'horizontale entre deux perches de BAMBOU basses, vue "
+        "STRICTEMENT DE PROFIL, en 2D PLATE, aucune perspective — mais ÉCRASÉE : la toile est profondément "
+        "CREUSÉE vers le bas en cuvette sous un choc, les perches de bambou ploient vers l'intérieur, le "
+        "tissu se plisse fortement et de petites lignes de vitesse marquent l'impact. Personne dessus. "
+        "LARGE et BAS, environ trois fois plus large que haut."
     ),
 }
 

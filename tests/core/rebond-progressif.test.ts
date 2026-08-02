@@ -41,8 +41,10 @@ describe('rebond de trampoline proportionnel à la chute', () => {
     const h3 = hauteur(bounceSpeedFrom(vitesseDeChuteDepuis(h2)))
     const plafond = hauteur(BOUNCE_SPEED_MAX)
 
-    expect(h2).toBeGreaterThan(h1 * 1.4) // la montée se VOIT dès le deuxième
-    expect(h2).toBeLessThan(plafond * 0.9) // …mais elle n'y est pas encore
+    expect(h2).toBeGreaterThan(h1 * 1.25) // la montée se VOIT dès le deuxième
+    // …mais elle n'y est pas encore. La marge est plus serrée qu'avant : le plafond ayant baissé (×2 →
+    // ×1,5 de la hauteur de base, sur retour du user), le deuxième rebond en est mécaniquement plus près.
+    expect(h2).toBeLessThan(plafond * 0.96)
     expect(h3).toBeCloseTo(plafond, 0) // le troisième touche le plafond
   })
 
@@ -53,15 +55,17 @@ describe('rebond de trampoline proportionnel à la chute', () => {
     expect(h).toBeCloseTo(plafond, 6)
   })
 
-  it('le gain vaut le nombre d\'or moins un — c\'est ce qui place la saturation au 3ᵉ', () => {
-    // G + G² = 1 : la condition pour que 1 + G + G² fasse exactement 2 (le plafond est le double
-    // de la hauteur de base). Écrit ici parce que la formule seule ne dit pas d'où sort 0,618.
-    expect(BOUNCE_GAIN + BOUNCE_GAIN * BOUNCE_GAIN).toBeCloseTo(1, 10)
+  it('le gain place la saturation au TROISIÈME rebond, par construction', () => {
+    // 1 + G + G² doit valoir exactement le plafond (×1,5 de la hauteur de base) : c'est cette égalité
+    // qui fait que le troisième rebond touche le plafond, ni le deuxième ni le cinquième. Écrit ici
+    // parce que la formule seule ne dit pas d'où sort 0,366 — et parce que le plafond a déjà bougé une
+    // fois (il était au double, le user a trouvé ça « nawak, juste trop trop haut »).
+    expect(1 + BOUNCE_GAIN + BOUNCE_GAIN * BOUNCE_GAIN).toBeCloseTo(1.5, 10)
   })
 
   it('le plafond reste dans une échelle jouable, pas en orbite', () => {
     const tuiles = hauteur(BOUNCE_SPEED_MAX) / TILE
-    expect(tuiles).toBeGreaterThan(18)
-    expect(tuiles).toBeLessThan(30)
+    expect(tuiles).toBeGreaterThan(14)
+    expect(tuiles).toBeLessThan(22)
   })
 })

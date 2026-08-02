@@ -47,7 +47,9 @@ describe('mobs de granularité (audit lot 3)', () => {
     { id: 'djinn-mineur', level: 23, biome: 'desert' },
     // 32 et non 30 : le rang Dijkstra du terrain où il vit a bougé avec les nouveaux motifs d'eau, et
     // le niveau des monstres en DÉCOULE (cf. core/mob-level). Le chiffre suit la carte, pas l'inverse.
-    { id: 'loup-des-neiges', level: 32, biome: 'montagne' },
+    // Ces niveaux DÉCOULENT du rang Dijkstra du terrain où le mob vit (cf. core/mob-level) : ils bougent
+    // quand la carte bouge, et la carte vient de doubler de longueur. Le chiffre suit la carte.
+    { id: 'loup-des-neiges', level: 30, biome: 'montagne' },
     { id: 'liche-mineure', level: 30, biome: 'cimetiere' },
     { id: 'kraken-juvenile', level: 40, biome: 'plage' },
     { id: 'cerbere', level: 42, biome: 'enfer' },

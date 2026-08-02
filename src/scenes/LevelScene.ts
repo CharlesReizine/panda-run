@@ -45,7 +45,14 @@ import { PORTEE_MENACE, lisser, tensionDe } from '../core/tension'
 // tranche visible ne traîne pas trop d'objets hors cadre, assez large pour que la liste ne change qu'une
 // fois toutes les ~40 frames de course. La marge évite qu'un objet apparaisse pile au bord.
 const LARGEUR_TRANCHE = 480
-const MARGE_TRANCHE = 160
+// ⚠️ MARGE PORTÉE À DEUX LARGEURS D'ÉCRAN. Retour du user : « on voit que tu affiches par bloc, donc
+// peut-être qu'il faut afficher plus que 3 blocs, mais genre 4 ou 5, pour éviter qu'on voie le terrain
+// apparaître au fur et à mesure. » À 160 px de marge, la tranche suivante se révélait à peine hors du
+// cadre : sur un écran large, ou en courant vite, l'apparition entrait dans le champ. À 1000 px on garde
+// en permanence quatre à cinq tranches, donc au moins un écran complet d'avance de chaque côté — le
+// culling redevient invisible, ce qui est sa seule qualité attendue. Le coût reste minime : on dessine
+// ~150 objets au lieu de ~100, contre 600 sans culling.
+const MARGE_TRANCHE = 1000
 
 const TRAMPO_W = 108
 
@@ -146,6 +153,7 @@ export class LevelScene extends Phaser.Scene {
   // que lorsque la tranche visible CHANGE.
   // ─── AMBIANCE : LA MUSIQUE SUIT LE DANGER ─────────────────────────────────────────────────────
   // Le calcul est dans core/tension.ts (pur, testé) ; ici on ne fait que l'alimenter et le lisser.
+  private suiviCamNormal = 0.1
   private tensionCourante = 0
   private tensionCible = 0
   private tensionDepuis = 0
@@ -1124,6 +1132,12 @@ export class LevelScene extends Phaser.Scene {
     // régression.
     this.cameras.main.setBounds(0, 0, widthPx, this.worldH)
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1)
+    // ⚠️ SUIVI VERTICAL PLUS VIF QUAND LE PANDA MONTE VITE. « Ou alors la caméra doit suivre le joueur en
+    // hauteur quand ça monte trop, mais là c'est pas possible » — si, et c'est même la bonne réponse : le
+    // problème d'un rebond très haut n'est pas la hauteur, c'est de ne plus voir où l'on retombe. Le
+    // lissage à 0,1 est confortable pour la marche mais traîne derrière une ascension de trampoline ; on
+    // le durcit le temps de la montée, puis on le relâche. Réglé dans update(), au plus près du mouvement.
+    this.suiviCamNormal = 0.1
 
     this.cursors = this.input.keyboard!.createCursorKeys()
     // clavier PC additionnel : ZQSD (AZERTY) et WASD (QWERTY) doublent les flèches —
@@ -4770,6 +4784,9 @@ export class LevelScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
+    // suivi vertical : vif tant que le panda s'élève vite (rebond de trampoline), normal sinon
+    const vy = (this.player?.body as Phaser.Physics.Arcade.Body | undefined)?.velocity.y ?? 0
+    this.cameras.main.setLerp(this.suiviCamNormal, vy < -700 ? 0.35 : this.suiviCamNormal)
     this.majTranchesVisibles()
     this.majMonstresProches()
     this.majTension(delta)

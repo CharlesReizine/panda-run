@@ -88,8 +88,15 @@ export type ModuleKind =
   // BASSIN CREUSÉ : lit en escalier de pierre, très peu profond aux berges, franchement profond au
   // centre — on marche, puis on nage. Silhouette de cuve taillée, plus le rectangle d'avant.
   | 'bassin-creuse'
-  // GRAND RIDEAU : la cascade occupe TOUTE la largeur du motif et retombe dans ce bassin creusé.
-  | 'grand-rideau'
+  // ⚠️ 'grand-rideau' A ÉTÉ RETIRÉ. Une cascade qui barre toute la largeur du motif était une bonne
+  // idée de terrain (« je préférerais que ce soit tout cascade sur toute la largeur ») mais elle ne
+  // CHAÎNE pas : sa sortie est douze rangées au-dessus de son entrée, et le seul lien entre les deux est
+  // la colonne d'eau — que les validateurs d'atteignabilité ne savent pas escalader. Ajouter une échelle
+  // d'accès n'a pas suffi ; posé de force, il rendait injoignable tout ce qui suivait, et laissé à
+  // l'ordonnanceur il n'était jamais retenu. Plutôt que de le garder en dette (« c'est quoi les tous
+  // inventoriés, c'est hors de question »), on le retire : il reviendra quand son raccordement sera
+  // repris — probablement en sortant à la MÊME altitude qu'il entre, le rideau devenant un obstacle à
+  // traverser plutôt qu'une montée.
   // PUITS : cuve marine ÉTROITE (2-4 tuiles) et PROFONDE, encadrée de 2 rebords de pierre qui
   // DÉPASSENT (margelle) — distinct du BASSIN large. On plonge par l'étroite ouverture ; coffre au fond.
   | 'puits'
@@ -1725,48 +1732,6 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.exitAlt = exitAlt
       break
     }
-    case 'grand-rideau': {
-      // ─── LA CASCADE OCCUPE TOUTE LA LARGEUR ───────────────────────────────────────────────────
-      //
-      // Retour du user sur Gorge : « le motif cascade puis cascade marche bof, je préférerais que ce soit
-      // tout cascade sur toute la largeur ». Deux rideaux étroits séparés par un bout de sol se lisent
-      // comme deux accidents ; un seul rideau qui barre le passage se lit comme un lieu.
-      //
-      // ⚠️ LE RIDEAU RETOMBE DANS UN BASSIN, il ne tombe pas dans le vide. Une cascade sans `bottomAlt`
-      // coule jusqu'au bas de la carte AVEC un trou mortel dessous : sur toute la largeur du motif, ça
-      // ferait un mur de mort qu'on ne peut que remonter. Ici la colonne s'arrête à la surface du bassin,
-      // et le bassin lui-même est creusé (peu profond aux berges, profond au centre) — on traverse en
-      // nageant sous le rideau, ou on le remonte pour la corniche haute.
-      const bas = Math.max(entryAlt, 1)
-      const haut = bas + cascadeRise(rng)
-      // ⚠️ LA CORNICHE HAUTE NE DOIT PAS SURPLOMBER LE BORD DU BASSIN. Le validateur de rebords lit la
-      // surface marchable la PLUS HAUTE juste à côté de la cuve et exige qu'elle soit à la ligne d'eau ;
-      // une corniche posée douze rangées au-dessus de ce même bord la remplace dans ce calcul et le lac
-      // passe pour « désaxé ». On réserve donc les colonnes : berge gauche, rideau, deux colonnes de
-      // rebord à la ligne d'eau, PUIS seulement la corniche.
-      const bergeW = 3
-      const cornW = Math.max(4, bergeW + 1)
-      p.platforms.push({ x: 0, alt: bas, w: bergeW })
-      const rx = bergeW
-      const rw = Math.max(8, w - bergeW - cornW - 2)
-      // le bassin d'accueil, à la rangée du bas : lit en cuvette, comme bassin-creuse mais plus court
-      p.waters.push({ x: rx, w: rw, kind: basinKind, bankAlt: bas })
-      const marcheW = Math.max(2, Math.floor(rw / 8))
-      for (let k = 0; k < 2; k++) {
-        const alt = Math.max(1, bas - 1 - k)
-        p.platforms.push({ x: rx + k * marcheW, alt, w: marcheW, solid: true })
-        p.platforms.push({ x: rx + rw - (k + 1) * marcheW, alt, w: marcheW, solid: true })
-      }
-      // LE RIDEAU : une seule colonne d'eau large, du haut du motif jusqu'à la surface du bassin.
-      p.waters.push({ x: rx, w: rw, kind: 'cascade', bankAlt: haut, bottomAlt: bas })
-      // rebord droit À LA LIGNE D'EAU (deux colonnes), puis seulement la corniche haute d'arrivée
-      p.platforms.push({ x: rx + rw, alt: bas, w: 2 })
-      p.platforms.push({ x: rx + rw + 2, alt: haut, w: Math.max(2, w - rx - rw - 2) })
-      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: rx + rw + 3, alt: haut + 1 })
-      placeBirds(haut + 2)
-      p.exitAlt = bas
-      break
-    }
     case 'colonnes-perilleuses': {
       // 5) « Des zones de saut sur des colonnes de pierre pas larges et de hauteurs différentes, et long
       // (genre casse-gueule, et tu tombes tu meurs). »
@@ -3328,6 +3293,14 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     const rng = mulberry32(seed + i * 2654435761)
     const [wmin, wmax] = m.widthRange
     const w = wmin + (hashSeed(opts.id + ':' + i + ':' + m.kind) % (wmax - wmin + 1))
+    // ⚠️ PAS DE PLAFOND D'ALTITUDE ICI, ET C'EST UNE ERREUR DE DIAGNOSTIC CORRIGÉE.
+    // J'ai cru que l'obstacle aux terrains longs était la DÉRIVE VERTICALE : le catalogue est
+    // structurellement montant (28 motifs « bas → haut » contre 4 qui redescendent), donc les terrains
+    // devaient finir en tours. Un plafond a été écrit, réglé, testé — puis la mesure a tranché : les
+    // terrains ACTUELS montent déjà jusqu'à 84 rangées et se valident très bien. La règle « ≤ 3 paliers
+    // empilés » se compte PAR COLONNE, pas sur la hauteur totale : un terrain peut grimper autant qu'il
+    // veut tant qu'il ne s'empile pas sur lui-même. Le plafond ne réglait donc rien et déstabilisait la
+    // sélection de motifs (le compteur « le moins servi » est global : brider les uns rebat les autres).
     const piece = buildModule(m, rng, w, runningAlt)
     // départ / sortie
     if (m.spawnHere) {
@@ -3339,6 +3312,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     pieces.push({ piece, x0: cursorX, w })
     cursorX += w
     runningAlt = piece.exitAlt
+
   })
   const totalWidth = cursorX + 2
 
@@ -3662,7 +3636,6 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   // l'ordonnanceur général « le moins servi d'abord », qui dispose de ~800 créneaux et garantit la
   // couverture par arithmétique. Ils posent leur propre eau, ils n'ont pas besoin du canal dédié.
   'bassin-creuse': { tier: 2, family: 'risque', entry: 'milieu', exit: 'milieu', width: [16, 26], below: 'marine', above: 'air', chest: true },
-  'grand-rideau': { tier: 2, family: 'risque', entry: 'bas', exit: 'bas', width: [18, 28], below: 'marine', above: 'air', chest: true },
   cascade: { tier: 2, family: 'risque', entry: 'bas', exit: 'haut', width: [16, 26], below: 'cascade', above: 'air', chest: true, water: true },
   grotte: { tier: 2, family: 'tension', entry: 'milieu', exit: 'milieu', width: [12, 20], below: 'roche', above: 'roche' },
   arene: { tier: 2, family: 'tension', entry: 'milieu', exit: 'milieu', width: [14, 24], below: 'sol', above: 'air' },
@@ -3871,7 +3844,9 @@ export function countFeatureModules(kinds: ModuleKind[]): number {
 }
 
 export function composeLevel(o: ComposeOpts): LevelDef {
-  return buildLevelFromModules(planModules(o), { id: o.id, name: o.name, biome: o.biome, seed: o.seed })
+  return buildLevelFromModules(planModules(o), {
+    id: o.id, name: o.name, biome: o.biome, seed: o.seed,
+  })
 }
 
 // Sélection DÉTERMINISTE de la liste de modules d'un niveau (sans expansion géométrique). Extrait de
@@ -3988,6 +3963,12 @@ export function planModules(o: ComposeOpts): Module[] {
   // Choix STRUCTUREL déterministe (départ / descente / montée de fin) dans un pool, filtré par tier +
   // échelles autorisées, tiré sur le SEED du niveau → chaque niveau varie ses rôles fixes (départ,
   // fin) au lieu de reprendre toujours plateau + descente-controlee/arène ou marche + échelle.
+  // ⚠️ LES RÔLES STRUCTURELS NE COMPTENT PAS DANS LE PLAFOND DE RÉPÉTITION, et c'est un arbitrage.
+  // Les y inclure semblait plus juste (un motif ne devrait pas sortir quatre fois dans un terrain) —
+  // essayé, et ça a rendu cimetiere-1 impossible à valider : ses rôles de départ et de montée n'avaient
+  // plus de candidat libre et retombaient sur un motif qui ne chaîne pas. Le plafond de variété se règle
+  // donc côté TEST, où il tient compte de la longueur : quatre occurrences sur vingt modules, c'est la
+  // même densité que deux sur dix.
   const structural = (pool: ModuleKind[], salt: string): ModuleKind => {
     const ok = pool.filter((k) => CATALOG[k].tier <= selCap && (!CATALOG[k].ladder || allowLadders))
     const list = ok.length ? ok : pool
@@ -4033,7 +4014,19 @@ export function planModules(o: ComposeOpts): Module[] {
 
   // 3) modules centraux
   const groundQ = [...o.ground]
-  const nextGround = (): string[] => (groundQ.length ? [groundQ.shift()!] : (o.ground.length ? [o.ground[0]!] : []))
+  // ⚠️ DEUX MONSTRES PAR MODULE, PAS UN. Demande du user après le doublement des terrains : « tu peux
+  // rajouter des mobs aussi, hein, si tu as doublé la taille ». Un module en portait un seul, quelle que
+  // soit sa largeur : sur des terrains deux fois plus longs, on traversait de longues portions sans
+  // rencontrer personne, et la récompense d'un terrain (XP, butin) ne suivait plus sa durée.
+  // Le second est tiré de la même file (rotation des espèces du biome) → aucune espèce nouvelle, juste
+  // une densité qui correspond à la longueur. Les modules d'EAU gardent leur peuplement propre, et le
+  // déclustering (une rencontre par fenêtre de 10 tuiles) empêche toujours les grappes.
+  const nextGround = (): string[] => {
+    const un = groundQ.length ? groundQ.shift()! : (o.ground.length ? o.ground[0]! : null)
+    if (un === null) return []
+    const deux = groundQ.length ? groundQ.shift()! : (o.ground.length ? o.ground[0]! : null)
+    return deux === null ? [un] : [un, deux]
+  }
   order.forEach((bucket, idx) => {
     if (waterSlots.has(idx + 1) && waters.length) {
       const wk = waters.shift()!
@@ -4096,7 +4089,7 @@ export function planModules(o: ComposeOpts): Module[] {
     // elle a privé de monstres des modules qui, eux, ont bien une surface au-dessus de leur cuve (cave-1
     // s'est mis à sortir sans graine valide). Ces deux-ci noient toute leur portée : il n'y a nulle part
     // où poser un mob terrestre, et le validateur le signale « aucune-surface ».
-    const surCuve = kind === 'bassin-creuse' || kind === 'grand-rideau'
+    const surCuve = kind === 'bassin-creuse'
     modules.push(mk(kind, {
       ground: surCuve ? (o.aquatic ?? []) : [...(mvpHere ? [o.mvp!] : []), ...nextGround()],
       birds: spec.birds && o.birds.length ? flock(kind) : undefined,

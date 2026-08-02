@@ -109,7 +109,12 @@ export function computeMonsterLevels(): Record<string, number> {
   const result: Record<string, number> = {}
   for (const m of Object.values(MONSTERS)) {
     const r = FIRST_RANK[m.id]
-    if (r === undefined) { result[m.id] = 1; continue }
+    // ⚠️ PAS DE RANG, PAS D'AVIS. Un monstre qui n'apparaît dans aucun terrain n'a pas de rang Dijkstra :
+    // renvoyer 1 revenait à affirmer qu'un géant de fin de jeu est un monstre de niveau 1, et à faire
+    // échouer les tests de cohérence des variantes géantes à chaque fois qu'un remaniement de terrains
+    // déplaçait une espèce. On garde donc le niveau écrit dans la fiche : c'est le seul chiffre qui ait
+    // du sens quand la carte n'en dit rien.
+    if (r === undefined) { result[m.id] = m.level; continue }
     let level = baseLevelForRank(r)
     if (isGardien(m.id)) level += GARDIEN_LEVEL_BONUS
     else if (m.boss) level += BOSS_LEVEL_BONUS

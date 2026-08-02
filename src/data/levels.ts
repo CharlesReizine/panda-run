@@ -94,13 +94,37 @@ export interface LevelDef {
   boss?: string
 }
 
-import { composeLevel, planModules, countFeatureModules, type ComposeOpts, type ModuleKind, type Tier, CATALOG } from './level-modules'
+import { buildLevelFromModules, composeLevel, planModules, countFeatureModules, type ComposeOpts, type Module, type ModuleKind, type Tier, CATALOG } from './level-modules'
 import {
   overStackedColumns, unlevelWaterBanks, deadEndSurfaces, suspendedWaterBanks,
   unreachablePlatforms, laddersToNowhere, unreachableLadders, unreachableChests,
   oversizedGaps, oversizedLadders, monstersOffSurface, startExitProblems, caveCeilingClearance,
   longEmptyFlats, monstersInRock,
 } from '../core/level-validator'
+
+// ─── PLANS DE TERRAIN PRÉCALCULÉS ────────────────────────────────────────────────────────────────
+//
+// Les terrains étaient reconstruits à CHAQUE DÉMARRAGE : jusqu'à 161 graines par terrain, chacune
+// validée contre quatorze invariants — ~11 s avant le premier pixel. C'est ce coût, et lui seul, qui
+// interdisait de les allonger : à ×2 la génération montait à 44 s.
+//
+// ⚠️ ON GRAVE LE PLAN DE MODULES, PAS LA GRAINE. Graver la graine ne reproduit rien : `planModules`
+// consulte un compteur GLOBAL (« le motif le moins servi d'abord ») que la recherche fait avancer des
+// centaines de fois, donc le choix des motifs dépend de tout ce qui a été composé avant.
+// `buildLevelFromModules`, lui, est PUR — mêmes modules, même graine, même terrain.
+import { PLANS_GRAVES } from './level-seeds.generated'
+
+/** Plan retenu par chaque terrain — ce que le générateur grave (cf. tests/data/graines.test.ts). */
+export const PLANS_CHOISIS: Record<string, { seed: string; modules: Module[] }> = {}
+
+const glob = globalThis as {
+  process?: { env?: Record<string, string | undefined> }
+  __PANDA_GRAINES_INTERDITES?: Record<string, string[]>
+}
+const REGRAVER = glob.process?.env?.GEN_GRAINES === '1'
+// Graines écartées par le générateur entre deux passes : un terrain peut sortir valide à la composition
+// et fautif APRÈS les passes appliquées à toute la liste (cf. la boucle de gravure).
+const graineInterdite = (id: string, seed: string) => !!glob.__PANDA_GRAINES_INTERDITES?.[id]?.includes(seed)
 import { MONSTERS } from './monsters'
 
 // Motifs (module kinds) EFFECTIVEMENT retenus par niveau de terrain — peuplé pendant la construction
@@ -482,7 +506,16 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   //
   // Le ×2 attend donc la seule correction qui le rende gratuit : PRÉCALCULER les terrains à la
   // construction du bundle au lieu de les régénérer sur le téléphone du joueur. C'est le prochain lot.
-  const midCount = midBase + 2 + Math.floor((rank - 1) / 2) + (idx % 2)
+  // ⚠️ TERRAINS DEUX FOIS PLUS LONGS, À LA DEMANDE DU USER : « je veux des niveaux plus longs et un jeu
+  // jouable, et pas juste du plat ». La longueur EST le budget de motifs : à dix créneaux centraux,
+  // l'ordonnanceur « le moins servi d'abord » ne peut pas faire tourner 82 motifs sans radoter.
+  //
+  // Ce n'était pas faisable tant que les terrains se reconstruisaient au démarrage (11 s → 44 s). Les
+  // plans sont désormais gravés à la construction, donc la longueur ne coûte plus rien au joueur. Le
+  // facteur est ADAPTATIF : on vise ×2, et on redescend terrain par terrain si aucune graine ne donne un
+  // résultat jouable — mieux vaut un terrain un peu plus court qu'un terrain dont les plateformes ne se
+  // rejoignent pas.
+  const midBaseCount = midBase + 2 + Math.floor((rank - 1) / 2) + (idx % 2)
     + (FORCES_EFFECTIFS[id]?.length ?? 0)
   // Échelles autorisées PARTOUT, y compris plaine-1 : sans échelle, une chute dans un creux/bassin
   // pouvait piéger le joueur sans remontée possible (retour joueur « je tombe et je peux pas remonter »).
@@ -555,7 +588,7 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
     ...(birdCap !== undefined ? { birdCap } : {}),
     ...(pool.aquatic ? { aquatic: pool.aquatic } : {}),
     ...(useMvp ? { mvp: pool.mvp } : {}),
-    midCount,
+    midCount: midBaseCount, // remplacé par la longueur retenue (facteur adaptatif, plus bas)
     allowLadders,
     ...(early ? { composeCap, earlyBoost: true, featureFloor } : {}),
     stony: STONY_BIOMES.has(biome),
@@ -626,26 +659,71 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   // (cave-1 sortait ainsi avec un monstre posé dans le vide). Doubler la réserve coûte quelques
   // dixièmes de seconde au démarrage, uniquement sur les terrains qui en ont besoin : les autres
   // s'arrêtent à la première graine propre, comme avant.
-  const salts = [`${id}-${ending}`, ...Array.from({ length: 160 }, (_, i) => `${id}-${ending}-${i}`)]
-  let chosen = salts[0]!
-  let level = composeLevel({ ...base, seed: chosen })
-  // On garde la PREMIÈRE graine conforme à TOUS les invariants (clean) ET portant assez de GROS MOTIFS
-  // (featureFloor, 0 hors early → premier clean, comportement historique). Repli sur le premier clean
-  // si aucune graine n'atteint le plancher de motifs (jamais observé, mais garantit un niveau valide).
-  for (const maxFlat of [16, 18, 20]) {
-    let firstClean: string | null = null
-    let found = false
-    for (const seed of salts) {
-      const l = composeLevel({ ...base, seed })
-      if (!cleanAt(l, maxFlat)) continue
-      found = true
-      if (firstClean === null) { firstClean = seed; level = l; chosen = seed }
-      const feats = countFeatureModules(planModules({ ...(base as ComposeOpts), seed }).map((m) => m.kind))
-      if (feats >= featureFloor) { level = l; chosen = seed; break }
-    }
-    if (found) break // seuil satisfait → on ne relâche pas davantage
+  // CHEMIN NORMAL : on rejoue le plan gravé. Aucune recherche, aucune validation au démarrage — celle-ci
+  // a eu lieu à la gravure, et tests/data/graines.test.ts la rejoue intégralement à chaque exécution.
+  const grave = REGRAVER ? undefined : PLANS_GRAVES[id]
+  if (grave) {
+    const l = buildLevelFromModules(grave.modules as Module[], { id, name, biome, seed: grave.seed })
+    LEVEL_MODULE_KINDS[id] = grave.modules.map((m) => m.kind as ModuleKind)
+    PLANS_CHOISIS[id] = grave as { seed: string; modules: Module[] }
+    return l
   }
-  LEVEL_MODULE_KINDS[id] = planModules({ ...(base as ComposeOpts), seed: chosen }).map((m) => m.kind)
+
+  // CHEMIN DE GRAVURE (et repli si la table manque une entrée).
+  const nSalts = REGRAVER ? 400 : 160
+  const salts = [`${id}-${ending}`, ...Array.from({ length: nSalts }, (_, i) => `${id}-${ending}-${i}`)]
+    .filter((sd) => !graineInterdite(id, sd))
+  // ⚠️ ON CONSERVE LE PLAN DE L'ESSAI RETENU ; ON NE LE REFABRIQUE PAS. `planModules` fait avancer un
+  // compteur global que chaque essai incrémente : le rappeler après la recherche, même avec la même
+  // graine, ne redonne PAS le même plan. Le premier jet validait un terrain et en gravait un autre.
+  let chosen = salts[0]!
+  let midChoisi = midBaseCount
+  let planChoisi = planModules({ ...({ ...base, midCount: midChoisi } as ComposeOpts), seed: chosen })
+  let level = buildLevelFromModules(planChoisi, { id, name, biome, seed: chosen })
+  // ⚠️ UN MOTIF IMPOSÉ EST UNE PRÉFÉRENCE, PAS UN CONTRAT. Certains terrains se voient imposer des motifs
+  // à géométrie exigeante (grande cascade, échelles de lianes…). Quand le reste du terrain change autour
+  // d'eux — et il change à chaque fois qu'on touche au générateur, le compteur « le moins servi » étant
+  // global — la combinaison peut devenir insoluble : la recherche épuise alors toutes ses graines et
+  // retombe SILENCIEUSEMENT sur la première, non validée. On tente donc une seconde passe SANS les motifs
+  // imposés. Perdre un motif sur un terrain est un moindre mal ; livrer un terrain injouable n'en est pas un.
+  const variantes: ComposeOpts[] = [base as ComposeOpts]
+  if (base.forcedKinds?.length) {
+    const sansForces = { ...base } as ComposeOpts & { forcedKinds?: ModuleKind[] }
+    delete sansForces.forcedKinds
+    variantes.push(sansForces)
+  }
+  // ⚠️ PLANCHER À ×1,5, SAUF POUR LES TERRAINS « HAUTS ». Le repli existe pour ceux qui ne supportent
+  // pas la pleine longueur, mais laisser tomber jusqu'à ×1 produit un terrain deux fois plus court que
+  // ses voisins : le joueur y arrive sur-niveau et le traverse en trente secondes (plaine-7 est tombé à
+  // un quart de l'XP attendue pour son rang). Les deux terrains « hauts », eux, gardent l'échappatoire
+  // complète : leurs motifs imposés de grande hauteur ne rentrent pas toujours, et un terrain court vaut
+  // mieux qu'un terrain dont les plateformes ne se rejoignent pas.
+  const facteurs = REGRAVER ? (TERRAINS_HAUTS[id] ? [2, 1.75, 1.5, 1.25, 1] : [2, 1.75, 1.5]) : [1]
+  let trouve = false
+  for (const variante of variantes) {
+  for (const facteur of facteurs) {
+    const mid = Math.max(6, Math.round(midBaseCount * facteur))
+    const b = { ...variante, midCount: mid } as ComposeOpts
+    for (const maxFlat of [16, 18, 20]) {
+      let found = false
+      for (const seed of salts) {
+        const pl = planModules({ ...b, seed })
+        const l = buildLevelFromModules(pl, { id, name, biome, seed })
+        if (!cleanAt(l, maxFlat)) continue
+        if (!found) { found = true; planChoisi = pl; level = l; chosen = seed; midChoisi = mid }
+        if (countFeatureModules(pl.map((m) => m.kind)) >= featureFloor) {
+          planChoisi = pl; level = l; chosen = seed; midChoisi = mid; break
+        }
+      }
+      if (found) { trouve = true; break }
+    }
+    if (trouve) break
+  }
+    if (trouve) break
+  }
+  void midChoisi
+  LEVEL_MODULE_KINDS[id] = planChoisi.map((m) => m.kind)
+  PLANS_CHOISIS[id] = { seed: chosen, modules: planChoisi }
   return level
 }
 
