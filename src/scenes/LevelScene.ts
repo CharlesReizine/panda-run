@@ -7,6 +7,7 @@ import { Projectile } from '../entities/Projectile'
 import { Prop } from '../entities/Prop'
 import { FlameWall } from '../entities/FlameWall'
 import { MONSTERS } from '../data/monsters'
+import type { MonsterDef } from '../core/types'
 import { PROPS, estCoffre } from '../data/props'
 import { MATERIALS } from '../data/materials'
 import { ITEMS, rarityColor } from '../data/items'
@@ -145,6 +146,9 @@ export class LevelScene extends Phaser.Scene {
   private tranchesDecor = new Map<number, Phaser.GameObjects.GameObject[]>()
   private trancheMin = 1
   private trancheMax = -1
+
+  // Fiches de spawn : la LISTE des monstres du terrain, indépendante des entités réellement instanciées.
+  private fichesSpawn: { def: MonsterDef; x: number; yTile: number; mort: boolean; pv: number | null; vivant: Enemy | null }[] = []
 
   /** Un tir touche la pierre : il s'y écrase (ou détone). Partagé par tous les colliders de matière. */
   private stopNetPierre!: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback
@@ -633,17 +637,22 @@ export class LevelScene extends Phaser.Scene {
       return this.levelDef.spawns.map((s) => ({ ...s, monsterId: remap.get(s.monsterId) ?? s.monsterId }))
     })()
 
-    for (const s of cappedSpawns) {
-      // s.y présent → monstre posé sur une corniche en hauteur (pieds sur son dessus) ; sinon au sol.
-      const yTile = s.y ?? this.groundRow
-      // On fait APPARAÎTRE le monstre AU-DESSUS de la surface (il retombe et se cale dessus). Les mobs
-      // GÉANTS ('grand', ×1,55) sont bien plus HAUTS : avec l'offset fixe de 40px, leurs pieds naissaient
-      // SOUS le sol → coincés dedans (retour user : « ours rentré dans le sol, peut plus bouger »). On
-      // relève donc l'offset selon le gabarit → jamais d'apparition enfoncée dans la roche/le sol.
-      const def = MONSTERS[s.monsterId]!
-      const off = def.size === 'grand' ? 84 : def.size === 'petit' ? 30 : 40
-      this.enemies.add(new Enemy(this, s.x * TILE, yTile * TILE - off, def))
-    }
+    // ─── LES MONSTRES N'EXISTENT QU'AUTOUR DU JOUEUR ──────────────────────────────────────────────
+    //
+    // Demande du user : « on peut pas afficher les monstres à mesure qu'on se rapproche plutôt que tous
+    // en permanence, pour rendre le jeu plus léger ? Genre ils n'existent que sur 3 largeurs d'écran et
+    // réapparaissent ? »
+    //
+    // C'est le pendant du culling du décor, en plus fort : un décor hors écran ne coûte que son rendu,
+    // un monstre hors écran coûte AUSSI son IA, son corps physique et ses colliders — à chaque frame,
+    // pour un ennemi que personne ne voit. Un terrain de fin en porte une trentaine.
+    //
+    // ⚠️ UN MONSTRE TUÉ NE REVIENT JAMAIS. C'est le piège évident de ce mécanisme : recréer à l'approche
+    // ce qu'on a détruit à l'éloignement transforme le moindre aller-retour en ferme à XP. Chaque fiche
+    // de spawn garde donc son état — mort ou vivant — et les PV du monstre au moment où il a disparu :
+    // on s'éloigne d'un ours entamé, on le retrouve entamé.
+    this.fichesSpawn = cappedSpawns.map((s) => ({ def: MONSTERS[s.monsterId]!, x: s.x * TILE, yTile: s.y ?? this.groundRow, mort: false, pv: null, vivant: null }))
+    this.majMonstresProches()
 
     // le groupe applique ses defaults (allowGravity: true, immovable: false) à chaque ajout et
     // écraserait sinon les setAllowGravity(false)/setImmovable(true) posés dans Prop — sans ça,
@@ -4665,8 +4674,44 @@ export class LevelScene extends Phaser.Scene {
     this.trancheMax = t1
   }
 
+  /**
+   * Fait exister les monstres proches, retire ceux qui s'éloignent.
+   *
+   * PORTÉE : trois largeurs d'écran, comme demandé. Assez large pour qu'un monstre soit toujours en place
+   * bien avant d'entrer dans le champ (jamais d'apparition sous le nez du joueur), assez étroite pour que
+   * la trentaine de monstres d'un terrain se réduise à une poignée d'actifs. On retire un peu plus loin
+   * qu'on ne crée (hystérésis) : sans ça, un monstre pile à la frontière serait détruit et recréé à
+   * chaque pas — le remède coûterait plus cher que le mal.
+   */
+  private majMonstresProches() {
+    const cam = this.cameras.main
+    const centre = cam.scrollX + cam.width / 2
+    const portee = cam.width * 1.5      // 3 largeurs d'écran, centrées sur la vue
+    const oubli = portee + cam.width / 2 // on ne retire qu'au-delà : hystérésis anti-clignotement
+    for (const f of this.fichesSpawn) {
+      if (f.mort) continue
+      const d = Math.abs(f.x - centre)
+      if (!f.vivant && d <= portee) {
+        // On fait APPARAÎTRE le monstre AU-DESSUS de la surface (il retombe et se cale dessus). Les mobs
+        // GÉANTS ('grand', ×1,55) sont bien plus HAUTS : avec l'offset fixe de 40px, leurs pieds naissaient
+        // SOUS le sol → coincés dedans (retour user : « ours rentré dans le sol, peut plus bouger »).
+        const off = f.def.size === 'grand' ? 84 : f.def.size === 'petit' ? 30 : 40
+        const e = new Enemy(this, f.x, f.yTile * TILE - off, f.def)
+        if (f.pv !== null) e.hp = f.pv // il revient dans l'état où on l'a laissé
+        e.fiche = f
+        this.enemies.add(e)
+        f.vivant = e
+      } else if (f.vivant && d > oubli) {
+        f.pv = f.vivant.hp
+        f.vivant.retirerHorsPortee() // et surtout PAS destroy() : cf. la méthode
+        f.vivant = null
+      }
+    }
+  }
+
   update(_time: number, delta: number) {
     this.majTranchesVisibles()
+    this.majMonstresProches()
     // barre de chargement du panda : au-dessus de sa tête, elle se démonte seule à la fin
     this.playerCast?.update(this.time.now, this.player.x, this.player.y - this.player.displayHeight / 2 - 8)
     this.eliteAmbience()

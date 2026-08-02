@@ -96,6 +96,10 @@ const MOB_DROWN_HP_FRAC_PER_S = 0.12 // fraction des PV max perdue par seconde u
 export class Enemy extends Phaser.Physics.Arcade.Sprite {
   monster: MonsterDef
   hp: number
+  // Fiche de spawn d'origine (cf. LevelScene.majMonstresProches). Le monstre n'existe que lorsque le
+  // joueur est proche ; sa fiche, elle, survit à ses disparitions et retient s'il est MORT — sans quoi
+  // un simple aller-retour le ressusciterait, et le terrain deviendrait une ferme à XP.
+  fiche: { mort: boolean; pv: number | null; vivant: unknown } | null = null
   private levelScene: LevelScene
   private nextActionAt = 0
   private nextShootAt = 0
@@ -287,6 +291,7 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private dieRagdoll(overkill: number) {
     if (!this.active || this.ragdolling) return
     this.scene.events.emit('enemy-died', this) // XP/loot au point de mort
+    if (this.fiche) { this.fiche.mort = true; this.fiche.vivant = null } // définitif : il ne réapparaîtra pas
     this.bar.destroy()
     this.lvlText.destroy()
     this.tierText?.destroy()
@@ -339,6 +344,35 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private die(grantReward: boolean) {
     if (!this.active) return
     if (grantReward) this.scene.events.emit('enemy-died', this)
+    if (this.fiche) { this.fiche.mort = true; this.fiche.vivant = null } // définitif : il ne réapparaîtra pas
+    this.bar.destroy()
+    this.lvlText.destroy()
+    this.tierText?.destroy()
+    this.eliteAura?.destroy()
+    this.zzz?.destroy()
+    this.burnTimer?.remove()
+    this.snareFx?.destroy()
+    this.fearFx?.destroy()
+    this.slowFx?.destroy()
+    this.meleeFx?.destroy()
+    this.castBar?.destroy()
+    this.destroy()
+  }
+
+  /**
+   * Retire le monstre parce que le JOUEUR S'EST ÉLOIGNÉ — pas parce qu'il est mort.
+   *
+   * ⚠️ NE PAS APPELER destroy() DIRECTEMENT. Un Enemy traîne une demi-douzaine de satellites créés dans
+   * la scène, pas en enfants : barre de vie, étiquette de niveau, aura d'élite, « zzz », barre
+   * d'incantation, effets d'entrave, et un timer de brûlure. `destroy()` sur le sprite les laisserait
+   * tous derrière — des barres de vie flottant au-dessus du vide, et une fuite d'objets à chaque
+   * éloignement, c'est-à-dire tout l'inverse du but recherché.
+   *
+   * Aucune récompense, aucun effet de mort, et la fiche reste marquée VIVANTE : le monstre reviendra
+   * quand on se rapprochera, avec les PV qu'on lui avait laissés.
+   */
+  retirerHorsPortee() {
+    if (!this.active) return
     this.bar.destroy()
     this.lvlText.destroy()
     this.tierText?.destroy()
