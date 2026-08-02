@@ -50,6 +50,20 @@ function texTrampoline(scene: Phaser.Scene, ecrase: boolean): string {
   return ecrase ? 'prop-trampoline-saut' : 'prop-trampoline'
 }
 
+/**
+ * Habille un trampoline : largeur imposée, hauteur DÉDUITE des proportions du dessin.
+ *
+ * ⚠️ ON N'IMPOSE PAS LA HAUTEUR. Les deux illustrations n'ont pas le même format (l'état écrasé porte
+ * des lignes de vitesse au-dessus du cadre, il est donc plus haut), et les forcer toutes deux dans
+ * 108×54 aplatirait la seconde. Origine en bas : quelle que soit la hauteur, l'engin reste POSÉ au même
+ * endroit, et le surplus part vers le haut — exactement là où l'impact doit se voir.
+ */
+function poseTrampoline(img: Phaser.GameObjects.Image, tex: string): void {
+  const src = img.scene.textures.get(tex).getSourceImage()
+  const ratio = src.height / Math.max(1, src.width)
+  img.setTexture(tex).setOrigin(0.5, 1).setDisplaySize(TRAMPO_W, TRAMPO_W * ratio)
+}
+
 // biomes → piste musicale ; 'carriere' n'a pas d'ambiance dédiée → repli sur 'montagne'
 const BIOME_TRACKS: Record<string, MusicTrack> = {
   plaine: 'plaine', foret: 'foret', desert: 'desert', cave: 'cave', jungle: 'jungle',
@@ -399,10 +413,11 @@ export class LevelScene extends Phaser.Scene {
     for (const tr of this.levelDef.trampolines ?? []) {
       const px = tr.x * TILE + TILE / 2
       const solY = (tr.y + 1) * TILE // le dessus de la surface qui porte l'engin : il se POSE dessus
-      const img = this.add.image(px, solY, texTrampoline(this, false))
-        .setOrigin(0.5, 1).setDisplaySize(TRAMPO_W, TRAMPO_H).setDepth(-2)
-      // respiration lente : un engin inerte à l'écran passe pour du décor
-      this.tweens.add({ targets: img, scaleY: img.scaleY * 0.94, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+      const img = this.add.image(px, solY, texTrampoline(this, false)).setDepth(-2)
+      poseTrampoline(img, texTrampoline(this, false))
+      // ⚠️ PLUS DE « RESPIRATION » EN BOUCLE. Un tween permanent sur scaleY se battait avec le changement
+      // d'état : à chaque rebond on redimensionne le sprite, et le tween reprenait la main la frame d'après
+      // (engin qui grandit, puis rétrécit). Les deux dessins suffisent à le rendre vivant.
       const tapisY = solY - TRAMPO_H + 14 // hauteur de la toile, où le rebond se déclenche
       const zone = this.physics.add.staticImage(px, tapisY, texTrampoline(this, false)).setVisible(false)
       zone.setDisplaySize(TRAMPO_W - 12, 18)
@@ -478,9 +493,9 @@ export class LevelScene extends Phaser.Scene {
         // qu'on comprime ne rétrécit pas, elle se CREUSE — les ressorts s'allongent, le cadre ne bouge pas.
         const visuel = this.trampolineVisuels.get(z)
         if (visuel) {
-          visuel.setTexture(texTrampoline(this, true)).setDisplaySize(TRAMPO_W, TRAMPO_H)
+          poseTrampoline(visuel, texTrampoline(this, true))
           this.time.delayedCall(170, () => {
-            if (visuel.active) visuel.setTexture(texTrampoline(this, false)).setDisplaySize(TRAMPO_W, TRAMPO_H)
+            if (visuel.active) poseTrampoline(visuel, texTrampoline(this, false))
           })
         }
         this.aoeRing(z.x, z.y + 6, 34, 0x64b5f6)

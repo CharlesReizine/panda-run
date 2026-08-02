@@ -430,6 +430,47 @@ def prompt_decor(nom: str) -> str:
     )
 
 
+
+def retirer_damier(im):
+    """Efface le DAMIER que le modèle peint parfois « pour figurer la transparence ».
+
+    ⚠️ C'EST UN FOND PEINT, PAS DE L'ALPHA. Le prompt l'interdit noir sur blanc, et le modèle le dessine
+    quand même une fois sur deux : deux gris très clairs alternés, en pixels pleinement opaques. Résultat
+    à l'écran : un rectangle à carreaux collé derrière l'objet.
+
+    On part des BORDS, jamais d'un « remplace tous les pixels clairs » : le dessin contient lui aussi des
+    blancs (reflets, lignes de vitesse), et un remplacement global les percerait. Ce qui n'est pas relié
+    au bord reste intact, par construction.
+    """
+    from collections import deque
+
+    im = im.convert("RGBA")
+    w, h = im.size
+    px = im.load()
+
+    def clair(c):
+        return c[0] > 214 and c[1] > 214 and c[2] > 214 and max(c[:3]) - min(c[:3]) < 14
+
+    vus = bytearray(w * h)
+    file = deque()
+    for x in range(w):
+        for y in (0, h - 1):
+            if clair(px[x, y]): file.append((x, y)); vus[y * w + x] = 1
+    for y in range(h):
+        for x in (0, w - 1):
+            if clair(px[x, y]): file.append((x, y)); vus[y * w + x] = 1
+    n = 0
+    while file:
+        x, y = file.popleft()
+        px[x, y] = (0, 0, 0, 0); n += 1
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < w and 0 <= ny < h and not vus[ny * w + nx] and clair(px[nx, ny]):
+                vus[ny * w + nx] = 1
+                file.append((nx, ny))
+    return im, n
+
+
 def finaliser_decor(im):
     """Recadre au plus près du dessin SANS le remettre dans un carré : on garde ses proportions."""
     from PIL import Image
@@ -437,8 +478,11 @@ def finaliser_decor(im):
     boite = im.getbbox()
     if boite:
         im = im.crop(boite)
-    if im.width > 512:
-        im = im.resize((512, max(1, round(im.height * 512 / im.width))), Image.LANCZOS)
+    # 256 px de côté au plus : c'est le plafond de VRAM que tests/perf/art-budget fait respecter aux
+    # décors (un PNG de 512 coûte quatre fois plus de mémoire résidente pour un objet affiché à 108 px).
+    grand = max(im.width, im.height)
+    if grand > 256:
+        im = im.resize((max(1, round(im.width * 256 / grand)), max(1, round(im.height * 256 / grand))), Image.LANCZOS)
     return im
 
 
@@ -821,6 +865,15 @@ def main():
         return
 
     filtres = [f for f in args.only if f != "only"]
+    if args.decor and args.repair:
+        # Rattrapage des fichiers DÉJÀ écrits : même nettoyage, sans repasser par le réseau.
+        from PIL import Image
+        for f in sorted(ART.glob("decor-*.png")):
+            im, efface = retirer_damier(Image.open(f))
+            finaliser_decor(im).save(f)
+            print(f"  {f.name} : {efface} px de fond peint retirés → {Image.open(f).size}")
+        return
+
     if args.decor:
         cibles = [{"id": n, "name": n, "slot": "decor", "decor": True} for n in DECORS]
         if filtres:
@@ -845,8 +898,10 @@ def main():
             print(f"[{i}/{len(cibles)}] decor-{c['id']} … ", end="", flush=True)
             try:
                 brut, modele = generer(creds, project, c)
-                im = detacher(brut, "decor")
+                im, efface = retirer_damier(detacher(brut, "decor"))
                 finaliser_decor(im).save(ART / f"decor-{c['id']}.png")
+                if efface:
+                    print(f"(damier peint retiré : {efface} px) ", end="")
                 print(f"ok ({modele})")
             except Exception as e:  # noqa: BLE001
                 print(f"ÉCHEC — {str(e)[:200]}")
