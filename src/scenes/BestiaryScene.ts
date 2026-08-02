@@ -2,7 +2,7 @@ import Phaser from 'phaser'
 import { MONSTERS } from '../data/monsters'
 import { getPlayer } from '../state'
 import type { MonsterDef } from '../core/types'
-import { renderMonsterCard, monsterKind, css, SILHOUETTE_TINT } from './monster-card'
+import { renderMonsterCard, monsterKind, css, SILHOUETTE_TINT, textureMonstre } from './monster-card'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 import { installUiClickSound } from '../ui/click-sound'
 
@@ -81,7 +81,7 @@ export class BestiaryScene extends Phaser.Scene {
       const seen = this.discovered(m)
       this.add.rectangle(cx, cy, cellW - 8, cellH - 8, 0x000000, 0.3).setStrokeStyle(1, 0xffffff, 0.15)
         .setInteractive({ useHandCursor: true }).on('pointerdown', () => this.renderDetail(m))
-      const sprite = this.add.image(cx, cy - 18, `monster-${m.id}`).setDisplaySize(40, 40)
+      const sprite = this.add.image(cx, cy - 18, textureMonstre(this, m)).setDisplaySize(40, 40)
       if (!seen) sprite.setTint(SILHOUETTE_TINT).setAlpha(0.85) // silhouette sombre tant que pas tué
       this.add.text(cx, cy + 18, seen ? m.name : '???', { fontSize: '12px', color: seen ? '#ffffff' : '#78909c', align: 'center', wordWrap: { width: cellW - 14 } }).setOrigin(0.5, 0)
       this.badge(cx, cy - 40, m, '10px')

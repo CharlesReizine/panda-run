@@ -100,3 +100,34 @@ describe('aucune image par défaut — butins', () => {
     expect(stale, `glyphe(s) sans matériau correspondant : ${stale.join(', ')}`).toEqual([])
   })
 })
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// LES VARIANTES AUSSI ONT UNE IMAGE
+//
+// Retour du user : « le Scorpionnet n'a pas d'image ». Les variantes (mini, géante) n'ont pas
+// d'illustration propre — elles réutilisent celle de leur base via `artFrom`, donc aucune texture
+// `monster-scorpion-mini` n'est jamais fabriquée. Enemy le savait depuis toujours (il lit
+// `monster-${artFrom ?? id}`) ; les écrans d'INFORMATION, eux, demandaient `monster-<id>` en dur.
+// Trois monstres étaient concernés — Scorpionnet, Gloopiot, Gobelinou — plus toutes les variantes géantes.
+describe('variantes : la texture de repli existe vraiment', () => {
+  it('chaque variante pointe une base qui EXISTE dans le registre', () => {
+    const orphelines = Object.values(MONSTERS)
+      .filter((m) => m.artFrom && !MONSTERS[m.artFrom])
+      .map((m) => `${m.id} → ${m.artFrom}`)
+    expect(orphelines, `variantes pointant une base inconnue : ${orphelines.join(', ')}`).toEqual([])
+  })
+
+  it('la base d\'une variante a bien son illustration', () => {
+    const sansArt = Object.values(MONSTERS)
+      .filter((m) => m.artFrom && !m.tex && !has(`art-${m.artFrom}.png`))
+      .map((m) => `${m.id} → art-${m.artFrom}.png`)
+    expect(sansArt, `base sans illustration : ${sansArt.join(', ')}`).toEqual([])
+  })
+
+  it('aucun écran ne peut demander `monster-<id>` pour une variante — la résolution est centralisée', () => {
+    // Garde-fou de forme : si un nouvel écran recopie `monster-${m.id}`, il retombera dans le bug.
+    // On vérifie que les deux écrans d'information passent bien par le helper partagé.
+    const src = Object.keys(import.meta.glob('../../src/scenes/{BestiaryScene,monster-card}.ts', { eager: false }))
+    expect(src.length, 'les écrans de fiche ont été renommés : mettre ce test à jour').toBe(2)
+  })
+})

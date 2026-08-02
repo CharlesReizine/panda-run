@@ -336,6 +336,11 @@ def finaliser(im, slot: str = "weapon"):
     """
     from PIL import Image
 
+    # Les DÉCORS ne passent pas par le cadrage carré : on rend l'image telle quelle, l'appelant la
+    # recadre en gardant ses proportions (cf. finaliser_decor).
+    if slot == "decor":
+        return im
+
     boite = im.split()[-1].getbbox()
     if boite:
         im = im.crop(boite)
@@ -392,6 +397,51 @@ def detacher(png_bytes: bytes, slot: str = "weapon") -> "object":
     return finaliser(im, slot)
 
 
+# ─── DÉCORS DU TERRAIN (hors catalogue d'objets) ────────────────────────────────────────────────────
+# Les objets sont lus dans items.ts ; un élément de terrain, lui, n'a pas de fiche. Ce petit catalogue
+# tient les sujets « libres » qu'on veut illustrer quand même, avec leur cadrage propre.
+#
+# ⚠️ CADRAGE DIFFÉRENT DES OBJETS : pas de recadrage carré. Un trampoline est un objet LARGE (le user :
+# « est pas assez large, fait ×3 ») ; le forcer dans un carré 128×128 obligerait le jeu à l'étirer, et
+# une toile étirée cesse de ressembler à une toile. On garde donc les proportions du dessin.
+DECORS = {
+    "trampoline": (
+        "Un trampoline de foire vu de FACE, LARGE et BAS (environ deux fois plus large que haut). "
+        "Cadre en BOIS clair verni avec des pieds obliques, toile en TISSU tendu bleu vif à surpiqûres, "
+        "ressorts métalliques apparents tout autour du cadre. Toile légèrement BOMBÉE vers le haut, au repos."
+    ),
+    "trampoline-saut": (
+        "Le MÊME trampoline de foire vu de FACE, large et bas, cadre en BOIS clair et toile en TISSU bleu, "
+        "mais ÉCRASÉ : la toile est profondément CREUSÉE vers le bas en cuvette, les ressorts sont ÉTIRÉS, "
+        "de petites lignes de vitesse et un nuage de poussière montrent l'impact. Personne dessus."
+    ),
+}
+
+
+def prompt_decor(nom: str) -> str:
+    return (
+        f"{STYLE} {DECORS[nom]} "
+        "L'objet SEUL, entier, vu de face, personne dessus, aucun décor derrière. "
+        # On repique les interdits du cadre d'objet (fond peint, damier, texte) mais PAS son
+        # « icône d'inventaire lisible à 40 px » : un élément de terrain se regarde à sa taille réelle
+        # dans le décor, et le demander en icône donnerait un dessin trapu et surdétaillé.
+        + CADRE_ALPHA.replace("Icône d'objet d'inventaire, l'objet SEUL au centre, cadré serré, ", "")
+                     .replace(" Doit rester lisible en tout petit (40 px).", "")
+    )
+
+
+def finaliser_decor(im):
+    """Recadre au plus près du dessin SANS le remettre dans un carré : on garde ses proportions."""
+    from PIL import Image
+
+    boite = im.getbbox()
+    if boite:
+        im = im.crop(boite)
+    if im.width > 512:
+        im = im.resize((512, max(1, round(im.height * 512 / im.width))), Image.LANCZOS)
+    return im
+
+
 def generer(creds, project, item) -> tuple:
     """Renvoie (octets PNG, nom du modèle utilisé). Essaie les modèles dans l'ordre de MODELES."""
     import requests
@@ -402,7 +452,7 @@ def generer(creds, project, item) -> tuple:
             f"https://{REGION}-aiplatform.googleapis.com/v1/projects/{project}"
             f"/locations/{REGION}/publishers/google/models/{modele}:{methode}"
         )
-        prompt = prompt_pour(item, alpha=alpha)
+        prompt = prompt_decor(item["id"]) if item.get("decor") else prompt_pour(item, alpha=alpha)
         if methode == "generateContent":
             corps = {
                 "contents": [{"role": "user", "parts": [{"text": prompt}]}],
@@ -738,6 +788,8 @@ def main():
     ap.add_argument("--repair-only", nargs="*", default=None, metavar="ID",
                     help="retire la plaque de fond de ces objets précis (contourne la détection), puis sort")
     ap.add_argument("--repair", action="store_true", help="avec --audit : retire les plaques de fond détectées")
+    ap.add_argument("--decor", action="store_true",
+                    help="génère les DÉCORS de terrain (trampoline…) au lieu du catalogue d'objets")
     ap.add_argument("--comptes", action="store_true", help="liste les comptes de service disponibles et sort")
     ap.add_argument("--compte", default=None, help="compte de service à utiliser (sous-chaîne du nom)")
     ap.add_argument("--limit", type=int, default=0, help="s'arrête après N objets")
@@ -769,6 +821,38 @@ def main():
         return
 
     filtres = [f for f in args.only if f != "only"]
+    if args.decor:
+        cibles = [{"id": n, "name": n, "slot": "decor", "decor": True} for n in DECORS]
+        if filtres:
+            cibles = [c for c in cibles if any(f in c["id"] for f in filtres)]
+        if not args.force:
+            cibles = [c for c in cibles if not (ART / f"decor-{c['id']}.png").exists()]
+        if not cibles:
+            print("Rien à générer côté décor. 🎉")
+            return
+        if args.list:
+            for c in cibles:
+                print(f"  decor-{c['id']}.png")
+            return
+        if args.dry:
+            for c in cibles:
+                print(f"\n── decor-{c['id']}.png ──\n{prompt_decor(c['id'])}")
+            return
+        creds, project, compte = charger_credentials(args.env, args.compte)
+        print(f"Compte « {compte} » · projet Vertex {project} · région {REGION}")
+        ART.mkdir(parents=True, exist_ok=True)
+        for i, c in enumerate(cibles, 1):
+            print(f"[{i}/{len(cibles)}] decor-{c['id']} … ", end="", flush=True)
+            try:
+                brut, modele = generer(creds, project, c)
+                im = detacher(brut, "decor")
+                finaliser_decor(im).save(ART / f"decor-{c['id']}.png")
+                print(f"ok ({modele})")
+            except Exception as e:  # noqa: BLE001
+                print(f"ÉCHEC — {str(e)[:200]}")
+            time.sleep(0.4)
+        return
+
     items = lire_items()
     dessines = set() if args.dessines else chapeaux_dessines()
     cibles = [it for it in items if args.force or not a_un_visuel(it, dessines)]

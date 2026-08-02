@@ -36,6 +36,20 @@ import { CastBar } from '../entities/cast-bar'
 import { skillSfx } from '../audio/skill-sfx'
 import { flammeGain, flammeIntervalle, flammeAudible, FLAMME_PORTEE } from '../core/flame-ambience'
 
+// TRAMPOLINE : gabarit à l'écran. 108 px ≈ 3,4 tuiles, soit trois fois le premier jet — « est pas assez
+// large, fait ×3 ». Hauteur fixée à part plutôt que déduite du format de l'image : selon qu'on affiche
+// l'illustration ou le repli procédural, les proportions diffèrent, et un engin qui change de taille
+// avec la présence d'un fichier serait un piège de plateforme.
+const TRAMPO_W = 108
+const TRAMPO_H = 54
+
+/** Texture du trampoline, illustrée si elle a été générée, procédurale sinon. */
+function texTrampoline(scene: Phaser.Scene, ecrase: boolean): string {
+  const art = ecrase ? 'art-trampoline-saut' : 'art-trampoline'
+  if (scene.textures.exists(art)) return art
+  return ecrase ? 'prop-trampoline-saut' : 'prop-trampoline'
+}
+
 // biomes → piste musicale ; 'carriere' n'a pas d'ambiance dédiée → repli sur 'montagne'
 const BIOME_TRACKS: Record<string, MusicTrack> = {
   plaine: 'plaine', foret: 'foret', desert: 'desert', cave: 'cave', jungle: 'jungle',
@@ -375,33 +389,26 @@ export class LevelScene extends Phaser.Scene {
     // positive) et ses pieds doivent être au-dessus du tapis. Sans la première, traverser le tapis par le
     // bas déclencherait un rebond vers le haut — on se retrouverait catapulté en montant une échelle
     // voisine. Sans la seconde, effleurer le bord relancerait un rebond en boucle.
+    //
+    // ⚠️ TROIS FOIS PLUS LARGE QUE LE PREMIER JET, sur retour du user (« est pas assez large, fait ×3 »).
+    // Ce n'est pas qu'une question de goût : un tapis d'une seule tuile se rate, et un engin qu'on rate
+    // passe pour cassé. À 3,4 tuiles, on tombe dessus sans viser — ce qui est le comportement voulu.
+    // La ZONE DE DÉCLENCHEMENT suit la largeur du dessin (moins une marge), sinon on rebondirait dans le
+    // vide au-dessus du cadre, ou pire : on traverserait la toile visible sans rien déclencher.
     this.trampolines = this.physics.add.staticGroup()
     for (const tr of this.levelDef.trampolines ?? []) {
       const px = tr.x * TILE + TILE / 2
-      const py = tr.y * TILE + TILE / 2
-      const img = this.add.image(px, py, 'prop-trampoline').setDepth(-2)
+      const solY = (tr.y + 1) * TILE // le dessus de la surface qui porte l'engin : il se POSE dessus
+      const img = this.add.image(px, solY, texTrampoline(this, false))
+        .setOrigin(0.5, 1).setDisplaySize(TRAMPO_W, TRAMPO_H).setDepth(-2)
       // respiration lente : un engin inerte à l'écran passe pour du décor
-      this.tweens.add({ targets: img, scaleY: 0.9, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
-      const zone = this.physics.add.staticImage(px, py - 4, 'prop-trampoline').setVisible(false)
-      zone.body.setSize(TILE * 1.6, 14).updateFromGameObject()
+      this.tweens.add({ targets: img, scaleY: img.scaleY * 0.94, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+      const tapisY = solY - TRAMPO_H + 14 // hauteur de la toile, où le rebond se déclenche
+      const zone = this.physics.add.staticImage(px, tapisY, texTrampoline(this, false)).setVisible(false)
+      zone.setDisplaySize(TRAMPO_W - 12, 18)
+      ;(zone.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject()
       this.trampolines.add(zone)
       this.trampolineVisuels.set(zone, img)
-    }
-    if ((this.levelDef.trampolines ?? []).length) {
-      this.physics.add.overlap(this.player, this.trampolines, (_pl, zObj) => {
-        const z = zObj as Phaser.Physics.Arcade.Image
-        const body = this.player.body as Phaser.Physics.Arcade.Body
-        if (body.velocity.y <= 0) return                 // il monte : on ne le renvoie pas
-        if (body.bottom > z.y + 18) return               // il est passé DESSOUS : pas de rebond
-        if (this.time.now < this.nextBounceAt) return     // anti-rebond multiple sur une même frame
-        this.nextBounceAt = this.time.now + 220
-        this.player.bounce()
-        audio.playSfx('jump')
-        // détente visuelle du tapis + onde, pour que le rebond se VOIE autant qu'il se sente
-        const visuel = this.trampolineVisuels.get(z)
-        if (visuel) this.tweens.add({ targets: visuel, scaleY: 0.55, duration: 90, yoyo: true })
-        this.aoeRing(z.x, z.y + 6, 34, 0x64b5f6)
-      })
     }
 
     for (const br of this.levelDef.bridges ?? []) {
@@ -449,6 +456,36 @@ export class LevelScene extends Phaser.Scene {
     this.physics.add.collider(this.player, platforms)
     // collision one-way : validée seulement quand le panda retombe sur le dessus
     this.physics.add.collider(this.player, oneWay, undefined, this.landsFromAbove)
+
+    // ⚠️ L'ABONNEMENT AUX TRAMPOLINES SE FAIT ICI, PAS LÀ-HAUT AVEC LEUR CONSTRUCTION, ET C'EST VITAL.
+    // Il était enregistré au moment de poser les tapis — soit ~50 lignes AVANT `new Player()`. Il
+    // passait donc `undefined` comme premier objet, ce que `physics.add.overlap` accepte sans broncher :
+    // ça n'explose qu'à la première frame, dans le moteur, en « undefined is not an object (evaluating
+    // 'e.isParent') ». Résultat : TOUT niveau portant un trampoline plantait au chargement — Piste en
+    // tête. Règle à retenir : un collider/overlap ne se déclare qu'une fois ses DEUX objets construits.
+    if ((this.levelDef.trampolines ?? []).length) {
+      this.physics.add.overlap(this.player, this.trampolines, (_pl, zObj) => {
+        const z = zObj as Phaser.Physics.Arcade.Image
+        const body = this.player.body as Phaser.Physics.Arcade.Body
+        if (body.velocity.y <= 0) return                 // il monte : on ne le renvoie pas
+        if (body.bottom > z.y + 18) return               // il est passé DESSOUS : pas de rebond
+        if (this.time.now < this.nextBounceAt) return     // anti-rebond multiple sur une même frame
+        this.nextBounceAt = this.time.now + 220
+        this.player.bounce()
+        audio.playSfx('jump')
+        // détente visuelle du tapis + onde, pour que le rebond se VOIE autant qu'il se sente.
+        // Deux DESSINS distincts (repos / écrasé) plutôt qu'un simple écrasement d'échelle : une toile
+        // qu'on comprime ne rétrécit pas, elle se CREUSE — les ressorts s'allongent, le cadre ne bouge pas.
+        const visuel = this.trampolineVisuels.get(z)
+        if (visuel) {
+          visuel.setTexture(texTrampoline(this, true)).setDisplaySize(TRAMPO_W, TRAMPO_H)
+          this.time.delayedCall(170, () => {
+            if (visuel.active) visuel.setTexture(texTrampoline(this, false)).setDisplaySize(TRAMPO_W, TRAMPO_H)
+          })
+        }
+        this.aoeRing(z.x, z.y + 6, 34, 0x64b5f6)
+      })
+    }
 
     this.enemies = this.physics.add.group()
     // Les AÉRIENS (oiseaux) traversent le décor : on les exclut des colliders terrain via ce
@@ -533,77 +570,82 @@ export class LevelScene extends Phaser.Scene {
     // un coffre "tombe" (gravité réactivée) dès qu'il rejoint le groupe
     // PANNEAUX « SAUT DE LA FOI » (plongeoir) : décor pur (poteau + flèche vers le bas), dessiné via les
     // primitives — pas un Prop destructible, aucune collision. Invite à plonger dans le lac en contrebas.
-    // ─── AQUEDUCS / VIADUCS DÉCORATIFS ──────────────────────────────────────────────────────────
-    // « Des ponts en pierre, 0 gameplay difficile, juste c'est stylé, avec un bel arrondi en dessous et une
-    // largeur variable. En dessous, soit c'est de l'eau (pas atteignable mais jolie), soit c'est du vide. »
+    // ─── AQUEDUCS / VIADUCS : UN TYPE DE TERRAIN, PAS UN DESSIN ─────────────────────────────────
+    // « Les aqueducs, je veux pas que ça soit décoratif dessiné, je veux que ça soit de la matière sur
+    // laquelle on peut marcher. C'est, au lieu d'avoir un terrain tout plat, parfois on a un aqueduc ou un
+    // pont, et c'est joliii. »
     //
-    // ⚠️ TOUT EST DESSINÉ EN FOND, SANS AUCUN CORPS PHYSIQUE. Pas de collision, pas de surface : c'est du
-    // décor. Un aqueduc marchable serait entré dans tous les calculs d'atteignabilité et de piège, et il
-    // aurait fallu le rendre joignable — pour un élément dont le seul rôle est de faire une belle image.
+    // Le TABLIER est une vraie plateforme, posée par le module 'aqueduc' avec le reste du terrain : ce
+    // qu'on dessine ici, c'est uniquement la MAÇONNERIE SOUS ce tablier. Elle n'a pas de corps — on ne
+    // marche pas sur une pile — mais elle n'est pas non plus « du décor » : elle occupe exactement
+    // l'emprise d'un morceau de sol qui a été retiré, et elle descend jusqu'à ce que le sol reprend.
     //
-    // L'arrondi est tracé arc par arc plutôt qu'avec une image : la largeur est variable (3 à 6 arches),
-    // donc une texture aurait dû être étirée, et un arrondi étiré cesse d'être un arrondi.
+    // ⚠️ CE QUI CLOCHAIT AVANT : un bandeau de pierre de hauteur FIXE, qui s'arrêtait en plein ciel —
+    // « des trucs dégueulasses qui volent ». Une pile de pont se lit par ses APPUIS : tant qu'on ne voit
+    // pas où elle se pose, l'œil n'y voit pas un ouvrage mais une bavure. D'où `a.h`, la hauteur réelle
+    // jusqu'au lit de la rivière (ou jusque hors cadre au-dessus d'un gouffre), et un tracé en PILES +
+    // ARCS plutôt qu'en aplat : on voit à travers, donc on voit que ça porte.
     for (const a of this.levelDef.arches ?? []) {
-      // ⚠️ DEPTH −8 : DEVANT le décor de fond, DERRIÈRE tout le jouable. L'image de fond est à −28 et les
-      // couches de parallaxe à −25/−22 : un aqueduc à −46 passait DERRIÈRE elles, donc invisible (constaté
-      // sur capture). Les éléments de terrain vivent entre −5 et −1, d'où cette bande intermédiaire.
+      // DEPTH −8 : devant le fond (−28) et les couches de parallaxe (−25/−22), derrière tout le jouable
+      // (−5 à −1). L'ouvrage appartient au terrain, il ne doit ni masquer le panda ni se noyer dans le ciel.
       const g = this.add.graphics().setDepth(-8)
-      const x0 = a.x * TILE, y0 = a.y * TILE, wpx = a.w * TILE
-      const nArches = Math.max(3, Math.min(6, Math.round(a.w / 3.2)))
-      const pasX = wpx / nArches
-      const rayon = pasX / 2
-      const hPile = rayon * 1.5 // hauteur des piles sous la clé de voûte
-      const basY = y0 + rayon + hPile
-      // ⚠️ PIERRE FRANCHE, PAS FANTÔME. Premier essai en gris pâle à 78 % d'opacité : sur un fond de forêt
-      // clair, l'aqueduc se lisait comme un filigrane. Un élément décoratif doit RECULER, pas disparaître —
-      // on garde donc une teinte pierre saturée et une opacité haute, et c'est la PROFONDEUR (derrière tout
-      // le jouable) qui le fait reculer, pas la transparence.
+      const x0 = a.x * TILE, wpx = a.w * TILE
+      const y0 = (a.y + 1) * TILE          // sous le tablier : le tablier, lui, est une plateforme
+      // AU-DESSUS D'UN GOUFFRE, ON NE DESSINE PAS TRENTE TUILES DE PILE. Un viaduc peut surplomber la
+      // vallée de 26 rangées : tracées en entier, les piles deviennent deux barres grises qui traversent
+      // l'écran de haut en bas et mangent tout le décor (constaté sur capture). On les borne à sept
+      // rangées et on les ESTOMPE sur les deux dernières — la pierre s'enfonce dans l'ombre du gouffre,
+      // ce qui dit la profondeur bien mieux qu'un trait qui continue.
+      const hTuiles = a.fill === 'eau' ? a.h : Math.min(a.h, 7)
+      const bornee = hTuiles < a.h
+      const basY = y0 + hTuiles * TILE     // là où les piles se posent (ou se perdent dans l'ombre)
       const pierre = 0x6f7d8a, pierreOmbre = 0x49535d, pierreClaire = 0x94a2ae
 
-      // ce qu'on voit SOUS les arches : une nappe d'eau décorative, ou rien (le vide)
-      if (a.fill === 'eau') {
-        // nappe posée au PIED des arches, pas au ras du tablier : c'est ce qui donne l'impression que
-        // l'ouvrage FRANCHIT quelque chose. Inatteignable (pur décor), comme demandé.
-        const eauY = basY - 6
-        g.fillStyle(0x1e5b8f, 0.8).fillRect(x0 - 10, eauY, wpx + 20, 18)
-        g.fillStyle(0x3d8fc4, 0.75).fillRect(x0 - 10, eauY, wpx + 20, 6)
-        g.fillStyle(0xbfe6ff, 0.4).fillRect(x0 - 10, eauY, wpx + 20, 2)
+      // Nombre d'arches : on vise ~4 tuiles de portée, borné pour que l'ouvrage garde ses proportions
+      // quelle que soit la largeur du module (une arche unique de 26 tuiles serait un tunnel).
+      const nArches = Math.max(2, Math.min(7, Math.round(a.w / 4)))
+      const pasX = wpx / nArches
+      const rayon = pasX / 2
+      const ePile = Math.max(10, pasX * 0.2)   // épaisseur des piles
+      const naissance = y0 + 14 + rayon        // hauteur de la ligne de naissance des arcs
+
+      // 1) LES PILES, du tablier jusqu'à leur appui. C'est la pièce qui manquait.
+      for (let k = 0; k <= nArches; k++) {
+        const cx = Phaser.Math.Clamp(x0 + pasX * k, x0 + ePile / 2, x0 + wpx - ePile / 2)
+        const px = cx - ePile / 2
+        g.fillStyle(pierreOmbre).fillRect(px, y0, ePile, basY - y0)
+        g.fillStyle(pierre).fillRect(px, y0, ePile - 3, basY - y0)
+        g.fillStyle(pierreClaire, 0.5).fillRect(px, y0, 3, basY - y0)
+        if (bornee) {
+          // fondu vers l'ombre : quatre bandes de plus en plus sombres au lieu d'une coupe nette
+          for (let f = 0; f < 4; f++) {
+            g.fillStyle(0x1a1f24, 0.22 + f * 0.24)
+            g.fillRect(px - 1, basY - (4 - f) * 14, ePile + 2, 14)
+          }
+        } else {
+          // socle évasé : un pied plus large, c'est ce qui donne l'assise à l'œil
+          g.fillStyle(pierreOmbre).fillRect(px - 4, basY - 10, ePile + 8, 10)
+        }
       }
 
-      // piles + arcs : on remplit le bandeau puis on ÉVIDE chaque arche, ce qui donne l'arrondi net
-      g.fillStyle(pierreOmbre).fillRect(x0, y0, wpx, rayon + hPile)
+      // 2) LES ARCS EN PLEIN CINTRE entre les piles, sous le tablier.
       for (let k = 0; k < nArches; k++) {
         const cx = x0 + pasX * (k + 0.5)
-        // évidement en cloche : demi-disque + jambages droits, en couleur de fond « trou »
-        g.fillStyle(0x000000, 0)
-        g.beginPath()
-        g.arc(cx, y0 + rayon, rayon * 0.78, Math.PI, 0)
-        g.closePath()
+        g.lineStyle(13, pierre, 1)
+        g.beginPath(); g.arc(cx, naissance, rayon - ePile / 2, Math.PI, 0); g.strokePath()
+        g.lineStyle(3, pierreClaire, 0.55)
+        g.beginPath(); g.arc(cx, naissance - 4, rayon - ePile / 2, Math.PI, 0); g.strokePath()
+        // écoinçons : le plein entre le sommet de l'arc et le tablier, sinon l'arc « pend » sous rien
+        g.fillStyle(pierre).fillRect(cx - rayon, y0, pasX, naissance - rayon - y0 + 2)
       }
-      // l'évidement se fait par masque : plus simple et plus net, on redessine les PILES par-dessus
-      g.fillStyle(pierre)
-      for (let k = 0; k <= nArches; k++) {
-        const px = x0 + pasX * k - pasX * 0.11
-        g.fillRect(Math.max(x0, px), y0 + rayon * 0.5, pasX * 0.22, rayon + hPile - rayon * 0.5)
-      }
-      // bandeau supérieur (tablier) : deux assises, la plus claire en haut pour capter la lumière
-      g.fillStyle(pierre).fillRect(x0 - 4, y0 - 10, wpx + 8, 10)
-      g.fillStyle(pierreClaire).fillRect(x0 - 4, y0 - 10, wpx + 8, 3)
-      // arcs en plein cintre : trait épais sous le tablier, un par arche
-      g.lineStyle(5, pierre, 1)
-      for (let k = 0; k < nArches; k++) {
-        const cx = x0 + pasX * (k + 0.5)
-        g.beginPath(); g.arc(cx, y0 + rayon, rayon * 0.8, Math.PI, 0); g.strokePath()
-      }
-      g.lineStyle(2, pierreClaire, 0.7)
-      for (let k = 0; k < nArches; k++) {
-        const cx = x0 + pasX * (k + 0.5)
-        g.beginPath(); g.arc(cx, y0 + rayon - 2, rayon * 0.8, Math.PI, 0); g.strokePath()
-      }
-      // voile atmosphérique : le décor de fond doit RECULER, sinon il concurrence le terrain jouable
-      // liseré sombre sous le tablier : il détache l'ouvrage du fond sans le rendre criard
-      g.lineStyle(2, 0x2f363d, 0.55).beginPath().moveTo(x0 - 4, y0 + 0.5).lineTo(x0 + wpx + 4, y0 + 0.5).strokePath()
-      g.setAlpha(0.93)
+
+      // 3) CORNICHE sous le tablier : la ligne franche qui dit « ici on marche ».
+      g.fillStyle(pierreOmbre).fillRect(x0 - 6, y0, wpx + 12, 14)
+      g.fillStyle(pierre).fillRect(x0 - 6, y0, wpx + 12, 10)
+      g.fillStyle(pierreClaire).fillRect(x0 - 6, y0, wpx + 12, 3)
+      // liseré sombre : détache l'ouvrage du ciel sans l'assombrir
+      g.lineStyle(2, 0x2f363d, 0.6).beginPath()
+        .moveTo(x0 - 6, y0 + 14.5).lineTo(x0 + wpx + 6, y0 + 14.5).strokePath()
     }
 
     for (const sign of this.levelDef.signs ?? []) {

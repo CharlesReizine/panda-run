@@ -82,6 +82,9 @@ export type ModuleKind =
   | 'cascade-deux-passages-g'// 3) idem en miroir (passages à GAUCHE)
   | 'boyau-tresor-retour'    // 4) passage sous-marin vers une grotte à trésor : il faut REVENIR pour avancer
   | 'colonnes-perilleuses'   // 5) longues colonnes de pierre étroites et de hauteurs variées (chute = mort)
+  // AQUEDUC / VIADUC : on MARCHE DESSUS. « Au lieu d'avoir un terrain tout plat, parfois on a un aqueduc
+  // ou un pont, et c'est joli. » Le tablier est une vraie surface ; sous les arches, de l'eau ou le vide.
+  | 'aqueduc'
   // PUITS : cuve marine ÉTROITE (2-4 tuiles) et PROFONDE, encadrée de 2 rebords de pierre qui
   // DÉPASSENT (margelle) — distinct du BASSIN large. On plonge par l'étroite ouverture ; coffre au fond.
   | 'puits'
@@ -239,6 +242,8 @@ interface Piece {
   bridges: { x: number; alt: number; w: number }[]
   // TRAMPOLINES : tapis posé à l'altitude `alt`. Rebond ×3 en hauteur + contrôle latéral accru.
   trampolines: { x: number; alt: number }[]
+  // AQUEDUCS : tablier MARCHABLE (une plateforme solide posée en même temps) + arches dessinées dessous.
+  arches: { x: number; alt: number; w: number; h: number; fill: 'eau' | 'vide' }[]
   // cuves d'eau : marine (noyade), cascade (remontable) ou lave (mortelle, enfer). bankAlt = rangée des
   // berges (surface juste dessous) ; le liquide descend jusqu'au sol (fond). Le moteur pose murs + fond + déco.
   // `openSide` : ouvre une paroi (passage sous-marin — on ressort par le côté immergé).
@@ -259,7 +264,7 @@ interface Piece {
 }
 
 function emptyPiece(exitAlt: number): Piece {
-  return { platforms: [], rocks: [], gaps: [], spikes: [], bridges: [], trampolines: [], waters: [], ladders: [], spawns: [], props: [], signs: [], exitAlt }
+  return { platforms: [], rocks: [], gaps: [], spikes: [], bridges: [], trampolines: [], arches: [], waters: [], ladders: [], spawns: [], props: [], signs: [], exitAlt }
 }
 
 // Dégagement libre (en rangées) garanti sous un PLAFOND DE ROCHE de tunnel : strictement supérieur à
@@ -1612,6 +1617,46 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.platforms.push({ x: lacX + lacW, alt: A, w: Math.max(bw, w - (lacX + lacW)) })
       placeBirds(A + 4)
       p.exitAlt = A
+      break
+    }
+    case 'aqueduc': {
+      // AQUEDUC MARCHABLE — « je veux pas que ça soit décoratif dessiné, je veux que ça soit de la matière
+      // sur laquelle on peut marcher. C'est, au lieu d'avoir un terrain tout plat, parfois on a un aqueduc
+      // ou un pont, et c'est joliii. »
+      //
+      // ⚠️ LE TABLIER EST UNE VRAIE PLATEFORME, pas un dessin. La première version vivait dans le décor de
+      // fond, hors de portée : jolie, mais sans conséquence. Ici l'ouvrage REMPLACE le sol — dessous c'est le
+      // vide ou l'eau — donc traverser, c'est marcher sur l'aqueduc. Il entre de ce fait dans tous les
+      // calculs d'atteignabilité, ce qui est le prix (et la preuve) qu'il fait partie du terrain.
+      // Les arches, elles, restent du dessin : elles pendent SOUS le tablier et ne portent rien.
+      const alt = Math.max(entryAlt, 3)
+      const bw = bank
+      const pontX = bw
+      const pontW = Math.max(8, w - 2 * bw)
+      const surEau = (hashSeed(m.kind + ':' + w + ':' + alt) % 2) === 0 && basinKind !== 'lave'
+
+      p.platforms.push({ x: 0, alt, w: bw })
+      p.platforms.push({ x: pontX, alt, w: pontW, solid: true }) // TABLIER : on marche dessus
+      p.platforms.push({ x: w - bw, alt, w: bw })
+
+      if (surEau) {
+        // eau EN CONTREBAS : on tombe dedans et on nage, on ne meurt pas. Berges à l'altitude de la cuve pour
+        // qu'elle ne soit pas « suspendue » — le validateur y tient, et il a raison : sans bord au niveau de
+        // l'eau, rien n'indique où la cuve commence.
+        p.waters.push({ x: pontX, w: pontW, kind: basinKind, bankAlt: 1 })
+        p.platforms.push({ x: pontX - 1, alt: 1, w: 1 })
+        p.platforms.push({ x: pontX + pontW, alt: 1, w: 1 })
+      } else {
+        for (let gx = pontX; gx < pontX + pontW; gx += 3) p.gaps.push({ x: gx, w: Math.min(3, pontX + pontW - gx) })
+      }
+      // HAUTEUR DE L'OUVRAGE. Sur l'eau, les piles descendent jusqu'à la SURFACE et s'y enfoncent : on
+      // voit où elles se posent, l'ouvrage tient. Au-dessus d'un gouffre, elles plongent — et le rendu
+      // les estompe au bout de quelques rangées plutôt que de les faire courir sur trente tuiles de gris.
+      // Sans cette hauteur, le bandeau de pierre s'arrêtait à mi-hauteur en plein ciel : « des trucs
+      // dégueulasses qui volent ». Une pile qui ne touche rien ne lit pas comme un pont, mais comme un bug.
+      p.arches.push({ x: pontX, alt, w: pontW, h: surEau ? Math.max(2, alt - 1) : alt, fill: surEau ? 'eau' : 'vide' })
+      placeBirds(alt + 4)
+      p.exitAlt = alt
       break
     }
     case 'colonnes-perilleuses': {
@@ -3213,6 +3258,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   const platforms: LevelDef['platforms'] = []
   const bridges: NonNullable<LevelDef['bridges']> = []
   const trampolines: NonNullable<LevelDef['trampolines']> = []
+  const arches: NonNullable<LevelDef['arches']> = []
   const gaps: NonNullable<LevelDef['gaps']> = []
   const hazards: NonNullable<LevelDef['hazards']> = []
   const ladders: NonNullable<LevelDef['ladders']> = []
@@ -3227,6 +3273,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     for (const pl of piece.platforms) platforms.push({ x: x0 + pl.x, y: row(pl.alt), w: pl.w, ...(pl.solid ? { solid: true } : {}) })
     for (const b of piece.bridges) bridges.push({ x: x0 + b.x, y: row(b.alt), w: b.w })
     for (const t of piece.trampolines) trampolines.push({ x: x0 + t.x, y: row(t.alt) })
+    for (const a of piece.arches) arches.push({ x: x0 + a.x, y: row(a.alt), w: a.w, h: a.h, fill: a.fill })
     for (const l of piece.ladders) ladders.push({ x: x0 + l.x, y: row(l.topAlt), h: l.h, ...(l.hung ? { hung: true } : {}) })
     for (const g of piece.gaps) gaps.push({ x: x0 + g.x, w: g.w })
     // dalles de roche (plafond de tunnel / socle) : y = rangée du HAUT de la dalle, h = épaisseur ;
@@ -3435,7 +3482,8 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     widthTiles: totalWidth, heightTiles,
     start, exit,
     platforms, bridges,
-    ...(trampolines.length ? { trampolines } : {}), gaps, hazards, ladders, rockBands, spawns: safeSpawns, props,
+    ...(trampolines.length ? { trampolines } : {}),
+    ...(arches.length ? { arches } : {}), gaps, hazards, ladders, rockBands, spawns: safeSpawns, props,
     ...(signs.length ? { signs } : {}),
   }
 }
@@ -3592,6 +3640,7 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'boyau-tresor-retour': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [18, 28], below: 'marine', above: 'air', chest: true, water: true },
   // Les colonnes, elles, sont un motif de TENSION : réservées au placement explicite, comme les trampolines.
   'colonnes-perilleuses': { forcedOnly: true, tier: 4, family: 'tension', entry: 'milieu', exit: 'milieu', width: [22, 34], below: 'vide', above: 'air' },
+  'aqueduc': { tier: 2, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [16, 26], below: 'vide', above: 'air' },
 }
 
 // Construit un Module à partir de son kind (fills + métadonnées du CATALOG) + peuplement/flags.

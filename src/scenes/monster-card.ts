@@ -32,6 +32,21 @@ export const css = (n: number): string => `#${n.toString(16).padStart(6, '0')}`
 /** Teinte de silhouette pour un monstre non découvert (sprite assombri en ombre). */
 export const SILHOUETTE_TINT = 0x101820
 
+/**
+ * Texture à afficher pour un monstre.
+ *
+ * ⚠️ `monster-<id>` NE SUFFIT PAS, et c'est le bug du « Scorpionnet sans image ». Les VARIANTES (mini,
+ * géante) n'ont pas d'illustration propre : elles réutilisent celle de leur base via `artFrom`, et aucune
+ * texture `monster-scorpion-mini` n'est donc jamais fabriquée. Enemy le savait déjà — il lit
+ * `monster-${def.artFrom ?? def.id}` depuis toujours ; ce sont les écrans d'information qui l'ignoraient.
+ * Trois monstres étaient concernés : Scorpionnet, Gloopiot et Gobelinou, plus toutes les variantes géantes.
+ * On centralise ici pour que l'oubli ne puisse pas se reproduire à un troisième endroit.
+ */
+export function textureMonstre(scene: Phaser.Scene, m: MonsterDef): string {
+  if (m.tex && scene.textures.exists(m.tex)) return m.tex
+  return `monster-${m.artFrom ?? m.id}`
+}
+
 /** Type d'un monstre pour l'affichage : badge et couleur. */
 export function monsterKind(m: MonsterDef): { label: string; color: number } {
   if (m.boss) return { label: 'BOSS', color: 0xff5252 }
@@ -141,7 +156,7 @@ export function renderMonsterCard(scene: Phaser.Scene, m: MonsterDef, opts: Mons
   }
 
   // ── QUART HAUT-GAUCHE : l'image seule ──
-  const big = scene.add.image(ident.x, ident.y, `monster-${m.id}`).setOrigin(0, 0).setDisplaySize(BD.portrait, BD.portrait)
+  const big = scene.add.image(ident.x, ident.y, textureMonstre(scene, m)).setOrigin(0, 0).setDisplaySize(BD.portrait, BD.portrait)
   if (!seen) big.setTint(SILHOUETTE_TINT).setAlpha(0.85)
   if (seen) {
     const sub = opts.kills === undefined ? behaviorLabel(m) : `${behaviorLabel(m)}\nvaincu ${opts.kills}×`

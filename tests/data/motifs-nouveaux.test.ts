@@ -56,31 +56,38 @@ describe('les motifs longtemps retenus sont enfin posés', () => {
   })
 })
 
-describe('les aqueducs décoratifs sont bien là', () => {
+describe('les aqueducs sont MARCHABLES, plus décoratifs', () => {
+  // ⚠️ CE BLOC A CHANGÉ DE NATURE, ET C'EST LE POINT. Il vérifiait un décor de fond posé dix rangées au-dessus
+  // du terrain. Retour du user : « je veux pas que ça soit décoratif dessiné, je veux que ça soit de la
+  // matière sur laquelle on peut marcher ». L'aqueduc est donc devenu un MODULE : son tablier remplace le sol
+  // et se traverse à pied. Ce qu'on vérifie maintenant, c'est justement qu'on peut marcher dessus.
   const avec = Object.values(LEVELS).filter((l) => (l.arches ?? []).length > 0)
 
-  it('un bon nombre de terrains en portent un', () => {
-    expect(avec.length).toBeGreaterThan(10)
+  it('des terrains en portent, distribués par l\'ordonnanceur', () => {
+    expect(avec.length).toBeGreaterThan(3)
   })
 
-  it('leur largeur VARIE, comme demandé', () => {
-    const largeurs = new Set(avec.flatMap((l) => (l.arches ?? []).map((a) => a.w)))
-    expect(largeurs.size).toBeGreaterThan(3)
-  })
-
-  it('les deux dessous existent : eau ET vide', () => {
-    const fills = new Set(avec.flatMap((l) => (l.arches ?? []).map((a) => a.fill)))
-    expect(fills.has('eau')).toBe(true)
-    expect(fills.has('vide')).toBe(true)
-  })
-
-  it('ils restent HORS de la zone de jeu : jamais au niveau du sol', () => {
-    // c'est ce qui les rend inoffensifs par construction, donc invisibles pour les validateurs
+  it('chaque aqueduc a une PLATEFORME sous ses pieds : c\'est ce qui le rend marchable', () => {
     for (const l of avec) {
-      const groundRow = (l.heightTiles ?? 30) - 3
       for (const a of l.arches ?? []) {
-        expect(groundRow - a.y, `${l.id}: aqueduc trop bas`).toBeGreaterThanOrEqual(8)
+        const tablier = l.platforms.some((p) => p.y === a.y && p.x <= a.x && p.x + p.w >= a.x + a.w)
+        expect(tablier, `${l.id}: aqueduc en x${a.x} sans tablier`).toBe(true)
       }
     }
+  })
+
+  it('sous le tablier, il y a vraiment quelque chose : du vide ou de l\'eau', () => {
+    for (const l of avec) {
+      for (const a of l.arches ?? []) {
+        const vide = (l.gaps ?? []).some((g) => g.x >= a.x && g.x < a.x + a.w)
+        const eau = (l.hazards ?? []).some((h) => h.kind === 'water' && h.x < a.x + a.w && h.x + h.w > a.x)
+        expect(vide || eau, `${l.id}: aqueduc en x${a.x} posé sur du sol plein`).toBe(true)
+      }
+    }
+  })
+
+  it('leur largeur VARIE : ce n\'est pas le même ouvrage recopié', () => {
+    const largeurs = new Set(avec.flatMap((l) => (l.arches ?? []).map((a) => a.w)))
+    expect(largeurs.size).toBeGreaterThan(1)
   })
 })

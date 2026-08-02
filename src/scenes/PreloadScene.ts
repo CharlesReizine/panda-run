@@ -112,6 +112,11 @@ export class PreloadScene extends Phaser.Scene {
     this.load.image('google-g', 'art/google-g.png')
     // pièce d'or illustrée (optionnelle) : si art/coin.png existe, elle remplace la pièce procédurale
     this.load.image('art-coin', 'art/coin.png')
+    // TRAMPOLINE : deux états illustrés (au repos / écrasé sous le panda). Absents du dépôt tant qu'ils
+    // n'ont pas été générés (scripts/generate_art.py --decor) — un 404 de loader n'arrête rien, et le
+    // dessin procédural ci-dessous prend le relais. C'est le même repli que la pièce d'or.
+    this.load.image('art-trampoline', 'art/decor-trampoline.png')
+    this.load.image('art-trampoline-saut', 'art/decor-trampoline-saut.png')
     // fond illustré de la carte du monde (vue du dessus fantasy), affiché par WorldMapScene
     this.load.image('map-monde', 'art/map-monde.jpg')
     for (const id of ART_MONSTERS) this.load.image(`art-${id}`, `art/art-${id}.png`)
@@ -2480,18 +2485,60 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0xb71c1c).fillEllipse(12, 9, 22, 15)
     g.fillStyle(0xef5350).fillEllipse(12, 8, 20, 12)
     g.fillStyle(0xffffff).fillCircle(6, 6, 2).fillCircle(18, 6, 2).fillCircle(12, 10, 2); g.generateTexture('prop-champignon', 24, 24); g.clear()
-    // ── TRAMPOLINE ─────────────────────────────────────────────────────────────────────────────
-    // Élément demandé par le user. Il doit se lire comme un ENGIN, pas comme une plateforme : cadre de
-    // bois clair, toile bleue tendue avec un reflet, et deux ressorts visibles sur les côtés. Le tapis est
-    // BOMBÉ vers le haut — c'est la forme qui dit « ça rebondit », avant même de l'essayer.
-    g.fillStyle(0x5d4037).fillRect(2, 14, 5, 10).fillRect(29, 14, 5, 10)            // pieds
-    g.fillStyle(0x8d6e63).fillRoundedRect(0, 8, 36, 8, 3)                           // cadre
-    g.fillStyle(0x1565c0).fillEllipse(18, 9, 32, 10)                                // toile (bombée)
-    g.fillStyle(0x42a5f5).fillEllipse(18, 8, 28, 7)
-    g.fillStyle(0x90caf9, 0.85).fillEllipse(14, 6, 12, 3)                           // reflet
-    g.lineStyle(1.5, 0xbdbdbd, 0.95)                                                 // ressorts
-    for (const sx of [5, 31]) { g.beginPath(); for (let k = 0; k < 4; k++) { g.moveTo(sx - 2, 15 + k * 2); g.lineTo(sx + 2, 16 + k * 2) } g.strokePath() }
-    g.generateTexture('prop-trampoline', 36, 26); g.clear()
+    // ── TRAMPOLINE (repli procédural) ──────────────────────────────────────────────────────────
+    // Sert tant que decor-trampoline.png n'est pas généré. Retour du user sur la première version :
+    // « le trampoline, c'est pas du tout dans le style graphique du jeu, et c'est pas assez large ».
+    // D'où : dessin TROIS FOIS plus large (108 px de gabarit au lieu de 36), cadre de BOIS avec veinage
+    // et pieds obliques, TOILE en tissu à surpiqûres, ressorts sur tout le pourtour — et surtout de gros
+    // contours nets, qui est la signature du reste du jeu (le premier jet n'en avait aucun).
+    const bois = 0xa1723c, boisOmbre = 0x6d4520, boisClair = 0xd7a869
+    const toile = 0x1e88e5, toileOmbre = 0x0d47a1, toileClaire = 0x90caf9, contour = 0x3b2412
+    const trampo = (creux: boolean) => {
+      const fleche = creux ? 15 : -11 // la toile se creuse à l'impact, se bombe au repos
+      const yCadre = 20
+      // PIEDS en X, dessinés en premier (ils passent derrière le cadre)
+      g.fillStyle(contour)
+      g.fillTriangle(12, 46, 20, 46, 33, yCadre).fillTriangle(96, 46, 88, 46, 75, yCadre)
+      g.fillStyle(boisOmbre)
+      g.fillTriangle(14, 45, 19, 45, 32, yCadre + 2).fillTriangle(94, 45, 89, 45, 76, yCadre + 2)
+      // TOILE : nappe de tissu tendue entre les deux joues, tracée à la parabole (Graphics n'a pas de
+      // courbe quadratique). Une toile tendue prend exactement cette forme ; une ligne brisée se verrait.
+      const nappe = (xg: number, xd: number, f: number, y: number) => {
+        g.beginPath(); g.moveTo(xg, y)
+        for (let k = 0; k <= 18; k++) {
+          const t = k / 18
+          g.lineTo(xg + (xd - xg) * t, y + f * 4 * t * (1 - t))
+        }
+        g.closePath(); g.fillPath()
+      }
+      g.fillStyle(contour); nappe(9, 99, fleche + Math.sign(fleche) * 4, yCadre)
+      g.fillStyle(toileOmbre); nappe(12, 96, fleche + Math.sign(fleche) * 2, yCadre)
+      g.fillStyle(toile); nappe(12, 96, fleche, yCadre - 2)
+      g.lineStyle(2, toileClaire, 0.8) // surpiqûres du tissu
+      for (const t of [0.28, 0.5, 0.72]) {
+        const x = 12 + 84 * t
+        g.beginPath(); g.moveTo(x, yCadre - 2); g.lineTo(x, yCadre - 2 + fleche * 4 * t * (1 - t)); g.strokePath()
+      }
+      // RESSORTS tout autour, entre la toile et le cadre
+      g.lineStyle(2, 0xeceff1, 0.95)
+      for (let k = 0; k < 10; k++) {
+        const sx = 13 + k * 9
+        g.beginPath(); g.moveTo(sx, yCadre - 5); g.lineTo(sx + 4, yCadre - 1); g.lineTo(sx, yCadre + 3); g.strokePath()
+      }
+      // CADRE de bois clair, gros contour net : c'est la signature graphique du reste du jeu
+      g.fillStyle(contour).fillRoundedRect(2, yCadre - 1, 104, 15, 7)
+      g.fillStyle(bois).fillRoundedRect(5, yCadre + 1, 98, 11, 5)
+      g.fillStyle(boisClair, 0.85).fillRoundedRect(8, yCadre + 2, 92, 3, 2)
+      g.fillStyle(boisOmbre, 0.6).fillRect(24, yCadre + 8, 60, 2) // veinage
+      if (creux) {
+        // lignes de vitesse : l'écrasement doit se LIRE, pas seulement se deviner à la forme
+        g.lineStyle(3, 0xffffff, 0.85)
+        for (const sx of [18, 90]) { g.beginPath(); g.moveTo(sx, 12); g.lineTo(sx, 1); g.strokePath() }
+        g.fillStyle(0xffffff, 0.5).fillCircle(30, 44, 4).fillCircle(78, 45, 3)
+      }
+    }
+    trampo(false); g.generateTexture('prop-trampoline', 108, 48); g.clear()
+    trampo(true); g.generateTexture('prop-trampoline-saut', 108, 48); g.clear()
     g.fillStyle(0x616161).fillEllipse(14, 14, 28, 20)
     g.fillStyle(0x9e9e9e).fillEllipse(13, 11, 16, 9); g.generateTexture('prop-roche', 28, 24); g.clear()
     // coffre plus détaillé (couvercle bombé + serrure + ferrures)

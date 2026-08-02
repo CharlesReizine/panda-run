@@ -92,6 +92,10 @@ if (game) {
   // sans qu'on maintienne la liste en double dans un script (une liste recopiée finit désynchronisée, et
   // une sonde qui saute des terrains ne prouve rien). Lecture seule, aucun effet sur le jeu.
   ;(window as unknown as { __pandaLevelIds?: string[] }).__pandaLevelIds = Object.keys(LEVELS)
+  // Et les définitions complètes : la sonde de terrains choisit son échantillon d'après ce que chaque
+  // terrain CONTIENT (trampolines, aqueducs, eau, boss) plutôt que d'après une liste d'identifiants
+  // écrite à la main, qui vieillirait sans prévenir dès qu'un motif change de place.
+  ;(window as unknown as { __pandaLevels?: typeof LEVELS }).__pandaLevels = LEVELS
   // Moteur audio, pour les sondes de son. Un bug de son est INOBSERVABLE en headless autrement : rien ne
   // sort d'un contexte Web Audio qu'on puisse lire. Sans ce crochet, la seule façon de savoir si un effet
   // part vraiment serait de demander au user de tendre l'oreille — c'est exactement ce qu'on veut éviter.
