@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { LEVEL_MODULE_KINDS, LEVELS } from '../../src/data/levels'
-import { CATALOG, type ModuleKind } from '../../src/data/level-modules'
+import { CATALOG, buildLevelFromModules, type ModuleKind } from '../../src/data/level-modules'
+import { TILE, maxJumpHeightPx } from '../../src/core/platforming'
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 // LES NOUVEAUX MOTIFS EXISTENT VRAIMENT DANS LE JEU
@@ -89,5 +90,55 @@ describe('les aqueducs sont MARCHABLES, plus décoratifs', () => {
   it('leur largeur VARIE : ce n\'est pas le même ouvrage recopié', () => {
     const largeurs = new Set(avec.flatMap((l) => (l.arches ?? []).map((a) => a.w)))
     expect(largeurs.size).toBeGreaterThan(1)
+  })
+})
+
+describe('le zigzag OBLIGE vraiment à faire gauche-droite-gauche', () => {
+  // Retour du user : « les paliers sont trop proches en hauteur, j'ai même pas besoin de faire
+  // gauche-droite-gauche, je peux juste sauter et ça passe. »
+  //
+  // Il avait raison, et le défaut était arithmétique. Les passerelles de TERRE se traversent PAR LE BAS
+  // (one-way) : ce qui décide si on peut tricher, ce n'est donc pas l'écart entre deux marches
+  // successives, mais l'écart entre deux marches de la MÊME COLONNE. À +2 rangées par marche, la même
+  // colonne revenait 4 rangées plus haut — 128 px, juste sous les ~130 px de saut. On montait tout droit
+  // en traversant ses propres passerelles.
+  //
+  // ⚠️ ON TESTE LE MODULE SEUL, pas un terrain complet : dans un terrain assemblé, d'autres motifs posent
+  // des plateformes étroites aux mêmes abscisses et le test mesurerait leur écart à elles. Le motif isolé
+  // dit exactement ce qu'on veut savoir.
+  const seul = buildLevelFromModules(
+    [{ kind: 'passerelles-zigzag', widthRange: [22, 22], fillBelow: 'sol', fillAbove: 'air', tags: [] }],
+    { id: 'test-zigzag', name: 'Zigzag', biome: 'plaine' },
+  )
+
+  it('le motif est bien posé dans de vrais terrains', () => {
+    const zig = Object.keys(LEVELS).filter((id) => (LEVEL_MODULE_KINDS[id] ?? []).includes('passerelles-zigzag'))
+    expect(zig.length, 'passerelles-zigzag n\'est généré nulle part').toBeGreaterThan(0)
+  })
+
+  it('deux passerelles de la MÊME colonne sont hors de portée d\'un saut', () => {
+    const saut = maxJumpHeightPx()
+    const colonnes = new Map<number, number[]>()
+    for (const pf of seul.platforms) {
+      if (pf.w > 4) continue // berges et palier de sortie : ce ne sont pas des passerelles
+      colonnes.set(pf.x, [...(colonnes.get(pf.x) ?? []), pf.y])
+    }
+    expect(colonnes.size, 'aucune passerelle étroite : le motif a changé de forme').toBeGreaterThan(1)
+    for (const [x, ys] of colonnes) {
+      const tries = [...ys].sort((a, b) => b - a)
+      for (let i = 1; i < tries.length; i++) {
+        const ecart = (tries[i - 1]! - tries[i]!) * TILE
+        expect(ecart, `colonne x${x} : deux passerelles à ${ecart} px — on monte tout droit`).toBeGreaterThan(saut)
+      }
+    }
+  })
+
+  it('mais la marche EN DIAGONALE, elle, reste franchissable', () => {
+    const saut = maxJumpHeightPx()
+    const etroites = seul.platforms.filter((pf) => pf.w <= 4).sort((a, b) => b.y - a.y)
+    for (let i = 1; i < etroites.length; i++) {
+      const ecart = (etroites[i - 1]!.y - etroites[i]!.y) * TILE
+      expect(ecart, 'la marche suivante est devenue inatteignable').toBeLessThanOrEqual(saut)
+    }
   })
 })

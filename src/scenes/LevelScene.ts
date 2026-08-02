@@ -487,7 +487,7 @@ export class LevelScene extends Phaser.Scene {
         if (this.time.now < this.nextBounceAt) return     // anti-rebond multiple sur une même frame
         this.nextBounceAt = this.time.now + 220
         this.player.bounce()
-        audio.playSfx('jump')
+        audio.playSfx('schloung') // pas le 'jump' générique : un trampoline a son propre bruit
         // détente visuelle du tapis + onde, pour que le rebond se VOIE autant qu'il se sente.
         // Deux DESSINS distincts (repos / écrasé) plutôt qu'un simple écrasement d'échelle : une toile
         // qu'on comprime ne rétrécit pas, elle se CREUSE — les ressorts s'allongent, le cadre ne bouge pas.

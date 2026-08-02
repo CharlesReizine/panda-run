@@ -1179,17 +1179,29 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     // ─── PASSERELLES FLOTTANTES EN ZIGZAG ASCENDANT ───────────────────────────────────────────
     case 'passerelles-zigzag': {
       // Plateformes SUSPENDUES qui montent en alternant GAUCHE / DROITE : on saute en haut à gauche,
-      // puis en haut à droite, puis gauche… pour grimper. Deux colonnes fixes (xL, xR) : chaque saut
-      // monte de STEP_RISE=2 rangées (< saut ≈ 4) avec un écart horizontal de 2 tuiles (≤ portée de
-      // saut confortable) → toujours FRANCHISSABLE. Le tout AU-DESSUS DU VIDE (passerelles flottantes :
+      // puis en haut à droite, puis gauche… pour grimper.
+      //
+      // ⚠️ STEP_RISE = 3, ET C'EST TOUTE LA DIFFÉRENCE ENTRE UN ZIGZAG ET UNE ÉCHELLE DÉGUISÉE.
+      // Retour du user : « les paliers sont trop proches en hauteur, j'ai même pas besoin de faire
+      // gauche-droite-gauche, je peux juste sauter et ça passe ». Il avait raison, et la cause est
+      // arithmétique : les passerelles de TERRE se traversent PAR LE BAS (one-way). Ce qui compte n'est
+      // donc pas l'écart entre deux marches successives, mais l'écart entre deux marches de la MÊME
+      // colonne — soit 2 × STEP_RISE. À 2, ça faisait 4 rangées = 128 px, juste sous les ~130 px de saut :
+      // on montait tout droit en traversant ses propres passerelles, sans jamais changer de côté.
+      // À 3, la marche diagonale reste au maximum du saut simple (3 rangées, cf. SIMPLE_JUMP_ROWS) mais
+      // la même colonne passe à 6 rangées = 192 px, hors d'atteinte. Le détour par l'autre côté devient
+      // le SEUL chemin — ce que le motif prétendait déjà être.
+      //
+      // Écart horizontal de 2 tuiles (≤ portée de saut à +3 rangées) → toujours FRANCHISSABLE. Le tout
+      // AU-DESSUS DU VIDE (passerelles flottantes :
       // rater un saut = chute mortelle, jamais coincé vivant → pas de socle plein sous la travée). La
       // dernière passerelle est un PALIER LARGE jusqu'au bord droit (raccord au module suivant, au
       // sommet). ≤ 3 passerelles empilées par colonne (silhouette collines respectée, le vide ne
       // compte pas comme palier).
       const base = Math.max(1, entryAlt)
-      const STEP_RISE = 2
+      const STEP_RISE = SIMPLE_JUMP_ROWS // 3 : la diagonale reste franchissable, la verticale ne l'est plus
       const pw = 3
-      const gapX = 2 // écart horizontal entre les deux colonnes (≤ portée de saut à +2 rangées)
+      const gapX = 2 // écart horizontal entre les deux colonnes (≤ portée de saut à +3 rangées)
       const xL = bank
       const xR = xL + pw + gapX
       const steps = 4 + Math.floor(rng() * 2) // 5 à 6 passerelles empilées (≤ 3 par colonne)

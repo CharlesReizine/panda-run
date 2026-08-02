@@ -14,7 +14,7 @@ const MUSIC_VOLUME = 0.35
 export type SfxName =
   | 'jump' | 'attack' | 'hit' | 'enemy-death' | 'coin' | 'potion' | 'skill'
   | 'level-up' | 'player-hit' | 'player-death' | 'boss-victory' | 'ui-tap' | 'buy'
-  | 'stomp' | 'player-burn' | 'elite' | 'npc-talk' | 'bubble' | 'coins' | 'splash'
+  | 'stomp' | 'player-burn' | 'elite' | 'npc-talk' | 'bubble' | 'coins' | 'splash' | 'schloung'
   // ── SORTS ET ATTAQUES, PAR FAMILLE (demande du user : « rajoute des bruits sur certaines attaques du
   // mage ou des autres »). Tout passait par un unique 'skill' : 66 compétences, un seul bruit — on ne
   // distinguait pas une boule de feu d'un soin. Le classement d'une compétence vers l'une de ces
@@ -370,6 +370,21 @@ class AudioEngine {
     switch (name) {
       case 'jump':
         this.tone('square', 320, t, 0.16, 0.5, 640)
+        break
+      // TRAMPOLINE — « génère un son SCHLOUNG quand on saute dessus ». C'est une onomatopée précise :
+      // le SCHL est l'attaque molle de la toile (bruit filtré bas, très court), le OUNG est le ressort
+      // qui se détend — une fondamentale qui MONTE puis retombe. Trois couches, dans cet ordre :
+      //   · le choc sourd de la toile qui encaisse (basse qui plonge) ;
+      //   · le grand glissando montant du ressort, en dents de scie (le « ouiiing » élastique) ;
+      //   · une queue qui redescend, sinon ça se termine en question et pas en rebond.
+      // Volume franc (0,55) : c'est un moment de jeu, pas un détail d'ambiance — et le user ne l'entendait
+      // déjà pas quand le son du saut jouait tout seul par-dessus.
+      case 'schloung':
+        this.noise(t, 0.05, 0.3, 'lowpass', 900)
+        this.tone('sine', 150, t, 0.07, 0.4, 70)
+        this.tone('sawtooth', 180, t + 0.02, 0.16, 0.55, 900)
+        this.tone('sawtooth', 900, t + 0.17, 0.13, 0.3, 320)
+        this.tone('triangle', 1400, t + 0.03, 0.09, 0.14, 2400)
         break
       case 'attack':
         this.tone('square', 220, t, 0.09, 0.45, 120)

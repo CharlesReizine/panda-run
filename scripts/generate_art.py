@@ -404,16 +404,24 @@ def detacher(png_bytes: bytes, slot: str = "weapon") -> "object":
 # ⚠️ CADRAGE DIFFÉRENT DES OBJETS : pas de recadrage carré. Un trampoline est un objet LARGE (le user :
 # « est pas assez large, fait ×3 ») ; le forcer dans un carré 128×128 obligerait le jeu à l'étirer, et
 # une toile étirée cesse de ressembler à une toile. On garde donc les proportions du dessin.
+# ⚠️ « DE PROFIL, SANS ANGLE » N'EST PAS UN DÉTAIL DE GOÛT. Le premier jet demandait « vu de face » et le
+# modèle a rendu une perspective trois-quarts : on voyait le DESSUS de la toile en ellipse, comme un objet
+# posé dans une pièce. Retour du user : « elle est un peu en 3D moche, mets vraiment une image 2D de profil
+# sans angle ». Dans un jeu de plateforme vu de côté, un objet en perspective jure avec tout le reste — le
+# panda, les mobs et le décor sont dessinés à plat. D'où l'insistance : coupe latérale, aucune ellipse.
 DECORS = {
     "trampoline": (
-        "Un trampoline de foire vu de FACE, LARGE et BAS (environ deux fois plus large que haut). "
-        "Cadre en BOIS clair verni avec des pieds obliques, toile en TISSU tendu bleu vif à surpiqûres, "
-        "ressorts métalliques apparents tout autour du cadre. Toile légèrement BOMBÉE vers le haut, au repos."
+        "Un trampoline vu STRICTEMENT DE PROFIL, de côté, en 2D PLATE comme un sprite de jeu de plateforme : "
+        "AUCUNE perspective, AUCUN angle, on ne voit PAS le dessus de la toile, la toile se réduit à une LIGNE "
+        "vue de côté. LARGE et BAS (environ deux fois plus large que haut). Cadre en BOIS clair verni, pieds "
+        "obliques, toile en TISSU tendu bleu vif vue par la tranche, ressorts métalliques entre la toile et le "
+        "cadre. La toile est légèrement BOMBÉE vers le haut, au repos."
     ),
     "trampoline-saut": (
-        "Le MÊME trampoline de foire vu de FACE, large et bas, cadre en BOIS clair et toile en TISSU bleu, "
-        "mais ÉCRASÉ : la toile est profondément CREUSÉE vers le bas en cuvette, les ressorts sont ÉTIRÉS, "
-        "de petites lignes de vitesse et un nuage de poussière montrent l'impact. Personne dessus."
+        "Le MÊME trampoline vu STRICTEMENT DE PROFIL, de côté, en 2D PLATE, AUCUNE perspective, AUCUN angle, "
+        "on ne voit PAS le dessus de la toile. Même cadre en BOIS clair, même toile en TISSU bleu vue par la "
+        "tranche, mais ÉCRASÉ : la toile est profondément CREUSÉE vers le bas en cuvette, les ressorts sont "
+        "ÉTIRÉS, de petites lignes de vitesse montrent l'impact. Personne dessus."
     ),
 }
 
@@ -421,7 +429,8 @@ DECORS = {
 def prompt_decor(nom: str) -> str:
     return (
         f"{STYLE} {DECORS[nom]} "
-        "L'objet SEUL, entier, vu de face, personne dessus, aucun décor derrière. "
+        "L'objet SEUL, entier, personne dessus, aucun décor derrière, aucune ombre portée au sol. "
+        "Dessin 2D À PLAT, vue de côté d'un jeu de plateforme — surtout pas un rendu 3D ni une vue en perspective. "
         # On repique les interdits du cadre d'objet (fond peint, damier, texte) mais PAS son
         # « icône d'inventaire lisible à 40 px » : un élément de terrain se regarde à sa taille réelle
         # dans le décor, et le demander en icône donnerait un dessin trapu et surdétaillé.
