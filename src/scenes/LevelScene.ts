@@ -36,12 +36,10 @@ import { CastBar } from '../entities/cast-bar'
 import { skillSfx } from '../audio/skill-sfx'
 import { flammeGain, flammeIntervalle, flammeAudible, FLAMME_PORTEE } from '../core/flame-ambience'
 
-// TRAMPOLINE : gabarit à l'écran. 108 px ≈ 3,4 tuiles, soit trois fois le premier jet — « est pas assez
-// large, fait ×3 ». Hauteur fixée à part plutôt que déduite du format de l'image : selon qu'on affiche
-// l'illustration ou le repli procédural, les proportions diffèrent, et un engin qui change de taille
-// avec la présence d'un fichier serait un piège de plateforme.
+// TRAMPOLINE : largeur à l'écran. 108 px ≈ 3,4 tuiles, soit trois fois le premier jet — « est pas assez
+// large, fait ×3 ». Seule la LARGEUR est imposée : la hauteur suit les proportions du dessin (cf.
+// poseTrampoline), et la zone de rebond se cale sur la hauteur RÉELLEMENT affichée.
 const TRAMPO_W = 108
-const TRAMPO_H = 54
 
 /** Texture du trampoline, illustrée si elle a été générée, procédurale sinon. */
 function texTrampoline(scene: Phaser.Scene, ecrase: boolean): string {
@@ -59,9 +57,13 @@ function texTrampoline(scene: Phaser.Scene, ecrase: boolean): string {
  * endroit, et le surplus part vers le haut — exactement là où l'impact doit se voir.
  */
 function poseTrampoline(img: Phaser.GameObjects.Image, tex: string): void {
-  const src = img.scene.textures.get(tex).getSourceImage()
-  const ratio = src.height / Math.max(1, src.width)
-  img.setTexture(tex).setOrigin(0.5, 1).setDisplaySize(TRAMPO_W, TRAMPO_W * ratio)
+  img.setTexture(tex).setOrigin(0.5, 1).setDisplaySize(TRAMPO_W, hauteurTrampoline(img.scene, tex))
+}
+
+/** Hauteur affichée d'un trampoline : la largeur imposée, mise aux proportions du dessin. */
+function hauteurTrampoline(scene: Phaser.Scene, tex: string): number {
+  const src = scene.textures.get(tex).getSourceImage()
+  return TRAMPO_W * (src.height / Math.max(1, src.width))
 }
 
 // biomes → piste musicale ; 'carriere' n'a pas d'ambiance dédiée → repli sur 'montagne'
@@ -418,7 +420,12 @@ export class LevelScene extends Phaser.Scene {
       // ⚠️ PLUS DE « RESPIRATION » EN BOUCLE. Un tween permanent sur scaleY se battait avec le changement
       // d'état : à chaque rebond on redimensionne le sprite, et le tween reprenait la main la frame d'après
       // (engin qui grandit, puis rétrécit). Les deux dessins suffisent à le rendre vivant.
-      const tapisY = solY - TRAMPO_H + 14 // hauteur de la toile, où le rebond se déclenche
+      // ⚠️ LA ZONE DE REBOND SE CALE SUR LA HAUTEUR RÉELLEMENT AFFICHÉE, jamais sur une constante. Elle
+      // valait « 54 − 14 » quand le dessin faisait 54 px de haut ; les illustrations livrées en font 38,
+      // et la zone se serait retrouvée AU-DESSUS du tapis — on tomberait à travers l'engin sans rien
+      // déclencher. La toile occupe le quart supérieur du dessin, d'où le 0,78.
+      const hTrampo = hauteurTrampoline(this, texTrampoline(this, false))
+      const tapisY = solY - hTrampo * 0.78
       const zone = this.physics.add.staticImage(px, tapisY, texTrampoline(this, false)).setVisible(false)
       zone.setDisplaySize(TRAMPO_W - 12, 18)
       ;(zone.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject()
