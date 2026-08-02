@@ -127,7 +127,10 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
       // barème d'avant, où le ruban à 300 or partait avec la monnaie du premier clear.
       { itemId: 'ruban', price: 250 },
       { itemId: 'sakkat', price: 320 },
-      { itemId: 'chapeau-poring', price: 1300 },
+      // 1450 et non 1300 : le pécule d'arrivée à Prontera a monté avec le contenu des terrains, et la
+      // règle veut qu'un chapeau non commun coûte au moins une fois et demie ce pécule — un aller-retour
+      // en plaine, minimum. Le prix suit le revenu du jeu, ce n'est pas un chiffre choisi à la main.
+      { itemId: 'chapeau-poring', price: 1450 },
       { itemId: 'bonnet-champi', price: 360 },
       { itemId: 'bandeau-guerrier', price: 340 },
       { itemId: 'plume-eclaireur', price: 270 },
@@ -147,8 +150,8 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
       { itemId: 'couronne-de-fleurs', price: 270 },
       { itemId: 'cagoule-de-voleur', price: 290 },
       { itemId: 'heaume-de-bronze', price: 310 },
-      { itemId: 'masque-de-renard', price: 1250 },
-      { itemId: 'mitre-du-clerc', price: 1250 },
+      { itemId: 'masque-de-renard', price: 1400 },
+      { itemId: 'mitre-du-clerc', price: 1400 },
       { itemId: 'bandeau-du-moine', price: 1360 },
     ],
   },

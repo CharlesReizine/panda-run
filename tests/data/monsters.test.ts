@@ -45,7 +45,9 @@ describe('mobs de granularité (audit lot 3)', () => {
     { id: 'serpent-des-sables', level: 15, biome: 'desert' },
     { id: 'elementaire-de-sable', level: 19, biome: 'desert' },
     { id: 'djinn-mineur', level: 23, biome: 'desert' },
-    { id: 'loup-des-neiges', level: 30, biome: 'montagne' },
+    // 32 et non 30 : le rang Dijkstra du terrain où il vit a bougé avec les nouveaux motifs d'eau, et
+    // le niveau des monstres en DÉCOULE (cf. core/mob-level). Le chiffre suit la carte, pas l'inverse.
+    { id: 'loup-des-neiges', level: 32, biome: 'montagne' },
     { id: 'liche-mineure', level: 30, biome: 'cimetiere' },
     { id: 'kraken-juvenile', level: 40, biome: 'plage' },
     { id: 'cerbere', level: 42, biome: 'enfer' },

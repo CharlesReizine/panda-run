@@ -85,6 +85,11 @@ export type ModuleKind =
   // AQUEDUC / VIADUC : on MARCHE DESSUS. « Au lieu d'avoir un terrain tout plat, parfois on a un aqueduc
   // ou un pont, et c'est joli. » Le tablier est une vraie surface ; sous les arches, de l'eau ou le vide.
   | 'aqueduc'
+  // BASSIN CREUSÉ : lit en escalier de pierre, très peu profond aux berges, franchement profond au
+  // centre — on marche, puis on nage. Silhouette de cuve taillée, plus le rectangle d'avant.
+  | 'bassin-creuse'
+  // GRAND RIDEAU : la cascade occupe TOUTE la largeur du motif et retombe dans ce bassin creusé.
+  | 'grand-rideau'
   // PUITS : cuve marine ÉTROITE (2-4 tuiles) et PROFONDE, encadrée de 2 rebords de pierre qui
   // DÉPASSENT (margelle) — distinct du BASSIN large. On plonge par l'étroite ouverture ; coffre au fond.
   | 'puits'
@@ -1669,6 +1674,97 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.arches.push({ x: pontX, alt, w: pontW, h: surEau ? Math.max(2, alt - 1) : alt, fill: surEau ? 'eau' : 'vide' })
       placeBirds(alt + 4)
       p.exitAlt = alt
+      break
+    }
+    case 'bassin-creuse': {
+      // ─── BASSIN CREUSÉ DANS LA ROCHE : LA PROFONDEUR VARIE ────────────────────────────────────
+      //
+      // Demande du user : « des bassins d'épaisseur variable (donc au début très très peu profond) puis
+      // au centre très profond pour forcer à nager », et « des bassins qui ont une forme plus
+      // intéressante que juste des rectangles et qui seraient dans la roche ».
+      //
+      // ⚠️ LE FOND EST FAIT DE PLATEFORMES, PAS DE ROCHE BRUTE, ET CE CHOIX EST DICTÉ PAR LES
+      // VALIDATEURS. Une dalle de roche immergée bloque la colonne de sol : `strictReach` y voit un mur
+      // et déclare injoignable tout ce qui suit — alors qu'on passe simplement à la nage. Des marches de
+      // PIERRE (platforms solid) descendent au contraire une par une depuis la berge : chacune est
+      // atteignable de la précédente par une simple chute, tous les validateurs suivent, et le rendu est
+      // le même (une plateforme solide se dessine avec la texture de paroi de cuve).
+      //
+      // Le profil est symétrique : on entre par un gué à hauteur de cheville, on descend marche par
+      // marche, et le centre n'a PAS de fond posé — c'est le sol du terrain, `bankAlt` rangées plus bas.
+      // Au-delà de trois rangées sous la surface, les pieds ne touchent plus : la nage est obligatoire,
+      // ce qui est exactement l'effet demandé.
+      const bankAlt = Math.max(entryAlt + 5, 6) // ≥ 5 rangées d'eau au centre → nage garantie
+      const rampW = 4
+      p.platforms.push(...ramp(0, rampW, entryAlt, bankAlt))
+      const wx = rampW
+      const ww = Math.max(10, w - 2 * rampW)
+      p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt })
+
+      // LIT EN ESCALIER : marches de pierre descendant de chaque berge vers le centre. Le nombre de
+      // marches suit la largeur — sur un bassin étroit, deux paliers suffisent à donner la pente.
+      const nMarches = Math.max(2, Math.min(4, Math.floor(ww / 6)))
+      const marcheW = Math.max(2, Math.floor((ww / 2 - 2) / nMarches))
+      for (let k = 0; k < nMarches; k++) {
+        const alt = bankAlt - 1 - k * Math.max(1, Math.floor((bankAlt - 1) / (nMarches + 1)))
+        if (alt < 1) break
+        p.platforms.push({ x: wx + k * marcheW, alt, w: marcheW, solid: true })
+        p.platforms.push({ x: wx + ww - (k + 1) * marcheW, alt, w: marcheW, solid: true })
+      }
+      // le coffre repose sur le POINT LE PLUS PROFOND : il faut plonger et tenir son souffle pour l'avoir
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) })
+
+      // BERGE DROITE plate à la ligne d'eau, puis redescente : la surface d'un lac est horizontale, et
+      // les validateurs exigent que les deux bords soient EXACTEMENT à la rangée de la surface.
+      const rbx = wx + ww
+      const flatW = Math.min(bank, Math.max(1, w - rbx - 1))
+      p.platforms.push({ x: rbx, alt: bankAlt, w: flatW })
+      const downX = rbx + flatW
+      if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, exitAlt))
+      placeBirds(bankAlt + 3)
+      p.exitAlt = exitAlt
+      break
+    }
+    case 'grand-rideau': {
+      // ─── LA CASCADE OCCUPE TOUTE LA LARGEUR ───────────────────────────────────────────────────
+      //
+      // Retour du user sur Gorge : « le motif cascade puis cascade marche bof, je préférerais que ce soit
+      // tout cascade sur toute la largeur ». Deux rideaux étroits séparés par un bout de sol se lisent
+      // comme deux accidents ; un seul rideau qui barre le passage se lit comme un lieu.
+      //
+      // ⚠️ LE RIDEAU RETOMBE DANS UN BASSIN, il ne tombe pas dans le vide. Une cascade sans `bottomAlt`
+      // coule jusqu'au bas de la carte AVEC un trou mortel dessous : sur toute la largeur du motif, ça
+      // ferait un mur de mort qu'on ne peut que remonter. Ici la colonne s'arrête à la surface du bassin,
+      // et le bassin lui-même est creusé (peu profond aux berges, profond au centre) — on traverse en
+      // nageant sous le rideau, ou on le remonte pour la corniche haute.
+      const bas = Math.max(entryAlt, 1)
+      const haut = bas + cascadeRise(rng)
+      // ⚠️ LA CORNICHE HAUTE NE DOIT PAS SURPLOMBER LE BORD DU BASSIN. Le validateur de rebords lit la
+      // surface marchable la PLUS HAUTE juste à côté de la cuve et exige qu'elle soit à la ligne d'eau ;
+      // une corniche posée douze rangées au-dessus de ce même bord la remplace dans ce calcul et le lac
+      // passe pour « désaxé ». On réserve donc les colonnes : berge gauche, rideau, deux colonnes de
+      // rebord à la ligne d'eau, PUIS seulement la corniche.
+      const bergeW = 3
+      const cornW = Math.max(4, bergeW + 1)
+      p.platforms.push({ x: 0, alt: bas, w: bergeW })
+      const rx = bergeW
+      const rw = Math.max(8, w - bergeW - cornW - 2)
+      // le bassin d'accueil, à la rangée du bas : lit en cuvette, comme bassin-creuse mais plus court
+      p.waters.push({ x: rx, w: rw, kind: basinKind, bankAlt: bas })
+      const marcheW = Math.max(2, Math.floor(rw / 8))
+      for (let k = 0; k < 2; k++) {
+        const alt = Math.max(1, bas - 1 - k)
+        p.platforms.push({ x: rx + k * marcheW, alt, w: marcheW, solid: true })
+        p.platforms.push({ x: rx + rw - (k + 1) * marcheW, alt, w: marcheW, solid: true })
+      }
+      // LE RIDEAU : une seule colonne d'eau large, du haut du motif jusqu'à la surface du bassin.
+      p.waters.push({ x: rx, w: rw, kind: 'cascade', bankAlt: haut, bottomAlt: bas })
+      // rebord droit À LA LIGNE D'EAU (deux colonnes), puis seulement la corniche haute d'arrivée
+      p.platforms.push({ x: rx + rw, alt: bas, w: 2 })
+      p.platforms.push({ x: rx + rw + 2, alt: haut, w: Math.max(2, w - rx - rw - 2) })
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: rx + rw + 3, alt: haut + 1 })
+      placeBirds(haut + 2)
+      p.exitAlt = bas
       break
     }
     case 'colonnes-perilleuses': {
@@ -3349,6 +3445,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   spawns.length = 0
   spawns.push(...cleanedSpawns)
 
+
   // ─── AUCUN DÉCOR, AUCUN COFFRE ENCHÂSSÉ DANS LA PIERRE ────────────────────────────────────────
   //
   // Retour du user sur Vallon : « y a un trésor qui est collé à de la pierre et c'est bizarre ».
@@ -3558,6 +3655,14 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   gue: { tier: 2, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [12, 22], below: 'vide', above: 'air', birds: true },
   'corniche-vide': { tier: 2, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [14, 26], below: 'vide', above: 'air', birds: true },
   bassin: { tier: 2, family: 'risque', entry: 'milieu', exit: 'milieu', width: [12, 22], below: 'marine', above: 'air', chest: true, water: true },
+  // ⚠️ PAS DE `water: true` SUR CES DEUX-LÀ, ET C'EST DÉLIBÉRÉ. Ce drapeau retire un motif des pools
+  // génériques pour le réserver au canal des « plans d'eau imposés » — un canal qui compte une douzaine
+  // de places pour une trentaine de motifs, donc incapable d'accueillir quoi que ce soit de plus sans en
+  // évincer un autre (essayé : le pas-japonais a disparu du jeu). Sans le drapeau, ils passent par
+  // l'ordonnanceur général « le moins servi d'abord », qui dispose de ~800 créneaux et garantit la
+  // couverture par arithmétique. Ils posent leur propre eau, ils n'ont pas besoin du canal dédié.
+  'bassin-creuse': { tier: 2, family: 'risque', entry: 'milieu', exit: 'milieu', width: [16, 26], below: 'marine', above: 'air', chest: true },
+  'grand-rideau': { tier: 2, family: 'risque', entry: 'bas', exit: 'bas', width: [18, 28], below: 'marine', above: 'air', chest: true },
   cascade: { tier: 2, family: 'risque', entry: 'bas', exit: 'haut', width: [16, 26], below: 'cascade', above: 'air', chest: true, water: true },
   grotte: { tier: 2, family: 'tension', entry: 'milieu', exit: 'milieu', width: [12, 20], below: 'roche', above: 'roche' },
   arene: { tier: 2, family: 'tension', entry: 'milieu', exit: 'milieu', width: [14, 24], below: 'sol', above: 'air' },
@@ -3982,8 +4087,18 @@ export function planModules(o: ComposeOpts): Module[] {
     USAGE_GLOBAL[kind] = (USAGE_GLOBAL[kind] ?? 0) + 1
     const spec = CATALOG[kind]
     const mvpHere = o.mvp && bucket === 'risque' && idx >= order.length - 2 && !modules.some((m) => m.ground?.includes(o.mvp!))
+    // ⚠️ PAS DE MONSTRE TERRESTRE SUR UN MODULE DONT LE SOL EST UNE CUVE. L'assembleur répartit les mobs
+    // au sol sur la portée du module ; au-dessus d'un bassin, il n'y a pas de surface où les poser et le
+    // validateur les signale « aucune-surface » (constaté sur cave-1 en ajoutant bassin-creuse). Les
+    // motifs du canal « plan d'eau imposé » recevaient déjà `o.aquatic` pour cette raison ; la règle
+    // vaut pour tout module à fond marine, d'où qu'il vienne.
+    // ⚠️ LA RÈGLE VISE LES DEUX NOUVEAUX MOTIFS, PAS TOUS LES FONDS MARINE. Élargie à `below === 'marine'`,
+    // elle a privé de monstres des modules qui, eux, ont bien une surface au-dessus de leur cuve (cave-1
+    // s'est mis à sortir sans graine valide). Ces deux-ci noient toute leur portée : il n'y a nulle part
+    // où poser un mob terrestre, et le validateur le signale « aucune-surface ».
+    const surCuve = kind === 'bassin-creuse' || kind === 'grand-rideau'
     modules.push(mk(kind, {
-      ground: [...(mvpHere ? [o.mvp!] : []), ...nextGround()],
+      ground: surCuve ? (o.aquatic ?? []) : [...(mvpHere ? [o.mvp!] : []), ...nextGround()],
       birds: spec.birds && o.birds.length ? flock(kind) : undefined,
       ...(o.hilly && kind === 'colline' ? { tall: true } : {}),
     }))

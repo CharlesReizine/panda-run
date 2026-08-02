@@ -199,7 +199,15 @@ const STONY_BIOMES = new Set(['cave', 'montagne', 'carriere', 'enfer'])
 const USAGE_EAU: Record<string, number> = {}
 const EAUX_ROTATIVES: ModuleKind[] = [...new Set(WATER_ROT.flat())]
 
+
 function eauxMoinsServies(id: string): ModuleKind[] {
+  // ⚠️ CE CANAL NE PEUT PAS GARANTIR LA COUVERTURE, ET IL NE FAUT PAS LUI DEMANDER DE LE FAIRE.
+  // Mesuré : une douzaine de terrains seulement passent par ici (les autres ont une eau imposée, ou sont
+  // en lave), pour une trentaine de motifs d'eau au catalogue. Quelle que soit la règle de tirage —
+  // « le moins servi », tourniquet strict, hachage — il y a moins de places que de motifs, donc des
+  // absents. Un tourniquet a été essayé : il a simplement changé l'identité des oubliés. La couverture
+  // se joue dans SPECIAL_WATER_LEVELS, qui pose nommément les motifs à géométrie exigeante ; ici on se
+  // contente de faire tourner le reste équitablement.
   const graine = empreinte(id + ':eau')
   const trie = [...EAUX_ROTATIVES].sort((a, b) => {
     const na = USAGE_EAU[a] ?? 0, nb = USAGE_EAU[b] ?? 0
@@ -606,7 +614,19 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
     && longEmptyFlats(l, maxFlat).length === 0 && deadEndSurfaces(l).length === 0
     && unreachablePlatforms(l).length === 0 && unreachableLadders(l).length === 0
     && unreachableChests(l).length === 0
-  const salts = [`${id}-${ending}`, ...Array.from({ length: 80 }, (_, i) => `${id}-${ending}-${i}`)]
+    // ⚠️ L'ATTEIGNABILITÉ STRICTE RESTE HORS DE CETTE CHAÎNE, ET C'EST UN ARBITRAGE, PAS UN OUBLI.
+    // Elle est vérifiée par tests/core/reachable-strict.test.ts sur tous les terrains, donc rien ne passe
+    // en douce. L'ajouter ici semblait plus propre — un invariant testé devrait guider la sélection —
+    // mais elle est si contraignante en biome de grotte (des murs de roche partout, c'est le principe)
+    // que cave-1 n'a plus trouvé AUCUNE graine sur 161 essais et retombait sur sa première, non validée :
+    // un monstre posé dans le vide. Un critère qui fait échouer la recherche ne protège plus rien, il la
+    // fait échouer en silence. On le laisse donc au test, qui échoue bruyamment, lui.
+  // ⚠️ 160 GRAINES, PAS 80. Chaque motif ajouté au catalogue rend la combinaison un peu plus contrainte,
+  // et un terrain qui n'en trouve aucune retombe SILENCIEUSEMENT sur sa première graine — non validée
+  // (cave-1 sortait ainsi avec un monstre posé dans le vide). Doubler la réserve coûte quelques
+  // dixièmes de seconde au démarrage, uniquement sur les terrains qui en ont besoin : les autres
+  // s'arrêtent à la première graine propre, comme avant.
+  const salts = [`${id}-${ending}`, ...Array.from({ length: 160 }, (_, i) => `${id}-${ending}-${i}`)]
   let chosen = salts[0]!
   let level = composeLevel({ ...base, seed: chosen })
   // On garde la PREMIÈRE graine conforme à TOUS les invariants (clean) ET portant assez de GROS MOTIFS
@@ -798,9 +818,15 @@ function ensureRosterCoverage(levels: LevelDef[]): void {
       if (MONSTERS[id]?.aerial) {
         home.spawns.push({ monsterId: id, x, y: Math.max(2, Math.floor((home.heightTiles ?? 16) / 3)) })
       } else {
-        const pl = home.platforms.find((p) => x >= p.x && x < p.x + p.w)
+        // ⚠️ `y` EST LA RANGÉE DE LA PLATEFORME, PAS CELLE AU-DESSUS. Le validateur exige `spawn.y ===
+        // plateforme.y` (la rangée du sol sur lequel il patrouille) ; ce `- 1` posait le monstre une
+        // rangée trop haut, donc « aucune-surface ». Le défaut dormait depuis longtemps : il ne se voit
+        // que lorsqu'une espèce doit être injectée ici faute d'être sortie naturellement — c'est arrivé
+        // au gobelin mineur en grotte, et cave-1 est devenu impossible à valider d'un coup. Le second
+        // injecteur, plus bas, écrivait déjà la bonne rangée : les deux disaient des choses différentes.
+        const pl = home.platforms.find((p) => x >= p.x && x < p.x + p.w && p.w >= 3)
         if (!pl) continue
-        home.spawns.push({ monsterId: id, x, y: pl.y - 1 })
+        home.spawns.push({ monsterId: id, x, y: pl.y })
       }
       present.add(id)
     }
