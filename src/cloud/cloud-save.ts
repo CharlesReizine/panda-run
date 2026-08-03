@@ -38,16 +38,49 @@ interface CloudDoc {
 
 // `null` = pas de sauvegarde cloud. Un document illisible est traité EXACTEMENT comme absent : on ne
 // bloque jamais le jeu sur une sauvegarde corrompue (même politique que TitleScene.safeLoad en local).
+/**
+ * Retrouve la partie d'un pseudo — par sa clé, ou par le NOM inscrit dans la sauvegarde.
+ *
+ * ⚠️ LA CLÉ DU DOCUMENT A DÉRIVÉ, LE NOM DU JOUEUR NON. C'est la leçon de trois correctifs successifs,
+ * et c'est la base qui l'a tranchée : « dans le classement on voit un archer de niveau 29 et pourtant
+ * quand je load j'ai un novice de niveau 1 ». Relevé dans Firestore :
+ *
+ *   clé « panda »          → nom « charlychoulove », archer 29, 23 terrains finis   ← la vraie partie
+ *   clé « charlychoulove » → nom « megastock »,      novice 1                       ← créée par erreur
+ *
+ * Le personnage était bien là ; il dormait sous « panda », qui est le REPLI de `pseudoKey` quand la
+ * normalisation ne rend rien d'exploitable. Une clé technique peut changer de forme au fil des versions
+ * (troncature, repli, identifiant d'authentification d'une ancienne build) ; le nom que le joueur a tapé,
+ * lui, est écrit DANS la sauvegarde et ne bouge pas. C'est donc lui qui fait office d'identité.
+ *
+ * ⚠️ ET ON COMPARE TOUS LES CANDIDATS AVANT DE CHOISIR, y compris la correspondance exacte. C'est le
+ * piège où je suis tombé : privilégier la clé exacte ramenait le novice 1 créé par erreur et laissait
+ * l'archer 29 au placard. On garde la sauvegarde la plus AVANCÉE — dans un jeu solo la progression ne
+ * redescend jamais, donc ce choix ne peut jamais faire perdre de progression.
+ */
 export async function pull(key: string): Promise<StampedSave | null> {
   const p = getDb()
   if (!p) return null
   const [db, mod] = await Promise.all([p, import('firebase/firestore')])
+
+  const candidats: StampedSave[] = []
   const snap = await mod.getDoc(mod.doc(db, 'saves', key))
   if (snap.exists()) {
     const s = lireDoc(snap.data() as CloudDoc)
-    if (s) return s
+    if (s) candidats.push(s)
   }
-  return retrouverSousUneAutreCle(db, mod, key)
+  candidats.push(...await autresCandidats(db, mod, key))
+  if (candidats.length === 0) return null
+  return plusAvancee(candidats)
+}
+
+/** La sauvegarde la plus avancée ; à niveau égal, la plus récente. */
+export function plusAvancee(candidats: StampedSave[]): StampedSave {
+  return candidats.reduce((a, b) => {
+    if (b.player.level > a.player.level) return b
+    if (b.player.level === a.player.level && b.savedAt > a.savedAt) return b
+    return a
+  })
 }
 
 function lireDoc(data: CloudDoc): StampedSave | null {
@@ -59,43 +92,38 @@ function lireDoc(data: CloudDoc): StampedSave | null {
   }
 }
 
-/**
- * Dernier recours : la partie existe, mais sous une clé écrite par une ANCIENNE version.
- *
- * ⚠️ CE REPLI EXISTE PARCE QU'UNE SAUVEGARDE A ÉTÉ « PERDUE ». Retour du user : « quand je choisis
- * continuer avec charlychoulove, ça me remet niveau 1 au début du jeu ». La partie n'avait pas disparu :
- * elle dormait sous une clé que la normalisation d'aujourd'hui ne produit plus (la longueur maximale du
- * pseudo a changé en cours de route, et la troncature avec elle). Le jeu cherchait au bon endroit selon
- * ses règles actuelles, ne trouvait rien, et proposait donc de créer une nouvelle partie — un écran de
- * perte de données déguisé en écran d'accueil. C'est le même désalignement de clé qui faisait deux
- * lignes au classement.
- *
- * On parcourt donc les sauvegardes et on accepte une clé dont la forme canonique est un PRÉFIXE de la
- * nôtre, ou l'inverse : c'est exactement la trace que laisse un changement de troncature. Rien d'autre
- * n'est toléré — deux joueurs aux pseudos voisins ne doivent jamais hériter de la partie de l'autre.
- * En cas d'ambiguïté (plusieurs candidats), on prend la sauvegarde la plus AVANCÉE : c'est celle que le
- * joueur reconnaîtra, et la seule que perdre serait grave.
- */
-async function retrouverSousUneAutreCle(
+/** Forme canonique d'un pseudo, pour comparer un nom écrit dans une sauvegarde à une clé. */
+export function canon(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9_-]/g, '')
+}
+
+/** Une sauvegarde appartient-elle au joueur qui demande `key` ? */
+export function memeJoueur(idDoc: string, nomDansLaSauvegarde: string, key: string): boolean {
+  // Deux traces reconnues, et deux seulement :
+  //  · le NOM du joueur dans la sauvegarde correspond au pseudo demandé (clé dérivée ou repliée) ;
+  //  · la clé est un PRÉFIXE de la nôtre, ou l'inverse (trace d'un changement de troncature).
+  // Rien d'autre : deux joueurs aux pseudos voisins ne doivent jamais hériter de la partie de l'autre.
+  if (canon(nomDansLaSauvegarde) === key) return true
+  return idDoc.startsWith(key) || key.startsWith(idDoc)
+}
+
+async function autresCandidats(
   db: import('firebase/firestore').Firestore,
   mod: typeof import('firebase/firestore'),
   key: string,
-): Promise<StampedSave | null> {
-  if (key.length < 3) return null // trop court pour qu'un préfixe soit significatif
+): Promise<StampedSave[]> {
+  if (key.length < 3) return [] // trop court pour qu'un préfixe soit significatif
   try {
     const snap = await mod.getDocs(mod.collection(db, 'saves'))
-    let meilleur: StampedSave | null = null
+    const out: StampedSave[] = []
     snap.forEach((d) => {
-      const id = d.id
-      if (id === key) return
-      if (!(id.startsWith(key) || key.startsWith(id))) return
+      if (d.id === key) return
       const s = lireDoc(d.data() as CloudDoc)
-      if (!s) return
-      if (!meilleur || s.player.level > meilleur.player.level) meilleur = s
+      if (s && memeJoueur(d.id, s.player.name ?? '', key)) out.push(s)
     })
-    return meilleur
+    return out
   } catch {
-    return null // droits insuffisants ou hors ligne : on ne bloque pas l'écran d'accueil
+    return [] // droits insuffisants ou hors ligne : on ne bloque pas l'écran d'accueil
   }
 }
 
