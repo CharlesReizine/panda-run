@@ -2402,6 +2402,38 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0x546e7a, 0.6).fillRect(3, 3, 24, 2).fillRect(3, 19, 24, 2) // reflet clair sur l'assise
     g.fillStyle(0x33691e, 0.5).fillEllipse(8, 4, 10, 4).fillEllipse(25, 20, 9, 4) // mousse humide
     g.generateTexture('basin-wall', 32, 32); g.clear()
+    // ─── PIERRE FRAGILE : la matière CASSABLE, en trois états d'usure ────────────────────────────
+    // Demande du user : « une nouvelle matière qui est du bloc de pierre cassable ». Elle doit se LIRE
+    // comme fragile AVANT qu'on la frappe, sinon personne ne devine qu'on peut la casser : d'où un ton
+    // plus CHAUD et plus CLAIR que la roche saine (basin-wall, gris-bleu froid), une taille de bloc plus
+    // petite (moellons, pas de gros appareil) et des fissures visibles dès le premier état.
+    // Les trois textures se succèdent au fil des coups : les fissures s'ouvrent, des morceaux manquent.
+    // ⚠️ LES TROIS FONT 32×32 ET SE SUBSTITUENT SANS RIEN REDIMENSIONNER : l'état d'usure ne doit pas
+    // déplacer le corps de collision, seulement changer ce qu'on voit.
+    const fissures: [number, number, number, number][][] = [
+      [[16, 2, 2, 9], [15, 11, 2, 7]], // état 0 : une fêlure verticale discrète
+      [[16, 2, 2, 9], [15, 11, 2, 7], [4, 14, 11, 2], [20, 8, 9, 2], [8, 20, 2, 8]], // état 1 : réseau
+      [[14, 0, 4, 32], [0, 13, 32, 4], [6, 20, 3, 12], [22, 4, 3, 14]], // état 2 : éclaté
+    ]
+    for (let etat = 0; etat < 3; etat++) {
+      g.fillStyle(0x6d5a4a).fillRect(0, 0, 32, 32) // fond de pierre chaude (grès friable)
+      // moellons : quatre assises courtes → appareil irrégulier, moins « mur bâti » que basin-wall
+      g.fillStyle(0x87715c)
+      for (let r = 0; r < 4; r++) {
+        const dec = r % 2 === 0 ? 0 : 8
+        for (let c = -1; c < 3; c++) g.fillRect(c * 12 + dec + 1, r * 8 + 1, 10, 6)
+      }
+      g.fillStyle(0xa8907a, 0.55) // reflet clair sur l'arête haute des moellons
+      for (let r = 0; r < 4; r++) g.fillRect(1, r * 8 + 1, 30, 1)
+      // FISSURES de l'état courant, tracées en creux sombre
+      g.fillStyle(0x3e3227)
+      for (const [fx, fy, fw, fh] of fissures[etat]!) g.fillRect(fx, fy, fw, fh)
+      if (etat === 2) {
+        // état éclaté : des morceaux MANQUENT (on voit le noir du vide derrière la pierre)
+        g.fillStyle(0x241d16).fillRect(2, 2, 9, 9).fillRect(21, 21, 9, 9)
+      }
+      g.generateTexture(`pierre-fragile-${etat}`, 32, 32); g.clear()
+    }
     // waterfall : CASCADE tuilable verticalement — rideau d'eau translucide, stries claires
     // d'écoulement + écume. Le rendu la fait défiler vers le bas (tilePositionY) pour l'effet de chute.
     g.fillStyle(0x1e88e5, 0.34).fillRect(0, 0, 32, 32)

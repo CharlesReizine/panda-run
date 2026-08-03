@@ -17,6 +17,7 @@
 
 import type { LevelDef } from './levels'
 import { MIN_LADDER_TILES, MAX_LADDER_TILES } from '../core/platforming'
+import { comblements } from '../core/roche'
 import { MONSTERS } from './monsters'
 
 // altitude = nombre de rangées AU-DESSUS du sol (0 = surface du sol). row = groundRow - alt.
@@ -61,6 +62,8 @@ export type ModuleKind =
   // GROTTE-TUNNEL : vrai boyau de roche (roche au-dessus ET en dessous) plus long/varié que 'grotte',
   // réservé aux biomes ROCHEUX / SOUTERRAINS (cave/montagne/carriere/enfer/jungle) — cavités franches
   | 'grotte-tunnel'
+  // PIERRE FRAGILE (matière cassable) : entrées murées à percer, plancher qui cède
+  | 'grotte-scellee' | 'sol-fragile'
   // GROTTE SOUS-MARINE EN U : lac en U NOYÉ SOUS UN TOIT DE ROCHE (grotte inondée) — on plonge, on
   // traverse le fond immergé sous un plafond de roche, on remonte de l'autre côté ; coffre au fond
   | 'grotte-noyee'
@@ -248,6 +251,9 @@ interface Piece {
   // (mesa). `solid` : le PLAFOND est une COLLISION pleine (on ne saute pas à travers) ; absent = socle
   // décoratif sous le sol (aucune collision).
   rocks: { x: number; altBot: number; altTop: number; w: number; solid?: boolean }[]
+  // PIERRE FRAGILE : même rectangle que `rocks` (altitudes inclusives) mais CASSABLE à coups d'attaque
+  // ou de saut. Sert à sceller une entrée de grotte et à poser un plancher qui cède. Cf. levels.ts.
+  breakables: { x: number; altBot: number; altTop: number; w: number; coups?: number }[]
   gaps: { x: number; w: number }[]
   // pics : alt = altitude de la SURFACE qui porte les pics (corniche en hauteur). Absent → pics au sol.
   spikes: { x: number; w: number; alt?: number }[]
@@ -276,7 +282,7 @@ interface Piece {
 }
 
 function emptyPiece(exitAlt: number): Piece {
-  return { platforms: [], rocks: [], gaps: [], spikes: [], bridges: [], trampolines: [], arches: [], waters: [], ladders: [], spawns: [], props: [], signs: [], exitAlt }
+  return { platforms: [], rocks: [], breakables: [], gaps: [], spikes: [], bridges: [], trampolines: [], arches: [], waters: [], ladders: [], spawns: [], props: [], signs: [], exitAlt }
 }
 
 // Dégagement libre (en rangées) garanti sous un PLAFOND DE ROCHE de tunnel : strictement supérieur à
@@ -1144,6 +1150,113 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       break
     }
 
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    // PIERRE FRAGILE — deux motifs porteurs, plus des caches greffées sur les motifs d'eau existants.
+    // Demande du user : « une nouvelle matière qui est du bloc de
+    // pierre cassable, et du coup il me faudrait quelques motifs avec des grottes ou grottes + de
+    // l'eau juste après ou cascade qui rentre dans grotte... avec des entrées bouchées qu'on peut
+    // casser en tapant quelques fois dans la pierre fragilisée. Pourquoi pas aussi des sols qu'on
+    // peut casser en sautant plusieurs fois sur les pierres fragiles. »
+    //
+    // ⚠️ AUCUN DE CES MOTIFS NE MET LA PIERRE FRAGILE SUR LE CHEMIN OBLIGATOIRE, et c'est une règle,
+    // pas une timidité. Un mur à casser barrant la seule route, c'est un joueur bloqué s'il ne
+    // comprend pas qu'il faut frapper la pierre — le pire des échecs de lisibilité. Ici la pierre
+    // scelle toujours un À-CÔTÉ : on traverse le module sans jamais y toucher, et la casser est une
+    // RÉCOMPENSE. L'atteignabilité du terrain ne dépend donc jamais d'un coup d'épée.
+    //
+    // ⚠️ ET CHAQUE CAVITÉ A UN PUITS OUVERT + UNE ÉCHELLE, ce qui n'est pas décoratif non plus. Une
+    // cavité entièrement enfermée dans le socle serait INJOIGNABLE (la bouche scellée débouche sur de
+    // la roche, pas sur de l'air) ; une chambre sans échelle serait un CUL-DE-SAC où le panda tombe
+    // sans pouvoir remonter. Le puits sert à descendre face au mur, l'échelle à ressortir.
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+
+    // ─── GROTTE SCELLÉE : entrée murée de pierre fragile, coffre au fond ──────────────────────
+    case 'grotte-scellee': {
+      // Un puits ouvert perce le chemin ; au fond, un mur de pierre fissurée bouche une cavité. On
+      // descend, on tape, on entre, on prend le coffre, on remonte par l'échelle du puits.
+      const alt = Math.max(entryAlt, 10) // il faut de la hauteur SOUS le chemin pour loger la cavité
+      const rampW = Math.min(8, Math.max(2, (alt - entryAlt) * 2))
+      const cavW = Math.min(8, Math.max(5, Math.floor(w * 0.32)))
+      const puitsW = 2
+      // ⚠️ LE SOL DE LA CAVITÉ EST CELUI DU MONDE, pas une plateforme posée juste au-dessus. Une
+      // plateforme à l'altitude 1 ajoutait un QUATRIÈME étage marchable dans la colonne (sol du monde,
+      // sol de la cavité, toit, chemin) là où la règle anti-empilement en tolère trois — le motif était
+      // recalé à chaque tirage. Le sol du monde fait très bien le plancher de la grotte.
+      const solCav = 0
+      const plafondCav = alt - 1         // plafond de la cavité
+      const bas = plafondCav             // la dalle fait deux rangées : plafond de la cavité + sol du chemin
+      const puitsX = Math.max(rampW + 1, Math.floor(w * 0.45))
+      const cavX = puitsX + puitsW
+      const finCav = Math.min(w, cavX + cavW)
+      // chemin : rampe d'accroche, bande jusqu'au puits, puis bande après la cavité
+      p.platforms.push(...ramp(0, rampW, entryAlt, alt))
+      p.platforms.push({ x: rampW, alt, w: puitsX - rampW })
+      if (w - finCav > 0) p.platforms.push({ x: finCav, alt, w: w - finCav })
+      // socle : plein à gauche du puits et après la cavité ; le puits reste OUVERT (on y descend)
+      if (alt - 1 >= 1) {
+        // ⚠️ LE SOCLE DÉMARRE APRÈS LA RAMPE, JAMAIS À x=0. Parti du bord, il ENTERRAIT les paliers de la
+        // rampe d'accroche sous une dalle pleine : au lieu d'un escalier, le module s'ouvrait sur un mur de
+        // roche de la hauteur du chemin, infranchissable — d'où les culs-de-sac et la sortie injoignable
+        // qui écartaient ce motif à chaque tirage.
+        p.rocks.push({ x: rampW, altBot: 1, altTop: alt - 1, w: puitsX - rampW })
+        if (w - finCav > 0) p.rocks.push({ x: finCav, altBot: 1, altTop: alt - 1, w: w - finCav })
+        // dalle de plafond au-dessus de la cavité ET du puits : le chemin repose sur du plein, et le
+        // puits garde son ouverture (une seule rangée de roche, percée par le trou du chemin)
+        // épaisseur visuelle du plafond, coiffée par la plateforme ci-dessous → jamais une corniche nue
+        p.rocks.push({ x: cavX, altBot: bas, altTop: bas, w: finCav - cavX })
+      }
+      // ⚠️ LE TOIT DE LA CAVITÉ EST UNE PLATEFORME SOLIDE, PAS UN SIMPLE DESSUS DE DALLE DE ROCHE, et
+      // c'est la subtilité qui a écarté ce motif de tous les terrains. Sans toit, la cavité ouvrait dans le
+      // chemin un trou d'une dizaine de colonnes ; avec une simple dalle de roche, seul `strictReach` (qui
+      // connaît les sommets de roche) voyait un passage — `unreachablePlatforms` et `deadEndSurfaces`, eux,
+      // ne raisonnent que sur les PLATEFORMES et continuaient de déclarer la suite du terrain injoignable.
+      // Une plateforme solide est comprise par TOUS les validateurs, et elle dit la vérité : c'est de la
+      // pierre, on marche dessus, on ne la traverse pas.
+      p.platforms.push({ x: cavX, alt, w: finCav - cavX, solid: true })
+      // MUR FRAGILE : il sépare le fond du puits de l'intérieur de la cavité
+      p.breakables.push({ x: cavX, altBot: solCav + 1, altTop: plafondCav - 1, w: 2 })
+      // PLANCHER SOUS LE COFFRE, sur trois colonnes seulement. Un plancher courant sur TOUTE la cavité
+      // ajoutait un quatrième étage marchable dans la colonne du puits (règle anti-empilement) ; réduit au
+      // fond de la grotte, il donne au coffre la surface dont `unreachableChests` a besoin sans empiler
+      // quoi que ce soit là où le panda descend.
+      p.platforms.push({ x: finCav - 3, alt: solCav + 1, w: 3 })
+      p.props.push({ kind: 'coffre', x: finCav - 2, alt: solCav + 2 })
+      if (groundMobs.length) p.spawns.push({ monsterId: groundMobs[0]!, x: finCav - 5, alt: solCav })
+      // ÉCHELLE DE REMONTÉE dans le puits
+      poseLadderOn(p, puitsX, solCav, puitsX - 1, Math.max(MIN_LADDER_TILES, Math.min(MAX_LADDER_TILES, alt - solCav)))
+      p.exitAlt = alt
+      break
+    }
+
+    // ─── SOL FRAGILE : « des sols qu'on peut casser en sautant plusieurs fois » ───────────────
+    case 'sol-fragile': {
+      // Un pan du chemin est en pierre fissurée. On peut passer dessus sans y penser ; s'acharner à
+      // retomber dessus le fait CÉDER, et on découvre une chambre au trésor sous le chemin.
+      const alt = Math.max(entryAlt, 9)
+      const rampW = Math.min(8, Math.max(2, (alt - entryAlt) * 2))
+      const dalleW = 4
+      const dalleX = Math.max(rampW + 2, Math.floor(w / 2) - Math.floor(dalleW / 2))
+      const finDalle = dalleX + dalleW
+      const solChambre = Math.max(1, alt - 6)
+      p.platforms.push(...ramp(0, rampW, entryAlt, alt))
+      p.platforms.push({ x: rampW, alt, w: dalleX - rampW })
+      if (w - finDalle > 0) p.platforms.push({ x: finDalle, alt, w: w - finDalle })
+      // le PAN FRAGILE tient le rôle du sol, à l'altitude exacte du chemin : rien ne le distingue d'une
+      // dalle normale, sinon la matière — c'est le motif entier.
+      p.breakables.push({ x: dalleX, altBot: alt, altTop: alt, w: dalleW })
+      if (alt - 1 >= 1) {
+        // socle démarré après la rampe (cf. grotte-scellee : à x=0 il enterrait les paliers d'accroche)
+        p.rocks.push({ x: rampW, altBot: 1, altTop: alt - 1, w: dalleX - rampW })
+        if (w - finDalle > 0) p.rocks.push({ x: finDalle, altBot: 1, altTop: alt - 1, w: w - finDalle })
+        if (solChambre - 1 >= 1) p.rocks.push({ x: dalleX, altBot: 1, altTop: solChambre - 1, w: dalleW })
+      }
+      p.platforms.push({ x: dalleX, alt: solChambre, w: dalleW }) // sol de la chambre
+      p.props.push({ kind: 'coffre', x: dalleX + 1, alt: solChambre + 1 })
+      // ÉCHELLE DE REMONTÉE : casser le sol ne doit pas être un aller simple
+      poseLadderOn(p, finDalle - 1, solChambre, dalleX, Math.max(MIN_LADDER_TILES, Math.min(MAX_LADDER_TILES, alt - solChambre)))
+      p.exitAlt = alt
+      break
+    }
     // ─── GROTTE SOUS-MARINE EN U : lac en U NOYÉ SOUS UN TOIT DE ROCHE, coffre au fond ────────
     case 'grotte-noyee': {
       // Grotte inondée : comme 'lac-en-u' (on plonge, on nage sous un plafond de roche IMMERGÉ au
@@ -1179,6 +1292,17 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       if (w - downX > 0) p.platforms.push(...ramp(downX, w - downX, bankAlt, exitAlt))
       // COFFRE AU FOND (jamais dans la lave) : plongée récompensée
       if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: wx + Math.floor(ww / 2) })
+      // CACHE SCELLÉE DE PIERRE FRAGILE sur la berge de sortie (demande du user : de la pierre cassable
+      // dans les grottes, et des grottes avec de l'eau). On la GREFFE ici plutôt que d'écrire un motif
+      // « grotte + eau » de plus : ce motif-ci a déjà une grotte, un plan d'eau et une géométrie éprouvée
+      // par les validateurs — deux tuiles fragiles et un coffre suffisent à y ajouter la mécanique, là où
+      // un motif neuf se battait sans fin contre la règle des berges à niveau.
+      // seuil à 2 : la berge de sortie de ce motif ne fait souvent que deux colonnes (elle est bornée par
+      // `w - rbx - 1`), et un seuil à 3 écartait silencieusement la greffe dans la plupart des largeurs.
+      if (flatW >= 2) {
+        p.breakables.push({ x: rbx, altBot: bankAlt + 1, altTop: bankAlt + 2, w: 2 })
+        p.props.push({ kind: 'coffre', x: rbx, alt: bankAlt + 1 })
+      }
       // monstres AQUATIQUES au fond (comme lac-en-u) — jamais de terrestre au-dessus de l'eau
       if (groundMobs.length) {
         const nAqua = Math.max(1, Math.min(3, Math.round((ww * bankAlt) / 80)))
@@ -1277,7 +1401,12 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const ww = Math.max(8, w - approachW - rampW)
       // hauteur du perchoir : très haut par l'échelle ; par les plateformes, dérivée de la place dispo
       // (paliers ≤ 3, chacun +3) → toujours plusieurs sauts au-dessus de l'eau, jamais de débordement.
-      const paliers = Math.max(1, Math.min(3, Math.floor((approachW - 3) / 3)))
+      // ⚠️ PLANCHER À 3 PALIERS, ET C'EST UN INVARIANT, PAS UN RÉGLAGE. Le « saut de la foi » n'a de sens
+      // que si le plongeoir culmine très haut ; à 1 ou 2 paliers on saute de trois rangées, ce qui n'est
+      // plus un plongeoir mais une marche. La règle « au moins un plongeoir du jeu culmine à ≥ 9 rangées »
+      // était jusqu'ici laissée à la CHANCE DE LA GRAINE : il a suffi de regraver les plans pour qu'aucun
+      // plongeoir n'atteigne plus 7, et le test a sauté. On le garantit donc par construction.
+      const paliers = 3
       const boardAlt = bankAlt + (ladderMode ? 9 + Math.floor(rng() * 3) : 3 * paliers)
       if (ladderMode) {
         // MONTÉE PAR ÉCHELLE : berge plate → jetée au ras de l'eau → longue échelle → plongeoir en surplomb.
@@ -2428,7 +2557,12 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const ww = Math.max(8, w - approachW - rampW)
       // hauteur du perchoir : très haut par l'échelle ; par les plateformes, dérivée de la place dispo
       // (paliers ≤ 3, chacun +3) → toujours plusieurs sauts au-dessus de l'eau, jamais de débordement.
-      const paliers = Math.max(1, Math.min(3, Math.floor((approachW - 3) / 3)))
+      // ⚠️ PLANCHER À 3 PALIERS, ET C'EST UN INVARIANT, PAS UN RÉGLAGE. Le « saut de la foi » n'a de sens
+      // que si le plongeoir culmine très haut ; à 1 ou 2 paliers on saute de trois rangées, ce qui n'est
+      // plus un plongeoir mais une marche. La règle « au moins un plongeoir du jeu culmine à ≥ 9 rangées »
+      // était jusqu'ici laissée à la CHANCE DE LA GRAINE : il a suffi de regraver les plans pour qu'aucun
+      // plongeoir n'atteigne plus 7, et le test a sauté. On le garantit donc par construction.
+      const paliers = 3
       const boardAlt = bankAlt + (ladderMode ? 9 + Math.floor(rng() * 3) : 3 * paliers)
       if (ladderMode) {
         // MONTÉE PAR ÉCHELLE : berge plate → jetée au ras de l'eau → longue échelle → plongeoir en surplomb.
@@ -3345,6 +3479,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   const hazards: NonNullable<LevelDef['hazards']> = []
   const ladders: NonNullable<LevelDef['ladders']> = []
   const rockBands: NonNullable<LevelDef['rockBands']> = []
+  const breakables: NonNullable<LevelDef['breakables']> = []
   const spawns: LevelDef['spawns'] = []
   const props: NonNullable<LevelDef['props']> = []
   const signs: NonNullable<LevelDef['signs']> = []
@@ -3361,6 +3496,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     // dalles de roche (plafond de tunnel / socle) : y = rangée du HAUT de la dalle, h = épaisseur ;
     // `solid` = plafond à collision pleine (on ne saute pas à travers).
     for (const rk of piece.rocks) rockBands.push({ x: x0 + rk.x, y: row(rk.altTop), w: rk.w, h: rk.altTop - rk.altBot + 1, ...(rk.solid ? { solid: true } : {}) })
+    for (const bk of piece.breakables) breakables.push({ x: x0 + bk.x, y: row(bk.altTop), w: bk.w, h: bk.altTop - bk.altBot + 1, ...(bk.coups ? { coups: bk.coups } : {}) })
     // pics : `top` = rangée de la surface qui les porte (corniche en hauteur), sinon au sol (top absent)
     for (const s of piece.spikes) hazards.push({ kind: 'spikes', x: x0 + s.x, w: s.w, ...(s.alt !== undefined ? { top: row(s.alt) } : {}) })
     for (const wtr of piece.waters) {
@@ -3397,6 +3533,12 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   // JAMAIS la pierre, ni en marchant, ni en tombant, ni les monstres). On force donc la collision sur
   // CHAQUE dalle de roche (fini les remplissages de mesa « décoratifs » traversables).
   for (const r of rockBands) r.solid = true
+
+  // CORNICHE DE PIERRE NUE (retour user : « je peux marcher sur la pierre même si j'ai la terre
+  // au-dessus et c'est pas bien ») : là où le sommet d'une dalle affleure à nu sous une plateforme de
+  // terre trop proche pour qu'on passe, on COMBLE l'air entre les deux — la pierre redevient le corps
+  // sous la terre au lieu d'offrir un recoin de maçonnerie. Ne comble que l'impraticable, cf. roche.ts.
+  rockBands.push(...comblements(rockBands, platforms))
 
   // ANTI-ROCHE (règle user : AUCUN monstre DANS la pierre — « impossible ») : si le CORPS d'un spawn
   // (la rangée juste au-dessus de ses pieds) chevauche une dalle de roche, on le DÉCALE horizontalement
@@ -3593,7 +3735,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     start, exit,
     platforms, bridges,
     ...(trampolines.length ? { trampolines } : {}),
-    ...(arches.length ? { arches } : {}), gaps, hazards, ladders, rockBands, spawns: safeSpawns, props,
+    ...(arches.length ? { arches } : {}), ...(breakables.length ? { breakables } : {}), gaps, hazards, ladders, rockBands, spawns: safeSpawns, props,
     ...(signs.length ? { signs } : {}),
   }
 }
@@ -3690,6 +3832,12 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'lac-en-u': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [18, 30], below: 'marine', above: 'roche', water: true },
   // GROTTE-TUNNEL : boyau de roche varié (roche dessus ET dessous) — biomes rocheux/souterrains
   'grotte-tunnel': { tier: 2, family: 'tension', entry: 'milieu', exit: 'haut', width: [14, 24], below: 'roche', above: 'roche' },
+  // ─── PIERRE FRAGILE ───────────────────────────────────────────────────────────────────────
+  // Entrée et sortie au MÊME niveau ('milieu' → 'milieu') pour les trois motifs de grotte : le
+  // chemin traverse à plat et la cavité est creusée EN DESSOUS, donc le module ne déplace pas
+  // l'altitude courante. `chest: true` : chacun cache un coffre derrière sa pierre.
+  'grotte-scellee': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [16, 26], below: 'roche', above: 'roche', chest: true },
+  'sol-fragile': { tier: 3, family: 'tension', entry: 'milieu', exit: 'milieu', width: [16, 24], below: 'roche', above: 'air', chest: true },
   // GROTTE SOUS-MARINE EN U : lac en U noyé sous un toit de roche, coffre au fond (plongée récompensée)
   'grotte-noyee': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [18, 30], below: 'marine', above: 'roche', chest: true, water: true },
   // REFONTE DES MOTIFS D'EAU (vrais passages)

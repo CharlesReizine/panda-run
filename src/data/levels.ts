@@ -83,6 +83,20 @@ export interface LevelDef {
   // PLAFOND DE ROCHE avec COLLISION PLEINE — on ne peut PAS la traverser au saut (le boyau garde un
   // dégagement > saut sous le plafond). Absent → dalle purement décorative (socle/mesa sous le sol).
   rockBands?: { x: number; y: number; w: number; h: number; solid?: boolean }[]
+  // PIERRE FRAGILE — matière CASSABLE (demande du user : « une nouvelle matière qui est du bloc de
+  // pierre cassable », avec « des entrées bouchées qu'on peut casser en tapant quelques fois dans la
+  // pierre fragilisée » et « des sols qu'on peut casser en sautant plusieurs fois »).
+  // x,y,w,h en tuiles ; y = rangée du haut. `coups` = nombre d'impacts pour faire tomber UNE tuile
+  // (défaut PIERRE_FRAGILE_COUPS). Chaque tuile se casse INDÉPENDAMMENT : on perce un trou à sa taille,
+  // le reste du mur tient.
+  //
+  // ⚠️ CANAL DISTINCT DE rockBands, ET C'EST LA DÉCISION STRUCTURANTE. Une dalle de `rockBands` solide est
+  // un mur que les validateurs traitent comme infranchissable ; la pierre fragile, elle, est franchissable
+  // par construction (il suffit de taper). Les ranger ensemble aurait rendu chaque validateur faux dans un
+  // sens ou dans l'autre : soit une grotte scellée passerait pour inaccessible (et le générateur
+  // rejetterait le terrain), soit un vrai mur passerait pour traversable. Ici l'atteignabilité IGNORE la
+  // pierre fragile — ce qui est derrière est considéré joignable, ce qui est exact.
+  breakables?: { x: number; y: number; w: number; h: number; coups?: number }[]
   // échelles (x tuile, y tuile du haut, hauteur en tuiles). `hung` : échelle SUSPENDUE « en T »
   // (coiffée d'une pierre, pied dans le vide) qu'on attrape/quitte au saut — cf. motif echelles-lianes.
   ladders?: { x: number; y: number; h: number; hung?: boolean }[]

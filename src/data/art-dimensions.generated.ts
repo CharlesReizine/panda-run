@@ -159,7 +159,7 @@ export const ART_IMAGES: ArtImage[] = [
   { name: 'coin.png', w: 96, h: 96 },
   { name: 'death-panda.png', w: 256, h: 146 },
   { name: 'decor-trampoline-saut.png', w: 256, h: 144 },
-  { name: 'decor-trampoline.png', w: 256, h: 223 },
+  { name: 'decor-trampoline.png', w: 256, h: 143 },
   { name: 'fish-piranha.png', w: 128, h: 128 },
   { name: 'fish-poisson-tropical.png', w: 128, h: 128 },
   { name: 'fish-poisson.png', w: 128, h: 128 },

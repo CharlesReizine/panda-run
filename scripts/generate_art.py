@@ -521,11 +521,38 @@ def retirer_damier(im):
     return im, n
 
 
+def boite_dessin(im, seuil_alpha=40, min_ligne=8, min_colonne=4):
+    """Boîte du DESSIN, salissures exclues (cf. finaliser_decor).
+
+    Une rangée qui compte moins de `min_ligne` pixels opaques n'est pas du dessin : c'est un filigrane ou
+    un résidu de détourage. Même règle sur les colonnes, avec un seuil plus bas (une patte de bambou est
+    fine). Renvoie None si l'image est vide.
+    """
+    im = im.convert("RGBA")
+    px = im.load()
+    W, H = im.size
+    lignes = [y for y in range(H) if sum(1 for x in range(W) if px[x, y][3] > seuil_alpha) >= min_ligne]
+    if not lignes:
+        return None
+    y0, y1 = lignes[0], lignes[-1]
+    colonnes = [x for x in range(W)
+                if sum(1 for y in range(y0, y1 + 1) if px[x, y][3] > seuil_alpha) >= min_colonne]
+    if not colonnes:
+        return None
+    return (colonnes[0], y0, colonnes[-1] + 1, y1 + 1)
+
+
 def finaliser_decor(im):
     """Recadre au plus près du dessin SANS le remettre dans un carré : on garde ses proportions."""
     from PIL import Image
 
-    boite = im.getbbox()
+    # ⚠️ PAS im.getbbox() : IL NE RECADRE RIEN DÈS QU'IL Y A UNE SALISSURE. Les modèles déposent parfois
+    # un filigrane de quelques pixels dans un coin ; getbbox() ne regarde que « alpha non nul », donc une
+    # tache de 6 px collée à la dernière rangée lui fait garder toute la hauteur. C'est ce qui a livré un
+    # trampoline de 256×223 dont le dessin s'arrêtait à la rangée 143 — 80 rangées de vide sous les pieds
+    # de bambou. Le moteur posant l'origine BASSE de l'image sur le sol, l'engin flottait de 42 px.
+    # On recadre donc sur la DENSITÉ : une ligne ou une colonne trop peu remplie est une salissure.
+    boite = boite_dessin(im)
     if boite:
         im = im.crop(boite)
     # 256 px de côté au plus : c'est le plafond de VRAM que tests/perf/art-budget fait respecter aux

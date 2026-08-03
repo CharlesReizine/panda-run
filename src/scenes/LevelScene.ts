@@ -23,6 +23,7 @@ import { SKILLS, skillDamageMult, CHARGE_MIN_MULT } from '../data/skills'
 import { hpRegenPerSec } from '../core/stats'
 import { rollDrops, rollChestRareItem } from '../core/loot'
 import { recordKill } from '../core/player-state'
+import { rangeeImpact, atteignableDuCiel, HORS_MONDE, type GeoChute } from '../core/chute'
 import type { DropEntry, SkillDef } from '../core/types'
 import type { UIScene } from './UIScene'
 import { TILE, DEFAULT_HEIGHT_TILES, groundRowFor, GRAVITY, landsOnOneWayPlatform } from '../core/platforming'
@@ -88,6 +89,11 @@ const BIOME_TRACKS: Record<string, MusicTrack> = {
   plaine: 'plaine', foret: 'foret', desert: 'desert', cave: 'cave', jungle: 'jungle',
   montagne: 'montagne', plage: 'plage', carriere: 'montagne', cimetiere: 'cimetiere', enfer: 'enfer',
 }
+
+// PIERRE FRAGILE : nombre d'impacts pour faire tomber UNE tuile. Trois, c'est le réglage qui dit
+// « fragilisée » sans dire « décorative » : on sent la résistance, on comprend au 1er coup (la tuile se
+// fissure à vue d'œil) et on n'y passe pas la journée. Surchargeable par motif via LevelDef.breakables[].coups.
+const PIERRE_FRAGILE_COUPS = 3
 
 // largeur de la barre de vie du boss (centrée sous son nom)
 const BOSS_BAR_W = 440
@@ -182,6 +188,14 @@ export class LevelScene extends Phaser.Scene {
   /** Un tir touche la pierre : il s'y écrase (ou détone). Partagé par tous les colliders de matière. */
   private stopNetPierre!: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback
   private trampolineVisuels = new Map<Phaser.GameObjects.GameObject, Phaser.GameObjects.Image>()
+  // PIERRE FRAGILE (matière cassable) : un corps statique par TUILE, cf. la construction dans create().
+  private pierresFragiles!: Phaser.Physics.Arcade.StaticGroup
+  // anti-répétition du coup porté EN RETOMBANT : le collider se déclenche à chaque frame de contact,
+  // sans quoi une seule chute compterait pour dix coups et la dalle céderait instantanément.
+  private nextCoupSol = 0
+  // vitesse de chute de la frame PRÉCÉDENTE. Indispensable : Arcade remet velocity.y à zéro en séparant
+  // les corps, donc au moment où le callback de collision tourne, la vitesse d'impact est DÉJÀ perdue.
+  private vitesseChuteAvant = 0
   private nextBounceAt = 0
   private platforms!: Phaser.Physics.Arcade.StaticGroup
   private oneWayPlatforms!: Phaser.Physics.Arcade.StaticGroup
@@ -488,6 +502,15 @@ export class LevelScene extends Phaser.Scene {
       // valait « 54 − 14 » quand le dessin faisait 54 px de haut ; les illustrations livrées en font 38,
       // et la zone se serait retrouvée AU-DESSUS du tapis — on tomberait à travers l'engin sans rien
       // déclencher. La toile occupe le quart supérieur du dessin, d'où le 0,78.
+      //
+      // ⚠️ CE 0,78 A LONGTEMPS ÉTÉ ACCUSÉ À TORT (« le trampoline vole au-dessus du sol », signalé trois
+      // fois). Le facteur était juste ; c'est la HAUTEUR QU'IL MULTIPLIAIT qui était fausse. Le PNG livré
+      // mesurait 256×223 alors que le dessin s'arrêtait à la rangée 143 : 80 rangées transparentes sous
+      // les pieds de bambou, plus un filigrane de 6 px collé à la dernière rangée — lequel donnait à la
+      // boîte alpha la hauteur pleine et faisait échouer tout recadrage naïf. Origine en bas posée sur le
+      // sol, l'engin flottait donc de 80/223 de sa hauteur (≈ 42 px, plus d'une tuile), et la zone de
+      // rebond se plaçait à 92 px au lieu de 59. Les deux dessins sont désormais recadrés au trait (256×143
+      // et 256×144, mêmes proportions), ce que `tests/art/trampoline-cadre.test.ts` empêche de défaire.
       const hTrampo = hauteurTrampoline(this, texTrampoline(this, false))
       const tapisY = solY - hTrampo * 0.78
       const zone = this.physics.add.staticImage(px, tapisY, texTrampoline(this, false)).setVisible(false)
@@ -575,6 +598,47 @@ export class LevelScene extends Phaser.Scene {
       })
     }
 
+    // ─── PIERRE FRAGILE : la matière CASSABLE ─────────────────────────────────────────────────
+    // Demande du user : « une nouvelle matière qui est du bloc de pierre cassable […] avec des entrées
+    // bouchées qu'on peut casser en tapant quelques fois dans la pierre fragilisée. Pourquoi pas aussi
+    // des sols qu'on peut casser en sautant plusieurs fois sur les pierres fragiles. »
+    //
+    // ⚠️ UNE TUILE = UN CORPS, ET C'EST CE QUI REND LA MATIÈRE LISIBLE. Un mur en UN seul corps
+    // disparaîtrait d'un bloc au dernier coup : on ne verrait pas la brèche s'ouvrir, seulement un mur
+    // qui s'évapore. Tuile par tuile, on perce un trou à sa taille, le reste tient, et on comprend
+    // immédiatement qu'il faut continuer à frapper. Le coût est modeste (une poignée de corps statiques
+    // par motif) et le découpage par tranches les cache comme le reste du décor.
+    this.pierresFragiles = this.physics.add.staticGroup()
+    for (const bk of this.levelDef.breakables ?? []) {
+      const coups = bk.coups ?? PIERRE_FRAGILE_COUPS
+      for (let ty = bk.y; ty < bk.y + bk.h; ty++) {
+        for (let tx = bk.x; tx < bk.x + bk.w; tx++) {
+          const bloc = this.pierresFragiles.create(
+            tx * TILE + TILE / 2, ty * TILE + TILE / 2, 'pierre-fragile-0',
+          ) as Phaser.Physics.Arcade.Sprite
+          bloc.setDisplaySize(TILE, TILE).setDepth(-3)
+          bloc.setData('reste', coups)
+          bloc.setData('coups', coups)
+          ;(bloc.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject()
+        }
+      }
+    }
+    // Le panda et les monstres butent dessus comme sur de la pierre pleine — TANT qu'elle tient.
+    this.physics.add.collider(this.player, this.pierresFragiles, (_pl, bObj) => {
+      // SAUTER DESSUS LA CASSE : on ne compte le coup que si le panda ARRIVE D'EN HAUT en tombant, et
+      // pas s'il la longe ou s'y cogne la tête. `nextCoupSol` évite que la même retombée compte dix
+      // fois (le collider se déclenche à chaque frame de contact).
+      const body = this.player.body as Phaser.Physics.Arcade.Body
+      const bloc = bObj as Phaser.Physics.Arcade.Sprite
+      if (!body.blocked.down && !body.touching.down) return
+      if (body.bottom > bloc.y) return // contact par le côté ou par le dessous
+      if (this.time.now < this.nextCoupSol) return
+      this.nextCoupSol = this.time.now + 260
+      // il faut RETOMBER dessus : marcher tranquillement sur la dalle ne l'entame pas
+      if (this.vitesseChuteAvant < 220) return
+      this.frapperPierre(bloc, 1)
+    })
+
     this.enemies = this.physics.add.group()
     // Les AÉRIENS (oiseaux) traversent le décor : on les exclut des colliders terrain via ce
     // processCallback (ils ne portent plus `checkCollision.none`, qui les rendait intouchables).
@@ -582,6 +646,9 @@ export class LevelScene extends Phaser.Scene {
     // plus à travers la map.
     const groundedEnemy: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (eObj) => !((eObj as Enemy).monster?.aerial)
     this.physics.add.collider(this.enemies, platforms, undefined, groundedEnemy)
+    // les monstres butent sur la pierre fragile comme sur un mur : elle enferme le gardien de la grotte
+    // scellée, ce qui est tout l'intérêt (il attend derrière, il ne sort pas à votre rencontre).
+    this.physics.add.collider(this.enemies, this.pierresFragiles, undefined, groundedEnemy)
     this.physics.add.collider(this.enemies, oneWay, undefined, groundedEnemy)
     // AÉRIENS vs PIERRE PLEINE (retour user : « les oiseaux passent à travers les murs ») : les oiseaux
     // gardent leur vol libre au-dessus du terrain, mais ne TRAVERSENT plus les dalles de roche SOLIDE.
@@ -633,6 +700,15 @@ export class LevelScene extends Phaser.Scene {
       this.physics.add.collider(grp, platforms, this.stopNetPierre)
       this.physics.add.collider(grp, solidWalls, this.stopNetPierre)
     }
+    // PIERRE FRAGILE À DISTANCE : une flèche l'entame comme un coup d'épée, puis s'y écrase. Sans ça
+    // l'archer et le mage n'auraient AUCUN moyen d'ouvrir une entrée scellée — leur jeu consiste à ne pas
+    // s'approcher. Les tirs ENNEMIS, eux, s'y écrasent sans l'entamer : un mur qu'un mob démolit par
+    // accident, c'est une brèche que le joueur n'a pas gagnée.
+    this.physics.add.collider(this.playerProjectiles, this.pierresFragiles, (projObj, bObj) => {
+      this.frapperPierre(bObj as Phaser.Physics.Arcade.Sprite, 1)
+      this.stopNetPierre(projObj, bObj)
+    })
+    this.physics.add.collider(this.enemyProjectiles, this.pierresFragiles, this.stopNetPierre)
 
     this.pickups = this.physics.add.group()
     this.physics.add.collider(this.pickups, platforms)
@@ -3553,6 +3629,37 @@ export class LevelScene extends Phaser.Scene {
     else this.executeArrowRain(skill, cx, cy, mult, color)
   }
 
+  // ─── ATTAQUES VENUES DU CIEL : DES CORPS SOUMIS À LA GRAVITÉ ──────────────────────────────────
+  // Demande du user : « toutes les attaques venues du ciel (météorite, pluie de flèches etc...) je veux
+  // que ça se fasse bloquer par tout sol au-dessus, par contre ça descend jusqu'au sol en dessous » —
+  // « c'est comme des corps soumis à la gravité quoi ». L'arbitrage vit dans core/chute.ts (géométrie
+  // pure, testée) ; ces trois raccourcis ne font que le traduire en pixels.
+  //
+  // ⚠️ LE VISUEL ET LES DÉGÂTS INTERROGENT LA MÊME RÈGLE, et c'est tout l'intérêt de les partager : sinon
+  // une flèche s'écraserait sur un plafond pendant que ses dégâts continueraient de pleuvoir dessous.
+
+  /** Le terrain tel que le voit un corps qui tombe. */
+  private geoChute(): GeoChute {
+    return {
+      groundRow: this.groundRow,
+      gaps: this.levelDef.gaps,
+      platforms: this.levelDef.platforms,
+      bridges: this.levelDef.bridges,
+      rockBands: this.levelDef.rockBands,
+    }
+  }
+
+  /** Ordonnée (px) où s'écrase un corps lâché du ciel en `xPx`. `null` = la colonne n'a pas de fond. */
+  private impactCielY(xPx: number): number | null {
+    const r = rangeeImpact(this.geoChute(), Math.floor(xPx / TILE))
+    return r === HORS_MONDE ? null : r * TILE
+  }
+
+  /** Une cible en (xPx, yPx) est-elle à ciel ouvert ? Sinon un sol la protège des attaques d'en haut. */
+  private exposeAuCiel(xPx: number, yPx: number): boolean {
+    return atteignableDuCiel(this.geoChute(), Math.floor(xPx / TILE), Math.floor(yPx / TILE))
+  }
+
   // Pluie de flèches / Nuée de flèches : ~40-64 mini-flèches s'abattent du ciel sur la zone visée,
   // en criblant le secteur par vagues (dégâts répétés). Spectacle : marqueur au sol + rideau dense.
   private executeArrowRain(skill: SkillDef, cx: number, cy: number, mult: number, color: number) {
@@ -3575,8 +3682,11 @@ export class LevelScene extends Phaser.Scene {
     for (let i = 0; i < count; i++) {
       this.time.delayedCall(Phaser.Math.Between(0, durationMs), () => {
         const ax = cx + Phaser.Math.FloatBetween(-radius, radius)
-        const startY = cy - 340 - Phaser.Math.Between(0, 70)
-        const landY = cy + Phaser.Math.Between(-10, 12)
+        // la flèche tombe jusqu'à la PREMIÈRE surface de sa colonne : un plafond l'arrête au-dessus du
+        // point visé, un vide la laisse filer bien en dessous. Colonne sans fond → elle sort de l'écran.
+        const sol = this.impactCielY(ax)
+        const landY = sol === null ? cy + 520 : sol + 4 // +4 : la pointe se plante dans la surface
+        const startY = landY - 340 - Phaser.Math.Between(0, 70)
         const arrow = this.add.image(ax, startY, 'fx-arrow').setTint(color).setRotation(Math.PI / 2).setScale(1.15).setDepth(7)
         this.tweens.add({
           targets: arrow, y: landY, duration: Phaser.Math.Between(200, 280), ease: 'Quad.in',
@@ -3589,13 +3699,16 @@ export class LevelScene extends Phaser.Scene {
     const ticks = 5
     for (let t = 0; t < ticks; t++) {
       this.time.delayedCall(120 + t * (durationMs / ticks), () => {
+        // à l'abri sous un sol, on ne prend RIEN : les flèches s'y sont écrasées (cf. exposeAuCiel).
         for (const obj of this.enemies.getChildren()) {
           const e = obj as Enemy
-          if (e.active && Phaser.Math.Distance.Between(cx, cy, e.x, e.y) <= radius * 1.08) e.takeDamage(physicalDamage(atk, e.effectiveDef(), mult * 0.45))
+          if (e.active && Phaser.Math.Distance.Between(cx, cy, e.x, e.y) <= radius * 1.08 && this.exposeAuCiel(e.x, e.y)) {
+            e.takeDamage(physicalDamage(atk, e.effectiveDef(), mult * 0.45))
+          }
         }
         for (const obj of this.props.getChildren()) {
           const prop = obj as Prop
-          if (prop.active && Phaser.Math.Distance.Between(cx, cy, prop.x, prop.y) <= radius * 1.08) prop.takeDamage(1)
+          if (prop.active && Phaser.Math.Distance.Between(cx, cy, prop.x, prop.y) <= radius * 1.08 && this.exposeAuCiel(prop.x, prop.y)) prop.takeDamage(1)
         }
       })
     }
@@ -3715,7 +3828,10 @@ export class LevelScene extends Phaser.Scene {
     for (let i = 0; i < count; i++) {
       this.time.delayedCall(Phaser.Math.Between(0, 900), () => {
         const mx = cx + Phaser.Math.FloatBetween(-radius, radius)
-        const landY = cy + Phaser.Math.Between(-8, 12)
+        // même règle de gravité que la pluie de flèches : le météore s'écrase sur la première surface de
+        // sa colonne, quitte à exploser sur un plafond bien au-dessus de la zone visée.
+        const solM = this.impactCielY(mx)
+        const landY = solM === null ? cy + 560 : solM + 2
         const startY = landY - 400
         const startX = mx - f * 130 // chute en biais
         // météore ARDENT : sprite fx-meteore si dispo, sinon composé procédural (halo + cœur jaune vif)
@@ -3743,16 +3859,18 @@ export class LevelScene extends Phaser.Scene {
             this.explosionFx(mx, landY, blast, 0xff7043)
             this.screenShake(0.008, 150)
             audio.playSfx('hit')
+            // le point d'impact respecte déjà les plafonds ; on refuse en plus le souffle qui passerait à
+            // travers une dalle mince (le rayon de 86 px en couvre presque trois).
             for (const obj of this.enemies.getChildren()) {
               const e = obj as Enemy
-              if (e.active && Phaser.Math.Distance.Between(mx, landY, e.x, e.y) <= blast) {
+              if (e.active && Phaser.Math.Distance.Between(mx, landY, e.x, e.y) <= blast && this.exposeAuCiel(e.x, e.y)) {
                 e.takeDamage(physicalDamage(atk, e.effectiveDef(), mult * 0.6))
                 e.applyBurn(atk * 0.15, 2200)
               }
             }
             for (const obj of this.props.getChildren()) {
               const prop = obj as Prop
-              if (prop.active && Phaser.Math.Distance.Between(mx, landY, prop.x, prop.y) <= blast) prop.takeDamage(1)
+              if (prop.active && Phaser.Math.Distance.Between(mx, landY, prop.x, prop.y) <= blast && this.exposeAuCiel(prop.x, prop.y)) prop.takeDamage(1)
             }
           },
         })
@@ -4374,6 +4492,64 @@ export class LevelScene extends Phaser.Scene {
 
   // Touche les ennemis/props devant le panda (ou pile sur lui), avec grande tolérance
   // verticale : le centre du grand sprite panda est plus haut que celui des monstres.
+  /**
+   * Porte `coups` impact(s) sur une tuile de pierre fragile. La tuile s'écaille (texture plus fissurée)
+   * puis TOMBE quand son compteur s'épuise : gravats, poussière, secousse courte.
+   *
+   * ⚠️ ON DÉTRUIT LA TUILE, PAS LE MUR. Chaque tuile a son propre compteur, donc frapper au même endroit
+   * ouvre une brèche à hauteur d'homme au lieu de faire disparaître tout le pan d'un coup — c'est ce qui
+   * rend la matière lisible (« il faut taper plusieurs fois, et ça s'ouvre là où je tape »).
+   */
+  private frapperPierre(bloc: Phaser.Physics.Arcade.Sprite, coups: number) {
+    if (!bloc.active) return
+    const reste = (bloc.getData('reste') as number) - coups
+    const total = bloc.getData('coups') as number
+    if (reste > 0) {
+      bloc.setData('reste', reste)
+      // trois dessins pour N coups : l'usure suit la proportion de dégâts, pas un décompte fixe
+      const usure = 1 - reste / Math.max(1, total)
+      bloc.setTexture(`pierre-fragile-${usure >= 0.66 ? 2 : usure >= 0.33 ? 1 : 0}`)
+      bloc.setDisplaySize(TILE, TILE) // la texture change, le corps ne bouge PAS
+      audio.playSfx('stomp', 0.7)
+      this.impactFx(bloc.x, bloc.y, 0xa8907a)
+      // petit tremblement de la tuile frappée : la pierre encaisse et on le voit
+      this.tweens.add({ targets: bloc, x: bloc.x + 2, duration: 45, yoyo: true, repeat: 1 })
+      return
+    }
+    // ─── LA TUILE CÈDE ───
+    const bx = bloc.x, by = bloc.y
+    bloc.destroy() // détruit aussi son corps statique → le passage est ouvert dès cette frame
+    audio.playSfx('stomp', 1)
+    this.screenShake(0.004, 120)
+    // GRAVATS : quelques éclats qui retombent, pour que l'effondrement se lise
+    for (let i = 0; i < 7; i++) {
+      const eclat = this.add.rectangle(bx, by, Phaser.Math.Between(4, 9), Phaser.Math.Between(4, 9), 0x87715c)
+        .setDepth(6).setAngle(Phaser.Math.Between(0, 360))
+      this.tweens.add({
+        targets: eclat,
+        x: bx + Phaser.Math.Between(-42, 42),
+        y: by + Phaser.Math.Between(10, 60),
+        angle: eclat.angle + Phaser.Math.Between(-180, 180),
+        alpha: 0, duration: Phaser.Math.Between(380, 620), ease: 'Quad.in',
+        onComplete: () => eclat.destroy(),
+      })
+    }
+    // nuage de poussière
+    const poussiere = this.add.circle(bx, by, 10, 0xd7c4ae).setAlpha(0.55).setDepth(5)
+    this.tweens.add({ targets: poussiere, scale: 3.2, alpha: 0, duration: 420, onComplete: () => poussiere.destroy() })
+  }
+
+  /** Tuiles de pierre fragile à portée de la frappe en cours (mêmes règles d'allonge que les monstres). */
+  private pierresAPortee(reach: number): Phaser.Physics.Arcade.Sprite[] {
+    const px = this.player.x, py = this.player.y, f = this.player.facing
+    const out: Phaser.Physics.Arcade.Sprite[] = []
+    for (const obj of this.pierresFragiles.getChildren()) {
+      const b = obj as Phaser.Physics.Arcade.Sprite
+      if (b.active && inMeleeReach((b.x - px) * f, Math.abs(b.y - py), reach)) out.push(b)
+    }
+    return out
+  }
+
   meleeHit(reach: number, multiplier: number) {
     const px = this.player.x, py = this.player.y, f = this.player.facing
     const atk = this.player.stats.atk * this.player.outgoingMult()
@@ -4391,6 +4567,15 @@ export class LevelScene extends Phaser.Scene {
     for (const obj of this.props.getChildren()) {
       const prop = obj as Prop
       if (prop.active && inMeleeReach((prop.x - px) * f, Math.abs(prop.y - py), reach)) prop.takeDamage(1)
+    }
+    // « des entrées bouchées qu'on peut casser en tapant quelques fois dans la pierre fragilisée » :
+    // TOUTE frappe au corps à corps entame la pierre, quelle que soit la compétence qui l'a portée.
+    // Une seule tuile par frappe — celle du haut, la plus proche du visage du panda — sinon un coup
+    // d'estoc large ouvrirait tout le mur d'un seul geste.
+    const pierres = this.pierresAPortee(reach)
+    if (pierres.length) {
+      pierres.sort((a, b) => Math.abs(a.y - py) - Math.abs(b.y - py))
+      this.frapperPierre(pierres[0]!, 1)
     }
   }
 
@@ -4962,6 +5147,13 @@ export class LevelScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
+    // MÉMOIRE DE LA VITESSE DE CHUTE. Sans elle, « casser un sol en sautant dessus » est indétectable :
+    // Arcade remet velocity.y à zéro en séparant les corps, donc un callback de collision ne voit jamais
+    // la vitesse d'impact. Le relevé se fait ici, dans update() — qui tourne APRÈS le pas de physique de
+    // la frame : la valeur qu'un callback consomme est donc celle de la frame PRÉCÉDENTE, c'est-à-dire la
+    // vitesse du panda encore en l'air, juste avant de toucher. C'est précisément ce qu'on veut mesurer.
+    const corpsJoueur = this.player?.body as Phaser.Physics.Arcade.Body | undefined
+    if (corpsJoueur) this.vitesseChuteAvant = Math.max(0, corpsJoueur.velocity.y)
 
     this.majTranchesVisibles()
     this.majMonstresProches()
