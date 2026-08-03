@@ -366,14 +366,23 @@ function pushVariedCeiling(p: Piece, w: number, alt: number, variant: number) {
 // keepGround (utile quand le sol est gappé et qu'il faut une vraie plateforme).
 function ramp(x0: number, w: number, fromAlt: number, toAlt: number, keepGround = false): { x: number; alt: number; w: number }[] {
   const diff = toAlt - fromAlt
-  const count = Math.max(1, Math.ceil(Math.abs(diff) / SIMPLE_JUMP_ROWS))
+  const countVoulu = Math.max(1, Math.ceil(Math.abs(diff) / SIMPLE_JUMP_ROWS))
+  // EN DESCENTE, le nombre de paliers est BORNÉ PAR LA PLACE. Un palier plus raide y est gratuit : on
+  // tombe. Alors qu'avancer de 3 par palier quand la portée ne le permet pas faisait sortir la rampe de
+  // [x0, x0+w) — jusqu'à 30 tuiles — et empiéter sur le module suivant.
+  // ⚠️ EN MONTÉE, NE PAS BORNER : raidir une montée la rend infranchissable (mesuré : plaine-7 n'a plus
+  // aucune graine valide en 30 passes, 56 plateformes injoignables).
+  const count = diff < 0 ? Math.max(1, Math.min(countVoulu, Math.floor(w / 3))) : countVoulu
   const step = diff / count
-  const segW = Math.max(3, Math.floor(w / count))
+  // Plancher de largeur : 3 tuiles pour se recevoir confortablement, mais en MONTÉE serrée on préfère
+  // des paliers de 2 à un débordement — resserrer garde le pas de montée franchissable, déborder non.
+  const segW = Math.max(count * 3 > w ? 2 : 3, Math.floor(w / count))
   const out: { x: number; alt: number; w: number }[] = []
   let x = x0
   for (let i = 0; i < count; i++) {
     const alt = Math.round(fromAlt + step * (i + 1))
-    const segw = i === count - 1 ? x0 + w - x : segW
+    const reste = x0 + w - x
+    const segw = i === count - 1 ? reste : Math.min(segW, reste)
     if (segw <= 0) break
     if (alt >= 1 || keepGround) out.push({ x, alt: Math.max(keepGround ? 0 : 1, alt), w: segw })
     x += segw
@@ -998,13 +1007,16 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const alt = Math.max(2, entryAlt)
       p.platforms.push({ x: 0, alt, w: 3 }) // berge d'entrée
       let x = 3
-      while (x < w - 4) {
+      // ⚠️ ON RÉSERVE LES 3 TUILES DE LA BERGE DE SORTIE AVANT D'AJOUTER UN ATTERRISSAGE. La condition
+      // était `x < w - 4`, qui laissait x dépasser w-3 : la berge, posée à max(x, w-3), sortait alors de
+      // la portée du module et empiétait sur le suivant.
+      while (x + 4 <= w - 3) {
         p.spikes.push({ x, w: 1, alt })
         p.platforms.push({ x: x + 1, alt, w: 1 }) // atterrissage d'une seule tuile
         p.spikes.push({ x: x + 2, w: 1, alt })
         x += 4
       }
-      p.platforms.push({ x: Math.max(x, w - 3), alt, w: 3 }) // berge de sortie
+      p.platforms.push({ x: w - 3, alt, w: 3 }) // berge de sortie
       p.exitAlt = alt
       break
     }
@@ -1533,13 +1545,24 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // (on ne fait pas surface au centre → on NAGE dessous pour avancer), et un TOIT DE ROCHE au-dessus
       // de tout (grotte fermée : roche jusqu'au plafond). Corniche de sortie à droite, à niveau.
       const alt = Math.max(entryAlt, 3)
-      const solidW = Math.max(Math.floor(w * 0.55), Math.floor(w / 2) + 2) // plancher solide couvre le milieu (spawn)
+      const colW = 3
+      // ⚠️ LE MODULE SE PARTAGE EN TROIS ET LA SOMME DOIT FAIRE w. Le bassin avait un plancher
+      // (2·colW+2) que le plancher de spawn ignorait : sur un module étroit, bassin + corniche
+      // débordaient de la portée (jusqu'à 5 tuiles) et la corniche de sortie atterrissait dans le module
+      // suivant. On rogne donc le plancher de spawn, pas la sortie.
+      const SORTIE_W = 3
+      // ⚠️ L'ORDRE DE PRIORITÉ N'EST PAS NÉGOCIABLE, ET S'EST PAYÉ D'UN « DÉPART DANS L'EAU ».
+      // 1) le plancher COUVRE LE MILIEU du module — le panda y apparaît (`piece.start` est à w/2) ;
+      // 2) la corniche de sortie garde ses 3 tuiles ;
+      // 3) le bassin prend ce qui reste. Rogner le plancher en premier faisait apparaître le joueur
+      // dans la cuve sur montagne-1 (attrapé par reachable.test, PAS par la validation de gravure).
+      const voulu = Math.max(Math.floor(w * 0.55), Math.floor(w / 2) + 2)
+      const solidW = Math.max(Math.floor(w / 2) + 2, Math.min(voulu, w - SORTIE_W - 2))
       p.platforms.push({ x: 0, alt, w: solidW }) // plancher de spawn (marchable, plein)
       if (alt - 1 >= 1) p.rocks.push({ x: 0, altBot: 1, altTop: alt - 1, w }) // « tout pierre dessous »
-      const colW = 3
       const wx = solidW
-      const ww = Math.max(2 * colW + 2, w - solidW - 3)
-      p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt: alt })
+      const ww = Math.max(0, w - solidW - SORTIE_W)
+      if (ww >= 2) p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt: alt })
       // PLAFOND IMMERGÉ au milieu du bassin (force la plongée)
       const ceilBotAlt = Math.max(1, Math.min(alt - 1, alt - 2))
       const midX = wx + colW
@@ -1550,9 +1573,9 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
         p.rocks.push({ x: rx, altBot: ceilBotAlt, altTop: alt, w: seg, solid: true })
         rx += seg + 2
       }
-      // corniche de sortie à droite, À NIVEAU (banc égal)
-      const rbx = wx + ww
-      p.platforms.push({ x: rbx, alt, w: Math.max(3, w - rbx) })
+      // corniche de sortie à droite, À NIVEAU (banc égal) — bornée à la portée du module
+      const rbx = Math.min(wx + ww, w - SORTIE_W)
+      p.platforms.push({ x: rbx, alt, w: w - rbx })
       // TOIT DE ROCHE au-dessus de tout (grotte fermée continue, roche jusqu'au plafond)
       pushVariedCeiling(p, w, alt, Math.floor(rng() * CEILING_VARIANTS))
       p.exitAlt = alt
@@ -1648,8 +1671,16 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // (≈ 4× le panda) ne se lit pas comme une cascade et le test le refuse. Le rideau va donc de `A` à
       // `sommet`, soit 13 rangées, et la bouche de la grotte se place à mi-chemin — ce qui donne bien
       // l'effet demandé : la cascade DÉPASSE l'entrée de la grotte.
-      const T = A + 5              // plancher de la grotte, au-dessus de l'entrée
-      const sommet = A + 13        // le rideau dépasse la bouche de la grotte de 8 rangées
+      // ⚠️ CE MOTIF ÉTAIT INJOIGNABLE PAR CONSTRUCTION, ET PERSONNE NE LE VOYAIT. Mesuré en l'isolant
+      // entre deux plateaux neutres : TROIS de ses cinq plateformes étaient hors d'atteinte, à toutes les
+      // largeurs. Le plancher de grotte était à A+5, or le saut garanti fait 3 rangées (4 à la limite
+      // physique) ; et il n'était pas non plus un « sommet de cascade » (il faut être à 2 rangées du haut
+      // du rideau, il en était à 8). Le motif ne validait que parce que les rampes des modules VOISINS
+      // débordaient sur sa portée et lui fabriquaient un escalier par accident. En supprimant ces
+      // débordements, les deux terrains qui l'imposent — plaine-7 et desert-7 — n'ont plus trouvé une
+      // seule graine valide. Chaque liaison est donc désormais EXPLICITE.
+      const T = A + SIMPLE_JUMP_ROWS // bouche de la grotte : à portée de saut GARANTIE depuis la berge
+      const sommet = A + 13          // le rideau dépasse la bouche de la grotte de 10 rangées
       let x = 0
       p.platforms.push({ x, alt: A, w: bank }); x += bank
       // rideau : de `sommet` jusqu'au niveau d'entrée (il recueille dans un petit bassin, pas dans le vide)
@@ -1663,10 +1694,13 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + 1, alt: T + 1 })
       const gardien = groundMobs.find((id) => !MONSTERS[id]?.aquatic && !MONSTERS[id]?.aerial)
       if (gardien) p.spawns.push({ monsterId: gardien, x: caveX + 3, alt: T })
-      // passage de sortie EN HAUT du rideau
-      p.platforms.push({ x: w - bank, alt: sommet, w: bank })
-      // relais d'accès au sommet : on grimpe la cascade, mais on garde une corniche d'appui
-      p.platforms.push({ x: caveX + floorW, alt: sommet - 3, w: Math.max(3, w - bank - (caveX + floorW)) })
+      // CORNICHE D'ÉMERGENCE au sommet du rideau : sans elle, remonter la cascade ne débouchait sur rien
+      // (le validateur ne voit un sommet de cascade que dans les 2 rangées sous le haut du rideau).
+      p.platforms.push({ x: caveX, alt: sommet, w: Math.min(3, floorW) })
+      // ÉCHELLE DE SORTIE de la cavité vers le passage haut — l'invariant maison : toute cavité a un
+      // puits d'accès et une échelle de sortie. Son palier EST le passage de sortie du module, collé au
+      // bord droit (le chaînage exige une surface marchable à `exitAlt` sur le bord).
+      poseLadderOn(p, w - 4, T, w, sommet - T + 2)
       placeBirds(sommet + 2)
       p.exitAlt = sommet
       break
@@ -2291,13 +2325,16 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const alt = Math.max(2, entryAlt)
       p.platforms.push({ x: 0, alt, w: 3 }) // berge d'entrée
       let x = 3
-      while (x < w - 4) {
+      // ⚠️ ON RÉSERVE LES 3 TUILES DE LA BERGE DE SORTIE AVANT D'AJOUTER UN ATTERRISSAGE. La condition
+      // était `x < w - 4`, qui laissait x dépasser w-3 : la berge, posée à max(x, w-3), sortait alors de
+      // la portée du module et empiétait sur le suivant.
+      while (x + 4 <= w - 3) {
         p.spikes.push({ x, w: 1, alt })
         p.platforms.push({ x: x + 1, alt, w: 1 }) // atterrissage d'une seule tuile
         p.spikes.push({ x: x + 2, w: 1, alt })
         x += 4
       }
-      p.platforms.push({ x: Math.max(x, w - 3), alt, w: 3 }) // berge de sortie
+      p.platforms.push({ x: w - 3, alt, w: 3 }) // berge de sortie
       p.exitAlt = alt
       break
     }
@@ -2689,13 +2726,24 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // (on ne fait pas surface au centre → on NAGE dessous pour avancer), et un TOIT DE ROCHE au-dessus
       // de tout (grotte fermée : roche jusqu'au plafond). Corniche de sortie à droite, à niveau.
       const alt = Math.max(entryAlt, 3)
-      const solidW = Math.max(Math.floor(w * 0.55), Math.floor(w / 2) + 2) // plancher solide couvre le milieu (spawn)
+      const colW = 3
+      // ⚠️ LE MODULE SE PARTAGE EN TROIS ET LA SOMME DOIT FAIRE w. Le bassin avait un plancher
+      // (2·colW+2) que le plancher de spawn ignorait : sur un module étroit, bassin + corniche
+      // débordaient de la portée (jusqu'à 5 tuiles) et la corniche de sortie atterrissait dans le module
+      // suivant. On rogne donc le plancher de spawn, pas la sortie.
+      const SORTIE_W = 3
+      // ⚠️ L'ORDRE DE PRIORITÉ N'EST PAS NÉGOCIABLE, ET S'EST PAYÉ D'UN « DÉPART DANS L'EAU ».
+      // 1) le plancher COUVRE LE MILIEU du module — le panda y apparaît (`piece.start` est à w/2) ;
+      // 2) la corniche de sortie garde ses 3 tuiles ;
+      // 3) le bassin prend ce qui reste. Rogner le plancher en premier faisait apparaître le joueur
+      // dans la cuve sur montagne-1 (attrapé par reachable.test, PAS par la validation de gravure).
+      const voulu = Math.max(Math.floor(w * 0.55), Math.floor(w / 2) + 2)
+      const solidW = Math.max(Math.floor(w / 2) + 2, Math.min(voulu, w - SORTIE_W - 2))
       p.platforms.push({ x: 0, alt, w: solidW }) // plancher de spawn (marchable, plein)
       if (alt - 1 >= 1) p.rocks.push({ x: 0, altBot: 1, altTop: alt - 1, w }) // « tout pierre dessous »
-      const colW = 3
       const wx = solidW
-      const ww = Math.max(2 * colW + 2, w - solidW - 3)
-      p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt: alt })
+      const ww = Math.max(0, w - solidW - SORTIE_W)
+      if (ww >= 2) p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt: alt })
       // PLAFOND IMMERGÉ au milieu du bassin (force la plongée)
       const ceilBotAlt = Math.max(1, Math.min(alt - 1, alt - 2))
       const midX = wx + colW
@@ -2706,9 +2754,9 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
         p.rocks.push({ x: rx, altBot: ceilBotAlt, altTop: alt, w: seg, solid: true })
         rx += seg + 2
       }
-      // corniche de sortie à droite, À NIVEAU (banc égal)
-      const rbx = wx + ww
-      p.platforms.push({ x: rbx, alt, w: Math.max(3, w - rbx) })
+      // corniche de sortie à droite, À NIVEAU (banc égal) — bornée à la portée du module
+      const rbx = Math.min(wx + ww, w - SORTIE_W)
+      p.platforms.push({ x: rbx, alt, w: w - rbx })
       // TOIT DE ROCHE au-dessus de tout (grotte fermée continue, roche jusqu'au plafond)
       pushVariedCeiling(p, w, alt, Math.floor(rng() * CEILING_VARIANTS))
       p.exitAlt = alt
@@ -2804,8 +2852,16 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // (≈ 4× le panda) ne se lit pas comme une cascade et le test le refuse. Le rideau va donc de `A` à
       // `sommet`, soit 13 rangées, et la bouche de la grotte se place à mi-chemin — ce qui donne bien
       // l'effet demandé : la cascade DÉPASSE l'entrée de la grotte.
-      const T = A + 5              // plancher de la grotte, au-dessus de l'entrée
-      const sommet = A + 13        // le rideau dépasse la bouche de la grotte de 8 rangées
+      // ⚠️ CE MOTIF ÉTAIT INJOIGNABLE PAR CONSTRUCTION, ET PERSONNE NE LE VOYAIT. Mesuré en l'isolant
+      // entre deux plateaux neutres : TROIS de ses cinq plateformes étaient hors d'atteinte, à toutes les
+      // largeurs. Le plancher de grotte était à A+5, or le saut garanti fait 3 rangées (4 à la limite
+      // physique) ; et il n'était pas non plus un « sommet de cascade » (il faut être à 2 rangées du haut
+      // du rideau, il en était à 8). Le motif ne validait que parce que les rampes des modules VOISINS
+      // débordaient sur sa portée et lui fabriquaient un escalier par accident. En supprimant ces
+      // débordements, les deux terrains qui l'imposent — plaine-7 et desert-7 — n'ont plus trouvé une
+      // seule graine valide. Chaque liaison est donc désormais EXPLICITE.
+      const T = A + SIMPLE_JUMP_ROWS // bouche de la grotte : à portée de saut GARANTIE depuis la berge
+      const sommet = A + 13          // le rideau dépasse la bouche de la grotte de 10 rangées
       let x = 0
       p.platforms.push({ x, alt: A, w: bank }); x += bank
       // rideau : de `sommet` jusqu'au niveau d'entrée (il recueille dans un petit bassin, pas dans le vide)
@@ -2819,10 +2875,13 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: caveX + 1, alt: T + 1 })
       const gardien = groundMobs.find((id) => !MONSTERS[id]?.aquatic && !MONSTERS[id]?.aerial)
       if (gardien) p.spawns.push({ monsterId: gardien, x: caveX + 3, alt: T })
-      // passage de sortie EN HAUT du rideau
-      p.platforms.push({ x: w - bank, alt: sommet, w: bank })
-      // relais d'accès au sommet : on grimpe la cascade, mais on garde une corniche d'appui
-      p.platforms.push({ x: caveX + floorW, alt: sommet - 3, w: Math.max(3, w - bank - (caveX + floorW)) })
+      // CORNICHE D'ÉMERGENCE au sommet du rideau : sans elle, remonter la cascade ne débouchait sur rien
+      // (le validateur ne voit un sommet de cascade que dans les 2 rangées sous le haut du rideau).
+      p.platforms.push({ x: caveX, alt: sommet, w: Math.min(3, floorW) })
+      // ÉCHELLE DE SORTIE de la cavité vers le passage haut — l'invariant maison : toute cavité a un
+      // puits d'accès et une échelle de sortie. Son palier EST le passage de sortie du module, collé au
+      // bord droit (le chaînage exige une surface marchable à `exitAlt` sur le bord).
+      poseLadderOn(p, w - 4, T, w, sommet - T + 2)
       placeBirds(sommet + 2)
       p.exitAlt = sommet
       break
@@ -3263,7 +3322,13 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       //   · ses lacs n'avaient de berge que d'un côté, ce que le validateur appelle un « rebord désaxé » ;
       //   · il sortait à l'altitude d'entrée, alors qu'un motif de DESCENTE doit descendre.
       const haut = Math.max(4, entryAlt)
-      const steps = 3
+      // ⚠️ LE NOMBRE DE PALIERS SUIT LA LARGEUR RÉELLE, IL N'EST PAS DÉCRÉTÉ. Un palier coûte 10 tuiles
+      // (2 berge + 3 lac + 2 berge + 3 marche), plus bank+6 d'amorce et bank de sortie : trois paliers
+      // demandent 42 tuiles. Avec `steps = 3` en dur dans un module large de 20 à 30, l'escalier sortait
+      // de sa portée jusqu'à 19 tuiles et écrasait le module suivant. La portée du catalogue est passée à
+      // [40, 46] pour que le motif garde ses trois lacs ; la borne ci-dessous le protège quand même.
+      const COUT_PALIER = 10
+      const steps = Math.max(1, Math.min(3, Math.floor((w - 2 * bank - 6) / COUT_PALIER)))
       const peak = haut + 13 // rideau de montée : 13 rangées, la hauteur minimale d'une cascade remontable
       let x = 0
       p.platforms.push({ x, alt: haut, w: bank }); x += bank
@@ -3406,6 +3471,10 @@ export interface AssembleOpts {
 }
 
 // ─── Assembleur : modules → LevelDef ────────────────────────────────────────────────────────
+// Modules ayant posé de la géométrie HORS de la portée qui leur était allouée. Doit rester vide ;
+// `tests/data/superpositions.test.ts` l'exige. Plafonnée pour ne pas gonfler pendant la recherche.
+export const DEBORDEMENTS: { id: string; kind: string; w: number; x: number; pw: number }[] = []
+
 export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): LevelDef {
   const seed = hashSeed(opts.seed ?? opts.id)
   // 1) pièces en espace altitude, chaînées (entrée = altitude courante)
@@ -3443,6 +3512,19 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
       // pierre générique sous toute surface pleine) → une seule bande plate visible au départ.
     }
     if (m.exitHere) piece.exit = { x: w - 3, alt: piece.exitAlt }
+    // ⚠️ UN MODULE NE DOIT JAMAIS DÉBORDER DE SA PORTÉE, ET ON LE CONSIGNE ICI. C'était la cause des 298
+    // débordements relevés le 3 août (jusqu'à 30 tuiles), donc des superpositions de plateformes : la
+    // géométrie d'un module empiétait sur celle du suivant. On l'attrape à l'assemblage parce qu'un
+    // débordement ne se voit AUTREMENT que par ses conséquences, très loin de sa cause — une plateforme
+    // injoignable à l'autre bout du terrain, ou deux textures l'une sur l'autre.
+    // On CONSIGNE, on ne lève pas : la recherche de graines construit des centaines de terrains et une
+    // exception l'abattrait au lieu d'écarter une graine. C'est `tests/data/superpositions.test.ts` qui
+    // exige que cette liste reste vide.
+    if (DEBORDEMENTS.length < 200) {
+      const horsPortee = (q: { x: number; w: number }) => q.x < 0 || q.x + q.w > w
+      const fautif = piece.platforms.find(horsPortee) ?? piece.rocks.find(horsPortee)
+      if (fautif) DEBORDEMENTS.push({ id: opts.id, kind: m.kind, w, x: fautif.x, pw: fautif.w })
+    }
     pieces.push({ piece, x0: cursorX, w })
     cursorX += w
     runningAlt = piece.exitAlt
@@ -3979,7 +4061,7 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'echelles-lianes': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [16, 26], below: 'sol', above: 'air', ladder: true, forcedOnly: true },
   'echelles-zigzag': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [12, 20], below: 'sol', above: 'air', ladder: true, forcedOnly: true },
   'lacs-cascade-montee': { tier: 3, family: 'risque', entry: 'bas', exit: 'haut', width: [18, 30], below: 'marine', above: 'air', chest: true, water: true, forcedOnly: true },
-  'lacs-cascade-descente': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [20, 30], below: 'marine', above: 'air', chest: true, water: true, forcedOnly: true },
+  'lacs-cascade-descente': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [40, 46], below: 'marine', above: 'air', chest: true, water: true, forcedOnly: true },
   // R171 — LAC → CASCADE → PLATEAU (lac horizontal + cascade remontable vers un plateau haut)
   'lac-cascade-plateau': { tier: 2, family: 'risque', entry: 'bas', exit: 'haut', width: [22, 32], below: 'marine', above: 'air', chest: true, water: true },
   // R171 — ESCALIER À GRANDS PAS (marches espacées, saut franc) — motif VERTICAL/traversée sec

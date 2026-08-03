@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { LEVELS } from '../../src/data/levels'
+import { DEBORDEMENTS } from '../../src/data/level-modules'
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 // AUCUNE SURFACE NE DOIT SE SUPERPOSER À UNE AUTRE — INVARIANT, ET IL EST ROUGE
@@ -58,6 +59,25 @@ function fautes(): Faute[] {
 }
 
 describe('géométrie des terrains', () => {
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // LA CAUSE, PAS LE SYMPTÔME : AUCUN MODULE NE POSE DE GÉOMÉTRIE HORS DE SA PORTÉE
+  //
+  // Les superpositions ci-dessous étaient l'effet visible ; la cause était qu'un module écrivait dans la
+  // portée du suivant. Mesuré : 298 débordements sur 48 terrains, jusqu'à 30 tuiles. Trois sources :
+  //   · `ramp()` avançait de 3 tuiles par palier même quand la portée n'en contenait pas autant ;
+  //   · `atterrissage-etroit` posait sa berge de sortie après avoir consommé toute la largeur ;
+  //   · `grotte-depart` dimensionnait son bassin sans réserver la corniche, et `lacs-cascade-descente`
+  //     décrétait trois paliers de lac (42 tuiles) dans un module large de 20 à 30.
+  //
+  // Ce test est le garde-fou de la cause. Il est SÉPARÉ de celui des superpositions parce qu'il doit
+  // rester vert même si un chevauchement cosmétique subsiste : ce sont deux défauts distincts.
+  it('aucun module ne pose de géométrie hors de la portée qui lui est allouée', () => {
+    const resume = DEBORDEMENTS.slice(0, 8)
+      .map((d) => `\n   ${d.id} · ${d.kind} (largeur ${d.w}) pose x${d.x}+${d.pw}, dépasse de ${d.x + d.pw - d.w}`)
+      .join('')
+    expect(DEBORDEMENTS, `${DEBORDEMENTS.length} module(s) débordent :${resume}`).toEqual([])
+  })
+
   it('aucune surface ne se superpose à une autre', () => {
     const f = fautes()
     const parType = new Map<string, number>()

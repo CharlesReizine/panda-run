@@ -152,7 +152,11 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
       { itemId: 'heaume-de-bronze', price: 400 },
       { itemId: 'masque-de-renard', price: 1820 },
       { itemId: 'mitre-du-clerc', price: 1820 },
-      { itemId: 'bandeau-du-moine', price: 1770 },
+      // 1820 et non 1770 : la règle est « un chapeau rare coûte au moins 1,5× le pécule d'arrivée », et
+      // ce pécule a monté avec le recalage des niveaux de monstres (le revenu du parcours suit leur
+      // niveau). 1770 passait sous la barre de trois pièces d'or. On aligne sur les deux autres rares
+      // d'entrée de gamme plutôt que d'abaisser la règle.
+      { itemId: 'bandeau-du-moine', price: 1820 },
     ],
   },
   morocc: {

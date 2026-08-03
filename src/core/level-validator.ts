@@ -500,6 +500,15 @@ export function startExitProblems(level: LevelDef, minAltGap = 3): string[] {
   if (level.start.y > groundRow) out.push('départ sous le sol du monde')
   if (level.start.y <= 2) out.push('départ collé au plafond')
   if (Math.abs(level.start.y - level.exit.y) < minAltGap) out.push('sortie à la même altitude que le départ')
+  // ⚠️ LE DÉPART N'EST JAMAIS DANS UNE CUVE. `reachable.test.ts` l'exige depuis longtemps, mais le
+  // critère manquait ICI — donc ni la recherche de graines ni la validation de gravure ne le voyaient.
+  // Un plan a ainsi été GRAVÉ avec le panda apparaissant dans l'eau sur montagne-1, et seul un test
+  // d'un autre fichier l'a rattrapé. Une graine fautive doit être écartée à la source, pas signalée en
+  // aval : c'est toute la raison d'être de cette liste.
+  const sx = level.start.x
+  const dansEau = (level.hazards ?? []).some((h) =>
+    h.kind === 'water' && (h.water === 'basin' || h.water === 'lave') && sx >= h.x && sx < h.x + h.w)
+  if (dansEau) out.push('départ dans l\'eau')
   return out
 }
 

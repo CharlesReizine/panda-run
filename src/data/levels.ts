@@ -173,7 +173,16 @@ const POOLS: Record<string, BiomePool> = {
   foret: { tier: 2, ground: ['louveteau', 'willow', 'poporing', 'mandragore', 'ronce-cracheuse', 'rocker', 'singe-grimpeur', 'ours-brun', 'gloopy-geant', 'fabre-geant'], birds: ['corbeau'], mvp: 'poring-dore' },
   desert: { tier: 2, ground: ['scorpion', 'scorpion-mini', 'fourmi-geante', 'scarabee-cornu', 'momie', 'vautour', 'orc-guerrier', 'zombie', 'mini-baphomet'], birds: ['faucon'], aquatic: WATER_THREATS, mvp: 'orc-seigneur' },
   jungle: { tier: 3, ground: ['willow', 'frelon-geant', 'flora-vorace', 'flora-geante', 'singe-grimpeur', 'ours-brun', 'ronce-cracheuse', 'scorpion-geant'], birds: ['ara'], aquatic: WATER_THREATS },
-  cave: { tier: 3, ground: ['chauve-souris', 'chauve-souris-geante', 'squelette', 'fantome', 'gobelin-mineur', 'gobelin-mini', 'fourmi-geante', 'mage-noir', 'golem-de-pierre'], birds: ['corbeau'], aquatic: WATER_THREATS },
+  // ⚠️ `golem-de-pierre` A ÉTÉ RETIRÉ DE CE POOL, ET C'EST UNE CORRECTION DE FRAGILITÉ, PAS UN CHOIX
+  // ESTHÉTIQUE. Un mob de pool cale son niveau sur le PREMIER biome où il apparaît. Le golem étant
+  // déclaré en grotte (rang 17) ET en carrière (rang 20), son niveau dépendait du tirage : tant que le
+  // générateur ne le posait sur aucune grotte il valait 32 et tenait l'apex de carriere-1 ; la regravure
+  // du 3 août l'a posé sur cave-1, il est tombé à 26, et carriere-1 s'est retrouvé sans aucun mob à son
+  // niveau calibré — « terrain absurdement trivial » (balance-invariant). Or AUCUNE autre espèce de
+  // carrière ne peut tenir ce rôle : toutes se calent plus tôt (scarabée sur le désert, gobelin et
+  // squelette sur la grotte). L'apex de carriere-1 reposait donc sur un coup de chance ; il est
+  // désormais garanti.
+  cave: { tier: 3, ground: ['chauve-souris', 'chauve-souris-geante', 'squelette', 'fantome', 'gobelin-mineur', 'gobelin-mini', 'fourmi-geante', 'mage-noir'], birds: ['corbeau'], aquatic: WATER_THREATS },
   montagne: { tier: 3, ground: ['harpie', 'ours-brun', 'yeti', 'louveteau', 'singe-geant'], birds: ['faucon'], aquatic: WATER_THREATS },
   cimetiere: { tier: 4, ground: ['squelette', 'goule', 'totem-maudit', 'banshee', 'fantome', 'pretre-goule', 'momie-geante', 'squelette-geant', 'goule-geante'], birds: ['harfang-spectral'], aquatic: WATER_THREATS, mvp: 'spectre-ancien' },
   plage: { tier: 3, ground: ['crabe-geant', 'harpie'], birds: ['ara'], aquatic: ['meduse', 'crabe-geant', 'requin', 'piranha'], mvp: 'roi-crabe' },

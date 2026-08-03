@@ -37,6 +37,17 @@ Puis **resynchroniser les niveaux de monstres** : ils dérivent du premier biome
 apparaît, donc la regravure les décale. `tests/core/mob-level.test.ts` dit lesquels. Le calcul dépend des
 niveaux stockés : **itérer jusqu'au point fixe** (deux ou trois passes).
 
+⚠️ **LE PLAN GRAVÉ CONTIENT LES LISTES DE MONSTRES** (`Module.ground` / `Module.birds`). Modifier un pool
+de biome dans `levels.ts` ne change donc RIEN tant qu'on n'a pas regravé — le plan rejoue les espèces
+telles qu'elles étaient au moment du tirage. Vérifié en dur : après avoir retiré `golem-de-pierre` du pool
+des grottes, il continuait d'apparaître sur cave-1, et `grep golem-de-pierre src/data/level-seeds.generated.ts`
+le montrait noir sur blanc. **Un changement de peuplement est un changement de génération.**
+
+⚠️ **DEUX TESTS D'ÉQUILIBRAGE SUIVENT LES NIVEAUX DE MONSTRES**, et ils tombent en aval du resync :
+`balance-invariant` (un terrain sans mob à son niveau calibré devient « absurdement trivial ») et
+`shop-economy` (le revenu du parcours, donc le pécule d'arrivée, donc le prix plancher des chapeaux
+rares). Les traiter fait partie du cycle, pas après.
+
 ### ⚠️ Toucher à la génération, c'est un cycle complet
 
 modifier → **regraver (6 à 7 minutes)** → resynchroniser les monstres → 1690 tests → six sondes → déployer.
@@ -115,6 +126,7 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 | R336 | caméra : suivi horizontal direct (la zone morte faisait toute la largeur) |
 | R337 | sous-sol sombre · texture `rock-body` · échelles percées · caméra qui rattrape l'altitude acquise |
 | R338 | nom EXACT au chargement (le préfixe laissait une faute de frappe ouvrir la partie d'un autre) · ce fichier |
+| R343 | **plus aucun module ne déborde de sa portée** (298 → 0) · `ramp()` corrigé de façon asymétrique · 3 motifs qui posaient leur dernière pièce hors du module · `cascade-plus-haute` rendue joignable (elle ne l'était que par accident) · superpositions 14 → 1 · « départ dans l'eau » devient un critère de sélection de graine |
 
 ### Décisions de fond qui ne se rediscutent pas sans raison
 
@@ -135,46 +147,76 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 ### ⚠️ Un test échoue volontairement
 
-`tests/data/superpositions.test.ts` est **rouge** : **14** superpositions restantes (plat/plat=10,
-plat/roche=4). Il en comptait 44 ; un post-traitement d'assemblage (`level-modules.ts`, juste avant le
-comblement des corniches nues) a éliminé toute la pierre fragile mal posée et tous les doublons de dalles.
-Les 14 qui restent sont ceux où rogner AMPUTERAIT un appui : la première version rognait sans garde-fou et
-a cassé l'atteignabilité de carriere-1 (huit tests rouges). Le garde-fou `LARGEUR_UTILE = 3` préfère donc un
-chevauchement cosmétique à une corniche devenue irrecevable — et c'est bien dans les MOTIFS que ces
-quatorze-là doivent être corrigés. C'est délibéré, sur décision du joueur : « je préfère que ça
-soit un test qui fail et on le fix, plutôt que du dirty fix où on peut avoir des patterns dégueulasses ».
-Le rendre vert en relâchant ses seuils serait remettre du scotch.
+`tests/data/superpositions.test.ts` est **rouge** : **UNE** superposition restante, `plat/plat` sur
+`plage-3`. Le compte a fait 44 → 14 → **1**. Les 44 premières sont tombées par un post-traitement
+d'assemblage (`level-modules.ts`, juste avant le comblement des corniches nues) qui a éliminé la pierre
+fragile mal posée et les doublons de dalles ; les 13 suivantes en corrigeant la CAUSE, c'est-à-dire les
+modules qui débordaient de leur portée (section suivante). Le garde-fou `LARGEUR_UTILE = 3` reste : rogner
+sans lui AMPUTAIT un appui et cassait l'atteignabilité de carriere-1 (huit tests rouges).
+
+C'est délibéré, sur décision du joueur : « je préfère que ça soit un test qui fail et on le fix, plutôt que
+du dirty fix où on peut avoir des patterns dégueulasses ». Le rendre vert en relâchant ses seuils serait
+remettre du scotch.
+
+**La dernière n'a pas été diagnostiquée** : elle se lit `plage-3 y17 x49`, deux plateformes de la même
+rangée qui se recouvrent, alors qu'AUCUN module ne déborde plus (le nouveau test de portée est vert). Elle
+vient donc d'un motif qui se superpose à lui-même, ou d'une couture entre deux modules à la même altitude.
+Le chemin est balisé : `tests/data/motifs-isoles.test.ts` sait planter un motif seul, il suffit d'y ajouter
+la détection de recouvrement pour trouver le fautif sans toucher aux terrains.
 
 `LevelScene` filtre encore ces doublons à la pose (filtre marqué TEMPORAIRE dans le code) : à l'écran on ne
 voit plus rien de superposé. Mais un filtre d'affichage ne peut rien contre « nager à travers la pierre » —
 une cuve d'eau qui chevauche une dalle de roche est un défaut de génération. **Le filtre se supprime le jour
 où ce test passe au vert.**
 
-### Le lot « génération » — quatre corrections, UNE regravure
+### Le lot « génération »
 
-À faire ensemble, dans cet ordre. Chacune est mesurée, localisée, et l'audit qui la trouve est décrit.
+**0. LES DÉBORDEMENTS DE MODULE SONT CORRIGÉS À LA SOURCE : 298 → 0.** (fait)
 
-**0. LA CAUSE DES CHEVAUCHEMENTS DE PLATEFORMES EST TROUVÉE : `ramp()` déborde de sa portée.**
+Un module écrivait de la géométrie **hors de la portée qui lui était allouée**, donc dans celle du suivant :
+298 débordements sur 48 terrains, jusqu'à 30 tuiles. C'était la cause des superpositions de plateformes.
+Quatre sources, toutes corrigées :
 
-`ramp(x0, w, fromAlt, toAlt)` calcule `segW = Math.max(3, Math.floor(w / count))` — plancher à 3, parce
-qu'un palier plus étroit ne se reçoit pas au saut — puis avance `x += segw` à chaque palier. Quand `w` ne
-suffit pas pour `count` paliers de 3, la rampe avance quand même de 3 par palier et **sort de la portée
-allouée**, empiétant sur la géométrie du module suivant.
+- **`ramp()`** avançait de 3 tuiles par palier même quand la portée n'en contenait pas autant.
+  ⚠️ **La correction n'est PAS symétrique, et c'est tout le sujet.** En **descente**, borner le nombre de
+  paliers par la place est gratuit : on tombe. En **montée**, raidir rend le pas infranchissable — mesuré,
+  `plaine-7` n'a plus trouvé aucune graine en 30 passes (56 plateformes injoignables). En montée serrée on
+  **resserre donc les paliers à 2 tuiles** au lieu de raidir. La version « borner dans les deux sens »,
+  écrite ici avant vérification, est fausse : elle a coûté une regravure de 23 minutes pour rien.
+- **`atterrissage-etroit`** posait sa berge de sortie après avoir consommé toute la largeur.
+- **`grotte-depart`** dimensionnait son bassin sans réserver la corniche de sortie.
+- **`lacs-cascade-descente`** décrétait `steps = 3` (42 tuiles) dans un module large de 20 à 30. Le nombre
+  de paliers suit désormais la largeur, et sa portée au catalogue est passée à `[40, 46]`.
 
-C'est la signature qu'on retrouve dans presque tous les cas relevés : deux paliers de largeur 3 décalés
-d'une seule tuile — `A x159+3 B x160+3` (foret-4), `A x144+3 B x146+3` (enfer-1), `A x178+3 B x179+3`
-(desert-3), et de même sur jungle-1, plage-3, cave-1, cimetiere-2, enfer-6. Les quatre `plat/roche`
-(carriere-1, montagne-2, jungle-4) ont la même origine : la rampe déborde dans une dalle voisine.
+Un garde-fou est posé à l'assemblage : `DEBORDEMENTS` (dans `level-modules.ts`) consigne tout module qui
+sort de sa portée, et `tests/data/superpositions.test.ts` exige que la liste reste vide. On **consigne** au
+lieu de lever, parce qu'une exception abattrait la recherche de graines au lieu d'écarter une graine.
 
-**Le correctif est écrit et tient en trois lignes** : borner le nombre de paliers par la place disponible
-(`count = min(countVoulu, floor(w / 3))`) et plafonner chaque palier à ce qui reste (`min(segW, x0 + w - x)`).
-Monter un peu plus vite reste franchissable — chaque pas est validé par les contrôles d'atteignabilité —
-alors que déborder ne l'est jamais.
+**0 bis. `cascade-plus-haute` ÉTAIT INJOIGNABLE PAR CONSTRUCTION, et c'est la vraie leçon du lot.** (fait)
 
-⚠️ **IL EXIGE UNE REGRAVURE**, et c'est normal : `ramp()` est utilisé par des dizaines de motifs, donc la
-géométrie change partout. Tenté sans regraver : **93 tests rouges**, uniquement des « plan gravé plus
-jouable ». C'est le seul correctif du lot dont on SAIT qu'il attaque la cause et non le symptôme — à lancer
-en premier, suivi de la regravure et du resync des niveaux de monstres.
+Trois de ses cinq plateformes étaient hors d'atteinte, à toutes les largeurs : son plancher de grotte était
+à 5 rangées de la berge d'entrée alors que le saut garanti en fait 3, et il n'était pas non plus un
+« sommet de cascade » (2 rangées maximum sous le haut du rideau, il en était à 8). **Rien ne l'avait jamais
+signalé** : les rampes des modules voisins débordaient sur sa portée et lui fabriquaient un escalier par
+accident. Le jour où ces débordements ont disparu, les deux terrains qui imposent ce motif — `plaine-7` et
+`desert-7` — n'ont plus trouvé une seule graine valide.
+
+Le motif a donc chaque liaison explicite : bouche de grotte à `A + SIMPLE_JUMP_ROWS`, corniche d'émergence
+au sommet du rideau (sans elle, remonter la cascade ne débouchait sur rien), et **échelle de sortie** de la
+cavité vers le passage haut — l'invariant maison « toute cavité a un puits d'accès et une échelle de
+sortie ».
+
+`tests/data/motifs-isoles.test.ts` plante désormais **chaque motif SEUL** entre deux plateaux neutres, à
+sa largeur minimale, médiane et maximale. Valider un motif *dans* un terrain ne le valide pas : un voisin
+généreux masque le défaut, et on ne l'apprend que le jour où le voisin cesse de l'être. Quatre motifs sont
+inventoriés avec leur raison (deux ne s'atteignent qu'au rebond, que ce modèle ne simule pas ; les deux
+`cascade-deux-passages` gardent une plateforme hors de portée aux grandes largeurs — dette réelle, à
+prendre avec le prochain lot puisqu'elle demande une regravure).
+
+⚠️ **LES TROIS CHIFFRES CI-DESSOUS SONT PÉRIMÉS ET DOIVENT ÊTRE REMESURÉS.** Ils datent d'avant la
+correction des débordements, qui a changé la géométrie de tous les terrains : « 12 superpositions dans
+grotte-scellee », « 26 séquences de sauts », « 74 paires de surfaces » ne valent plus rien tels quels. Les
+CAUSES décrites restent utiles, les comptes non. Remesurer avant de s'y remettre.
 
 **1. Douze superpositions de textures dans `grotte-scellee`** — « dans tes nouveaux motifs y a parfois des
 textures qui se superposent ». **Cause identifiée** : la hauteur de la cavité suivait celle du SOCLE, or
@@ -211,18 +253,6 @@ les motifs fautifs — chercher d'abord du côté des coutures entre modules et 
 (`couloir-large`, `passage-immerge`, `passerelles-zigzag`, `cascade-deux-passages-g`,
 `colonnes-perilleuses`). Le correctif « un couloir large ne doit pas être nu » a été écrit dans la copie
 morte : il n'a jamais tourné.
-
-**74 paires de surfaces à moins d'un saut l'une de l'autre**, sur 45 terrains, presque toutes à 2 rangées
-avec 3 colonnes de chevauchement — « j'en ai vu une qui revient et ça perturbe ». Une première tentative
-(rehausser la corniche du dessus à un saut complet, en vérifiant que la rangée d'arrivée est libre) a été
-ABANDONNÉE : elle rend la génération insoluble. Le générateur a cherché des graines valides pendant plus de
-dix-huit minutes sans en trouver une seule, contre cent secondes d'habitude — rehausser en aveugle viole
-d'autres invariants en cascade. La correction devra passer par les motifs fautifs, un par un, en repérant
-d'où sortent ces paires (probablement les coutures entre modules et `ramp()`).
-
-**26 séquences de sauts avec du sol praticable dessous**, sur 20 terrains (pire : `plaine-1 x417→435`,
-six plateformes avec du sol utilisable 18 rangées plus bas ; `desert-3` en compte quatre). Le contenu est
-contournable en marchant en dessous, donc inutile. Correction = génération, donc regravure.
 
 **Deux documents Firestore périmés** — `saves/panda` et `players/panda`, doublons de l'archer 29 sous une
 clé abandonnée. Inoffensifs (le dédoublonnage les ignore, `chercher` ne les lit plus). Suppression bloquée
