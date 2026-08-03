@@ -111,6 +111,11 @@ const SURVIE_APNEE_MS = 5000
 // Énergie rendue par monstre abattu. Volontairement FAIBLE (« mais qui reste faible ») : de quoi
 // enchaîner un sort de plus quand on nettoie un groupe, pas de quoi jouer sans jamais regarder sa barre.
 const GAIN_ENERGIE_KILL = 6
+
+// Rayon de l'anneau du « Rugissement du panda » (sa portée déclarée, cf. data/skills). Nommé ici parce
+// que le feu d'artifice de victoire s'y RÉFÈRE : le user a demandé des cercles allant jusqu'à quatre fois
+// ce diamètre. Écrire 90 en dur des deux côtés aurait laissé les deux dériver le jour où la portée change.
+const RAYON_RAGE = 90
 const DROWN_TICK_MS = 300 // cadence des ticks de noyade : perte régulière, jamais d'un coup
 // Cadence des bulles, VISUELLES ET SONORES à la fois (le son est joué dans emitBubble).
 // 170 ms donnait ~6 bulles par seconde : une mitraillette. Le joueur veut « blop… une demi-seconde…
@@ -2380,6 +2385,44 @@ export class LevelScene extends Phaser.Scene {
   //   - deux couches concentriques qui tournent en sens opposé → de la profondeur, pas un trait plat.
   // Le rayon reste CIRCULAIRE (pas d'ellipse) : c'est celui qui sert aux tests de portée, le visuel
   // ne doit pas mentir sur la zone réellement touchée.
+  /**
+   * Feu d'artifice de victoire : des ondes qui montent dans le CIEL et s'y dissipent.
+   *
+   * Demande du user : « quand on tue un boss, je veux que ça fasse un feu d'artifice, c'est-à-dire
+   * visuellement la même chose que rage du panda dans le ciel, avec des cercles qui grossissent et se
+   * dissipent, et de couleurs différentes. Les cercles vont jusqu'à faire 4 fois le diamètre du cercle
+   * de rage du panda actuel. »
+   *
+   * ⚠️ ON RÉUTILISE `aoeRing`, ON N'EN ÉCRIT PAS UN AUTRE. C'est littéralement ce qui a été demandé
+   * (« la même chose que rage du panda »), et c'est aussi la bonne façon de faire : cet anneau a déjà son
+   * tracé dentelé, sa rotation, son fondu, son mode additif. Un second effet « presque pareil » aurait
+   * divergé au premier réglage — le jour où l'on retouche l'anneau des sorts, le feu d'artifice suit.
+   *
+   * Les tirs sont ÉCHELONNÉS et dispersés : un feu d'artifice, ce sont des salves qui se répondent, pas
+   * une fleur unique. Rayons croissants jusqu'à quatre fois celui du rugissement (RAYON_RAGE), position
+   * en hauteur pour que ça se passe dans le ciel, et une couleur différente par salve.
+   */
+  private feuDArtifice() {
+    const cam = this.cameras.main
+    const cx = cam.scrollX + cam.width / 2
+    const ciel = Math.max(60, this.groundRow * TILE - cam.height * 0.75)
+    const couleurs = [0xffd54f, 0xff7043, 0x4dd0e1, 0xba68c8, 0x81c784, 0xf06292, 0xfff176]
+    const SALVES = 9
+    for (let i = 0; i < SALVES; i++) {
+      this.time.delayedCall(i * 260, () => {
+        if (!this.scene?.isActive()) return
+        // dispersion : plus on avance dans la volée, plus les tirs s'écartent et montent
+        const t = i / (SALVES - 1)
+        const x = cx + Phaser.Math.Between(-1, 1) * cam.width * 0.34 * (0.35 + t)
+        const y = ciel + Phaser.Math.Between(-70, 70)
+        // le rayon grimpe jusqu'à 4× celui du rugissement du panda, comme demandé
+        const rayon = RAYON_RAGE * (1.2 + 2.8 * t)
+        this.aoeRing(x, y, rayon, couleurs[i % couleurs.length]!, true)
+        audio.playSfx('coin', 0.5 + 0.3 * t) // pétillement discret, monte avec la salve
+      })
+    }
+  }
+
   private aoeRing(x: number, y: number, radius: number, color: number, withShards = false) {
     const SEG = 36
     // même générateur que les auras persistantes (art/jagged-ring) → l'éclat et la durée ont
@@ -4637,6 +4680,7 @@ export class LevelScene extends Phaser.Scene {
     this.bossBar = null
     this.bossBarBg = null
     this.bossName = null
+    this.feuDArtifice()
     const txt = this.add.text(CX, 200, 'VICTOIRE !', { fontSize: '56px', color: '#ffd700', fontStyle: 'bold' }).setOrigin(0.5).setScrollFactor(0)
     this.tweens.add({ targets: txt, scale: 1.2, yoyo: true, repeat: 3, duration: 300 })
     this.createExit()

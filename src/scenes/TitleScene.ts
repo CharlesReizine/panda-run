@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import { load, save } from '../core/save'
+import { load, loadStamped, save } from '../core/save'
 import { newPlayer, type PlayerState } from '../core/player-state'
 import { setPlayer } from '../state'
 import { audio } from '../audio/audio-engine'
@@ -158,24 +158,40 @@ export class TitleScene extends Phaser.Scene {
     }
 
     this.say(`Recherche de « ${pseudo} »…`)
+    let cloud: StampedSave | null = null
     try {
-      const cloud = await avecDelai(ensureUser().then(() => pull(key)), DELAI_CLOUD_MS)
-      if (cloud) { this.adopt(pseudo, key, cloud); return }
-      // ⚠️ PAS DE CLOUD ≠ PAS DE PARTIE. On proposait directement d'en créer une : quand la recherche
-      // échouait — réseau lent, coupure, connexion anonyme qui traîne — le joueur se voyait offrir un
-      // écran « nouvelle partie » alors que sa sauvegarde existait, intacte, à quelques mètres de là.
-      // On regarde donc TOUJOURS le local avant de conclure quoi que ce soit.
-      const local = this.safeLoad()
-      if (local) { setPlayer(local); writeActivePseudo(pseudo); setAutoPushKey(key); this.left = true; this.scene.start('WorldMap'); return }
-      this.confirmNewGame(pseudo, key)
+      cloud = await avecDelai(ensureUser().then(() => pull(key)), DELAI_CLOUD_MS)
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      logEvent('error', 'cloud', msg)
-      // même règle en cas d'erreur franche : la partie locale prime sur un message d'échec
-      const local = this.safeLoad()
-      if (local) { setPlayer(local); writeActivePseudo(pseudo); setAutoPushKey(key); this.left = true; this.scene.start('WorldMap'); return }
-      this.say(`Impossible de vérifier : ${msg}`, '#ffab91')
+      logEvent('error', 'cloud', e instanceof Error ? e.message : String(e))
     }
+    const local = this.safeLoad()
+    const localTampon = local ? loadStamped() : null
+
+    // ─── ON REPREND LA PARTIE LA PLUS AVANCÉE, POINT ────────────────────────────────────────────
+    //
+    // ⚠️ TROIS RÈGLES ONT ÉTÉ ESSAYÉES ICI, DEUX ONT PERDU DES DONNÉES. Le premier jet ne regardait que
+    // le cloud : quand la lecture échouait, on proposait de créer une NOUVELLE partie — un écran de perte
+    // de données déguisé en accueil, et le joueur qui accepte écrase sa sauvegarde locale par un novice
+    // niveau 1. Le second jet a inversé la priorité vers le local : il a alors ressuscité précisément ce
+    // novice niveau 1 créé par erreur, et l'a préféré au vrai personnage resté au cloud (« il me trouve
+    // mais j'ai une map vide quand je load, et j'ai un novice »).
+    //
+    // La bonne règle ne dépend d'aucune des deux sources : dans un jeu solo, la progression ne REDESCEND
+    // jamais. La sauvegarde la plus avancée est donc toujours la bonne, d'où qu'elle vienne — et la
+    // choisir ne peut, par construction, jamais faire perdre de progression. À niveau égal, la plus
+    // récente départage.
+    const niveau = (s: StampedSave | null) => s?.player.level ?? -1
+    const gagnant = niveau(cloud) > niveau(localTampon) ? cloud
+      : niveau(localTampon) > niveau(cloud) ? localTampon
+        : ((cloud?.savedAt ?? 0) >= (localTampon?.savedAt ?? 0) ? cloud : localTampon)
+
+    if (gagnant) {
+      // adopter écrit la sauvegarde retenue EN LOCAL : les deux côtés repartent alignés, et le prochain
+      // envoi automatique pousse le bon état — c'est ce qui répare durablement un cloud périmé.
+      this.adopt(pseudo, key, gagnant)
+      return
+    }
+    this.confirmNewGame(pseudo, key)
   }
 
   // NOUVELLE PARTIE — si le pseudo porte DÉJÀ une partie, on demande avant d'écraser.

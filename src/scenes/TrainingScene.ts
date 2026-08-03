@@ -13,8 +13,8 @@ import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 import { installUiClickSound } from '../ui/click-sound'
 
 // PAGE D'ENTRAÎNEMENT : on incarne n'importe quelle classe (base + évolutions), MANA infini, TOUS
-// les skills débloqués au rang max. Un grand arbre-boss ENRACINÉ encaisse sans mourir et frappe pour 0, des
-// corbeaux volent et « attaquent » pour 0 — impossible de mourir. Réutilise toute la machinerie de
+// les skills débloqués au rang max. Un grand arbre-boss ENRACINÉ encaisse sans mourir et frappe pour 0 —
+// impossible de mourir, et rien ne bouge en travers du champ de vision. Réutilise toute la machinerie de
 // LevelScene (sol, joueur, skills, HUD) via l'héritage + le drapeau `training`.
 
 // classes proposées : les 3 voies de base + leurs évolutions (+ novice pour la panoplie de départ)
@@ -96,9 +96,7 @@ export class TrainingScene extends LevelScene {
     return p
   }
 
-  // dummy + corbeaux, tous INVINCIBLES (persistants, jamais tués) et inoffensifs (hitPlayer no-op en
-  // mode training). Le gros Poring (roi-gloopy, charge) télégraphie et anime ses attaques ; les
-  // corbeaux (aerial) planent puis piquent sur le joueur.
+  // Un seul mannequin : INVINCIBLE (jamais tué) et inoffensif (hitPlayer no-op en mode training).
   private spawnDummies() {
     const gy = this.groundTopY()
     const width = this.levelDef.widthTiles * TILE
@@ -121,12 +119,11 @@ export class TrainingScene extends LevelScene {
     dummy.root(10 ** 9) // enraciné pour la durée de la session
     this.enemies.add(dummy)
 
-    const crowDef = MONSTERS['corbeau']!
-    for (const [cx, cy] of [[240, 150], [520, 110], [760, 170], [900, 130]] as const) {
-      const crow = new Enemy(this, cx, cy, crowDef)
-      crow.invincible = true
-      this.enemies.add(crow)
-    }
+    // ⚠️ AUCUN OISEAU DANS L'ARÈNE D'ENTRAÎNEMENT. Demande du user : « le truc entraînement, je veux
+    // 0 piaf ». Ils étaient là pour donner une cible aérienne, mais ils passent leur temps à piquer sur
+    // le panda et à traverser le champ de vision : on essayait un sort, un corbeau passait devant, et on
+    // ne voyait plus rien de ce qu'on venait de lancer. Cet écran sert à REGARDER ses sorts ; tout ce qui
+    // bouge en travers lui nuit. L'arbre enraciné, lui, reste une cible immobile — c'est le point.
   }
 
   // bandeau d'entraînement + boutons « Menu » et « Changer de classe » (épinglés à l'écran, au-dessus

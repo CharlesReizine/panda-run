@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { newPlayer } from '../../src/core/player-state'
 import { computeStats } from '../../src/core/stats'
-import { physicalDamage, inMeleeReach } from '../../src/core/combat'
+import { RYTHME_COMBAT, physicalDamage, inMeleeReach } from '../../src/core/combat'
 import { CLASSES } from '../../src/data/classes'
 
 describe('stats & combat', () => {
@@ -37,9 +37,15 @@ describe('stats & combat', () => {
     expect(s.maxHp).toBe(base.maxHp + 4 * 2) // INT → +4 pv/pt
   })
 
-  it('dégâts = atk*mult - def, minimum 1', () => {
-    expect(physicalDamage(20, 5)).toBe(15)
-    expect(physicalDamage(20, 5, 2)).toBe(35)
+  it('dégâts = (atk*mult − def) × rythme, minimum 1', () => {
+    // ⚠️ LE FACTEUR DE RYTHME S'APPLIQUE APRÈS LA SOUSTRACTION, et c'est ce que ce test épingle.
+    // Demande du user : « divise par deux les dégâts faits et reçus, je trouve que ça va trop vite ».
+    // Appliqué à l'attaque seule, il aurait déséquilibré un camp ; appliqué au résultat, joueur et
+    // monstres ralentissent ensemble et le rapport de force ne bouge pas d'un pouce.
+    expect(physicalDamage(20, 5)).toBe(Math.round(15 * RYTHME_COMBAT))
+    expect(physicalDamage(20, 5, 2)).toBe(Math.round(35 * RYTHME_COMBAT))
+    // le plancher reste à 1 : une attaque doit toujours faire quelque chose, sinon un adversaire trop
+    // blindé devient invulnérable au lieu d'être difficile
     expect(physicalDamage(3, 100)).toBe(1)
   })
 
