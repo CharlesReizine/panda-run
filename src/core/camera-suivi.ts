@@ -37,9 +37,29 @@ export const LERP_Y_MONTEE = 0.3
 /** Vitesse de montée (px/s, valeur négative en Arcade) à partir de laquelle on durcit le suivi vertical. */
 export const SEUIL_MONTEE = -450
 
-/** Zone morte à appliquer à la caméra, en pixels. La largeur NULLE est le cœur du correctif. */
-export function zoneMorte(hauteurEcran: number): { w: number; h: number } {
-  return { w: 0, h: hauteurEcran * BANDE_MORTE_Y }
+/**
+ * Part de la hauteur utilisée comme zone morte une fois le panda POSÉ et STABLE.
+ *
+ * Étroite : la caméra se recentre alors sur lui. C'est la seconde moitié de la demande — « genre un saut
+ * fasse rien, mais si je saute sur une plateforme et que je reste dessus alors la caméra s'ajuste ».
+ */
+export const BANDE_POSE_Y = 0.1
+
+/** Temps au sol (ms) avant de considérer l'altitude comme ACQUISE et de recentrer. */
+export const POSE_MS = 320
+
+/**
+ * Zone morte à appliquer à la caméra, en pixels.
+ *
+ * La largeur NULLE est le cœur du correctif horizontal. La hauteur, elle, DÉPEND DE L'ÉTAT : large en
+ * l'air (un saut, un rebond de trampoline ne bougent rien), étroite dès qu'on est posé depuis un moment
+ * (la caméra rattrape l'altitude acquise). Sans ce basculement, rester longtemps en hauteur laissait le
+ * panda collé en haut du cadre — « quand je suis haut longtemps, faudrait que ça baisse ; là c'est
+ * difficile à suivre. Pareil quand je descends. »
+ */
+export function zoneMorte(hauteurEcran: number, msAuSol = 0): { w: number; h: number } {
+  const part = msAuSol >= POSE_MS ? BANDE_POSE_Y : BANDE_MORTE_Y
+  return { w: 0, h: hauteurEcran * part }
 }
 
 /**

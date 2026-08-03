@@ -2402,6 +2402,34 @@ export class PreloadScene extends Phaser.Scene {
     g.fillStyle(0x546e7a, 0.6).fillRect(3, 3, 24, 2).fillRect(3, 19, 24, 2) // reflet clair sur l'assise
     g.fillStyle(0x33691e, 0.5).fillEllipse(8, 4, 10, 4).fillEllipse(25, 20, 9, 4) // mousse humide
     g.generateTexture('basin-wall', 32, 32); g.clear()
+    // ─── rock-body : LE CORPS DE PIERRE des falaises, mesas et socles ────────────────────────────
+    // Retour du user, capture à l'appui : « graphiquement ça fait des choses bizarres, des strates
+    // moches ». Les corps de pierre étaient tuilés avec `basin-wall` — une maçonnerie à JOINTS
+    // RÉGULIERS tous les 16 px. Sur une paroi de deux tuiles ça passe ; répétée sur trente tuiles de
+    // haut et cinquante de large, la grille devient un empilement de strates grises qui n'a plus rien
+    // d'une falaise et beaucoup d'un mur de château au milieu de la jungle.
+    //
+    // ⚠️ LA CLÉ EST L'ABSENCE DE MOTIF ALIGNÉ, pas la couleur. Toute arête horizontale ou verticale qui
+    // traverse la tuile de bord à bord se répète à l'identique et se lit comme une ligne de maçonnerie.
+    // On ne dessine donc QUE des taches et des éclats qui ne touchent pas les bords, sur 64 px (quatre
+    // fois moins de répétitions par écran), en faible contraste — la masse lit « roche » sans motif.
+    g.fillStyle(0x4a5560).fillRect(0, 0, 64, 64) // masse de roche, gris-bleu sourd
+    const taches: [number, number, number, number, number][] = [
+      // x, y, rayonX, rayonY, teinte (0 = plus clair, 1 = plus sombre)
+      [14, 11, 13, 9, 0], [45, 19, 11, 8, 1], [26, 33, 15, 10, 1], [54, 46, 12, 9, 0],
+      [9, 48, 10, 8, 1], [37, 57, 13, 7, 0], [58, 8, 8, 7, 1], [20, 22, 7, 5, 0],
+    ]
+    for (const [x, y, rx, ry, sombre] of taches) {
+      g.fillStyle(sombre ? 0x3f4a55 : 0x556270, 0.85).fillEllipse(x, y, rx * 2, ry * 2)
+    }
+    // éclats anguleux courts (fractures), volontairement OBLIQUES et jamais jointifs d'un bord à l'autre
+    g.lineStyle(2, 0x38424c, 0.7)
+    for (const [x1, y1, x2, y2] of [[8, 20, 19, 31], [30, 6, 38, 17], [44, 34, 55, 27], [16, 54, 27, 45], [50, 58, 59, 50]] as [number, number, number, number][]) {
+      g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.strokePath()
+    }
+    g.fillStyle(0x616f7d, 0.5) // quelques paillettes claires : la pierre accroche la lumière
+    for (const [x, y] of [[22, 15], [48, 24], [12, 38], [34, 44], [57, 37], [28, 60]] as [number, number][]) g.fillRect(x, y, 3, 2)
+    g.generateTexture('rock-body', 64, 64); g.clear()
     // ─── PIERRE FRAGILE : la matière CASSABLE, en trois états d'usure ────────────────────────────
     // Demande du user : « une nouvelle matière qui est du bloc de pierre cassable ». Elle doit se LIRE
     // comme fragile AVANT qu'on la frappe, sinon personne ne devine qu'on peut la casser : d'où un ton

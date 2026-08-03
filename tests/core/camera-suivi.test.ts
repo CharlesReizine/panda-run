@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  zoneMorte, lerpVertical, BANDE_MORTE_Y, LERP_X, LERP_Y_CALME, LERP_Y_MONTEE, SEUIL_MONTEE,
+  zoneMorte, lerpVertical, BANDE_MORTE_Y, BANDE_POSE_Y, POSE_MS,
+  LERP_X, LERP_Y_CALME, LERP_Y_MONTEE, SEUIL_MONTEE,
 } from '../../src/core/camera-suivi'
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -66,5 +67,30 @@ describe('lissage', () => {
     }
     expect(LERP_X).toBeGreaterThan(0)
     expect(LERP_X).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('la caméra rattrape l\'altitude ACQUISE', () => {
+  // « Genre un saut fasse rien, mais si je saute sur une plateforme et que je reste dessus, alors la caméra
+  // s'ajuste. » Et l'autre moitié : « quand je suis haut longtemps faudrait que ça baisse, là c'est
+  // difficile à suivre ; pareil quand je descends. »
+  it('garde une zone morte LARGE en l\'air : le saut ne bouge rien', () => {
+    expect(zoneMorte(540, 0).h).toBeCloseTo(540 * BANDE_MORTE_Y)
+    expect(zoneMorte(540).h).toBeCloseTo(540 * BANDE_MORTE_Y) // défaut = en l'air
+  })
+
+  it('la RESSERRE une fois posé depuis POSE_MS : la caméra se recentre', () => {
+    expect(zoneMorte(540, POSE_MS).h).toBeCloseTo(540 * BANDE_POSE_Y)
+    expect(zoneMorte(540, 5000).h).toBeCloseTo(540 * BANDE_POSE_Y)
+    expect(BANDE_POSE_Y).toBeLessThan(BANDE_MORTE_Y)
+  })
+
+  it('ne se resserre PAS pendant un simple passage au sol entre deux sauts', () => {
+    // enchaîner les sauts ne doit pas faire osciller la caméra : il faut RESTER posé
+    expect(zoneMorte(540, POSE_MS - 1).h).toBeCloseTo(540 * BANDE_MORTE_Y)
+  })
+
+  it('ne touche jamais à la largeur, posé ou en l\'air', () => {
+    for (const ms of [0, 100, POSE_MS, 9999]) expect(zoneMorte(540, ms).w, `ms=${ms}`).toBe(0)
   })
 })

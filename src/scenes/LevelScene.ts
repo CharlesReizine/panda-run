@@ -24,8 +24,8 @@ import { hpRegenPerSec } from '../core/stats'
 import { rollDrops, rollChestRareItem } from '../core/loot'
 import { recordKill } from '../core/player-state'
 import { rangeeImpact, atteignableDuCiel, HORS_MONDE, type GeoChute } from '../core/chute'
+import { silhouetteSousSol, percerPourEchelles } from '../core/vide'
 import { zoneMorte, lerpVertical, LERP_X, LERP_Y_CALME } from '../core/camera-suivi'
-import { bandesDeVide } from '../core/vide'
 import type { DropEntry, SkillDef } from '../core/types'
 import type { UIScene } from './UIScene'
 import { TILE, DEFAULT_HEIGHT_TILES, groundRowFor, GRAVITY, landsOnOneWayPlatform } from '../core/platforming'
@@ -198,6 +198,8 @@ export class LevelScene extends Phaser.Scene {
   // vitesse de chute de la frame PRÉCÉDENTE. Indispensable : Arcade remet velocity.y à zéro en séparant
   // les corps, donc au moment où le callback de collision tourne, la vitesse d'impact est DÉJÀ perdue.
   private vitesseChuteAvant = 0
+  // temps passé au sol (ms). Sert à décider quand la caméra rattrape l'altitude acquise, cf. camera-suivi.
+  private msAuSol = 0
   private nextBounceAt = 0
   private platforms!: Phaser.Physics.Arcade.StaticGroup
   private oneWayPlatforms!: Phaser.Physics.Arcade.StaticGroup
@@ -454,39 +456,32 @@ export class LevelScene extends Phaser.Scene {
       const wallH = 2 * TILE
       this.add.rectangle(m.x * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(1, 0).setDepth(-3)
       this.add.rectangle(m.end * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(0, 0).setDepth(-3)
+    }
+    // ─── SOUS-SOL SOMBRE : « en dessous ça soit TJR TJR du vide » ─────────────────────────────
+    // Deux versions en voiles translucides ont échoué avant celle-ci (rayures verticales, puis patchwork de
+    // rectangles sur la jungle : « des strates moches »). Un rectangle semi-transparent sur un fond illustré
+    // lumineux se lit toujours comme un rectangle. Ici le sous-sol est OPAQUE et sa limite suit EXACTEMENT
+    // la silhouette du terrain : partout où une plateforme couvre cette limite il n'y a aucune arête à
+    // voir, et là où la silhouette décroche l'arête verticale ressemble à une falaise — l'effet voulu.
+    // Le ciel reste intact au-dessus du relief. Règle et fusion en rectangles : core/vide.ts.
+    // Depth -7 : sous tout le terrain (dalles -5, plateformes -4) et sous les parois de trou (-3).
+    const dessusTerrain = [
+      ...this.levelDef.platforms.map((p) => ({ x: p.x, y: p.y, w: p.w })),
+      ...(this.levelDef.bridges ?? []).map((b) => ({ x: b.x, y: b.y, w: b.w })),
+      ...(this.levelDef.rockBands ?? []).map((r) => ({ x: r.x, y: r.y, w: r.w })),
+    ]
+    for (const pan of silhouetteSousSol(this.levelDef.widthTiles, this.groundRow, dessusTerrain, this.levelDef.gaps ?? [])) {
+      const yPx = pan.top * TILE
+      this.add.rectangle(pan.x * TILE, yPx, pan.w * TILE, this.worldH - yPx, 0x161d28)
+        .setOrigin(0, 0).setDepth(-7)
+    }
 
-    }
-    // ─── VOILE DE GOUFFRE : « je préférais du vrai vide en dessous » ─────────────────────────
-    // Sur la capture du user, deux rangées de corniches d'herbe flottaient au-dessus d'une prairie peinte,
-    // d'une rivière et d'un château : rien ne disait que tomber tue.
-    //
-    // ⚠️ ON FUSIONNE LES TROUS VOISINS AVANT D'ASSOMBRIR, et c'est ce qui fait la différence entre un
-    // gouffre et des rayures. Un champ de plateformes suspendues n'est pas UN trou : c'est une dizaine de
-    // trous étroits séparés par les plateformes elles-mêmes. Voiler colonne par colonne dessinait donc des
-    // bandes sombres verticales entre les dalles, en laissant le fond éclatant SOUS chacune d'elles —
-    // exactement l'effet de rayures. En rapprochant les trous distants de moins de TOLERANCE_VIDE tuiles,
-    // toute la zone suspendue devient un seul gouffre continu.
-    const TOLERANCE_VIDE = 8
-    const zonesVide: { x: number; end: number }[] = []
-    for (const g of sortedGaps) {
-      const last = zonesVide[zonesVide.length - 1]
-      if (last && g.x <= last.end + TOLERANCE_VIDE) last.end = Math.max(last.end, g.x + g.w)
-      else zonesVide.push({ x: g.x, end: g.x + g.w })
-    }
-    for (const z of zonesVide) {
-      if (cascadeRanges.some((c) => z.x >= c.x && z.end <= c.end)) continue
-      // le voile part juste sous la surface la plus HAUTE qui surplombe la zone : tout ce qui est en
-      // dessous appartient au gouffre. Le ciel au-dessus reste intact.
-      const surTrou = [
-        ...this.levelDef.platforms.filter((p) => p.x < z.end && p.x + p.w > z.x),
-        ...(this.levelDef.bridges ?? []).filter((b) => b.x < z.end && b.x + b.w > z.x),
-      ]
-      const rangeeHaute = surTrou.length ? Math.min(...surTrou.map((p) => p.y)) : this.groundRow
-      // depth -6 : derrière tout le terrain (dalles -5, plateformes -4) et devant le fond de biome.
-      for (const b of bandesDeVide(z.x * TILE, (z.end - z.x) * TILE, (rangeeHaute + 1) * TILE, this.worldH)) {
-        this.add.rectangle(b.x, b.y, b.w, b.h, 0x0a0d14, b.alpha).setOrigin(0, 0).setDepth(-6)
-      }
-    }
+    // Colonnes d'échelle qui TRAVERSENT une corniche : l'échelle court de sa rangée haute (y) vers le bas
+    // sur `h` rangées, donc elle croise la corniche si celle-ci tombe dans cet intervalle.
+    const echellesQuiTraversent = (p: { x: number; y: number; w: number }): number[] =>
+      (this.levelDef.ladders ?? [])
+        .filter((l) => l.x >= p.x && l.x < p.x + p.w && p.y > l.y && p.y <= l.y + l.h)
+        .map((l) => l.x)
 
     // plateformes surélevées : on les traverse en montant et on se pose dessus en retombant (voir
     // landsFromAbove). Rendu en UN TileSprite par plateforme ; collision en UN corps statique par
@@ -500,8 +495,17 @@ export class LevelScene extends Phaser.Scene {
         this.addStaticBand(platforms, p.x * TILE, p.y * TILE, p.w * TILE, TILE)
       } else {
         // MARCHE DE TERRE : plateforme one-way (traversable par le bas, on se pose dessus en retombant).
-        this.add.tileSprite(p.x * TILE, p.y * TILE, p.w * TILE, TILE, platformKey).setOrigin(0, 0).setDepth(-4)
-        this.addStaticBand(oneWay, p.x * TILE, p.y * TILE, p.w * TILE, TILE, true)
+        // ⚠️ PERCÉE AU CROISEMENT D'UNE ÉCHELLE. « Une échelle que je peux pas descendre », puis « faut
+        // élargir un peu pour laisser un trou à côté de l'échelle pour remonter (et descendre) ». Laisser
+        // la corniche pleine et se contenter de la rendre traversable ne suffit pas : le passage doit se
+        // VOIR, sinon rien ne dit au joueur qu'on peut franchir la marche, et l'échelle a l'air de buter
+        // dans le sol. On perce donc pour de bon — visuel ET collision, d'un seul geste (cf. core/vide.ts,
+        // qui refuse de percer quand il resterait un moignon impraticable d'un côté ou de l'autre).
+        const traversee = echellesQuiTraversent(p)
+        for (const seg of percerPourEchelles(p, traversee)) {
+          this.add.tileSprite(seg.x * TILE, p.y * TILE, seg.w * TILE, TILE, platformKey).setOrigin(0, 0).setDepth(-4)
+          this.addStaticBand(oneWay, seg.x * TILE, p.y * TILE, seg.w * TILE, TILE, true)
+        }
       }
     }
     // ponts de planches : plateformes fines, elles aussi traversables par le bas. Rendu en UN
@@ -578,7 +582,11 @@ export class LevelScene extends Phaser.Scene {
       // PLAFOND SOLIDE (rb.solid) : COLLISION pleine → on ne saute PAS à travers. Le dégagement sous le
       // plafond reste > saut confortable (garanti côté assembleur), donc le boyau reste traversable.
       // Socle décoratif (mesa, sous le sol) : aucune collision. Rendu derrière le joueur dans les deux cas.
-      this.add.tileSprite(rb.x * TILE, rb.y * TILE, rb.w * TILE, rb.h * TILE, 'basin-wall').setOrigin(0, 0).setDepth(-5)
+      // ⚠️ 'rock-body', PAS 'basin-wall'. La texture de cuve est une maçonnerie à joints réguliers tous
+      // les 16 px : correcte sur une paroi de bassin de deux tuiles, elle devient un empilement de strates
+      // grises dès qu'on la tuile sur une falaise de trente tuiles (« des strates moches », capture à
+      // l'appui). 'rock-body' est une masse de roche sans motif aligné, sur 64 px.
+      this.add.tileSprite(rb.x * TILE, rb.y * TILE, rb.w * TILE, rb.h * TILE, 'rock-body').setOrigin(0, 0).setDepth(-5)
       if (rb.solid) this.addStaticBand(platforms, rb.x * TILE, rb.y * TILE, rb.w * TILE, rb.h * TILE)
     }
 
@@ -1656,6 +1664,13 @@ export class LevelScene extends Phaser.Scene {
   // (Ancien seuil = plat.bottom, dessous de la dalle : il acceptait les contacts latéraux dans la
   // bande de 32 px sous le dessus et provoquait le wedge horizontal.)
   private readonly landsFromAbove: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (playerObj, platObj) => {
+    // ⚠️ SUR UNE ÉCHELLE, LES MARCHES DE TERRE NE BLOQUENT PLUS. Retour du user, capture à l'appui :
+    // « une échelle que je peux pas descendre — je pense là on peut peut-être laisser passer à travers ».
+    // Une échelle traverse souvent une corniche : en descendant, le panda se posait DESSUS et le voyage
+    // s'arrêtait là, sans rien pour l'expliquer. Tant qu'il est agrippé, il passe donc au travers, dans
+    // les deux sens. C'est aussi la convention de tous les jeux à échelles, et ça ne coûte aucune
+    // sécurité : lâcher l'échelle rétablit la collision immédiatement, donc on retombe normalement.
+    if (this.player.onLadder) return false
     const pb = (playerObj as Phaser.Physics.Arcade.Sprite).body as Phaser.Physics.Arcade.Body
     const plat = (platObj as Phaser.Physics.Arcade.Sprite).body as Phaser.Physics.Arcade.StaticBody
     const margin = Math.abs(pb.velocity.y) * (this.game.loop.delta / 1000) + 4
@@ -5181,6 +5196,17 @@ export class LevelScene extends Phaser.Scene {
     // trampoline et on ne voit plus où l'on retombe. Ce comportement était DÉCRIT dans un commentaire
     // depuis plusieurs versions sans avoir jamais été écrit ; il l'est maintenant, et il est testé.
     if (corpsJoueur) this.cameras.main.lerp.y = lerpVertical(corpsJoueur.velocity.y)
+    // ─── LA CAMÉRA RATTRAPE L'ALTITUDE ACQUISE ────────────────────────────────────────────────
+    // « Genre un saut fasse rien, mais si je saute sur une plateforme et que je reste dessus, alors la
+    // caméra s'ajuste. » On mesure donc le temps passé AU SOL : en l'air la zone morte reste large (le
+    // saut et le rebond ne bougent rien), et dès qu'il est posé depuis POSE_MS elle se resserre, ce qui
+    // recentre en douceur. Rester longtemps en hauteur ne laisse plus le panda collé en haut du cadre.
+    if (corpsJoueur) {
+      const auSol = corpsJoueur.blocked.down || corpsJoueur.touching.down || this.player.onLadder
+      this.msAuSol = auSol ? this.msAuSol + delta : 0
+      const zm = zoneMorte(this.cameras.main.height, this.msAuSol)
+      this.cameras.main.setDeadzone(zm.w, zm.h)
+    }
 
     this.majTranchesVisibles()
     this.majMonstresProches()
