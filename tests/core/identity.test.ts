@@ -55,10 +55,16 @@ describe('pseudoKey', () => {
     }
   })
 
-  it('retombe sur une clé valide quand la saisie ne donne rien', () => {
-    // Firestore refuse un identifiant de document vide → il FAUT un repli
-    expect(pseudoKey('')).toBe('panda')
-    expect(pseudoKey('🐼🐼')).toBe('panda')
-    expect(pseudoKey('...')).toBe('panda')
+  it('ne renvoie AUCUNE clé quand la saisie ne donne rien — le repli a été supprimé', () => {
+    // ⚠️ CE TEST DISAIT L'INVERSE, ET LE REPLI A COÛTÉ UNE SAUVEGARDE. Firestore refuse un identifiant de
+    // document vide, d'où l'idée d'un repli sur « panda » ; sauf qu'un repli silencieux range la partie
+    // AILLEURS que là où on la cherchera ensuite. Relevé dans la base :
+    //   clé « panda » → nom « charlychoulove », archer 29, 23 terrains finis
+    // Le joueur tapait son pseudo, le jeu cherchait « charlychoulove », ne trouvait rien, et proposait de
+    // créer une nouvelle partie. C'est maintenant à l'appelant de refuser un pseudo inutilisable et d'en
+    // redemander un — mieux vaut redemander que d'inventer.
+    expect(pseudoKey('')).toBe('')
+    expect(pseudoKey('🐼🐼')).toBe('')
+    expect(pseudoKey('...')).toBe('')
   })
 })

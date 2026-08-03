@@ -148,6 +148,9 @@ export class TitleScene extends Phaser.Scene {
     const pseudo = await askPseudo(readActivePseudo() ?? '')
     if (pseudo === null) return
     const key = pseudoKey(pseudo)
+    // pseudo vide après normalisation (emoji seuls, ponctuation) : on redemande au lieu de ranger la
+    // partie sous une clé de repli, ce qui la rendait introuvable ensuite.
+    if (!key) { this.say('Ce pseudo ne contient aucun caractère utilisable.', '#ffab91'); return }
 
     // pas de cloud configuré : on reprend la sauvegarde locale s'il y en a une
     if (!cloudAvailable()) {
@@ -199,6 +202,7 @@ export class TitleScene extends Phaser.Scene {
     const pseudo = await askPseudo(readActivePseudo() ?? '')
     if (pseudo === null) return
     const key = pseudoKey(pseudo)
+    if (!key) { this.say('Ce pseudo ne contient aucun caractère utilisable.', '#ffab91'); return }
 
     if (!cloudAvailable()) { this.startFresh(pseudo, key); return }
 
@@ -258,7 +262,13 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private startFresh(pseudo: string, key: string) {
-    const p = newPlayer(pseudo)
+    // ⚠️ LE NOM DU PERSONNAGE EST LA CLÉ, MOT POUR MOT. C'est la question du user : « pourquoi la clé
+    // n'est pas le nom dans la sauvegarde ? » Elle l'est désormais par CONSTRUCTION, et ce n'est pas de
+    // la cosmétique : c'est ce qui permet de retrouver une partie dont la clé aurait dérivé (cf.
+    // cloud-save.pull, qui compare le nom écrit dans la sauvegarde au pseudo demandé). Deux valeurs
+    // censées être égales mais calculées séparément finissent toujours par diverger — ici, elles ne
+    // peuvent plus.
+    const p = newPlayer(key)
     setPlayer(p)
     save(p)
     writeActivePseudo(pseudo)

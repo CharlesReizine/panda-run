@@ -30,10 +30,19 @@ export function sanitizePseudo(raw: string): string {
 }
 
 // Clé de document Firestore. Identique au pseudo canonique par construction : deux fonctions
-// distinctes pourraient DIVERGER, une seule ne peut pas. Contrainte Firestore respectée (pas de
-// '/', ni '.', ni '..'), et repli sur une clé valide si la saisie ne donne rien d'exploitable.
+// distinctes pourraient DIVERGER, une seule ne peut pas.
 export function pseudoKey(pseudo: string): string {
-  return sanitizePseudo(pseudo) || 'panda'
+  // ⚠️ LE REPLI « panda » A COÛTÉ UNE SAUVEGARDE, ET IL EST SUPPRIMÉ. Quand la saisie ne donnait rien
+  // d'exploitable, tout le monde atterrissait dans le MÊME document — relevé dans la base :
+  //   clé « panda » → nom « charlychoulove », archer 29, 23 terrains finis
+  // Le joueur tapait ensuite son pseudo, le jeu cherchait « charlychoulove », ne trouvait rien à cet
+  // endroit, et lui proposait de créer une nouvelle partie. Un repli silencieux qui range une partie
+  // ailleurs que là où on la cherchera est un piège, pas une sécurité.
+  //
+  // On renvoie donc une chaîne VIDE, et l'appelant refuse d'aller plus loin (cf. TitleScene) : mieux vaut
+  // redemander un pseudo que d'en inventer un. La contrainte Firestore (pas de '/', '.', '..') est de
+  // toute façon respectée par sanitizePseudo, qui ne garde que [a-z0-9_-].
+  return sanitizePseudo(pseudo)
 }
 
 const ACTIVE_KEY = 'panda-run-pseudo'

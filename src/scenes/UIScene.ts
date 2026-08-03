@@ -201,7 +201,15 @@ export class UIScene extends Phaser.Scene {
       const slot = this.add.rectangle(x, SLOT_Y, SLOT_SIZE, SLOT_SIZE, 0x000000, 0.5)
         .setStrokeStyle(2, 0xffffff, 0.6)
         .setInteractive(new Phaser.Geom.Rectangle(-5, -5, SLOT_GAP, SLOT_SIZE + 26), Phaser.Geom.Rectangle.Contains)
+      // ⚠️ LE RELÂCHEMENT EST ANNONCÉ EXPLICITEMENT, ET C'EST INDISPENSABLE AUX SORTS MAINTENUS.
+      // LevelScene DEVINAIT la source du maintien : touche de slot enfoncée, sinon pointeur actif de SA
+      // scène. Depuis un bouton du HUD, aucune des deux ne convient — le pointeur appartient à l'interface,
+      // pas au terrain — donc le maintien se croyait déjà relâché et se coupait après le premier tick.
+      // C'est ça, « la mitraillette ne marche pas en continu », même en entraînement avec du mana à volonté.
+      // Un bouton sait quand on le lâche : il le dit, au lieu de laisser l'autre scène le deviner.
       slot.on('pointerdown', () => { this.pressFx(slot); this.game.events.emit('input-skill', i) })
+      slot.on('pointerup', () => this.game.events.emit('input-skill-up', i))
+      slot.on('pointerout', () => this.game.events.emit('input-skill-up', i))
       this.add.text(x, SLOT_Y + SLOT_SIZE / 2 + 9, `${i + 1}`, { fontSize: '12px', color: '#ffd54f' }).setOrigin(0.5)
       this.slotIcons.push(this.add.image(x, SLOT_Y, '__DEFAULT').setDisplaySize(SLOT_SIZE - 8, SLOT_SIZE - 8).setVisible(false))
       // overlay de cooldown ANCRÉ À DROITE (origine 1) : on le rétrécit vers la droite (scaleX) au fil

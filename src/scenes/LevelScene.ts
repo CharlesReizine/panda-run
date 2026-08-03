@@ -168,7 +168,6 @@ export class LevelScene extends Phaser.Scene {
   // que lorsque la tranche visible CHANGE.
   // ─── AMBIANCE : LA MUSIQUE SUIT LE DANGER ─────────────────────────────────────────────────────
   // Le calcul est dans core/tension.ts (pur, testé) ; ici on ne fait que l'alimenter et le lisser.
-  private suiviCamNormal = 0.1
   private tensionCourante = 0
   private tensionCible = 0
   private tensionDepuis = 0
@@ -279,6 +278,8 @@ export class LevelScene extends Phaser.Scene {
     slot: number; skill: SkillDef; mode: 'channel' | 'charge'
     key?: Phaser.Input.Keyboard.Key; pointer?: Phaser.Input.Pointer
     startedAt: number; nextTickAt: number
+    /** Le HUD a annoncé le relâchement de ce slot (cf. isHeldDown). */
+    relache?: boolean
     fx?: Phaser.GameObjects.GameObject[]
   } | null = null
   private slotKeys: (Phaser.Input.Keyboard.Key | undefined)[] = []
@@ -1116,6 +1117,7 @@ export class LevelScene extends Phaser.Scene {
     this.input.keyboard!.on('keydown-SPACE', this.basicAttack, this)
     this.input.keyboard!.on('keydown-X', this.basicAttack, this)
     this.game.events.on('input-skill', this.castSkill, this)
+    this.game.events.on('input-skill-up', this.relacherSlot, this)
     this.game.events.on('input-potion', this.usePotion, this)
     this.input.keyboard!.on('keydown-P', this.usePotion, this)
     for (const [key, slot] of [['ONE', 0], ['TWO', 1], ['THREE', 2], ['FOUR', 3]] as const) {
@@ -1147,12 +1149,27 @@ export class LevelScene extends Phaser.Scene {
     // régression.
     this.cameras.main.setBounds(0, 0, widthPx, this.worldH)
     this.cameras.main.startFollow(this.player, true, 0.1, 0.1)
+    // ─── LA CAMÉRA NE SUIT PAS CHAQUE SAUT ────────────────────────────────────────────────────
+    //
+    // Retour du user : « quand on saute, sur trampoline ou normal, je trouve fatigant que la caméra suive
+    // en hauteur à chaque fois. Ça peut pas laisser monter un peu et réaligner de temps en temps, quand on
+    // se rapproche trop du premier quart haut ? »
+    //
+    // ⚠️ C'EST UNE ZONE MORTE, PAS UN LISSAGE. J'avais d'abord durci le suivi vertical pendant les
+    // rebonds — l'inverse de ce qu'il fallait : ça rendait la caméra encore plus bavarde. Un lissage plus
+    // mou ne réglerait rien non plus, il retarderait le mouvement sans le supprimer. Ce qu'on veut, c'est
+    // que la caméra IGNORE les déplacements verticaux tant que le panda reste dans une bande centrale, et
+    // ne se remette en mouvement que lorsqu'il en sort — donc quand il approche du haut du cadre.
+    //
+    // Zone morte : toute la largeur (le défilement horizontal, lui, doit rester continu) et 62 % de la
+    // hauteur. Le panda peut donc s'élever d'environ 30 % de l'écran sans que rien ne bouge, ce qui couvre
+    // un saut normal en entier et le premier rebond de trampoline. Au-delà, la caméra rattrape en douceur.
+    this.cameras.main.setDeadzone(this.cameras.main.width, this.cameras.main.height * 0.62)
     // ⚠️ SUIVI VERTICAL PLUS VIF QUAND LE PANDA MONTE VITE. « Ou alors la caméra doit suivre le joueur en
     // hauteur quand ça monte trop, mais là c'est pas possible » — si, et c'est même la bonne réponse : le
     // problème d'un rebond très haut n'est pas la hauteur, c'est de ne plus voir où l'on retombe. Le
     // lissage à 0,1 est confortable pour la marche mais traîne derrière une ascension de trampoline ; on
     // le durcit le temps de la montée, puis on le relâche. Réglé dans update(), au plus près du mouvement.
-    this.suiviCamNormal = 0.1
 
     this.cursors = this.input.keyboard!.createCursorKeys()
     // clavier PC additionnel : ZQSD (AZERTY) et WASD (QWERTY) doublent les flèches —
@@ -1185,6 +1202,7 @@ export class LevelScene extends Phaser.Scene {
       this.events.off('player-dive-land', this.onDiveLand, this)
       this.game.events.off('input-attack', this.basicAttack, this)
       this.game.events.off('input-skill', this.castSkill, this)
+      this.game.events.off('input-skill-up', this.relacherSlot, this)
       this.game.events.off('input-potion', this.usePotion, this)
       this.events.off('enemy-died', this.onEnemyDied, this)
       this.events.off('enemy-died', this.onBossDied, this)
@@ -2210,8 +2228,16 @@ export class LevelScene extends Phaser.Scene {
 
   // projectile allié tiré depuis la main, à hauteur des monstres (yOffset : décalage vertical du
   // point de départ, ex. pour tirer deux flèches très rapprochées → Double flèche)
-  private spawnPlayerProjectile(damage: number, rangePx: number, yOffset = 0): Projectile {
-    const proj = new Projectile(this, this.player.x + this.player.facing * 22, this.player.y + 16 + yOffset, this.player.facing, 0, damage, true, rangePx)
+  /**
+   * Tir du joueur. `angle` (radians) incline la trajectoire — 0 = horizontal, positif = vers le bas.
+   *
+   * La composante verticale est proportionnelle à l'horizontale (tan de l'angle), donc la flèche part
+   * bien dans la direction demandée quelle que soit sa vitesse : c'est la DIRECTION qu'on incline, pas
+   * une vitesse verticale ajoutée à l'aveugle.
+   */
+  private spawnPlayerProjectile(damage: number, rangePx: number, yOffset = 0, angle = 0): Projectile {
+    const dirY = Math.tan(angle)
+    const proj = new Projectile(this, this.player.x + this.player.facing * 22, this.player.y + 16 + yOffset, this.player.facing, dirY, damage, true, rangePx)
     proj.setScale(1.5) // bien visible
     this.playerProjectiles.add(proj)
     proj.launch() // relance la vélocité (le groupe l'a remise à 0 sur add)
@@ -3779,10 +3805,21 @@ export class LevelScene extends Phaser.Scene {
 
   // ═════════════ MAINTIEN : sorts CANALISÉS (ticks + drain mana) & CHARGE (relâche) ═════════════
 
+  /** Le HUD signale qu'on a lâché ce slot : un sort maintenu s'arrête là. */
+  private relacherSlot(slot: number) {
+    if (this.held?.slot === slot) this.held.relache = true
+  }
+
   private isHeldDown(h: NonNullable<typeof this.held>): boolean {
+    // ⚠️ LE RELÂCHEMENT ANNONCÉ PAR LE HUD FAIT AUTORITÉ. Avant, on interrogeait la touche ou le pointeur
+    // de CETTE scène ; depuis un bouton d'interface, ni l'un ni l'autre n'est enfoncé, donc le maintien se
+    // coupait après un seul tick — la mitraillette ne tirait qu'une flèche. Désormais un maintien dure
+    // jusqu'à ce qu'on dise qu'il s'arrête, et les sources qu'on sait lire (clavier, pointeur de terrain)
+    // ne servent plus qu'à détecter un relâchement qu'on n'aurait pas reçu.
+    if (h.relache) return false
     if (h.key) return h.key.isDown
     if (h.pointer) return h.pointer.isDown
-    return false
+    return true
   }
 
   // Entre en mode maintenu. La source (touche de slot tenue, sinon pointeur du bouton) est capturée
@@ -3793,7 +3830,7 @@ export class LevelScene extends Phaser.Scene {
     const byKey = key?.isDown ?? false
     const pointer = !byKey && this.input.activePointer.isDown ? this.input.activePointer : undefined
     const mode: 'channel' | 'charge' = skill.kind === 'channel' ? 'channel' : 'charge'
-    this.held = { slot, skill, mode, key: byKey ? key : undefined, pointer, startedAt: now, nextTickAt: now, fx: [] }
+    this.held = { slot, skill, mode, key: byKey ? key : undefined, pointer, startedAt: now, nextTickAt: now, fx: [], relache: false }
     audio.playSfx(skillSfx(skill))
     this.announceSkill(skill.name)
     if (mode === 'channel') this.updateHeld(now) // 1er tick immédiat (un tap = au moins une décharge)
@@ -3843,8 +3880,15 @@ export class LevelScene extends Phaser.Scene {
     const dmg = atk * skillDamageMult(skill, rank)
     const px = this.player.x, py = this.player.y, f = this.player.facing
     if (skill.id === 'mitraillette') {
-      const off = Phaser.Math.Between(-7, 7)
-      const proj = this.spawnPlayerProjectile(dmg, skill.range, off)
+      // ⚠️ LES FLÈCHES PARTENT EN ÉVENTAIL, PLUS TOUTES À L'HORIZONTALE. Demande du user : « si ça pouvait
+      // tirer pas que des flèches horizontales mais un peu avec de l'angle aussi, genre +15 → −15 degrés ».
+      // Une rafale strictement horizontale se lit comme une seule flèche répétée ; l'éventail donne la
+      // gerbe, et ça change aussi le jeu — on couvre une cible un peu plus haute ou plus basse sans viser.
+      // L'angle est tiré par tir dans ±15°, et le décalage vertical de départ suit le signe de l'angle
+      // pour que la flèche semble sortir de l'arc et non le croiser.
+      const angle = Phaser.Math.DegToRad(Phaser.Math.Between(-15, 15))
+      const off = Phaser.Math.Between(-7, 7) + Math.round(Math.sin(angle) * 10)
+      const proj = this.spawnPlayerProjectile(dmg, skill.range, off, angle)
       proj.setTexture('fx-arrow').clearTint().setScale(1.1)
       // buff flèche enflammée : flammèche minuscule à la POINTE (pas de gros sprite fx-fleche-enflammee)
       if (this.player.isFlaming()) this.attachTipFlame(proj)
@@ -4918,9 +4962,7 @@ export class LevelScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
-    // suivi vertical : vif tant que le panda s'élève vite (rebond de trampoline), normal sinon
-    const vy = (this.player?.body as Phaser.Physics.Arcade.Body | undefined)?.velocity.y ?? 0
-    this.cameras.main.setLerp(this.suiviCamNormal, vy < -700 ? 0.35 : this.suiviCamNormal)
+
     this.majTranchesVisibles()
     this.majMonstresProches()
     this.majTension(delta)
