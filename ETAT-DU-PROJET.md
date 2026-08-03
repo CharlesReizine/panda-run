@@ -133,6 +133,18 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 ## Dette et travaux ouverts
 
+### ⚠️ Un test échoue volontairement
+
+`tests/data/superpositions.test.ts` est **rouge** : 44 superpositions de géométrie (plat/plat=17,
+pierre/plat=12, roche/roche=11, plat/roche=4). C'est délibéré, sur décision du joueur : « je préfère que ça
+soit un test qui fail et on le fix, plutôt que du dirty fix où on peut avoir des patterns dégueulasses ».
+Le rendre vert en relâchant ses seuils serait remettre du scotch.
+
+`LevelScene` filtre encore ces doublons à la pose (filtre marqué TEMPORAIRE dans le code) : à l'écran on ne
+voit plus rien de superposé. Mais un filtre d'affichage ne peut rien contre « nager à travers la pierre » —
+une cuve d'eau qui chevauche une dalle de roche est un défaut de génération. **Le filtre se supprime le jour
+où ce test passe au vert.**
+
 ### Le lot « génération » — quatre corrections, UNE regravure
 
 À faire ensemble, dans cet ordre. Chacune est mesurée, localisée, et l'audit qui la trouve est décrit.

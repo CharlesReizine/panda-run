@@ -45,3 +45,33 @@ describe('percerPourEchelles', () => {
     }
   })
 })
+
+describe('le perçage ne touche pas la plateforme qui PORTE l\'échelle', () => {
+  // « Un trou de terrain sous la première échelle », relevé sur Vallon. Le filtre des échelles qui
+  // traversent une corniche utilisait `p.y <= l.y + l.h` : la borne INCLUSIVE prenait la corniche du pied
+  // de l'échelle, celle sur laquelle elle repose, et on creusait donc le sol sous ses pieds.
+  //
+  // ⚠️ CE TEST PORTE SUR LA RÈGLE DE SÉLECTION, pas sur `percerPourEchelles`. Le perçage lui-même était
+  // correct ; ce qui était faux, c'est la LISTE des échelles qu'on lui passait. C'est là qu'était le bug,
+  // et c'est donc là qu'il faut le verrouiller.
+  const traversantes = (p: { y: number }, echelles: { x: number; y: number; h: number }[]) =>
+    echelles.filter((l) => p.y > l.y && p.y < l.y + l.h).map((l) => l.x)
+
+  const ECHELLE = { x: 5, y: 10, h: 9 } // montant de la rangée 10 (haut) à 19 (pied)
+
+  it('ignore la corniche du PIED (rangée y + h)', () => {
+    expect(traversantes({ y: 19 }, [ECHELLE])).toEqual([])
+  })
+
+  it('ignore la corniche du SOMMET', () => {
+    expect(traversantes({ y: 10 }, [ECHELLE])).toEqual([])
+  })
+
+  it('perce bien les corniches réellement traversées en chemin', () => {
+    for (const y of [11, 14, 18]) expect(traversantes({ y }, [ECHELLE]), `y=${y}`).toEqual([5])
+  })
+
+  it('ignore ce qui est hors du montant', () => {
+    for (const y of [5, 9, 20, 40]) expect(traversantes({ y }, [ECHELLE]), `y=${y}`).toEqual([])
+  })
+})

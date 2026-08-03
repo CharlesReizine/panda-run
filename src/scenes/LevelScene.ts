@@ -461,7 +461,11 @@ export class LevelScene extends Phaser.Scene {
     // sur `h` rangées, donc elle croise la corniche si celle-ci tombe dans cet intervalle.
     const echellesQuiTraversent = (p: { x: number; y: number; w: number }): number[] =>
       (this.levelDef.ladders ?? [])
-        .filter((l) => l.x >= p.x && l.x < p.x + p.w && p.y > l.y && p.y <= l.y + l.h)
+        // ⚠️ BORNE HAUTE STRICTE : on ne perce PAS la plateforme sur laquelle l'échelle REPOSE. Elle se
+        // trouve à la rangée `l.y + l.h`, tout en bas du montant ; l'inclure creusait un trou juste sous
+        // les pieds de l'échelle — « un trou de terrain sous la première échelle », relevé sur Vallon.
+        // Seules les corniches TRAVERSÉES en chemin doivent s'ouvrir, jamais celle qui la porte.
+        .filter((l) => l.x >= p.x && l.x < p.x + p.w && p.y > l.y && p.y < l.y + l.h)
         .map((l) => l.x)
 
     // plateformes surélevées : on les traverse en montant et on se pose dessus en retombant (voir
@@ -640,13 +644,17 @@ export class LevelScene extends Phaser.Scene {
     // qui s'évapore. Tuile par tuile, on perce un trou à sa taille, le reste tient, et on comprend
     // immédiatement qu'il faut continuer à frapper. Le coût est modeste (une poignée de corps statiques
     // par motif) et le découpage par tranches les cache comme le reste du décor.
-    // ⚠️ ON NE POSE RIEN LÀ OÙ IL Y A DÉJÀ DE LA MATIÈRE. Retour du user, capture à l'appui : « dans tes
-    // nouveaux motifs y a parfois des textures qui se superposent ». Douze cas relevés : le mur fragile
-    // d'une grotte scellée montait sur toute la hauteur du socle (jusqu'à 25 rangées quand l'altitude
-    // d'entrée est haute) et traversait au passage les corniches et les dalles qu'il croisait. Corriger la
-    // GÉNÉRATION demanderait une regravure complète ; filtrer À LA POSE règle le symptôme visible tout de
-    // suite, sans toucher aux plans gravés — une tuile cassable posée dans de la pierre pleine n'apporte
-    // rien de jouable, elle ne fait que doubler un décor déjà là.
+    // ⚠️ FILTRE TEMPORAIRE, ET IL NE DOIT PAS SURVIVRE. On ne pose pas de tuile cassable là où il y a déjà
+    // de la matière — ce qui masque le symptôme (« des textures qui se superposent ») sans corriger la
+    // cause : les motifs continuent de produire de la géométrie qui se recouvre.
+    //
+    // Le user a tranché : « je préfère que ça soit un test qui fail et on le fix, plutôt que du dirty fix
+    // où on peut avoir des patterns dégueulasses. Tu me fix ça, tu me le scotch pas. » Il a raison, et
+    // « nager à travers la pierre » le prouve : un filtre d'AFFICHAGE ne peut rien contre une cuve d'eau
+    // qui chevauche une dalle de roche.
+    //
+    // `tests/data/superpositions.test.ts` échoue donc volontairement (44 cas) et restera rouge jusqu'à ce
+    // que les motifs soient corrigés. CE FILTRE SE SUPPRIME le jour où ce test passe au vert.
     const tuileOccupee = (tx: number, ty: number): boolean =>
       this.levelDef.platforms.some((p) => tx >= p.x && tx < p.x + p.w && ty === p.y)
       || (this.levelDef.rockBands ?? []).some((r) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h)
