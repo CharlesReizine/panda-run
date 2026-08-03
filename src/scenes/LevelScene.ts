@@ -467,7 +467,15 @@ export class LevelScene extends Phaser.Scene {
     // plateformes surélevées : on les traverse en montant et on se pose dessus en retombant (voir
     // landsFromAbove). Rendu en UN TileSprite par plateforme ; collision en UN corps statique par
     // plateforme (dessus à p.y*TILE, hauteur 1 tuile) — équivalent exact des anciennes tuiles.
+    // Une plateforme entièrement NOYÉE dans une dalle de roche est invisible et son corps est redondant
+    // (la dalle est déjà solide, toutes faces) : la poser ne fait que superposer deux textures au même
+    // endroit. Quatre cas relevés par l'audit des superpositions.
+    const noyeeDansLaRoche = (p: { x: number; y: number; w: number }): boolean =>
+      (this.levelDef.rockBands ?? []).some((r) =>
+        r.x <= p.x && r.x + r.w >= p.x + p.w && r.y <= p.y && r.y + r.h > p.y)
+
     for (const p of this.levelDef.platforms) {
+      if (noyeeDansLaRoche(p)) continue
       if (p.solid) {
         // MARCHE DE PIERRE RIGIDE : texture rocheuse + collision PLEINE (groupe `platforms`, toutes
         // faces) → on ne la traverse PAS, ni par le bas ni par les côtés. Posée isolée (trou d'air
@@ -632,11 +640,24 @@ export class LevelScene extends Phaser.Scene {
     // qui s'évapore. Tuile par tuile, on perce un trou à sa taille, le reste tient, et on comprend
     // immédiatement qu'il faut continuer à frapper. Le coût est modeste (une poignée de corps statiques
     // par motif) et le découpage par tranches les cache comme le reste du décor.
+    // ⚠️ ON NE POSE RIEN LÀ OÙ IL Y A DÉJÀ DE LA MATIÈRE. Retour du user, capture à l'appui : « dans tes
+    // nouveaux motifs y a parfois des textures qui se superposent ». Douze cas relevés : le mur fragile
+    // d'une grotte scellée montait sur toute la hauteur du socle (jusqu'à 25 rangées quand l'altitude
+    // d'entrée est haute) et traversait au passage les corniches et les dalles qu'il croisait. Corriger la
+    // GÉNÉRATION demanderait une regravure complète ; filtrer À LA POSE règle le symptôme visible tout de
+    // suite, sans toucher aux plans gravés — une tuile cassable posée dans de la pierre pleine n'apporte
+    // rien de jouable, elle ne fait que doubler un décor déjà là.
+    const tuileOccupee = (tx: number, ty: number): boolean =>
+      this.levelDef.platforms.some((p) => tx >= p.x && tx < p.x + p.w && ty === p.y)
+      || (this.levelDef.rockBands ?? []).some((r) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h)
+      || (this.levelDef.bridges ?? []).some((b) => tx >= b.x && tx < b.x + b.w && ty === b.y)
+
     this.pierresFragiles = this.physics.add.staticGroup()
     for (const bk of this.levelDef.breakables ?? []) {
       const coups = bk.coups ?? PIERRE_FRAGILE_COUPS
       for (let ty = bk.y; ty < bk.y + bk.h; ty++) {
         for (let tx = bk.x; tx < bk.x + bk.w; tx++) {
+          if (tuileOccupee(tx, ty)) continue // déjà de la matière ici : pas de tuile en double
           const bloc = this.pierresFragiles.create(
             tx * TILE + TILE / 2, ty * TILE + TILE / 2, 'pierre-fragile-0',
           ) as Phaser.Physics.Arcade.Sprite
