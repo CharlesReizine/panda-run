@@ -34,7 +34,20 @@ GEN_GRAINES=1 npx vitest run tests/data/graines.test.ts   # ~100 s
 ```
 
 Puis **resynchroniser les niveaux de monstres** : ils dérivent du premier biome où chaque espèce
-apparaît, donc la regravure les décale. `tests/core/mob-level.test.ts` dit lesquels.
+apparaît, donc la regravure les décale. `tests/core/mob-level.test.ts` dit lesquels. Le calcul dépend des
+niveaux stockés : **itérer jusqu'au point fixe** (deux ou trois passes).
+
+### ⚠️ Toucher à la génération, c'est un cycle complet
+
+modifier → **regraver (6 à 7 minutes)** → resynchroniser les monstres → 1690 tests → six sondes → déployer.
+
+Trois tentatives ont échoué le 3 août faute d'avoir tenu ce cycle jusqu'au bout. Deux règles en découlent :
+
+- **Grouper les corrections de génération, puis regraver UNE fois.** Une regravure par correctif, c'est
+  vingt-cinq minutes de calcul pour rien.
+- **Toujours lire `tests/data/couverture-motifs.test.ts`.** C'est le seul test qui dise qu'un motif a
+  DISPARU du jeu. Un correctif de géométrie qui rend un motif intirable passe sinon pour un succès : tous
+  les autres tests restent verts, et le contenu s'évapore en silence.
 
 ---
 
@@ -120,9 +133,38 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 ## Dette et travaux ouverts
 
-**Le `switch` dupliqué de `buildModule`** — ~1000 lignes mortes, 56 `case` en double dont 5 divergents.
-Nettoyer change la génération : regravure + resync des niveaux de monstres + revérification complète.
-Passe dédiée.
+### Le lot « génération » — quatre corrections, UNE regravure
+
+À faire ensemble, dans cet ordre. Chacune est mesurée, localisée, et l'audit qui la trouve est décrit.
+
+**1. Douze superpositions de textures dans `grotte-scellee`** — « dans tes nouveaux motifs y a parfois des
+textures qui se superposent ». **Cause identifiée** : la hauteur de la cavité suivait celle du SOCLE, or
+l'altitude d'entrée monte jusqu'à 27 rangées → caverne de 25 rangées et mur fragile à l'échelle, qui
+traverse tout ce qui passe par là. Correctif écrit puis **abandonné faute d'avoir pu boucler le cycle**,
+mais il est juste et la regravure a convergé (396 s) :
+
+- `HAUT_CAV = 7` (plancher au sol du monde, intérieur 1..6, plafond en 7) ;
+- socle RÉDUIT au-dessus de la cavité : `{ altBot: HAUT_CAV, altTop: alt - 1 }` au lieu de `1..alt-1` ;
+- mur fragile sur `1..HAUT_CAV - 1`, plus sur toute la hauteur ;
+- ⚠️ **`alt = Math.max(entryAlt, 9)`, PAS 12.** À 12 la rampe d'accroche devient trop raide pour les
+  altitudes d'entrée basses : le motif est rejeté à chaque tirage et `couverture-motifs` le signale comme
+  « jamais généré ». C'est l'erreur commise, et elle ne se voit qu'avec ce test.
+
+**2. Vingt-six séquences de sauts avec du sol praticable dessous**, sur 20 terrains (pire : `plaine-1
+x417→435`, six plateformes avec du sol utilisable 18 rangées plus bas ; `desert-3` en compte quatre).
+Le contenu se contourne en marchant en dessous, donc il ne sert à rien. Détection : plateformes suspendues
+enchaînées (écart ≤ 5 tuiles, Δy ≤ 4) dont les colonnes ont un sol ni troué ni enterré sous la roche.
+
+**3. Soixante-quatorze paires de surfaces à moins d'un saut l'une de l'autre**, sur 45 terrains, presque
+toutes à 2 rangées avec 3 colonnes de chevauchement — « j'en ai vu une qui revient et ça perturbe ».
+Rehausser la corniche du dessus **par post-traitement global ne marche pas** : génération insoluble, plus de
+dix-huit minutes de recherche sans une graine valide, contre cent secondes d'habitude. Il faut passer par
+les motifs fautifs — chercher d'abord du côté des coutures entre modules et de `ramp()`.
+
+**4. Le `switch` dupliqué de `buildModule`** — ~1000 lignes mortes, 56 `case` en double dont 5 divergents
+(`couloir-large`, `passage-immerge`, `passerelles-zigzag`, `cascade-deux-passages-g`,
+`colonnes-perilleuses`). Le correctif « un couloir large ne doit pas être nu » a été écrit dans la copie
+morte : il n'a jamais tourné.
 
 **74 paires de surfaces à moins d'un saut l'une de l'autre**, sur 45 terrains, presque toutes à 2 rangées
 avec 3 colonnes de chevauchement — « j'en ai vu une qui revient et ça perturbe ». Une première tentative
