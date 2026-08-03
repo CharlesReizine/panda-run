@@ -167,7 +167,14 @@ mais il est juste et la regravure a convergé (396 s) :
   altitudes d'entrée basses : le motif est rejeté à chaque tirage et `couverture-motifs` le signale comme
   « jamais généré ». C'est l'erreur commise, et elle ne se voit qu'avec ce test.
 
-**2. Vingt-six séquences de sauts avec du sol praticable dessous**, sur 20 terrains (pire : `plaine-1
+**2. Vingt-six séquences de sauts avec du sol praticable dessous** — ⚠️ **CREUSER LE SOL DESSOUS NE MARCHE
+PAS.** Tenté en post-traitement d'assemblage (ajouter un `gap` sous chaque séquence de ≥ 3 plateformes
+suspendues, en épargnant les bords de terrain et les zones déjà trouées) : **53 tests rouges**. Le sol qu'on
+creuse EST la route principale du terrain ; les plateformes suspendues sont la variante haute, pas l'inverse.
+La correction doit donc soit retirer la séquence redondante, soit la déplacer au-dessus d'un vide existant —
+dans les MOTIFS, pas en post-traitement.
+
+Détail du défaut d'origine :, sur 20 terrains (pire : `plaine-1
 x417→435`, six plateformes avec du sol utilisable 18 rangées plus bas ; `desert-3` en compte quatre).
 Le contenu se contourne en marchant en dessous, donc il ne sert à rien. Détection : plateformes suspendues
 enchaînées (écart ≤ 5 tuiles, Δy ≤ 4) dont les colonnes ont un sol ni troué ni enterré sous la roche.
