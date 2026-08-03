@@ -154,6 +154,28 @@ où ce test passe au vert.**
 
 À faire ensemble, dans cet ordre. Chacune est mesurée, localisée, et l'audit qui la trouve est décrit.
 
+**0. LA CAUSE DES CHEVAUCHEMENTS DE PLATEFORMES EST TROUVÉE : `ramp()` déborde de sa portée.**
+
+`ramp(x0, w, fromAlt, toAlt)` calcule `segW = Math.max(3, Math.floor(w / count))` — plancher à 3, parce
+qu'un palier plus étroit ne se reçoit pas au saut — puis avance `x += segw` à chaque palier. Quand `w` ne
+suffit pas pour `count` paliers de 3, la rampe avance quand même de 3 par palier et **sort de la portée
+allouée**, empiétant sur la géométrie du module suivant.
+
+C'est la signature qu'on retrouve dans presque tous les cas relevés : deux paliers de largeur 3 décalés
+d'une seule tuile — `A x159+3 B x160+3` (foret-4), `A x144+3 B x146+3` (enfer-1), `A x178+3 B x179+3`
+(desert-3), et de même sur jungle-1, plage-3, cave-1, cimetiere-2, enfer-6. Les quatre `plat/roche`
+(carriere-1, montagne-2, jungle-4) ont la même origine : la rampe déborde dans une dalle voisine.
+
+**Le correctif est écrit et tient en trois lignes** : borner le nombre de paliers par la place disponible
+(`count = min(countVoulu, floor(w / 3))`) et plafonner chaque palier à ce qui reste (`min(segW, x0 + w - x)`).
+Monter un peu plus vite reste franchissable — chaque pas est validé par les contrôles d'atteignabilité —
+alors que déborder ne l'est jamais.
+
+⚠️ **IL EXIGE UNE REGRAVURE**, et c'est normal : `ramp()` est utilisé par des dizaines de motifs, donc la
+géométrie change partout. Tenté sans regraver : **93 tests rouges**, uniquement des « plan gravé plus
+jouable ». C'est le seul correctif du lot dont on SAIT qu'il attaque la cause et non le symptôme — à lancer
+en premier, suivi de la regravure et du resync des niveaux de monstres.
+
 **1. Douze superpositions de textures dans `grotte-scellee`** — « dans tes nouveaux motifs y a parfois des
 textures qui se superposent ». **Cause identifiée** : la hauteur de la cavité suivait celle du SOCLE, or
 l'altitude d'entrée monte jusqu'à 27 rangées → caverne de 25 rangées et mur fragile à l'échelle, qui
