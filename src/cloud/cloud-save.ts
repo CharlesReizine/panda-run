@@ -131,14 +131,23 @@ export function canon(s: string): string {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9_-]/g, '')
 }
 
-/** Une sauvegarde appartient-elle au joueur qui demande `key` ? */
+/**
+ * Une sauvegarde appartient-elle au joueur qui demande `key` ?
+ *
+ * UNE SEULE trace reconnue : le NOM inscrit dans la sauvegarde vaut exactement le pseudo demandé, aux
+ * accents et à la ponctuation près. Le pseudo étant la seule identité du jeu, l'égalité est le seul
+ * critère défendable.
+ *
+ * ⚠️ LA CORRESPONDANCE PAR PRÉFIXE A ÉTÉ SUPPRIMÉE, ET C'ÉTAIT UNE FAILLE, PAS UN CONFORT. La règle
+ * acceptait `idDoc.startsWith(key) || key.startsWith(idDoc)` pour rattraper d'anciennes clés tronquées.
+ * Conséquence relevée par le user : « pour charger une partie c'est nom exact ? j'ai écrit
+ * charlychoulov et ça m'a chargé charlychoulove ». Une lettre oubliée ouvrait donc la partie d'un autre
+ * — et la sauvegarde automatique l'écrasait ensuite sous le mauvais pseudo. Le préfixe couvrait un cas
+ * historique devenu vide (la clé vaut désormais le pseudo normalisé, le repli a disparu) au prix d'un
+ * détournement de partie à chaque faute de frappe. Le compte est vite fait.
+ */
 export function memeJoueur(idDoc: string, nomDansLaSauvegarde: string, key: string): boolean {
-  // Deux traces reconnues, et deux seulement :
-  //  · le NOM du joueur dans la sauvegarde correspond au pseudo demandé (clé dérivée ou repliée) ;
-  //  · la clé est un PRÉFIXE de la nôtre, ou l'inverse (trace d'un changement de troncature).
-  // Rien d'autre : deux joueurs aux pseudos voisins ne doivent jamais hériter de la partie de l'autre.
-  if (canon(nomDansLaSauvegarde) === key) return true
-  return idDoc.startsWith(key) || key.startsWith(idDoc)
+  return canon(nomDansLaSauvegarde) === key
 }
 
 async function autresCandidats(

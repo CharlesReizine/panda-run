@@ -29,10 +29,17 @@ describe('retrouver la partie d\'un joueur', () => {
     expect(memeJoueur('panda', 'charlychoulove', 'charlychoulove')).toBe(true)
   })
 
-  it('reconnaît une clé tronquée, dans les deux sens', () => {
-    // trace d'un changement de longueur maximale du pseudo
-    expect(memeJoueur('charlychoulo', 'peu importe', 'charlychoulove')).toBe(true)
-    expect(memeJoueur('charlychoulove2', 'peu importe', 'charlychoulove')).toBe(true)
+  it('REFUSE une correspondance par préfixe — une lettre oubliée ne charge pas la partie d\'un autre', () => {
+    // ⚠️ CE TEST DISAIT L'INVERSE, ET C'ÉTAIT UNE FAILLE. La règle acceptait qu'une clé soit le préfixe de
+    // l'autre, pour rattraper d'anciennes troncatures. Relevé par le user : « j'ai écrit charlychoulov et
+    // ça m'a chargé charlychoulove ». Une faute de frappe ouvrait la partie d'un autre joueur, que la
+    // sauvegarde automatique écrasait ensuite sous le mauvais pseudo. Le pseudo est la seule identité du
+    // jeu : seule l'égalité exacte peut faire foi.
+    expect(memeJoueur('charlychoulo', 'peu importe', 'charlychoulove')).toBe(false)
+    expect(memeJoueur('charlychoulove2', 'peu importe', 'charlychoulove')).toBe(false)
+    expect(memeJoueur('charlychoulove', 'charlychoulov', 'charlychoulove')).toBe(false)
+    // et le sens qui compte pour le joueur : taper une lettre en moins ne trouve rien
+    expect(memeJoueur('charlychoulove', 'charlychoulove', 'charlychoulov')).toBe(false)
   })
 
   it('ne confond PAS deux joueurs distincts', () => {
@@ -63,10 +70,8 @@ describe('retrouver la partie d\'un joueur', () => {
     expect(gagnant.savedAt).toBe(9000)
   })
 
-  it('une clé trop courte ne sert pas de préfixe attrape-tout', () => {
-    // « ab » ne doit pas revendiquer « abcdefgh » : le garde-fou est côté appelant (longueur ≥ 3),
-    // mais la règle de préfixe elle-même reste symétrique et doit rester lisible.
-    expect(memeJoueur('ab', 'quelconque', 'abcdefgh')).toBe(true) // vrai ici…
-    // …ce qui est précisément pourquoi `autresCandidats` refuse les clés de moins de 3 caractères.
+  it('une clé courte ne revendique rien', () => {
+    // le préfixe attrape-tout n'existe plus : « ab » ne peut plus prétendre à « abcdefgh »
+    expect(memeJoueur('ab', 'quelconque', 'abcdefgh')).toBe(false)
   })
 })
