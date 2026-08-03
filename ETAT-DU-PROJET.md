@@ -135,8 +135,13 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 ### ⚠️ Un test échoue volontairement
 
-`tests/data/superpositions.test.ts` est **rouge** : 44 superpositions de géométrie (plat/plat=17,
-pierre/plat=12, roche/roche=11, plat/roche=4). C'est délibéré, sur décision du joueur : « je préfère que ça
+`tests/data/superpositions.test.ts` est **rouge** : **14** superpositions restantes (plat/plat=10,
+plat/roche=4). Il en comptait 44 ; un post-traitement d'assemblage (`level-modules.ts`, juste avant le
+comblement des corniches nues) a éliminé toute la pierre fragile mal posée et tous les doublons de dalles.
+Les 14 qui restent sont ceux où rogner AMPUTERAIT un appui : la première version rognait sans garde-fou et
+a cassé l'atteignabilité de carriere-1 (huit tests rouges). Le garde-fou `LARGEUR_UTILE = 3` préfère donc un
+chevauchement cosmétique à une corniche devenue irrecevable — et c'est bien dans les MOTIFS que ces
+quatorze-là doivent être corrigés. C'est délibéré, sur décision du joueur : « je préfère que ça
 soit un test qui fail et on le fix, plutôt que du dirty fix où on peut avoir des patterns dégueulasses ».
 Le rendre vert en relâchant ses seuils serait remettre du scotch.
 

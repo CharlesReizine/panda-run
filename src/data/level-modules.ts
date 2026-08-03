@@ -3534,6 +3534,115 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   // CHAQUE dalle de roche (fini les remplissages de mesa « décoratifs » traversables).
   for (const r of rockBands) r.solid = true
 
+  // ─── AUCUNE GÉOMÉTRIE NE SE SUPERPOSE À UNE AUTRE ─────────────────────────────────────────
+  // Retour du user : « y a des surfaces qui se superposent et quand c'est le cas on peut nager à travers
+  // la pierre », puis sa consigne sur la manière de le traiter : « je préfère que ça soit un test qui fail
+  // et on le fix, plutôt que du dirty fix. Tu me fix ça, tu me le scotch pas. »
+  //
+  // ⚠️ CE NETTOYAGE EST UN POST-TRAITEMENT D'ASSEMBLAGE, PAS UN FILTRE D'AFFICHAGE, et c'est toute la
+  // différence. LevelScene refusait de POSER les doublons : à l'écran on ne voyait plus rien, mais la
+  // géométrie restait fausse — d'où l'eau qui chevauchait la roche, que le rendu ne pouvait pas rattraper.
+  // Ici on corrige le LevelDef lui-même, donc les validateurs, l'atteignabilité et la physique voient tous
+  // la même vérité. Et comme le post-traitement s'applique APRÈS l'assemblage, les plans gravés restent
+  // valables : aucune regravure nécessaire.
+  //
+  // On ne RETIRE que du redondant, jamais une surface unique : une plateforme noyée dans de la roche pleine
+  // (la roche porte déjà la collision), une dalle contenue dans une autre, une plateforme dupliquée sur la
+  // même rangée, une tuile cassable posée dans de la matière. Aucune de ces suppressions ne peut retirer un
+  // appui au joueur.
+  // ⚠️ TROIS PASSES, PAS UNE. Rogner une géométrie en déplace le bord, ce qui peut révéler un
+  // chevauchement resté invisible tant que l'autre était plus large. Une seule passe laissait quatre cas
+  // sur quarante-quatre ; on répète jusqu'à ce que le nettoyage n'ait plus rien à faire.
+  // Largeur minimale d'une corniche pour qu'on puisse encore s'y recevoir au saut. En dessous, on renonce
+  // à rogner : un chevauchement cosmétique vaut mieux qu'un appui amputé.
+  const LARGEUR_UTILE = 3
+  for (let passe = 0; passe < 3; passe++) {
+    const chev = (a: { x: number; w: number }, b: { x: number; w: number }) =>
+      Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
+    const dansDalle = (p: { x: number; y: number; w: number }) =>
+      rockBands.some((r) => r.x <= p.x && r.x + r.w >= p.x + p.w && r.y <= p.y && r.y + r.h > p.y)
+
+    // 1) plateformes noyées dans une dalle : invisibles, et leur corps double celui de la dalle.
+    // Chevauchement PARTIEL : on ne retire pas, on ROGNE au segment qui sort de la dalle — cette partie
+    // est une vraie surface, la supprimer retirerait un appui.
+    for (let i = platforms.length - 1; i >= 0; i--) {
+      const p = platforms[i]!
+      if (dansDalle(p)) { platforms.splice(i, 1); continue }
+      for (const r of rockBands) {
+        if (chev(p, r) <= 0 || r.y > p.y || r.y + r.h <= p.y) continue
+        // ⚠️ ON NE ROGNE PAS EN DESSOUS DE LARGEUR_UTILE. Rogner sans garde-fou a cassé l'atteignabilité de
+        // carriere-1 : une corniche réduite à une ou deux tuiles ne se reçoit plus au saut, et huit tests
+        // sont tombés. Mieux vaut laisser un chevauchement cosmétique qu'amputer un appui.
+        const reste = p.x < r.x ? r.x - p.x : (p.x + p.w > r.x + r.w ? p.x + p.w - (r.x + r.w) : 0)
+        if (reste > 0 && reste < LARGEUR_UTILE) continue
+        if (p.x < r.x) p.w = r.x - p.x
+        else if (p.x + p.w > r.x + r.w) { const fin = p.x + p.w; p.x = r.x + r.w; p.w = fin - p.x }
+        if (p.w <= 0) { platforms.splice(i, 1); break }
+      }
+    }
+
+    // 2) plateformes dupliquées sur la MÊME rangée : on garde la plus large et on rogne l'autre
+    for (let i = platforms.length - 1; i >= 0; i--) {
+      const a = platforms[i]!
+      for (let j = 0; j < platforms.length; j++) {
+        if (i === j) continue
+        const b = platforms[j]!
+        if (a.y !== b.y || chev(a, b) <= 0) continue
+        if (b.w > a.w || (b.w === a.w && j < i)) {
+          // `a` est la moins large : on la rogne au segment qui dépasse, ou on la retire
+          const reste = a.x < b.x ? b.x - a.x : (a.x + a.w > b.x + b.w ? a.x + a.w - (b.x + b.w) : 0)
+          if (reste > 0 && reste < LARGEUR_UTILE) continue // cf. le garde-fou ci-dessus
+          if (a.x < b.x) a.w = b.x - a.x
+          else if (a.x + a.w > b.x + b.w) { const fin = a.x + a.w; a.x = b.x + b.w; a.w = fin - a.x }
+          else { platforms.splice(i, 1) }
+          break
+        }
+      }
+    }
+
+    // 3) dalles de roche : celles contenues dans une autre disparaissent ; en chevauchement PARTIEL on
+    // rogne la plus PETITE horizontalement (la masse reste, seul le doublon s'en va).
+    for (let i = rockBands.length - 1; i >= 0; i--) {
+      const a = rockBands[i]!
+      if (rockBands.some((b, j) => j !== i && b.x <= a.x && b.x + b.w >= a.x + a.w
+        && b.y <= a.y && b.y + b.h >= a.y + a.h)) { rockBands.splice(i, 1); continue }
+      for (let j = 0; j < rockBands.length; j++) {
+        if (i === j) continue
+        const b = rockBands[j]!
+        if (chev(a, b) <= 0 || Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) <= 0) continue
+        // à surface ÉGALE, l'indice départage : sans ce tie-break les deux dalles se renvoient la balle
+        // (« c'est à l'autre d'être rognée ») et le chevauchement survit à toutes les passes. Trois cas
+        // restaient ainsi en début de terrain, là où le socle du module de départ touche celui du suivant.
+        const aireA = a.w * a.h, aireB = b.w * b.h
+        if (aireB < aireA || (aireB === aireA && j < i)) continue // c'est à l'autre d'être rognée
+        if (a.x < b.x) a.w = b.x - a.x
+        else if (a.x + a.w > b.x + b.w) { const fin = a.x + a.w; a.x = b.x + b.w; a.w = fin - a.x }
+        // ⚠️ SI LA PORTÉE EST DÉJÀ CONTENUE, LE CHEVAUCHEMENT EST VERTICAL et rogner en x ne peut rien.
+        // C'est le dernier cas resté après toutes les passes : une petite dalle logée dans la portée d'une
+        // grande, mais débordant d'une rangée par le haut. On raccourcit alors sa HAUTEUR.
+        else if (a.y < b.y) a.h = b.y - a.y
+        else { const bas = a.y + a.h; a.y = b.y + b.h; a.h = bas - a.y }
+        if (a.w <= 0 || a.h <= 0) { rockBands.splice(i, 1); break }
+      }
+    }
+
+    // 4) pierre fragile : on rogne les rangées qui tombent dans de la matière déjà présente
+    for (let i = breakables.length - 1; i >= 0; i--) {
+      const b = breakables[i]!
+      const occupee = (y: number) =>
+        platforms.some((p) => chev(b, p) > 0 && p.y === y)
+        || rockBands.some((r) => chev(b, r) > 0 && r.y <= y && r.y + r.h > y)
+      let haut = b.y, bas = b.y + b.h - 1
+      while (haut <= bas && occupee(haut)) haut++
+      while (bas >= haut && occupee(bas)) bas--
+      if (bas < haut) { breakables.splice(i, 1); continue }
+      b.y = haut; b.h = bas - haut + 1
+      // une rangée occupée AU MILIEU du mur reste possible : on tronque alors au segment du haut
+      for (let y = haut; y <= bas; y++) if (occupee(y)) { b.h = y - haut; break }
+      if (b.h <= 0) breakables.splice(i, 1)
+    }
+  }
+
   // CORNICHE DE PIERRE NUE (retour user : « je peux marcher sur la pierre même si j'ai la terre
   // au-dessus et c'est pas bien ») : là où le sommet d'une dalle affleure à nu sous une plateforme de
   // terre trop proche pour qu'on passe, on COMBLE l'air entre les deux — la pierre redevient le corps
