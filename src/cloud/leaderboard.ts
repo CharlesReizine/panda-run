@@ -71,24 +71,27 @@ export async function top(limitTo = 50): Promise<LeaderEntry[]> {
 }
 
 /**
- * UNE LIGNE PAR JOUEUR : on garde l'entrée la plus RÉCENTE de chaque pseudo.
+ * UNE LIGNE PAR JOUEUR : on garde l'entrée la plus AVANCÉE de chaque pseudo.
  *
  * ⚠️ POURQUOI CE FILTRE EXISTE. Retour du user : « j'ai changé de classe et ça me fait deux lignes dans
  * le classement, moi archer et moi chasseur ». La clé du document est pourtant le pseudo, donc une
- * évolution de classe RÉÉCRIT la même ligne — sauf que d'anciennes lignes, écrites avant que la clé ne
- * soit normalisée, traînent encore dans la collection sous une casse ou une ponctuation différentes.
- * Elles ne seront jamais réécrites, seulement oubliées : personne ne les met à jour, donc personne ne les
- * corrige. Le classement doit s'en protéger à la LECTURE — c'est le seul endroit qui voit le doublon.
+ * évolution RÉÉCRIT la même ligne — sauf que d'anciennes lignes, écrites avant que la clé ne soit
+ * normalisée, traînent dans la collection sous une casse ou une ponctuation différentes. Personne ne les
+ * met plus à jour, donc personne ne les corrige : le classement doit s'en protéger à la LECTURE.
  *
- * On compare sur le pseudo NORMALISÉ, et on garde la plus récente : c'est celle qui reflète la partie
- * en cours, et son niveau est de toute façon le plus élevé.
+ * ⚠️ ON TRIE PAR NIVEAU, PAS PAR DATE — ET C'EST UNE CORRECTION. Le premier jet gardait la ligne la plus
+ * RÉCENTE, en supposant qu'elle serait aussi la plus avancée. Faux : « tu m'as supprimé mon chasseur
+ * niveau 32, tu as supprimé le mauvais ». Une ligne fantôme peut très bien porter un horodatage plus
+ * frais (dernière écriture avant que la clé ne change) tout en décrivant un personnage moins avancé.
+ * Le niveau, lui, ne redescend jamais : c'est le seul critère qui dit laquelle des deux lignes raconte
+ * la vraie partie. La date ne sert plus qu'à départager deux lignes de même niveau.
  */
-function unParJoueur(entries: LeaderEntry[]): LeaderEntry[] {
+export function unParJoueur(entries: LeaderEntry[]): LeaderEntry[] {
   const meilleur = new Map<string, LeaderEntry>()
   for (const e of entries) {
     const cle = e.pseudo.trim().toLowerCase()
     const deja = meilleur.get(cle)
-    if (!deja || e.updatedAt > deja.updatedAt || (e.updatedAt === deja.updatedAt && e.level > deja.level)) {
+    if (!deja || e.level > deja.level || (e.level === deja.level && e.updatedAt > deja.updatedAt)) {
       meilleur.set(cle, e)
     }
   }

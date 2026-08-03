@@ -19,6 +19,23 @@ import { installUiClickSound } from '../ui/click-sound'
 // IDENTITÉ = LE PSEUDO (choix du user, cf. cloud/identity.ts). Taper son pseudo suffit à retrouver sa
 // partie sur n'importe quel appareil ; il n'y a aucun mot de passe, donc aucune preuve d'identité —
 // quiconque connaît un pseudo peut reprendre la partie correspondante. C'est assumé.
+/**
+ * Délai au-delà duquel on cesse d'attendre le cloud.
+ *
+ * ⚠️ IL N'Y EN AVAIT AUCUN — c'est ça, le « ça met des plombes de retrouver la partie ». Un `await` sur
+ * une lecture réseau n'a pas de fin : si la connexion anonyme traîne ou si Firestore ne répond pas,
+ * l'écran reste sur « Recherche de… » indéfiniment, sans que rien n'indique quoi que ce soit. La taille
+ * de la base n'y est pour rien (deux documents) : le coût est dans l'établissement de la connexion, pas
+ * dans la requête. Passé ce délai, on reprend la sauvegarde LOCALE — qui est de toute façon la plus
+ * récente neuf fois sur dix, la synchro se faisant en arrière-plan.
+ */
+const DELAI_CLOUD_MS = 6000
+
+/** Renvoie `null` au lieu d'attendre indéfiniment. La promesse continue sa vie, on ne l'écoute plus. */
+function avecDelai<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))])
+}
+
 export class TitleScene extends Phaser.Scene {
   constructor() { super('Title') }
 
@@ -142,13 +159,21 @@ export class TitleScene extends Phaser.Scene {
 
     this.say(`Recherche de « ${pseudo} »…`)
     try {
-      await ensureUser()
-      const cloud = await pull(key)
+      const cloud = await avecDelai(ensureUser().then(() => pull(key)), DELAI_CLOUD_MS)
       if (cloud) { this.adopt(pseudo, key, cloud); return }
+      // ⚠️ PAS DE CLOUD ≠ PAS DE PARTIE. On proposait directement d'en créer une : quand la recherche
+      // échouait — réseau lent, coupure, connexion anonyme qui traîne — le joueur se voyait offrir un
+      // écran « nouvelle partie » alors que sa sauvegarde existait, intacte, à quelques mètres de là.
+      // On regarde donc TOUJOURS le local avant de conclure quoi que ce soit.
+      const local = this.safeLoad()
+      if (local) { setPlayer(local); writeActivePseudo(pseudo); setAutoPushKey(key); this.left = true; this.scene.start('WorldMap'); return }
       this.confirmNewGame(pseudo, key)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       logEvent('error', 'cloud', msg)
+      // même règle en cas d'erreur franche : la partie locale prime sur un message d'échec
+      const local = this.safeLoad()
+      if (local) { setPlayer(local); writeActivePseudo(pseudo); setAutoPushKey(key); this.left = true; this.scene.start('WorldMap'); return }
       this.say(`Impossible de vérifier : ${msg}`, '#ffab91')
     }
   }
@@ -163,8 +188,7 @@ export class TitleScene extends Phaser.Scene {
 
     this.say(`Vérification de « ${pseudo} »…`)
     try {
-      await ensureUser()
-      const cloud = await pull(key)
+      const cloud = await avecDelai(ensureUser().then(() => pull(key)), DELAI_CLOUD_MS)
       if (cloud) { this.confirmOverwrite(pseudo, key, cloud); return }
       this.startFresh(pseudo, key)
     } catch (e) {
