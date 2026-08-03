@@ -24,6 +24,8 @@ import { hpRegenPerSec } from '../core/stats'
 import { rollDrops, rollChestRareItem } from '../core/loot'
 import { recordKill } from '../core/player-state'
 import { rangeeImpact, atteignableDuCiel, HORS_MONDE, type GeoChute } from '../core/chute'
+import { zoneMorte, lerpVertical, LERP_X, LERP_Y_CALME } from '../core/camera-suivi'
+import { bandesDeVide } from '../core/vide'
 import type { DropEntry, SkillDef } from '../core/types'
 import type { UIScene } from './UIScene'
 import { TILE, DEFAULT_HEIGHT_TILES, groundRowFor, GRAVITY, landsOnOneWayPlatform } from '../core/platforming'
@@ -452,7 +454,40 @@ export class LevelScene extends Phaser.Scene {
       const wallH = 2 * TILE
       this.add.rectangle(m.x * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(1, 0).setDepth(-3)
       this.add.rectangle(m.end * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(0, 0).setDepth(-3)
+
     }
+    // ─── VOILE DE GOUFFRE : « je préférais du vrai vide en dessous » ─────────────────────────
+    // Sur la capture du user, deux rangées de corniches d'herbe flottaient au-dessus d'une prairie peinte,
+    // d'une rivière et d'un château : rien ne disait que tomber tue.
+    //
+    // ⚠️ ON FUSIONNE LES TROUS VOISINS AVANT D'ASSOMBRIR, et c'est ce qui fait la différence entre un
+    // gouffre et des rayures. Un champ de plateformes suspendues n'est pas UN trou : c'est une dizaine de
+    // trous étroits séparés par les plateformes elles-mêmes. Voiler colonne par colonne dessinait donc des
+    // bandes sombres verticales entre les dalles, en laissant le fond éclatant SOUS chacune d'elles —
+    // exactement l'effet de rayures. En rapprochant les trous distants de moins de TOLERANCE_VIDE tuiles,
+    // toute la zone suspendue devient un seul gouffre continu.
+    const TOLERANCE_VIDE = 8
+    const zonesVide: { x: number; end: number }[] = []
+    for (const g of sortedGaps) {
+      const last = zonesVide[zonesVide.length - 1]
+      if (last && g.x <= last.end + TOLERANCE_VIDE) last.end = Math.max(last.end, g.x + g.w)
+      else zonesVide.push({ x: g.x, end: g.x + g.w })
+    }
+    for (const z of zonesVide) {
+      if (cascadeRanges.some((c) => z.x >= c.x && z.end <= c.end)) continue
+      // le voile part juste sous la surface la plus HAUTE qui surplombe la zone : tout ce qui est en
+      // dessous appartient au gouffre. Le ciel au-dessus reste intact.
+      const surTrou = [
+        ...this.levelDef.platforms.filter((p) => p.x < z.end && p.x + p.w > z.x),
+        ...(this.levelDef.bridges ?? []).filter((b) => b.x < z.end && b.x + b.w > z.x),
+      ]
+      const rangeeHaute = surTrou.length ? Math.min(...surTrou.map((p) => p.y)) : this.groundRow
+      // depth -6 : derrière tout le terrain (dalles -5, plateformes -4) et devant le fond de biome.
+      for (const b of bandesDeVide(z.x * TILE, (z.end - z.x) * TILE, (rangeeHaute + 1) * TILE, this.worldH)) {
+        this.add.rectangle(b.x, b.y, b.w, b.h, 0x0a0d14, b.alpha).setOrigin(0, 0).setDepth(-6)
+      }
+    }
+
     // plateformes surélevées : on les traverse en montant et on se pose dessus en retombant (voir
     // landsFromAbove). Rendu en UN TileSprite par plateforme ; collision en UN corps statique par
     // plateforme (dessus à p.y*TILE, hauteur 1 tuile) — équivalent exact des anciennes tuiles.
@@ -1224,29 +1259,17 @@ export class LevelScene extends Phaser.Scene {
     // axes. Sur un monde « défaut 16 » (worldH = 540 = viewport) l'axe Y reste verrouillé → aucune
     // régression.
     this.cameras.main.setBounds(0, 0, widthPx, this.worldH)
-    this.cameras.main.startFollow(this.player, true, 0.1, 0.1)
-    // ─── LA CAMÉRA NE SUIT PAS CHAQUE SAUT ────────────────────────────────────────────────────
-    //
-    // Retour du user : « quand on saute, sur trampoline ou normal, je trouve fatigant que la caméra suive
-    // en hauteur à chaque fois. Ça peut pas laisser monter un peu et réaligner de temps en temps, quand on
-    // se rapproche trop du premier quart haut ? »
-    //
-    // ⚠️ C'EST UNE ZONE MORTE, PAS UN LISSAGE. J'avais d'abord durci le suivi vertical pendant les
-    // rebonds — l'inverse de ce qu'il fallait : ça rendait la caméra encore plus bavarde. Un lissage plus
-    // mou ne réglerait rien non plus, il retarderait le mouvement sans le supprimer. Ce qu'on veut, c'est
-    // que la caméra IGNORE les déplacements verticaux tant que le panda reste dans une bande centrale, et
-    // ne se remette en mouvement que lorsqu'il en sort — donc quand il approche du haut du cadre.
-    //
-    // Zone morte : toute la largeur (le défilement horizontal, lui, doit rester continu) et 62 % de la
-    // hauteur. Le panda peut donc s'élever d'environ 30 % de l'écran sans que rien ne bouge, ce qui couvre
-    // un saut normal en entier et le premier rebond de trampoline. Au-delà, la caméra rattrape en douceur.
-    this.cameras.main.setDeadzone(this.cameras.main.width, this.cameras.main.height * 0.62)
-    // ⚠️ SUIVI VERTICAL PLUS VIF QUAND LE PANDA MONTE VITE. « Ou alors la caméra doit suivre le joueur en
-    // hauteur quand ça monte trop, mais là c'est pas possible » — si, et c'est même la bonne réponse : le
-    // problème d'un rebond très haut n'est pas la hauteur, c'est de ne plus voir où l'on retombe. Le
-    // lissage à 0,1 est confortable pour la marche mais traîne derrière une ascension de trampoline ; on
-    // le durcit le temps de la montée, puis on le relâche. Réglé dans update(), au plus près du mouvement.
-
+    // ─── SUIVI DISSYMÉTRIQUE : HORIZONTAL COLLÉ, VERTICAL LÂCHE ───────────────────────────────
+    // La règle et ses réglages vivent dans core/camera-suivi.ts (pur, testé). Résumé :
+    //  · X : lissage 1 et AUCUNE zone morte → le décor suit le pas. La version précédente donnait à la
+    //    zone morte TOUTE LA LARGEUR de l'écran en croyant garder « un défilement horizontal continu » ;
+    //    or une zone morte est justement la région où la cible bouge SANS que la caméra suive, donc cela
+    //    supprimait le suivi horizontal (« le terrain se décale plus assez vers la droite quand j'avance »).
+    //  · Y : zone morte de 62 % de la hauteur → un saut entier et le premier rebond de trampoline ne
+    //    bougent rien (« fatigant que la caméra suive en hauteur à chaque fois »), rattrapage doux ensuite.
+    this.cameras.main.startFollow(this.player, true, LERP_X, LERP_Y_CALME)
+    const zm = zoneMorte(this.cameras.main.height)
+    this.cameras.main.setDeadzone(zm.w, zm.h)
     this.cursors = this.input.keyboard!.createCursorKeys()
     // clavier PC additionnel : ZQSD (AZERTY) et WASD (QWERTY) doublent les flèches —
     // gauche = A/Q, droite = D, haut = W/Z, bas = S. HAUT = saut (hors échelle) ou grimpe (sur
@@ -5154,6 +5177,10 @@ export class LevelScene extends Phaser.Scene {
     // vitesse du panda encore en l'air, juste avant de toucher. C'est précisément ce qu'on veut mesurer.
     const corpsJoueur = this.player?.body as Phaser.Physics.Arcade.Body | undefined
     if (corpsJoueur) this.vitesseChuteAvant = Math.max(0, corpsJoueur.velocity.y)
+    // SUIVI VERTICAL PLUS VIF PENDANT UNE ASCENSION RAPIDE : à 0,1 la caméra traîne derrière un rebond de
+    // trampoline et on ne voit plus où l'on retombe. Ce comportement était DÉCRIT dans un commentaire
+    // depuis plusieurs versions sans avoir jamais été écrit ; il l'est maintenant, et il est testé.
+    if (corpsJoueur) this.cameras.main.lerp.y = lerpVertical(corpsJoueur.velocity.y)
 
     this.majTranchesVisibles()
     this.majMonstresProches()
