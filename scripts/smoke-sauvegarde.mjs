@@ -16,7 +16,9 @@
 //   1. cloud injoignable → `chercher` répond `echec`, JAMAIS `absent` (le bug exact de la capture) ;
 //   2. clé inconnue, cloud joignable → `absent` (sinon plus personne ne pourrait créer de partie) ;
 //   3. une sauvegarde locale fait l'aller-retour sans rien perdre ;
-//   4. la décision de reprise refuse de proposer une nouvelle partie sur un échec.
+//   4. la décision de reprise refuse de proposer une nouvelle partie sur un échec ;
+//   5. on progresse, on RECHARGE LA PAGE, et la progression est toujours là (niveau, or, terrains finis) ;
+//   6. une sauvegarde corrompue est traitée comme absente et ne plante pas l'écran d'accueil.
 import { chromium } from 'playwright'
 import { spawn } from 'node:child_process'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -115,6 +117,63 @@ try {
     `hors ligne avec un local, on obtient ${avecLocal.action}/${avecLocal.source} au lieu de reprendre/local`)
   verifie(avecLocal.niveau === 29, `hors ligne avec un local, niveau chargé = ${avecLocal.niveau}`)
   console.log(`  hors ligne + local → ${avecLocal.action} (${avecLocal.source}, niv ${avecLocal.niveau})`)
+
+
+  // ─── 5) PROGRESSER, RECHARGER LA PAGE, RETROUVER SA PROGRESSION ──────────────────────────────
+  // Le test que rien ne couvrait, et pourtant le seul qui dise si le jeu est jouable : la sauvegarde
+  // sert à survivre à une FERMETURE D'ONGLET. Sept appels à `save()` sont dispersés dans les scènes ;
+  // ce qui compte n'est aucun d'eux en particulier, c'est que l'état écrit se retrouve après reload.
+  const avant = await page.evaluate(async () => {
+    const st = await import('/src/state.ts')
+    const save = await import('/src/core/save.ts')
+    const prog = await import('/src/core/progression.ts')
+    const ps = await import('/src/core/player-state.ts')
+    const p = ps.newPlayer('sonde-persist')
+    st.setPlayer(p)
+    // on progresse par le VRAI chemin de progression (gain d'XP → montées de niveau en cascade)
+    prog.grantXp(p, 5000)
+    p.gold += 1234
+    p.clearedNodes = ['plaine-1', 'plaine-2']
+    save.save(p)
+    return { niveau: p.level, or: p.gold, terrains: p.clearedNodes.length, xp: p.xp }
+  })
+  console.log(`  avant reload → niv ${avant.niveau}, ${avant.or} or, ${avant.terrains} terrains`)
+  verifie(avant.niveau > 1, `grantXp n'a pas fait monter de niveau (niv ${avant.niveau})`)
+
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(
+    () => window.__pandaGame?.scene.getScenes(true).some((s) => s.scene.key === 'Title'),
+    null, { timeout: 300000 },
+  )
+  const apres = await page.evaluate(async () => {
+    const save = await import('/src/core/save.ts')
+    const p = save.load()
+    return { niveau: p?.level, or: p?.gold, terrains: (p?.clearedNodes ?? []).length, xp: p?.xp, nom: p?.name }
+  })
+  console.log(`  après reload → niv ${apres.niveau}, ${apres.or} or, ${apres.terrains} terrains`)
+  verifie(apres.nom === 'sonde-persist', `nom perdu au reload : ${apres.nom}`)
+  verifie(apres.niveau === avant.niveau, `NIVEAU PERDU au reload : ${avant.niveau} → ${apres.niveau}`)
+  verifie(apres.or === avant.or, `OR PERDU au reload : ${avant.or} → ${apres.or}`)
+  verifie(apres.xp === avant.xp, `XP PERDUE au reload : ${avant.xp} → ${apres.xp}`)
+  verifie(apres.terrains === avant.terrains,
+    `TERRAINS FINIS PERDUS au reload : ${avant.terrains} → ${apres.terrains} (c'est la carte du monde qui se vide)`)
+
+  // ─── 6) une sauvegarde CORROMPUE ne doit pas planter le jeu ──────────────────────────────────
+  // Politique documentée : un fichier illisible est traité comme absent, jamais comme une erreur fatale.
+  // Sans ce filet, un octet de travers sur le téléphone du joueur rendait l'écran d'accueil inutilisable.
+  const corrompue = await page.evaluate(async () => {
+    const save = await import('/src/core/save.ts')
+    const cles = Object.keys(localStorage).filter((k) => k.includes('panda'))
+    for (const k of cles) localStorage.setItem(k, '{ceci n est pas du json')
+    let plante = null
+    let relu
+    try { relu = save.load() } catch (e) { plante = String(e) }
+    return { plante, relu: relu === null ? 'null' : typeof relu, cles: cles.length }
+  })
+  verifie(corrompue.cles > 0, 'aucune clé de sauvegarde trouvée dans localStorage (la sonde ne teste rien)')
+  verifie(!corrompue.plante, `une sauvegarde corrompue fait PLANTER load() : ${corrompue.plante}`)
+  verifie(corrompue.relu === 'null', `une sauvegarde corrompue rend « ${corrompue.relu} » au lieu de null`)
+  console.log(`  sauvegarde corrompue → load() rend ${corrompue.relu}, sans planter`)
 
   // ─── 2) CLOUD JOIGNABLE, clé inconnue : « absent » ──────────────────────────────────────────
   // Sans ce contre-test, rendre « echec » en toute circonstance ferait passer les vérifications

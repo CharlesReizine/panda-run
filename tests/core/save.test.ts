@@ -130,3 +130,50 @@ describe('save', () => {
     expect(load(fakeStorage())).toBeNull()
   })
 })
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// UNE SAUVEGARDE ILLISIBLE EST TRAITÉE COMME ABSENTE — JAMAIS COMME UNE ERREUR
+//
+// La politique était documentée mais appliquée à un seul endroit (`TitleScene.safeLoad`) ; partout
+// ailleurs, dont `syncNow` qui tourne en tâche de fond, un JSON abîmé faisait remonter un SyntaxError.
+// Un octet de travers dans le localStorage du téléphone cassait donc la synchronisation en silence.
+// Relevé par la sonde scripts/smoke-sauvegarde.mjs, pas par un test — d'où ceux-ci.
+//
+// ⚠️ LA GARANTIE EST TESTÉE SUR `load` ET `loadStamped`, pas sur un appelant : c'est la fonction qui la
+// porte, sinon elle dépend de la mémoire de celui qui l'appelle.
+describe('sauvegarde illisible', () => {
+  const faux = (contenu: string): Storage => ({
+    getItem: () => contenu,
+    setItem: () => {}, removeItem: () => {}, clear: () => {}, key: () => null, length: 1,
+  }) as unknown as Storage
+
+  const ORDURES = [
+    '{ceci n est pas du json',      // frappe / troncature
+    '',                            // clé présente mais vide
+    'null',                        // JSON valide, contenu inutilisable
+    '[]',                          // JSON valide, mauvaise forme
+    '{"player":',                  // JSON tronqué en plein milieu
+    '{"version":999,"player":{}}', // version future, forme inconnue
+  ]
+
+  for (const contenu of ORDURES) {
+    it(`load() ne lève pas et rend null pour ${JSON.stringify(contenu).slice(0, 32)}`, () => {
+      expect(() => load(faux(contenu))).not.toThrow()
+      expect(load(faux(contenu))).toBeNull()
+    })
+
+    it(`loadStamped() ne lève pas pour ${JSON.stringify(contenu).slice(0, 32)}`, () => {
+      expect(() => loadStamped(faux(contenu))).not.toThrow()
+      expect(loadStamped(faux(contenu))).toBeNull()
+    })
+  }
+
+  it('une sauvegarde VALIDE se lit toujours (le filet ne mange pas les bonnes)', () => {
+    // contre-test : renvoyer null en toute circonstance ferait passer tout ce qui précède
+    const p = newPlayer('charly')
+    p.level = 29
+    const bon = faux(serialize(p, 1234))
+    expect(load(bon)?.level).toBe(29)
+    expect(loadStamped(bon)?.savedAt).toBe(1234)
+  })
+})

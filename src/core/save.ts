@@ -85,13 +85,45 @@ export function save(p: PlayerState, storage: Storage = localStorage, savedAt: n
   for (const l of listeners) l(p, savedAt)
 }
 
-export function load(storage: Storage = localStorage): PlayerState | null {
-  const raw = storage.getItem(SAVE_KEY)
-  return raw === null ? null : deserialize(raw)
+// ⚠️ NI `load` NI `loadStamped` NE LÈVENT JAMAIS, et la garantie est ICI plutôt que chez l'appelant.
+// La politique « une sauvegarde illisible est traitée comme absente » était documentée depuis longtemps,
+// mais elle n'était appliquée qu'au seul endroit qui y avait pensé : `TitleScene.safeLoad`. Partout
+// ailleurs — dont `syncNow`, qui tourne en tâche de fond — un JSON abîmé faisait remonter un SyntaxError.
+// Un octet de travers dans le localStorage du téléphone suffisait donc à casser la synchronisation en
+// silence. Une sonde l'a relevé : « une sauvegarde corrompue fait PLANTER load() ».
+// Corriger à la source vaut mieux que d'espérer que chaque appelant se souvienne d'un try/catch.
+/**
+ * Une sauvegarde a-t-elle la FORME d'un joueur ? Attraper l'exception ne suffit pas : un JSON
+ * parfaitement valide mais de mauvaise forme (`[]`, `null`, un objet d'une version inconnue) traverse la
+ * désérialisation sans broncher et ressort en `undefined`, ou pire en `{ player: undefined }` du côté
+ * horodaté. L'appelant croit alors tenir une sauvegarde et casse une ligne plus loin, sur
+ * `save.player.level`. On vérifie donc le minimum vital dont dépend toute la suite du jeu.
+ */
+function formeValide(p: unknown): p is PlayerState {
+  if (!p || typeof p !== 'object') return false
+  const o = p as Record<string, unknown>
+  return typeof o.level === 'number' && Number.isFinite(o.level) && o.level >= 1 && typeof o.classId === 'string'
 }
 
-// Variante horodatée, pour la synchro cloud (core/sync.ts).
+export function load(storage: Storage = localStorage): PlayerState | null {
+  try {
+    const raw = storage.getItem(SAVE_KEY)
+    if (raw === null) return null
+    const p = deserialize(raw)
+    return formeValide(p) ? p : null
+  } catch {
+    return null
+  }
+}
+
+// Variante horodatée, pour la synchro cloud (core/sync.ts). Même règle : illisible = absente.
 export function loadStamped(storage: Storage = localStorage): StampedSave | null {
-  const raw = storage.getItem(SAVE_KEY)
-  return raw === null ? null : deserializeStamped(raw)
+  try {
+    const raw = storage.getItem(SAVE_KEY)
+    if (raw === null) return null
+    const s = deserializeStamped(raw)
+    return s && formeValide(s.player) ? s : null
+  } catch {
+    return null
+  }
 }
