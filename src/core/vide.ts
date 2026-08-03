@@ -1,55 +1,20 @@
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// LE SOUS-SOL EST SOMBRE, ET SA LIMITE SUIT LA SILHOUETTE DU TERRAIN
+// TROUS DE PASSAGE — ce qui reste de src/core/vide.ts
 //
-// « J'aimerais que quand y a des plateformes en hauteur ou autre trou, en dessous ça soit TJR TJR du vide. »
+// ⚠️ TROIS TENTATIVES POUR « FAIRE RESSEMBLER LE VIDE À DU VIDE » ONT ÉTÉ RETIRÉES, et le motif de leur
+// échec vaut d'être gardé : la demande était « quand y a des plateformes en hauteur ou autre trou, en
+// dessous ça soit TJR TJR du vide ».
+//   1. dégradé translucide sur les colonnes trouées → RAYURES verticales entre les dalles, fond éclatant
+//      sous chacune d'elles ;
+//   2. le même sous toute surface élevée → PATCHWORK de rectangles translucides sur la jungle
+//      (« graphiquement ça fait des choses bizarres, des strates moches ») ;
+//   3. sous-sol OPAQUE suivant la silhouette du terrain → « y a des gros trucs noirs, on passe dedans on
+//      tombe ». C'est la faute la plus grave des trois, et elle est de principe : un remplissage opaque
+//      annonce de la MATIÈRE, alors qu'il n'apporte AUCUNE collision. Le rendu mentait sur le terrain, et
+//      un joueur qui se fie à ce qu'il voit tombe dans le décor.
 //
-// ⚠️ DEUX TENTATIVES EN VOILES TRANSLUCIDES ONT ÉCHOUÉ AVANT CELLE-CI, et leur échec dit pourquoi celle-ci
-// marche. D'abord un dégradé sur les seules colonnes trouées : ça dessinait des RAYURES verticales entre
-// les dalles, en laissant le fond éclatant sous chacune d'elles. Puis le même dégradé sous toute surface
-// élevée : un PATCHWORK de rectangles translucides posés sur la jungle (« graphiquement ça fait des choses
-// bizarres, des strates moches »). La leçon : un rectangle semi-transparent sur un fond illustré lumineux
-// se lit toujours comme un rectangle. On ne fabrique pas du vide en le teintant.
-//
-// La bonne approche est l'inverse : rendre le sous-sol OPAQUE, et faire passer sa limite EXACTEMENT sur la
-// silhouette du terrain. Là où une plateforme couvre la limite, il n'y a aucune arête à voir — elle est
-// cachée sous la plateforme. Là où la silhouette décroche (bord d'une corniche), l'arête verticale qui
-// apparaît est précisément ce à quoi ressemble une falaise. Le ciel reste intact au-dessus du relief, et
-// tout ce qui est dessous est sombre : c'est la lecture classique d'un jeu de plateformes.
-
-/** Surface marchable ou matière : tout ce qui définit le dessus du terrain. Tuiles. */
-export interface Dessus { x: number; y: number; w: number }
-
-/** Pan de sous-sol : de la rangée `top` (le dessus du terrain) jusqu'au bas du monde. Tuiles. */
-export interface PanSousSol { x: number; w: number; top: number }
-
-/**
- * Silhouette du sous-sol : pour chaque colonne, la rangée du DESSUS du terrain ; colonnes voisines de même
- * altitude fusionnées en un seul rectangle (les terrains font 600 tuiles de large — un objet par colonne
- * serait absurde).
- */
-export function silhouetteSousSol(
-  largeur: number,
-  groundRow: number,
-  dessus: Dessus[],
-  trous: { x: number; w: number }[],
-): PanSousSol[] {
-  const tops: number[] = []
-  for (let x = 0; x < largeur; x++) {
-    const troue = trous.some((t) => t.x <= x && t.x + t.w > x)
-    let top = troue ? Infinity : groundRow
-    for (const d of dessus) if (d.x <= x && d.x + d.w > x) top = Math.min(top, d.y)
-    // Colonne trouée ET sans rien au-dessus : on repart du sol du monde plutôt que de remonter à l'infini.
-    // Sans ce garde-fou on peindrait le CIEL en noir au-dessus des trous à ciel ouvert.
-    tops.push(Number.isFinite(top) ? top : groundRow)
-  }
-  const out: PanSousSol[] = []
-  for (let x = 0; x < largeur; x++) {
-    const prec = out[out.length - 1]
-    if (prec && prec.top === tops[x] && prec.x + prec.w === x) prec.w++
-    else out.push({ x, w: 1, top: tops[x]! })
-  }
-  return out
-}
+// La leçon, pour la prochaine tentative : le vide ne se peint pas par-dessus, il se CREUSE dans la
+// génération. Tant que le socle de pierre est là, il est solide, et le montrer autrement est un piège.
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 // TROU DE PASSAGE AU CROISEMENT D'UNE ÉCHELLE

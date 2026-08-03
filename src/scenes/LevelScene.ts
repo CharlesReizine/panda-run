@@ -24,7 +24,7 @@ import { hpRegenPerSec } from '../core/stats'
 import { rollDrops, rollChestRareItem } from '../core/loot'
 import { recordKill } from '../core/player-state'
 import { rangeeImpact, atteignableDuCiel, HORS_MONDE, type GeoChute } from '../core/chute'
-import { silhouetteSousSol, percerPourEchelles } from '../core/vide'
+import { percerPourEchelles } from '../core/vide'
 import { zoneMorte, lerpVertical, LERP_X, LERP_Y_CALME } from '../core/camera-suivi'
 import type { DropEntry, SkillDef } from '../core/types'
 import type { UIScene } from './UIScene'
@@ -457,25 +457,6 @@ export class LevelScene extends Phaser.Scene {
       this.add.rectangle(m.x * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(1, 0).setDepth(-3)
       this.add.rectangle(m.end * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(0, 0).setDepth(-3)
     }
-    // ─── SOUS-SOL SOMBRE : « en dessous ça soit TJR TJR du vide » ─────────────────────────────
-    // Deux versions en voiles translucides ont échoué avant celle-ci (rayures verticales, puis patchwork de
-    // rectangles sur la jungle : « des strates moches »). Un rectangle semi-transparent sur un fond illustré
-    // lumineux se lit toujours comme un rectangle. Ici le sous-sol est OPAQUE et sa limite suit EXACTEMENT
-    // la silhouette du terrain : partout où une plateforme couvre cette limite il n'y a aucune arête à
-    // voir, et là où la silhouette décroche l'arête verticale ressemble à une falaise — l'effet voulu.
-    // Le ciel reste intact au-dessus du relief. Règle et fusion en rectangles : core/vide.ts.
-    // Depth -7 : sous tout le terrain (dalles -5, plateformes -4) et sous les parois de trou (-3).
-    const dessusTerrain = [
-      ...this.levelDef.platforms.map((p) => ({ x: p.x, y: p.y, w: p.w })),
-      ...(this.levelDef.bridges ?? []).map((b) => ({ x: b.x, y: b.y, w: b.w })),
-      ...(this.levelDef.rockBands ?? []).map((r) => ({ x: r.x, y: r.y, w: r.w })),
-    ]
-    for (const pan of silhouetteSousSol(this.levelDef.widthTiles, this.groundRow, dessusTerrain, this.levelDef.gaps ?? [])) {
-      const yPx = pan.top * TILE
-      this.add.rectangle(pan.x * TILE, yPx, pan.w * TILE, this.worldH - yPx, 0x161d28)
-        .setOrigin(0, 0).setDepth(-7)
-    }
-
     // Colonnes d'échelle qui TRAVERSENT une corniche : l'échelle court de sa rangée haute (y) vers le bas
     // sur `h` rangées, donc elle croise la corniche si celle-ci tombe dans cet intervalle.
     const echellesQuiTraversent = (p: { x: number; y: number; w: number }): number[] =>
