@@ -36,42 +36,76 @@ interface CloudDoc {
   build: string // repère de version du jeu qui a écrit — aide au diagnostic
 }
 
-// `null` = pas de sauvegarde cloud. Un document illisible est traité EXACTEMENT comme absent : on ne
-// bloque jamais le jeu sur une sauvegarde corrompue (même politique que TitleScene.safeLoad en local).
-/**
- * Retrouve la partie d'un pseudo — par sa clé, ou par le NOM inscrit dans la sauvegarde.
- *
- * ⚠️ LA CLÉ DU DOCUMENT A DÉRIVÉ, LE NOM DU JOUEUR NON. C'est la leçon de trois correctifs successifs,
- * et c'est la base qui l'a tranchée : « dans le classement on voit un archer de niveau 29 et pourtant
- * quand je load j'ai un novice de niveau 1 ». Relevé dans Firestore :
- *
- *   clé « panda »          → nom « charlychoulove », archer 29, 23 terrains finis   ← la vraie partie
- *   clé « charlychoulove » → nom « megastock »,      novice 1                       ← créée par erreur
- *
- * Le personnage était bien là ; il dormait sous « panda », qui est le REPLI de `pseudoKey` quand la
- * normalisation ne rend rien d'exploitable. Une clé technique peut changer de forme au fil des versions
- * (troncature, repli, identifiant d'authentification d'une ancienne build) ; le nom que le joueur a tapé,
- * lui, est écrit DANS la sauvegarde et ne bouge pas. C'est donc lui qui fait office d'identité.
- *
- * ⚠️ ET ON COMPARE TOUS LES CANDIDATS AVANT DE CHOISIR, y compris la correspondance exacte. C'est le
- * piège où je suis tombé : privilégier la clé exacte ramenait le novice 1 créé par erreur et laissait
- * l'archer 29 au placard. On garde la sauvegarde la plus AVANCÉE — dans un jeu solo la progression ne
- * redescend jamais, donc ce choix ne peut jamais faire perdre de progression.
- */
-export async function pull(key: string): Promise<StampedSave | null> {
-  const p = getDb()
-  if (!p) return null
-  const [db, mod] = await Promise.all([p, import('firebase/firestore')])
+// Un document ILLISIBLE est traité comme absent : on ne bloque jamais le jeu sur une sauvegarde
+// corrompue (même politique que TitleScene.safeLoad en local). Un document qu'on n'a PAS PU LIRE, en
+// revanche, n'est pas absent — cf. le type Recherche juste en dessous.
+//
+// ⚠️ LA CLÉ DU DOCUMENT A DÉRIVÉ PAR LE PASSÉ, LE NOM DU JOUEUR NON. C'est la leçon de quatre correctifs
+// successifs, et c'est la base qui l'a tranchée : « dans le classement on voit un archer de niveau 29 et
+// pourtant quand je load j'ai un novice de niveau 1 ». Relevé alors dans Firestore :
+//
+//   clé « panda »          → nom « charlychoulove », archer 29, 23 terrains finis   ← la vraie partie
+//   clé « charlychoulove » → nom « megastock »,      novice 1                       ← créée par erreur
+//
+// Le personnage dormait sous « panda », le REPLI de `pseudoKey` quand la normalisation ne rendait rien
+// d'exploitable. Ce repli a été supprimé depuis, et la clé vaut maintenant exactement le pseudo normalisé :
+// le document exact est donc redevenu la source de vérité, et le rattrapage par le nom n'est plus qu'un
+// FILET pour les sauvegardes écrites par les anciennes versions.
 
-  const candidats: StampedSave[] = []
-  const snap = await mod.getDoc(mod.doc(db, 'saves', key))
-  if (snap.exists()) {
-    const s = lireDoc(snap.data() as CloudDoc)
-    if (s) candidats.push(s)
+/**
+ * Résultat d'une recherche de sauvegarde. TROIS états, et la distinction est vitale.
+ *
+ * ⚠️ « JE N'AI RIEN TROUVÉ » ET « JE N'AI PAS PU CHERCHER » NE SONT PAS LA MÊME CHOSE, et les confondre
+ * a coûté une sauvegarde. `pull` rendait `null` dans les deux cas ; l'appelant en concluait que la partie
+ * n'existait pas et proposait d'en créer une NOUVELLE — donc d'écraser, avec un novice niveau 1, une
+ * partie bien vivante que la seule lecture avait échoué à voir. Le joueur a vu « charlychoulove n'existe
+ * pas » alors que le document était là, intact, dans la base.
+ *
+ * Règle : seul `absent` autorise à proposer une nouvelle partie. `echec` n'autorise qu'à réessayer.
+ */
+export type Recherche =
+  | { etat: 'trouve'; save: StampedSave }
+  | { etat: 'absent' }
+  | { etat: 'echec'; raison: string }
+
+const raisonDe = (e: unknown): string => (e instanceof Error ? e.message : String(e))
+
+/**
+ * Cherche la sauvegarde de `key`.
+ *
+ * ⚠️ LA CLÉ EXACTE D'ABORD, ET ON S'ARRÊTE LÀ SI ELLE RÉPOND. La version précédente enchaînait
+ * SYSTÉMATIQUEMENT un balayage de toute la collection (`autresCandidats`) même quand le document exact
+ * venait d'être trouvé : deux allers-retours au lieu d'un, pour rien. C'est ce qui faisait dire au user
+ * « ça met des plombes à retrouver la partie alors qu'on cherche dans une DB à deux lignes », et surtout
+ * ce qui poussait l'opération au-delà du délai d'attente — d'où l'échec pris pour une absence.
+ * Le balayage reste utile, mais UNIQUEMENT en repli : il rattrape les sauvegardes rangées sous une clé
+ * dérivée (troncature, ancien identifiant d'authentification).
+ */
+export async function chercher(key: string): Promise<Recherche> {
+  const p = getDb()
+  if (!p) return { etat: 'echec', raison: 'cloud non configuré' }
+  let db: import('firebase/firestore').Firestore
+  let mod: typeof import('firebase/firestore')
+  try {
+    [db, mod] = await Promise.all([p, import('firebase/firestore')])
+  } catch (e) {
+    return { etat: 'echec', raison: raisonDe(e) }
   }
-  candidats.push(...await autresCandidats(db, mod, key))
-  if (candidats.length === 0) return null
-  return plusAvancee(candidats)
+
+  try {
+    const snap = await mod.getDoc(mod.doc(db, 'saves', key))
+    if (snap.exists()) {
+      const s = lireDoc(snap.data() as CloudDoc)
+      if (s) return { etat: 'trouve', save: s }
+    }
+  } catch (e) {
+    // on ne SAIT pas si la partie existe : surtout ne pas répondre « absent »
+    return { etat: 'echec', raison: raisonDe(e) }
+  }
+
+  const autres = await autresCandidats(db, mod, key)
+  if (autres === null) return { etat: 'echec', raison: 'balayage des clés dérivées impossible' }
+  return autres.length ? { etat: 'trouve', save: plusAvancee(autres) } : { etat: 'absent' }
 }
 
 /** La sauvegarde la plus avancée ; à niveau égal, la plus récente. */
@@ -111,7 +145,7 @@ async function autresCandidats(
   db: import('firebase/firestore').Firestore,
   mod: typeof import('firebase/firestore'),
   key: string,
-): Promise<StampedSave[]> {
+): Promise<StampedSave[] | null> {
   if (key.length < 3) return [] // trop court pour qu'un préfixe soit significatif
   try {
     const snap = await mod.getDocs(mod.collection(db, 'saves'))
@@ -123,7 +157,9 @@ async function autresCandidats(
     })
     return out
   } catch {
-    return [] // droits insuffisants ou hors ligne : on ne bloque pas l'écran d'accueil
+    // ⚠️ `null`, PAS `[]`. Une liste vide signifie « la collection ne contient rien pour ce joueur », ce
+    // qui autorise l'appelant à proposer une nouvelle partie ; un échec de lecture ne l'autorise pas.
+    return null
   }
 }
 

@@ -20,6 +20,11 @@ export type SyncAction =
   | 'garder-le-local' // le local fait foi ; l'appelant pousse ensuite
   | 'pousser-le-local' // aucune sauvegarde cloud : on crée la première
   | 'demander' // divergence réelle : c'est au joueur de choisir
+  // ⚠️ LECTURE DU CLOUD IMPOSSIBLE — DISTINCT DE « aucune sauvegarde cloud ». Sans cet état, un échec de
+  // lecture se présentait comme un cloud VIDE, et la synchronisation en concluait « pousser-le-local » :
+  // elle écrasait donc une sauvegarde distante bien vivante par l'état local, qui pouvait être un novice
+  // niveau 1. On ne synchronise pas ce qu'on n'a pas pu lire.
+  | 'impossible'
 
 // Tout ce dont la décision a besoin : un horodatage. `savedAt` vaut 0 pour une sauvegarde
 // d'avant la version 9 (pas d'horodatage) → elle est alors toujours considérée comme la plus ancienne.

@@ -3,10 +3,11 @@ import { load, loadStamped, save } from '../core/save'
 import { newPlayer, type PlayerState } from '../core/player-state'
 import { setPlayer } from '../state'
 import { audio } from '../audio/audio-engine'
+import { decideReprise, decideNouvelle } from '../core/reprise'
 import { logEvent } from '../core/logger'
 import { BUILD } from '../core/build'
 import { cloudAvailable, ensureUser } from '../cloud/auth'
-import { pull } from '../cloud/cloud-save'
+import { chercher, type Recherche } from '../cloud/cloud-save'
 import { pseudoKey, readActivePseudo, writeActivePseudo } from '../cloud/identity'
 import { adoptCloud, setAutoPushKey } from '../cloud/sync-service'
 import { askPseudo } from '../ui/pseudo-prompt'
@@ -29,11 +30,34 @@ import { installUiClickSound } from '../ui/click-sound'
  * dans la requête. Passé ce délai, on reprend la sauvegarde LOCALE — qui est de toute façon la plus
  * récente neuf fois sur dix, la synchro se faisant en arrière-plan.
  */
-const DELAI_CLOUD_MS = 6000
+// ⚠️ 6 s NE SUFFISAIENT PAS, et le prix de l'impatience était une sauvegarde. Ce délai couvre, sur un
+// téléphone qui démarre à froid : l'authentification anonyme, le chargement du module Firestore, puis
+// l'aller-retour réseau. Sur iPhone en 4G, l'ensemble dépasse régulièrement six secondes — le délai
+// expirait, et l'écran d'accueil annonçait « ta partie n'existe pas ». On laisse donc le temps qu'il faut,
+// et surtout un dépassement ne conclut plus jamais à une absence (cf. Recherche dans cloud-save.ts).
+const DELAI_CLOUD_MS = 20000
 
-/** Renvoie `null` au lieu d'attendre indéfiniment. La promesse continue sa vie, on ne l'écoute plus. */
-function avecDelai<T>(p: Promise<T>, ms: number): Promise<T | null> {
-  return Promise.race([p, new Promise<null>((r) => setTimeout(() => r(null), ms))])
+/**
+ * Course entre une promesse et un chronomètre. Rend `{ delai: true }` en cas de dépassement.
+ *
+ * ⚠️ LE DÉPASSEMENT PORTE SA PROPRE MARQUE, il ne se déguise pas en résultat. La version précédente rendait
+ * `null` — exactement ce que rendait aussi une recherche infructueuse. L'appelant ne pouvait donc pas
+ * distinguer « la partie n'existe pas » de « je n'ai pas eu le temps de regarder », et proposait de créer
+ * une nouvelle partie dans les deux cas. La promesse abandonnée continue sa vie ; on ne l'écoute plus.
+ */
+function avecDelai<T>(p: Promise<T>, ms: number): Promise<T | { delai: true }> {
+  return Promise.race([p, new Promise<{ delai: true }>((r) => setTimeout(() => r({ delai: true }), ms))])
+}
+
+/** Cherche au cloud en traduisant tout imprévu (dépassement, exception) en état `echec` explicite. */
+async function chercherAuCloud(key: string): Promise<Recherche> {
+  try {
+    const r = await avecDelai(ensureUser().then(() => chercher(key)), DELAI_CLOUD_MS)
+    if ('delai' in r) return { etat: 'echec', raison: `pas de réponse après ${DELAI_CLOUD_MS / 1000} s` }
+    return r
+  } catch (e) {
+    return { etat: 'echec', raison: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 export class TitleScene extends Phaser.Scene {
@@ -161,40 +185,43 @@ export class TitleScene extends Phaser.Scene {
     }
 
     this.say(`Recherche de « ${pseudo} »…`)
-    let cloud: StampedSave | null = null
-    try {
-      cloud = await avecDelai(ensureUser().then(() => pull(key)), DELAI_CLOUD_MS)
-    } catch (e) {
-      logEvent('error', 'cloud', e instanceof Error ? e.message : String(e))
-    }
+    const rech = await chercherAuCloud(key)
+    if (rech.etat === 'echec') logEvent('error', 'cloud', rech.raison)
     const local = this.safeLoad()
     const localTampon = local ? loadStamped() : null
 
-    // ─── ON REPREND LA PARTIE LA PLUS AVANCÉE, POINT ────────────────────────────────────────────
-    //
-    // ⚠️ TROIS RÈGLES ONT ÉTÉ ESSAYÉES ICI, DEUX ONT PERDU DES DONNÉES. Le premier jet ne regardait que
-    // le cloud : quand la lecture échouait, on proposait de créer une NOUVELLE partie — un écran de perte
-    // de données déguisé en accueil, et le joueur qui accepte écrase sa sauvegarde locale par un novice
-    // niveau 1. Le second jet a inversé la priorité vers le local : il a alors ressuscité précisément ce
-    // novice niveau 1 créé par erreur, et l'a préféré au vrai personnage resté au cloud (« il me trouve
-    // mais j'ai une map vide quand je load, et j'ai un novice »).
-    //
-    // La bonne règle ne dépend d'aucune des deux sources : dans un jeu solo, la progression ne REDESCEND
-    // jamais. La sauvegarde la plus avancée est donc toujours la bonne, d'où qu'elle vienne — et la
-    // choisir ne peut, par construction, jamais faire perdre de progression. À niveau égal, la plus
-    // récente départage.
-    const niveau = (s: StampedSave | null) => s?.player.level ?? -1
-    const gagnant = niveau(cloud) > niveau(localTampon) ? cloud
-      : niveau(localTampon) > niveau(cloud) ? localTampon
-        : ((cloud?.savedAt ?? 0) >= (localTampon?.savedAt ?? 0) ? cloud : localTampon)
-
-    if (gagnant) {
+    // LA DÉCISION VIT DANS core/reprise.ts, PAS ICI, et c'est le vrai correctif de fond. Cinq versions
+    // de ce choix se sont succédé dans cette méthode et quatre ont perdu des données, alors que les
+    // fonctions pures qu'elles appelaient étaient toutes couvertes de tests verts : le défaut était
+    // chaque fois dans l'ENCHAÎNEMENT, qu'aucun test ne pouvait atteindre puisqu'une scène Phaser ne se
+    // teste pas. Sortie de la scène, la règle est épinglée cas par cas (tests/core/reprise.test.ts).
+    const choix = decideReprise(rech, localTampon)
+    if (choix.action === 'reprendre') {
       // adopter écrit la sauvegarde retenue EN LOCAL : les deux côtés repartent alignés, et le prochain
       // envoi automatique pousse le bon état — c'est ce qui répare durablement un cloud périmé.
-      this.adopt(pseudo, key, gagnant)
+      this.adopt(pseudo, key, choix.save)
       return
     }
+    if (choix.action === 'reessayer') { this.offrirNouvelEssai(pseudo, choix.raison, () => this.continueGame()); return }
     this.confirmNewGame(pseudo, key)
+  }
+
+  /**
+   * Panneau « je n'ai pas pu vérifier ». N'OFFRE JAMAIS DE CRÉER UNE PARTIE — c'est tout son intérêt.
+   *
+   * Le user a vu « charlychoulove n'existe pas » avec un bouton « Oui, nouvelle partie » alors que son
+   * archer 29 était intact dans la base : la lecture avait dépassé le délai. Accepter aurait écrasé le
+   * personnage. Tant qu'on n'a pas réussi à lire, le seul geste autorisé est de réessayer.
+   */
+  private offrirNouvelEssai(pseudo: string, raison: string, reessayer: () => void) {
+    this.ask(
+      `Impossible de vérifier « ${pseudo} »`,
+      `La partie n'a PAS été retrouvée, mais elle n'est pas perdue :\nla connexion n'a simplement pas répondu.\n(${raison})`,
+      [
+        { label: 'Réessayer', color: 0x2e7d32, onPick: () => void this.guard(async () => reessayer()) },
+        { label: 'Annuler', color: 0x455a64, onPick: () => this.say('') },
+      ],
+    )
   }
 
   // NOUVELLE PARTIE — si le pseudo porte DÉJÀ une partie, on demande avant d'écraser.
@@ -207,16 +234,20 @@ export class TitleScene extends Phaser.Scene {
     if (!cloudAvailable()) { this.startFresh(pseudo, key); return }
 
     this.say(`Vérification de « ${pseudo} »…`)
-    try {
-      const cloud = await avecDelai(ensureUser().then(() => pull(key)), DELAI_CLOUD_MS)
-      if (cloud) { this.confirmOverwrite(pseudo, key, cloud); return }
-      this.startFresh(pseudo, key)
-    } catch (e) {
-      // hors réseau : on ne bloque pas la création, la synchro suivra
-      logEvent('warn', 'cloud', `vérification impossible : ${e instanceof Error ? e.message : String(e)}`)
-      this.say('Hors connexion — partie locale, synchronisée plus tard.', '#ffcc80')
-      this.startFresh(pseudo, key)
+    const rech = await chercherAuCloud(key)
+    const quoi = decideNouvelle(rech)
+    if (quoi === 'confirmer-ecrasement') { this.confirmOverwrite(pseudo, key, (rech as { save: StampedSave }).save); return }
+    // ⚠️ ON NE CRÉE PAS UNE PARTIE NEUVE SUR UNE VÉRIFICATION QUI A ÉCHOUÉ. L'ancien code démarrait
+    // quand même (« hors connexion, la synchro suivra ») : la partie neuve écrasait ensuite, à la
+    // première synchronisation, une sauvegarde distante qu'on n'avait jamais réussi à lire. C'est
+    // précisément par là qu'un personnage se perd.
+    if (quoi === 'reessayer') {
+      const raison = rech.etat === 'echec' ? rech.raison : 'inconnue'
+      logEvent('warn', 'cloud', `vérification impossible : ${raison}`)
+      this.offrirNouvelEssai(pseudo, raison, () => this.newGame())
+      return
     }
+    this.startFresh(pseudo, key)
   }
 
   // Panneau de confirmation générique : un titre, un corps, et deux à trois choix.

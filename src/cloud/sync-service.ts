@@ -8,7 +8,7 @@
 
 import { decideSync, type SyncAction } from '../core/sync'
 import { loadStamped, save, onSaved, type StampedSave } from '../core/save'
-import { pull, push } from './cloud-save'
+import { chercher, push } from './cloud-save'
 import { publish } from './leaderboard'
 import { BUILD } from '../core/build'
 import type { PlayerState } from '../core/player-state'
@@ -46,7 +46,11 @@ export interface SyncOutcome {
 // c'est à l'interface de faire trancher le joueur, jamais à ce module de deviner.
 export async function syncNow(key: string): Promise<SyncOutcome> {
   const local = loadStamped()
-  const cloud = await pull(key)
+  const r = await chercher(key)
+  // ⚠️ ON N'ÉCRIT RIEN QUAND LA LECTURE A ÉCHOUÉ. Un échec rendu comme « pas de sauvegarde cloud » faisait
+  // décider « pousser-le-local » : la synchronisation écrasait alors la partie distante par l'état local.
+  if (r.etat === 'echec') return { action: 'impossible', local, cloud: null }
+  const cloud = r.etat === 'trouve' ? r.save : null
   const action = decideSync(local, cloud, readLastSyncedAt())
 
   switch (action) {
@@ -61,6 +65,8 @@ export async function syncNow(key: string): Promise<SyncOutcome> {
       // les deux côtés portent le même état : on note juste le point de synchro
       if (local) writeLastSyncedAt(local.savedAt)
       break
+    case 'impossible':
+      break // rien à faire : on ne touche à aucun des deux côtés
     case 'demander':
       break // décision rendue à l'appelant
   }

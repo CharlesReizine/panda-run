@@ -9,7 +9,8 @@
     "test": "vitest run",
     "emulator": "node scripts/emulator.mjs",
     "deploy": "pnpm build && npx -y firebase-tools@latest deploy --only hosting --project panda-run-reizine",
-    "deploy:rules": "npx -y firebase-tools@latest deploy --only firestore:rules --project panda-run-reizine"
+    "deploy:rules": "npx -y firebase-tools@latest deploy --only firestore:rules --project panda-run-reizine",
+    "verif": "tsc --noEmit && vitest run && pnpm build && node scripts/smoke-boot.mjs && node scripts/smoke-sauvegarde.mjs && node scripts/smoke-ecrans.mjs && node scripts/smoke-pierre.mjs"
   },
   "dependencies": {
     "firebase": "^12.16.0",
