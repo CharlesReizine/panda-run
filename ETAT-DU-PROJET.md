@@ -69,9 +69,12 @@ Ceux qui ont coûté du temps, dans l'ordre où ils mordent.
 **`buildLevelFromModules` est PUR, `planModules` NON.** Le second consulte un compteur global (« le motif
 le moins servi d'abord »). Graver une graine ne reproduit donc rien : on grave le **plan de modules**.
 
-**Le `switch` de `buildModule` contient 56 `case` en double.** Le premier gagne ; ~1000 lignes sont mortes.
-Avant d'ajouter un motif : `grep -n "case '<kind>'"` doit renvoyer **une** ligne. Cinq copies divergent, et
-le correctif « couloir-large » n'a jamais tourné. Voir la dette plus bas.
+**Le `switch` de `buildModule` A ÉTÉ DÉDOUBLONNÉ (R346) — et le piège méritait son passage ici.** Il
+contenait 56 `case` en double, ~1000 lignes mortes : le premier gagne, donc un correctif écrit dans la
+seconde copie ne tourne JAMAIS. C'est arrivé (« couloir-large » n'a jamais tourné) et cinq copies avaient
+divergé. Le bloc n'était PAS supprimable en entier : 15 décors n'existaient QUE dans la seconde moitié.
+Supprimé décor par décor, et prouvé sans effet (géométrie des 58 terrains identique à l'octet).
+`tests/data/pas-de-decor-en-double.test.ts` lit désormais le fichier source et tombe si ça revient.
 
 **Le dessus d'une dalle de roche n'est compris que par `strictReach`.** `unreachablePlatforms` et
 `deadEndSurfaces` ne raisonnent que sur les *plateformes*. Un toit de grotte doit donc être une plateforme
