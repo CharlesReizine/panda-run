@@ -40,7 +40,19 @@ export const HUD_LEFT = {
   // Le centre est le SEUL espace libre de la rangée haute : la colonne gauche porte la vie et l'XP, la
   // droite le son, la pause et les fioles. On le déclare ici pour que le test de non-recouvrement le
   // couvre comme les autres — c'est précisément ce fichier qui existe pour ça.
-  questTracker: { x: 320, y: 4, w: 320, h: 34 } as HudRect,
+  //
+  // ⚠️ IL COMMENCE SOUS LE NOM DU TERRAIN, ET C'EST UNE COLLISION CORRIGÉE. `LevelScene` écrit le nom du
+  // terrain au CENTRE, en (480, 8) : le bandeau, posé à y = 4, lui passait dessus. Ça ne se voyait pas
+  // tant qu'il ne s'affichait qu'avec une quête en cours ; depuis qu'il est PERMANENT (état passif
+  // « Voir les quêtes »), il recouvrait le nom en permanence — « "voir quête" ça s'écrit au-dessus du
+  // nom du terrain, donc nul ». Le nom occupe la bande 8 → 26 ; le bandeau commence à 30.
+  //
+  // ⚠️ CETTE ZONE EST LA SEULE DU HUD À CROISER UN OBJET QUI N'EST PAS DÉCLARÉ ICI. Le nom du terrain
+  // appartient à `LevelScene`, pas à l'interface, donc le test de non-recouvrement ne le voit pas. On le
+  // déclare donc, pour que le test couvre enfin les deux.
+  questTracker: { x: 320, y: 30, w: 320, h: 34 } as HudRect,
+  /** Nom du terrain, écrit par LevelScene en (480, 8) — déclaré ici pour entrer dans le test. */
+  nomTerrain: { x: 380, y: 6, w: 200, h: 22 } as HudRect,
 }
 
 export const centerOf = (r: HudRect): { x: number; y: number } => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 })

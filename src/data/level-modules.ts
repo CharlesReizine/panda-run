@@ -735,8 +735,18 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.trampolines.push({ x: Math.floor(w * 0.3), alt: alt + 1 })
       // corniche d'arrivée, large : on retombe dessus après un rebond, pas au pixel près
       p.platforms.push({ x: Math.floor(w * 0.5), alt: haut, w: w - Math.floor(w * 0.5) })
-      // palier de secours à mi-hauteur : rater le rebond ne renvoie pas au début du module
-      p.platforms.push({ x: Math.floor(w * 0.62), alt: alt + 4, w: 4 })
+      // ─── PALIER DE SECOURS : À CÔTÉ DE LA CORNICHE, PAS DESSOUS ──────────────────────────────
+      //
+      // ⚠️ IL ÉTAIT POSÉ SOUS LA CORNICHE D'ARRIVÉE, DONC INATTEIGNABLE. À `0,62 w` il tombait dans la
+      // portée de la corniche (`0,5 w` → `w`), quatre rangées plus bas : par le haut on ne traverse pas
+      // une corniche de terre, par les côtés les socles de pierre ferment le passage. « Rater le rebond
+      // ne renvoie pas au début du module » était donc faux — le palier ne servait à rien.
+      //
+      // Pire, l'espace entre les deux formait une poche close que le comblement d'assemblage remplissait
+      // de roche : à l'écran, une bande d'herbe noyée dans la pierre (« y a de la terre qui se superpose
+      // à de la pierre, c'est nul »). On le pose donc AVANT la corniche, où l'on retombe vraiment quand
+      // le rebond est trop court.
+      p.platforms.push({ x: Math.max(0, Math.floor(w * 0.5) - 5), alt: alt + 4, w: 4 })
       placeBirds(haut + 3)
       p.exitAlt = haut
       break
@@ -1592,35 +1602,46 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const PAN = 3
       const QUEUE = 3
       const xE = rampU + 2
-      const midU = Math.max(4, w - xE - 2 * PAN - QUEUE)
-      const xS = xE + PAN + midU
+      // ─── TROIS TERRES AUTOUR DE L'ÉCHELLE ─────────────────────────────────────────────────────
+      //
+      // Retour du joueur : « le truc que tu as fait avec de la terre au-dessus de l'échelle ne suffit
+      // pas à me laisser passer, je bute sur la case d'à côté. Mets 3 terres dans ce cas : à gauche, au
+      // dessus, et à droite de l'échelle. » Il a raison, et la raison est mécanique : on sort d'une
+      // échelle en se DÉCALANT, pas en montant tout droit. Une seule tuile de terre au sommet donne un
+      // perchoir d'une case, encadré par le pan fragile — et le pan, on ne peut pas le casser d'ici.
+      // Le puits s'ouvre donc UNE COLONNE PLUS LOIN : la terre couvre xLad-1, xLad et xLad+1.
+      const xLad = xE - 1        // l'échelle est dans le chemin, pas dans le pan
+      const xPan = xE + 1        // le pan fragile ne commence qu'après la terre de droite
+      const midU = Math.max(4, w - xPan - 2 * PAN - QUEUE)
+      const xS = xPan + PAN + midU
       const finPans = Math.min(w - QUEUE, xS + PAN)
       // ── CHEMIN DE SURFACE : trois segments, deux pans fragiles entre eux
       p.platforms.push(...ramp(0, rampU, entryAlt, altU))
-      p.platforms.push({ x: rampU, alt: altU, w: xE - rampU })
-      p.platforms.push({ x: xE + PAN, alt: altU, w: xS - (xE + PAN) })
+      p.platforms.push({ x: rampU, alt: altU, w: xPan - rampU })
+      p.platforms.push({ x: xPan + PAN, alt: altU, w: xS - (xPan + PAN) })
       p.platforms.push({ x: finPans, alt: altU, w: w - finPans })
-      p.breakables.push({ x: xE, altBot: altU, altTop: altU, w: PAN })
+      p.breakables.push({ x: xPan, altBot: altU, altTop: altU, w: PAN })
       p.breakables.push({ x: xS, altBot: altU, altTop: altU, w: finPans - xS })
       // ── LE U : deux puits ouverts du sol au chemin, reliés par un couloir bas coiffé de roche. Le sol du
       // monde fait le plancher — une plateforme de plus empilerait un étage marchable pour rien (même
       // leçon que sur grotte-scellee).
       if (altU - 1 >= 1) {
-        // ⚠️ LE SOCLE S'ARRÊTE UNE COLONNE AVANT LE PUITS : c'est là que descend l'échelle de remontée.
-        if (xE - rampU - 1 > 0) p.rocks.push({ x: rampU, altBot: 1, altTop: altU - 1, w: xE - rampU - 1 })
+        // ⚠️ LE SOCLE S'ARRÊTE AVANT LE PUITS : les deux colonnes xLad et xLad+1 sont le puits d'entrée,
+        // et couler l'échelle dans la pierre la rendrait inutile.
+        if (xLad - rampU > 0) p.rocks.push({ x: rampU, altBot: 1, altTop: altU - 1, w: xLad - rampU })
         if (w - finPans > 0) p.rocks.push({ x: finPans, altBot: 1, altTop: altU - 1, w: w - finPans })
         // PLAFOND du couloir : c'est lui qui fait le U. Les deux puits restent ouverts de bout en bout, le
         // milieu est coiffé, donc on DOIT marcher au fond pour passer d'un puits à l'autre.
-        p.rocks.push({ x: xE + PAN, altBot: CAVE_CLEARANCE, altTop: altU - 1, w: xS - (xE + PAN), solid: true })
+        p.rocks.push({ x: xPan + PAN, altBot: CAVE_CLEARANCE, altTop: altU - 1, w: xS - (xPan + PAN), solid: true })
       }
       // ── RÉCOMPENSE au fond du couloir, et son gardien
       // ⚠️ COFFRE SANS ALTITUDE, ET C'EST LA CONVENTION « POSÉ AU FOND ». Avec une altitude, le validateur
       // exige une PLATEFORME pile dessous — or le plancher du couloir est le sol du MONDE, qui n'en est
       // pas une. Sans altitude, il est simplement posé au sol, et `unreachableChests` ne lui reproche plus
       // que d'être au-dessus d'un trou mortel (il ne l'est pas).
-      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: xE + PAN + Math.floor(midU / 2) })
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: xPan + PAN + Math.floor(midU / 2) })
       const gardienU = groundMobs.find((id) => !MONSTERS[id]?.aquatic && !MONSTERS[id]?.aerial)
-      if (gardienU) p.spawns.push({ monsterId: gardienU, x: xE + PAN + 1, alt: 0 })
+      if (gardienU) p.spawns.push({ monsterId: gardienU, x: xPan + PAN + 1, alt: 0 })
       // ── ÉCHELLE DE REMONTÉE dans le puits d'ENTRÉE.
       //
       // ⚠️ ELLE MONTAIT DANS LA COLONNE DU PAN FRAGILE, ET ÇA RENDAIT LA SORTIE IMPOSSIBLE. Retour du
@@ -1632,7 +1653,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // L'échelle se plante donc une colonne AVANT le pan, dans le dernier carreau du chemin : ce
       // carreau est du sol normal, il fait le palier, et le socle de pierre lui laisse la place (cf.
       // ci-dessus). Le pan fragile garde sa largeur — il n'a jamais eu besoin de porter l'échelle.
-      p.ladders.push({ x: xE - 1, topAlt: altU + 2, h: altU + 2 })
+      p.ladders.push({ x: xLad, topAlt: altU + 2, h: altU + 2 })
       p.exitAlt = altU
       break
     }
@@ -3384,15 +3405,24 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   //
   // Post-traitement d'assemblage, donc les plans gravés restent valables : c'est la géométrie produite
   // qu'on répare, pas le plan de modules. `tests/data/poches-closes.test.ts` en est le garde-fou.
-  for (const poche of sealedVoids({
+  const geoPoches = {
     id: opts.id, name: opts.name, biome: opts.biome, widthTiles: totalWidth, heightTiles,
-    platforms, spawns: [], gaps, rockBands, ...(breakables.length ? { breakables } : {}),
-  })) {
+    platforms, spawns: [], gaps, rockBands, ladders, ...(breakables.length ? { breakables } : {}),
+  }
+  for (const poche of sealedVoids(geoPoches)) {
+    const l = geoPoches
     // ⚠️ ON NE COMBLE JAMAIS UNE POCHE QUI CONTIENT UNE ÉCHELLE. Une échelle enfermée dans la pierre
     // est le défaut qu'on vient de corriger ailleurs (cf. laddersInRock) : la couler dans du roc le
     // rendrait invisible au lieu de le supprimer. On laisse la poche telle quelle, et le test tombe.
     if (ladders.some((l) => l.x >= poche.x && l.x < poche.x + poche.w
       && l.y < poche.y + poche.h && l.y + l.h > poche.y)) continue
+    // ⚠️ NI UNE POCHE QUI REPOSE SUR UNE PLATEFORME. Le comblement la coulerait dans la pierre : à
+    // l'écran, une bande d'herbe prise en sandwich au milieu d'un bloc de roche — « y a de la terre qui
+    // se superpose à de la pierre, c'est nul » (25 cas, presque tous sur le palier de secours du
+    // trampoline). Une plateforme est faite pour qu'on se pose dessus ; l'enterrer pour masquer un vide
+    // échange un défaut contre un pire.
+    if (l.platforms.some((p) => p.y === poche.y + poche.h
+      && p.x < poche.x + poche.w && p.x + p.w > poche.x)) continue
     // ⚠️ SANS `solid`, ET C'EST DÉLIBÉRÉ. Le comblement remplit un espace où le panda ne peut pas se
     // rendre : la collision n'y change rien pour lui. En revanche, le déclarer SOLIDE le ferait entrer
     // dans les validateurs qui raisonnent sur les plafonds d'un CHEMIN — `caveCeilingClearance` a

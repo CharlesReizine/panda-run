@@ -10,6 +10,7 @@ import { MONSTERS } from '../data/monsters'
 import type { MonsterDef } from '../core/types'
 import { PROPS, estCoffre } from '../data/props'
 import { spawnFeetRow } from '../core/level-validator'
+import { HUD_LEFT } from './hud-layout'
 import { MATERIALS } from '../data/materials'
 import { ITEMS, rarityColor } from '../data/items'
 import { physicalDamage, inMeleeReach } from '../core/combat'
@@ -1315,7 +1316,11 @@ export class LevelScene extends Phaser.Scene {
     // échelle) ; ESPACE = attaque ; MAJ = dash.
     this.wasd = this.input.keyboard!.addKeys('W,A,S,D,Z,Q') as Record<string, Phaser.Input.Keyboard.Key>
 
-    this.add.text(CX, 8, this.levelDef.name, { fontSize: '15px', color: '#ffffff' }).setOrigin(0.5, 0).setScrollFactor(0)
+    // ⚠️ LA POSITION VIENT DE `hud-layout`, PAS D'UN LITTÉRAL. Le nom du terrain est le seul texte de
+    // l'interface écrit par la scène de jeu : tant qu'il vivait ici en dur, le test de non-recouvrement
+    // du HUD ne le voyait pas — et le bandeau de quête, devenu permanent, s'est posé dessus.
+    this.add.text(CX, HUD_LEFT.nomTerrain.y + 2, this.levelDef.name, { fontSize: '15px', color: '#ffffff' })
+      .setOrigin(0.5, 0).setScrollFactor(0)
 
     // MODE TEST : bandeau « invincible » + bouton retour au sélecteur (balade libre pour inspecter).
     if (this.testMode) {
