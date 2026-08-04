@@ -170,6 +170,11 @@ export interface MonsterDef {
   // aquatiques (ni volants) qui se retrouvent immergés dans une eau marine profonde SE NOIENT
   // (dégâts périodiques jusqu'à la mort, cf. Enemy.checkDrown). Absent → terrestre, se noie.
   aquatic?: boolean
+  // AMPHIBIE : aquatique (donc il ne se noie pas) MAIS il vit aussi à terre, et c'est son habitat
+  // PRINCIPAL. Sans cette distinction, le filet d'assemblage qui remet les poissons dans l'eau
+  // traînerait le crabe de plage à la mer — alors que son lore le dit « sentinelle sur le sable ».
+  // `aquatic` dit « ne se noie pas », pas « doit être immergé » : c'est ce flag qui fait la différence.
+  amphibie?: boolean
   // GABARIT physique du monstre : 'grand' = rendu et hitbox agrandis (GRAND_SCALE dans Enemy),
   // silhouette imposante (ours, golem). Absent → 'normal' (rétrocompat exacte).
   // GABARIT physique : 'grand' = rendu+hitbox agrandis (ours, golem) ; 'petit' = rendu+hitbox

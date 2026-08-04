@@ -372,11 +372,17 @@ function ramp(x0: number, w: number, fromAlt: number, toAlt: number, keepGround 
   // [x0, x0+w) — jusqu'à 30 tuiles — et empiéter sur le module suivant.
   // ⚠️ EN MONTÉE, NE PAS BORNER : raidir une montée la rend infranchissable (mesuré : plaine-7 n'a plus
   // aucune graine valide en 30 passes, 56 plateformes injoignables).
-  const count = diff < 0 ? Math.max(1, Math.min(countVoulu, Math.floor(w / 3))) : countVoulu
+  // ⚠️ EN DESCENTE ON BORNE PAR w/2, PAS w/3 — ET C'EST UN CORRECTIF DE CORRECTIF. Borner par w/3 laissait
+  // trop peu de paliers : les marches devenaient des à-pics (mesuré 10 rangées d'un coup entre deux
+  // corniches collées sur jungle-1, retour joueur « en bas ça vole un peu »). Or un palier de DESCENTE se
+  // reçoit à 2 tuiles — on TOMBE dessus, on ne le vise pas au saut. Deux tuiles par palier, c'est deux
+  // fois plus de paliers dans la même portée, donc des marches deux fois plus douces.
+  const PLANCHER = 2
+  const count = diff < 0 ? Math.max(1, Math.min(countVoulu, Math.floor(w / PLANCHER))) : countVoulu
   const step = diff / count
-  // Plancher de largeur : 3 tuiles pour se recevoir confortablement, mais en MONTÉE serrée on préfère
-  // des paliers de 2 à un débordement — resserrer garde le pas de montée franchissable, déborder non.
-  const segW = Math.max(count * 3 > w ? 2 : 3, Math.floor(w / count))
+  // Plancher de largeur : 3 tuiles pour se recevoir confortablement, mais quand la portée est serrée on
+  // préfère des paliers de 2 à un débordement — resserrer reste franchissable, déborder ne l'est jamais.
+  const segW = Math.max(count * 3 > w ? PLANCHER : 3, Math.floor(w / count))
   const out: { x: number; alt: number; w: number }[] = []
   let x = x0
   for (let i = 0; i < count; i++) {
@@ -542,8 +548,11 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.platforms.push({ x: 0, alt, w: bw + 4 })
       p.trampolines.push({ x: bw + 1, alt: alt + 1 })
       for (let gx = bw + 4; gx < w - bw; gx += 3) p.gaps.push({ x: gx, w: Math.min(3, w - bw - gx) })
-      p.platforms.push({ x: bw + 6, alt: haut, w: Math.max(5, w - bw - bw - 6) })
-      p.platforms.push({ x: w - bw, alt: haut, w: bw })
+      // ⚠️ UNE SEULE PLATEFORME, PAS DEUX. La plateforme haute et la corniche de sortie étaient à la MÊME
+      // altitude, et le plancher `max(5, …)` de la première la faisait mordre sur la seconde d'une tuile
+      // dès la largeur minimale — c'était la dernière superposition du jeu (vue sur plage-3). Deux
+      // surfaces contiguës de même altitude n'ont aucune raison d'être deux objets.
+      p.platforms.push({ x: bw + 6, alt: haut, w: w - (bw + 6) })
       placeBirds(haut + 3)
       p.exitAlt = haut
       break
@@ -568,8 +577,10 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // échelle posée sur la corniche, montant vers le palier de sortie (2 rangées sous son sommet)
       const h = Math.max(MIN_LADDER_TILES, Math.min(MAX_LADDER_TILES, 7))
       p.ladders.push({ x: percheX + 1, topAlt: percheAlt + h, h })
-      p.platforms.push({ x: percheX + 2, alt: percheAlt + h - 2, w: 5 })
-      p.platforms.push({ x: w - bw, alt: percheAlt + h - 2, w: bw })
+      // le palier de l'échelle VA JUSQU'AU BORD DROIT : c'est lui la sortie. En deux morceaux (palier de 5
+      // + corniche de 3 à la même altitude) ils se recouvraient — c'était la dernière superposition du jeu,
+      // vue sur plage-3 (`A x45+5 B x49+3`).
+      p.platforms.push({ x: percheX + 2, alt: percheAlt + h - 2, w: w - (percheX + 2) })
       placeBirds(percheAlt + h + 2)
       p.exitAlt = percheAlt + h - 2
       break
@@ -600,13 +611,15 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // et deux coffres perdus sur foret-6. Le rideau grimpe donc vers une corniche à TRÉSOR, en cul-de-sac,
       // et la route continue au niveau d'entrée. Le trampoline sert à franchir le vide, pas à sortir.
       const suiteX = casX + 4
-      p.platforms.push({ x: suiteX, alt, w: Math.max(4, w - bw - suiteX) })
+      // même correction que `trampoline-vide` : la suite du chemin et la corniche de sortie sont à la MÊME
+      // altitude, et le plancher `max(4, …)` faisait mordre l'une sur l'autre aux largeurs serrées.
+      p.platforms.push({ x: suiteX, alt, w: w - suiteX })
       // ⚠️ LA CORNICHE EST À CÔTÉ DE LA COLONNE, PAS DESSUS. Posée au-dessus du rideau (même x), le
       // validateur ne la reconnaissait pas comme « haut de cascade » et la déclarait injoignable : son
       // modèle relie le PIED au sommet ADJACENT, pas à ce qui coiffe la colonne.
       p.platforms.push({ x: casX + 4, alt: top, w: 5 }) // corniche du haut : récompense de la remontée
       if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: casX + 6, alt: top + 1 })
-      p.platforms.push({ x: w - bw, alt, w: bw })
+      // (plus de corniche de sortie séparée : la plateforme ci-dessus va désormais jusqu'au bord droit)
       placeBirds(top + 2)
       p.exitAlt = alt
       break
@@ -1016,7 +1029,11 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
         p.spikes.push({ x: x + 2, w: 1, alt })
         x += 4
       }
-      p.platforms.push({ x: w - 3, alt, w: 3 }) // berge de sortie
+      // Berge de sortie : elle reprend PILE là où la série d'atterrissages s'arrête, et court jusqu'au bord
+      // droit. La poser à `w - 3` laissait un vide de 4 à 5 tuiles entre le dernier atterrissage et elle
+      // selon la largeur — le motif devenait intirable et DISPARAISSAIT du jeu (couverture-motifs).
+      // La boucle garantit `x ≤ w - 3`, donc la berge fait toujours au moins 3 tuiles.
+      p.platforms.push({ x, alt, w: w - x })
       p.exitAlt = alt
       break
     }
@@ -1186,10 +1203,24 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     case 'grotte-scellee': {
       // Un puits ouvert perce le chemin ; au fond, un mur de pierre fissurée bouche une cavité. On
       // descend, on tape, on entre, on prend le coffre, on remonte par l'échelle du puits.
-      const alt = Math.max(entryAlt, 10) // il faut de la hauteur SOUS le chemin pour loger la cavité
+      // ⚠️ LA HAUTEUR DU CHEMIN EST PLAFONNÉE PAR CE QU'UNE ÉCHELLE PEUT REMONTER. Il faut de la hauteur
+      // SOUS le chemin pour loger la cavité, mais on doit aussi pouvoir ressortir du puits : la remontée
+      // est une échelle, son sommet est à `alt + 2` (règle du décalage pieds), donc `alt + 2` doit tenir
+      // dans MAX_LADDER_TILES. Sans ce plafond, la remontée n'atteignait pas le chemin et son palier
+      // allait se coincer SOUS la dalle de plafond de la cavité — « je peux marcher du sable même s'il y
+      // a de la pierre dessus », retour joueur, vu sur plaine-3 et jungle-3.
+      const alt = Math.min(MAX_LADDER_TILES - 2, Math.max(entryAlt, 10))
       const rampW = Math.min(8, Math.max(2, (alt - entryAlt) * 2))
       const cavW = Math.min(8, Math.max(5, Math.floor(w * 0.32)))
-      const puitsW = 2
+      // ⚠️ TROIS COLONNES, ET L'ÉCHELLE CONTRE LA CAVITÉ : ON DESCEND EN TOMBANT, PAS EN GRIMPANT.
+      // Demande du joueur : « c'est bizarre de descendre par l'échelle, je voudrais un trou là pour
+      // descendre ». Le puits était large de 2 avec l'échelle sur la colonne D'ARRIVÉE : en marchant on
+      // l'agrippait avant d'avoir pu tomber. Deux colonnes ouvertes devant, l'échelle au fond : on tombe
+      // dedans, et on ne remonte QUE par elle — la profondeur (alt ≥ 10 rangées) dépasse de loin les 4
+      // rangées d'un saut, ce que le jeu formalise déjà par MIN_LADDER_TILES (« deux fois la hauteur de
+      // saut »). Le joueur ne subit aucun dégât de chute, tomber n'est donc pas une punition. Et 3 tuiles
+      // restent franchissables au saut pour qui veut passer sans descendre.
+      const puitsW = 3
       // ⚠️ LE SOL DE LA CAVITÉ EST CELUI DU MONDE, pas une plateforme posée juste au-dessus. Une
       // plateforme à l'altitude 1 ajoutait un QUATRIÈME étage marchable dans la colonne (sol du monde,
       // sol de la cavité, toit, chemin) là où la règle anti-empilement en tolère trois — le motif était
@@ -1234,8 +1265,11 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.platforms.push({ x: finCav - 3, alt: solCav + 1, w: 3 })
       p.props.push({ kind: 'coffre', x: finCav - 2, alt: solCav + 2 })
       if (groundMobs.length) p.spawns.push({ monsterId: groundMobs[0]!, x: finCav - 5, alt: solCav })
-      // ÉCHELLE DE REMONTÉE dans le puits
-      poseLadderOn(p, puitsX, solCav, puitsX - 1, Math.max(MIN_LADDER_TILES, Math.min(MAX_LADDER_TILES, alt - solCav)))
+      // ÉCHELLE DE REMONTÉE dans le puits — SANS palier propre. `poseLadderOn` en aurait ajouté un à
+      // `alt - 2`, large de 4, qui débordait vers la cavité et se retrouvait SOUS la dalle de plafond.
+      // Le chemin fait très bien le palier : il finit PILE au bord du puits (x = puitsX), donc le
+      // validateur le reconnaît comme sommet d'échelle (l.x ≤ p.x + p.w + 1, décalage de 2 rangées).
+      p.ladders.push({ x: cavX - 1, topAlt: alt + 2, h: alt + 2 })
       p.exitAlt = alt
       break
     }
@@ -1642,7 +1676,9 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.platforms.push({ x: 0, alt: entryAlt, w: bank }) // berge d'entrée
       p.platforms.push(...ramp(bank, upW, entryAlt, palierAlt)) // rampe d'accès au sommet de l'échelle
       const ladX = bank + upW + 1
-      p.platforms.push({ x: ladX - 2, alt: palierAlt, w: 4 }) // palier haut (on descend d'ici)
+      // palier haut (on descend d'ici) — posé PILE au bout de la rampe. À `ladX - 2` il chevauchait d'une
+      // tuile le dernier palier de la rampe, à la même altitude : deux textures l'une sur l'autre.
+      p.platforms.push({ x: bank + upW, alt: palierAlt, w: 4 })
       p.ladders.push({ x: ladX, topAlt, h })
       p.platforms.push({ x: ladX - 1, alt: footAlt, w: 3 }) // pied de l'échelle (près du sol)
       const gapX = ladX + 2
@@ -1777,7 +1813,15 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // dépendent d'aucun pool, et sur la VRAIE route du motif un piège a du sens : le raccourci se paie.
       p.spikes.push({ x: zoneX + moitie + 2, w: 2, alt: T + 1 })
 
-      p.platforms.push({ x: w - bw, alt: T + 1, w: bw })
+      // ⚠️ LA CORNICHE DE SORTIE PART DU BOUT DU TUNNEL, PAS DU BORD DU MODULE. Fixée à `w - bw`, elle
+      // s'éloignait du tunnel à mesure qu'on élargissait le module : 6 tuiles de vide à la MÊME altitude
+      // aux grandes largeurs, donc une sortie injoignable (mesuré sur cascade-deux-passages w=30 et sa
+      // variante -g dès w=25). On ne peut pas simplement prolonger le tunnel : dans la variante `-g` le
+      // rideau se trouve ENTRE le tunnel et la sortie, et une plateforme posée dessus le coifferait — le
+      // validateur ne reconnaîtrait plus son sommet. On part donc du plus à droite des deux : bout du
+      // tunnel, ou bout du rideau.
+      const sortieX = Math.max(zoneX + zoneW, casX + 2)
+      p.platforms.push({ x: sortieX, alt: T + 1, w: w - sortieX })
       placeBirds(T + 4)
       p.exitAlt = T + 1
       break
@@ -2334,7 +2378,11 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
         p.spikes.push({ x: x + 2, w: 1, alt })
         x += 4
       }
-      p.platforms.push({ x: w - 3, alt, w: 3 }) // berge de sortie
+      // Berge de sortie : elle reprend PILE là où la série d'atterrissages s'arrête, et court jusqu'au bord
+      // droit. La poser à `w - 3` laissait un vide de 4 à 5 tuiles entre le dernier atterrissage et elle
+      // selon la largeur — le motif devenait intirable et DISPARAISSAIT du jeu (couverture-motifs).
+      // La boucle garantit `x ≤ w - 3`, donc la berge fait toujours au moins 3 tuiles.
+      p.platforms.push({ x, alt, w: w - x })
       p.exitAlt = alt
       break
     }
@@ -2823,7 +2871,9 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.platforms.push({ x: 0, alt: entryAlt, w: bank }) // berge d'entrée
       p.platforms.push(...ramp(bank, upW, entryAlt, palierAlt)) // rampe d'accès au sommet de l'échelle
       const ladX = bank + upW + 1
-      p.platforms.push({ x: ladX - 2, alt: palierAlt, w: 4 }) // palier haut (on descend d'ici)
+      // palier haut (on descend d'ici) — posé PILE au bout de la rampe. À `ladX - 2` il chevauchait d'une
+      // tuile le dernier palier de la rampe, à la même altitude : deux textures l'une sur l'autre.
+      p.platforms.push({ x: bank + upW, alt: palierAlt, w: 4 })
       p.ladders.push({ x: ladX, topAlt, h })
       p.platforms.push({ x: ladX - 1, alt: footAlt, w: 3 }) // pied de l'échelle (près du sol)
       const gapX = ladX + 2
@@ -3917,6 +3967,53 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
       if (!moved) sp.monsterId = ''
     }
     for (let i = safeSpawns.length - 1; i >= 0; i--) if (!safeSpawns[i]!.monsterId) safeSpawns.splice(i, 1)
+    safeSpawns.sort((a, b) => a.x - b.x)
+  }
+
+  // ── UN POISSON EST DANS L'EAU (dernier filet) ─────────────────────────────────────────────────
+  // Retour joueur : « il se passe un truc bizarre dans Ravin, j'ai trois poissons sur du sol empilés ».
+  // Mesuré : 182 mobs aquatiques posés HORS de toute cuve, dont requin + méduse + piranha sur la MÊME
+  // tuile de berge à deux pas du bassin (desert-5 x176, bassin à x178).
+  //
+  // Deux causes se cumulaient. (1) Les motifs « plan d'eau » reçoivent la liste aquatique dans leur slot
+  // `ground` (cf. `o.aquatic` dans planModules) : le placeur générique du motif les pose donc sur la
+  // SURFACE marchable — la berge — au lieu du fond. (2) Les aquatiques sont volontairement EXCLUS du
+  // déclustering (« bancs en cuve », sinon les plans d'eau se videraient), donc rien ne les sépare et ils
+  // s'empilent au même x.
+  // On les REPLACE dans la cuve la plus proche, RÉPARTIS sur sa largeur, et on retire ceux qui n'ont
+  // aucune eau à portée : un requin sur le sable n'est pas une menace, c'est un bug qui se voit.
+  // ⚠️ LES AMPHIBIES SONT ÉPARGNÉS. `aquatic` veut dire « ne se noie pas », pas « doit être immergé » :
+  // le crabe de plage est aquatique ET c'est une sentinelle sur le sable. Seul `amphibie` fait la part.
+  const nageur = (id: string) => !!MONSTERS[id]?.aquatic && !MONSTERS[id]?.amphibie
+  const cuves = hazards.filter((h) => h.kind === 'water' && h.water !== 'lave' && h.w > 0)
+  if (cuves.length) {
+    // 1) chaque nageur rejoint la cuve la plus proche du point où le motif voulait le poser
+    for (const sp of safeSpawns) {
+      if (!nageur(sp.monsterId)) continue
+      if (cuves.some((h) => sp.x >= h.x && sp.x < h.x + h.w)) continue
+      let best = -1, bestD = Infinity
+      cuves.forEach((h, i) => {
+        const d = sp.x < h.x ? h.x - sp.x : sp.x - (h.x + h.w - 1)
+        if (d < bestD) { bestD = d; best = i }
+      })
+      if (best < 0 || bestD > 24) { sp.monsterId = '' ; continue } // aucune eau à portée : on retire
+      sp.x = cuves[best]!.x
+    }
+    for (let i = safeSpawns.length - 1; i >= 0; i--) if (!safeSpawns[i]!.monsterId) safeSpawns.splice(i, 1)
+    // 2) RÉPARTITION DANS LA CUVE, sur TOUS ses nageurs et pas seulement ceux qu'on vient de déplacer :
+    // les piles existaient AUSSI dans l'eau (trois espèces sur la même tuile), et le déclustering ne
+    // passe volontairement pas par là. Un banc s'étale, il ne s'empile pas.
+    cuves.forEach((h) => {
+      const dedans = safeSpawns.filter((s) => nageur(s.monsterId) && s.x >= h.x && s.x < h.x + h.w)
+      // Pas d'au moins 1 colonne, calé sur le BORD de la cuve : tant qu'elle a autant de colonnes que de
+      // nageurs, chacun a la sienne. Une cuve plus étroite que son banc en empile fatalement quelques-uns
+      // (le test le tolère explicitement dans ce seul cas).
+      const pas = dedans.length && h.w >= dedans.length ? Math.floor(h.w / dedans.length) : 1
+      dedans.forEach((s, k) => {
+        s.x = h.x + Math.min(h.w - 1, pas * k)
+        delete s.y // sans y = au FOND, immergé : c'est la convention des menaces d'eau
+      })
+    })
     safeSpawns.sort((a, b) => a.x - b.x)
   }
 

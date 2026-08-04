@@ -28,18 +28,19 @@ const INVENTAIRE: Record<string, string> = {
   // `strictReach` qui modélise le rebond). Le défaut est dans le modèle de mesure, pas dans le motif.
   'trampoline-vide': 'atteignable au rebond, non simulé par computeReach',
   'trampoline-echelle': 'atteignable au rebond, non simulé par computeReach',
-  // Dette réelle, à corriger avec le prochain lot de génération (une correction de motif = une
-  // regravure) : une plateforme reste hors de portée aux grandes largeurs.
-  'cascade-deux-passages': '1 plateforme hors de portée à la largeur maximale',
-  'cascade-deux-passages-g': '1 plateforme hors de portée aux grandes largeurs',
+  // (les deux `cascade-deux-passages` ont été corrigés : leur corniche de sortie était fixée au bord du
+  // module et s'éloignait du tunnel à mesure qu'on l'élargissait — 6 tuiles de vide à la même altitude.)
 }
 
 const plateauNeutre = (w: number, extra: Partial<Module> = {}): Module => ({
   kind: 'plateau', widthRange: [w, w], fillBelow: 'sol', fillAbove: 'air', tags: [], ...extra,
 })
 
-/** Nombre de plateformes injoignables DANS le motif, planté seul entre deux plateaux. */
-function injoignables(kind: ModuleKind, w: number): number {
+const ov = (a: { x: number; w: number }, b: { x: number; w: number }) =>
+  Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
+
+/** Défauts du motif planté seul entre deux plateaux : injoignables, et surfaces qui se recouvrent. */
+function mesure(kind: ModuleKind, w: number): { injoignables: number; recouvrements: number } {
   const meta = CATALOG[kind]!
   const modules: Module[] = [
     plateauNeutre(20, { spawnHere: true, startAlt: 0 }),
@@ -48,22 +49,52 @@ function injoignables(kind: ModuleKind, w: number): number {
   ]
   const l = buildLevelFromModules(modules, { id: `isole-${kind}-${w}`, name: 'isolé', biome: 'plaine', seed: 'isolé' })
   // le motif occupe [20, 20+w) : la marge de bord gauche de l'assembleur vaut 2, plus 18 de plateau
-  return (unreachablePlatforms(l) as unknown as { x: number }[]).filter((p) => p.x >= 20 && p.x <= 20 + w).length
+  const dans = (p: { x: number }) => p.x >= 20 && p.x <= 20 + w
+  const injoignables = (unreachablePlatforms(l) as unknown as { x: number }[]).filter(dans).length
+  // DEUX SURFACES DE MÊME ALTITUDE QUI SE RECOUVRENT : c'est la faute qui produisait les superpositions
+  // visibles à l'écran, et elle vient presque toujours du même geste — une corniche de sortie posée au
+  // bord du module alors qu'une plateforme de même altitude court déjà jusque-là.
+  const plats = l.platforms.filter(dans)
+  let recouvrements = 0
+  for (let i = 0; i < plats.length; i++) for (let j = i + 1; j < plats.length; j++) {
+    if (plats[i]!.y === plats[j]!.y && ov(plats[i]!, plats[j]!) > 0) recouvrements++
+  }
+  return { injoignables, recouvrements }
 }
 
+// ⚠️ ON BALAYE TOUTES LES LARGEURS, PAS TROIS. La première version n'essayait que min / médiane / max, et
+// la dernière superposition du jeu (plage-3) est passée exactement par là : elle n'apparaissait qu'à une
+// largeur intermédiaire. Un motif est une famille de géométries, pas trois.
 const tousLesMotifs = (Object.keys(CATALOG) as ModuleKind[]).map((kind) => {
   const [wmin, wmax] = CATALOG[kind]!.width
-  const largeurs = [...new Set([wmin, Math.round((wmin + wmax) / 2), wmax])]
-  const fautes = largeurs.map((w) => ({ w, n: injoignables(kind, w) })).filter((r) => r.n > 0)
-  return { kind, fautes }
+  const fautes: { w: number; quoi: string }[] = []
+  const recouvre: { w: number; quoi: string }[] = []
+  for (let w = wmin; w <= wmax; w++) {
+    const { injoignables, recouvrements } = mesure(kind, w)
+    if (injoignables) fautes.push({ w, quoi: `${injoignables} injoignable(s)` })
+    if (recouvrements) recouvre.push({ w, quoi: `${recouvrements} recouvrement(s)` })
+  }
+  return { kind, fautes, recouvre }
 })
 
 describe('chaque motif se tient debout seul', () => {
   it('aucun motif n\'a de plateforme injoignable sans l\'aide d\'un voisin', () => {
     const fautifs = tousLesMotifs
       .filter((m) => m.fautes.length > 0 && !INVENTAIRE[m.kind])
-      .map((m) => `${m.kind} (${m.fautes.map((f) => `largeur ${f.w} → ${f.n} injoignable(s)`).join(', ')})`)
-    expect(fautifs, `motifs injoignables seuls :\n   ${fautifs.join('\n   ')}`).toEqual([])
+      .map((m) => `${m.kind} (${m.fautes.map((f) => `largeur ${f.w} → ${f.quoi}`).join(', ')})`)
+    expect(fautifs, `motifs fautifs seuls :\n   ${fautifs.join('\n   ')}`).toEqual([])
+  })
+
+  // ⚠️ L'INVENTAIRE N'EXCUSE QUE L'ATTEIGNABILITÉ, JAMAIS UN RECOUVREMENT — et cette distinction s'est
+  // payée. En excusant un motif EN ENTIER, l'inventaire cachait le recouvrement de `trampoline-echelle`
+  // (dont l'atteignabilité, elle, n'est pas mesurable ici faute de modèle du rebond) : c'est précisément
+  // la superposition qui restait dans le jeu. Une limite du modèle de MESURE ne dispense pas d'un défaut
+  // de GÉOMÉTRIE, qui se voit à l'œil nu.
+  it('aucun motif ne pose deux surfaces qui se recouvrent (aucune dérogation)', () => {
+    const fautifs = tousLesMotifs
+      .filter((m) => m.recouvre.length > 0)
+      .map((m) => `${m.kind} (${m.recouvre.map((f) => `largeur ${f.w} → ${f.quoi}`).join(', ')})`)
+    expect(fautifs, `motifs qui se recouvrent :\n   ${fautifs.join('\n   ')}`).toEqual([])
   })
 
   it('l\'inventaire ne contient que des motifs RÉELLEMENT encore fautifs', () => {

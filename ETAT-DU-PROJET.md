@@ -130,6 +130,12 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 ### Décisions de fond qui ne se rediscutent pas sans raison
 
+- **Un puits, on y TOMBE ; l'échelle sert à REMONTER.** Sur `grotte-scellee`, l'échelle occupait la
+  colonne d'arrivée du chemin : on l'agrippait avant d'avoir pu tomber, et descendre à l'échelle « c'est
+  bizarre » (mot du joueur). Le puits fait donc trois colonnes, l'échelle contre la paroi du fond, et sa
+  profondeur (≥ 10 rangées) interdit de ressortir au saut — ce que le jeu formalise déjà par
+  `MIN_LADDER_TILES` (« deux fois la hauteur de saut »). Le joueur ne subit aucun dégât de chute : tomber
+  est une invitation, pas une punition. Trois tuiles restent franchissables pour qui veut juste passer.
 - **La pierre fragile n'est jamais sur le chemin obligatoire.** Un mur à casser barrant la seule route,
   c'est un joueur bloqué s'il n'a pas compris qu'il faut frapper. Elle scelle toujours un à-côté.
 - **Toute cavité a un puits d'accès et une échelle de sortie.** Sinon : injoignable, ou cul-de-sac.
@@ -145,7 +151,22 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 ## Dette et travaux ouverts
 
-### ⚠️ Un test échoue volontairement
+### ✅ Plus aucune superposition — 44 → 14 → 1 → 0, et le filtre d'affichage est retiré
+
+`tests/data/superpositions.test.ts` est **VERT**. Il a été rouge volontairement pendant longtemps, sur
+décision du joueur : « je préfère que ça soit un test qui fail et on le fix, plutôt que du dirty fix où on
+peut avoir des patterns dégueulasses. Tu me fix ça, tu me le scotch pas. » Il a eu raison de tenir : la
+cause n'était pas répartie dans les motifs, c'étaient **deux gestes** qui revenaient partout —
+des modules qui débordaient de leur portée, et deux surfaces de même altitude traitées comme deux objets.
+
+Conséquence : **le filtre TEMPORAIRE de `LevelScene` est supprimé** (il ne posait pas de tuile cassable là
+où il y avait déjà de la matière). Sa condition de sortie était précisément ce test au vert. Le garder
+maintenant cacherait la prochaine régression.
+
+Ce qui protège l'acquis : `superpositions.test.ts` (l'effet), le garde-fou `DEBORDEMENTS` (la cause n° 1),
+et `motifs-isoles.test.ts` (la cause n° 2, à **toutes** les largeurs, sans dérogation).
+
+### Historique de cette dette (conservé : elle a coûté cher)
 
 `tests/data/superpositions.test.ts` est **rouge** : **UNE** superposition restante, `plat/plat` sur
 `plage-3`. Le compte a fait 44 → 14 → **1**. Les 44 premières sont tombées par un post-traitement
@@ -168,6 +189,21 @@ la détection de recouvrement pour trouver le fautif sans toucher aux terrains.
 voit plus rien de superposé. Mais un filtre d'affichage ne peut rien contre « nager à travers la pierre » —
 une cuve d'eau qui chevauche une dalle de roche est un défaut de génération. **Le filtre se supprime le jour
 où ce test passe au vert.**
+
+### ⚠️ LE GESTE FAUTIF QUI REVIENT : deux surfaces de MÊME altitude traitées comme deux objets
+
+Cinq motifs avaient exactement le même défaut, et il produisait tantôt une superposition, tantôt une
+sortie injoignable : une plateforme court vers la droite, PUIS une « corniche de sortie » est posée à
+`w - bank`, à la MÊME altitude. Selon la largeur tirée, les deux se recouvrent (superposition visible) ou
+s'écartent de 4 à 6 tuiles (sortie hors de portée : un vide de 4 tuiles à altitude égale ne se saute pas).
+
+`trampoline-vide`, `trampoline-cascade`, `trampoline-echelle`, `echelle-descente-piegee` et les deux
+`cascade-deux-passages` en sont morts. **La règle : deux surfaces contiguës de même altitude sont UNE
+plateforme.** On la fait courir jusqu'au bord droit, et on ne pose pas de corniche séparée — sauf s'il y a
+quelque chose entre les deux (dans `cascade-deux-passages-g`, le rideau de cascade : on part alors du plus
+à droite des deux, jamais par-dessus le rideau, qui perdrait son sommet reconnaissable).
+
+`tests/data/motifs-isoles.test.ts` couvre ce geste, **à toutes les largeurs** et sans dérogation possible.
 
 ### Le lot « génération »
 

@@ -970,6 +970,17 @@ function injectPinnedSpawns(levels: LevelDef[]): void {
       const xs = home.spawns.map((s) => s.x)
       const aerial = !!MONSTERS[id]?.aerial
       let placed = false
+      // ⚠️ UN NAGEUR SE POSE DANS L'EAU, PAS SUR UNE CORNICHE. Épinglé comme les autres, le kraken
+      // juvénile atterrissait sur une plateforme de plage-4 : « il patrouille les lagons profonds », dit
+      // son lore, et le joueur voyait un poulpe sur le sable. On le met au FOND d'une cuve (sans `y`,
+      // convention des menaces d'eau). `amphibie` exclut le crabe de plage, qui vit bien à terre.
+      if (MONSTERS[id]?.aquatic && !MONSTERS[id]?.amphibie) {
+        const cuve = (home.hazards ?? [])
+          .filter((h) => h.kind === 'water' && h.water !== 'lave' && h.w > 0)
+          .sort((a, b) => b.w - a.w)[0] // la plus large : de la place pour patrouiller
+        if (cuve) home.spawns.push({ monsterId: id, x: cuve.x + Math.floor(cuve.w / 2) })
+        continue
+      }
       for (let cand = 12; cand < home.widthTiles - 4 && !placed; cand++) {
         if (Math.abs(cand - startX) < 8) continue
         if (!xs.every((sx) => Math.abs(sx - cand) >= 10)) continue
@@ -1037,6 +1048,14 @@ function attribuerPaliersDeCoffre(l: LevelDef): void {
     if (graine < seuilFer) c.kind = 'coffre-fer'
   })
 }
+
+// ⚠️ CET APPEL MANQUAIT, ET AUCUN TEST NE LE DISAIT. `attribuerPaliersDeCoffre` était écrite, commentée,
+// déterministe — et JAMAIS APPELÉE : mesuré 155 coffres de bois, 0 de fer, 0 d'or dans tout le jeu. Le
+// joueur l'a signalé avant les tests : « j'ai l'impression de jamais avoir vu les coffres plus stylés
+// alors que j'ai beaucoup joué ». Il n'y en avait aucun. Les halos par palier, les étincelles en orbite,
+// le butin rare : tout existait et ne s'affichait nulle part.
+// Placé APRÈS le peuplement, parce que le palier dépend du niveau du plus fort monstre du terrain.
+for (const l of list) attribuerPaliersDeCoffre(l)
 
 // ⚠️ LA POSE DÉCORATIVE DE FOND A ÉTÉ SUPPRIMÉE. L'aqueduc vivait dans le décor, dix rangées au-dessus du
 // terrain : joli, mais sans conséquence. Retour du user : « je veux pas que ça soit décoratif dessiné, je

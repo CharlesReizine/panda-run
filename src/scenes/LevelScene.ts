@@ -644,28 +644,18 @@ export class LevelScene extends Phaser.Scene {
     // qui s'évapore. Tuile par tuile, on perce un trou à sa taille, le reste tient, et on comprend
     // immédiatement qu'il faut continuer à frapper. Le coût est modeste (une poignée de corps statiques
     // par motif) et le découpage par tranches les cache comme le reste du décor.
-    // ⚠️ FILTRE TEMPORAIRE, ET IL NE DOIT PAS SURVIVRE. On ne pose pas de tuile cassable là où il y a déjà
-    // de la matière — ce qui masque le symptôme (« des textures qui se superposent ») sans corriger la
-    // cause : les motifs continuent de produire de la géométrie qui se recouvre.
-    //
-    // Le user a tranché : « je préfère que ça soit un test qui fail et on le fix, plutôt que du dirty fix
-    // où on peut avoir des patterns dégueulasses. Tu me fix ça, tu me le scotch pas. » Il a raison, et
-    // « nager à travers la pierre » le prouve : un filtre d'AFFICHAGE ne peut rien contre une cuve d'eau
-    // qui chevauche une dalle de roche.
-    //
-    // `tests/data/superpositions.test.ts` échoue donc volontairement (44 cas) et restera rouge jusqu'à ce
-    // que les motifs soient corrigés. CE FILTRE SE SUPPRIME le jour où ce test passe au vert.
-    const tuileOccupee = (tx: number, ty: number): boolean =>
-      this.levelDef.platforms.some((p) => tx >= p.x && tx < p.x + p.w && ty === p.y)
-      || (this.levelDef.rockBands ?? []).some((r) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h)
-      || (this.levelDef.bridges ?? []).some((b) => tx >= b.x && tx < b.x + b.w && ty === b.y)
-
+    // ⚠️ LE FILTRE « PAS DE TUILE LÀ OÙ IL Y A DÉJÀ DE LA MATIÈRE » A ÉTÉ SUPPRIMÉ, ET C'ÉTAIT SA
+    // CONDITION DE SORTIE. Il masquait le symptôme (« des textures qui se superposent ») sans corriger la
+    // cause. Le user avait tranché : « je préfère que ça soit un test qui fail et on le fix, plutôt que du
+    // dirty fix où on peut avoir des patterns dégueulasses. Tu me fix ça, tu me le scotch pas. »
+    // `tests/data/superpositions.test.ts` a compté 44 → 14 → 1 → **0** : les motifs ne produisent plus de
+    // géométrie qui se recouvre, à toutes les largeurs (cf. `tests/data/motifs-isoles.test.ts`). Le filtre
+    // n'a donc plus rien à filtrer, et le garder cacherait la prochaine régression.
     this.pierresFragiles = this.physics.add.staticGroup()
     for (const bk of this.levelDef.breakables ?? []) {
       const coups = bk.coups ?? PIERRE_FRAGILE_COUPS
       for (let ty = bk.y; ty < bk.y + bk.h; ty++) {
         for (let tx = bk.x; tx < bk.x + bk.w; tx++) {
-          if (tuileOccupee(tx, ty)) continue // déjà de la matière ici : pas de tuile en double
           const bloc = this.pierresFragiles.create(
             tx * TILE + TILE / 2, ty * TILE + TILE / 2, 'pierre-fragile-0',
           ) as Phaser.Physics.Arcade.Sprite
@@ -683,8 +673,19 @@ export class LevelScene extends Phaser.Scene {
       // fois (le collider se déclenche à chaque frame de contact).
       const body = this.player.body as Phaser.Physics.Arcade.Body
       const bloc = bObj as Phaser.Physics.Arcade.Sprite
+      // ── COUP DE TÊTE PAR LE DESSOUS (demande joueur : « façon Mario ») ────────────────────────────
+      // Sauter dans une pierre fragile la casse aussi. C'est le geste que tout joueur essaie devant un
+      // bloc au-dessus de sa tête, et ne rien obtenir se lit comme un décor mort. On exige un saut qui
+      // MONTE encore (velocity.y < 0) : longer un plafond en courant ne l'entame pas.
+      if (body.blocked.up || body.touching.up) {
+        if (body.velocity.y > -60) return // on ne monte plus : simple frottement contre le plafond
+        if (this.time.now < this.nextCoupSol) return
+        this.nextCoupSol = this.time.now + 260
+        this.frapperPierre(bloc, 1)
+        return
+      }
       if (!body.blocked.down && !body.touching.down) return
-      if (body.bottom > bloc.y) return // contact par le côté ou par le dessous
+      if (body.bottom > bloc.y) return // contact par le côté
       if (this.time.now < this.nextCoupSol) return
       this.nextCoupSol = this.time.now + 260
       // il faut RETOMBER dessus : marcher tranquillement sur la dalle ne l'entame pas
@@ -915,18 +916,31 @@ export class LevelScene extends Phaser.Scene {
       // coffre ne peut pas être doré à l'écran et lâcher du butin de coffre en bois.
       const tier = PROPS[propDef.kind]?.tier
       if (tier) {
+        // ⚠️ LA PARURE DU COFFRE MEURT AVEC LE COFFRE. Retour joueur : « en bas j'ai une étoile qui
+        // clignote mais pas de coffre ». Le halo et les étincelles sont des objets INDÉPENDANTS du coffre,
+        // avec des tweens en `repeat: -1` : à l'ouverture, `onPropBroken` détruisait le coffre et sa
+        // parure restait à clignoter dans le vide, pour toute la partie. On l'accroche donc à la
+        // destruction du coffre — quel que soit ce qui le détruit — et on coupe les tweens, sinon
+        // l'animation en orbite continuerait d'écrire dans un objet détruit.
+        const parure: Phaser.GameObjects.GameObject[] = []
+        const tweensParure: Phaser.Tweens.Tween[] = []
+        prop.once('destroy', () => {
+          for (const t of tweensParure) t.stop()
+          for (const o of parure) o.destroy()
+        })
         const style = {
           bois: { flot: 5, halo: 0, teinte: 0xfff59d, etincelles: 1, taille: 16 },
           fer: { flot: 6, halo: 26, teinte: 0x40c4ff, etincelles: 2, taille: 17 },
           or: { flot: 8, halo: 40, teinte: 0xffd54f, etincelles: 4, taille: 20 },
         }[tier]
-        this.tweens.add({ targets: prop, y: prop.y - style.flot, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+        tweensParure.push(this.tweens.add({ targets: prop, y: prop.y - style.flot, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' }))
         // halo pulsant SOUS le coffre (depth négatif) : il agrandit la silhouette sans la masquer
         if (style.halo) {
           const halo = this.add.image(prop.x, prop.y, 'ring').setTint(style.teinte)
             .setBlendMode(Phaser.BlendModes.ADD).setDepth(-4).setAlpha(0.5)
             .setDisplaySize(style.halo * 2, style.halo * 2)
-          this.tweens.add({ targets: halo, alpha: 0.15, scale: { from: halo.scale, to: halo.scale * 1.35 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+          parure.push(halo)
+          tweensParure.push(this.tweens.add({ targets: halo, alpha: 0.15, scale: { from: halo.scale, to: halo.scale * 1.35 }, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.inOut' }))
         }
         // étincelles : elles tournent AUTOUR du coffre pour les paliers rares — c'est le mouvement, plus
         // que la couleur, qui fait remarquer un objet dans un décor déjà chargé
@@ -934,17 +948,18 @@ export class LevelScene extends Phaser.Scene {
           const a0 = (k / style.etincelles) * Math.PI * 2
           const rayon = tier === 'bois' ? 0 : 20
           const et = this.add.text(prop.x, prop.y - 22, '✦', { fontSize: `${style.taille}px`, color: `#${style.teinte.toString(16).padStart(6, '0')}` }).setOrigin(0.5)
+          parure.push(et)
           if (rayon === 0) {
-            this.tweens.add({ targets: et, alpha: 0.2, scale: 1.4, duration: 600, yoyo: true, repeat: -1 })
+            tweensParure.push(this.tweens.add({ targets: et, alpha: 0.2, scale: 1.4, duration: 600, yoyo: true, repeat: -1 }))
           } else {
-            this.tweens.addCounter({
+            tweensParure.push(this.tweens.addCounter({
               from: 0, to: Math.PI * 2, duration: tier === 'or' ? 2600 : 3400, repeat: -1,
               onUpdate: (tw) => {
                 const a = a0 + (tw.getValue() ?? 0)
                 et.setPosition(prop.x + Math.cos(a) * rayon, prop.y - 6 + Math.sin(a) * rayon * 0.5)
                 et.setAlpha(0.35 + 0.5 * (0.5 + 0.5 * Math.sin(a * 2)))
               },
-            })
+            }))
           }
         }
       }

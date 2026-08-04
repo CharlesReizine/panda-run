@@ -150,13 +150,13 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
       { itemId: 'couronne-de-fleurs', price: 350 },
       { itemId: 'cagoule-de-voleur', price: 380 },
       { itemId: 'heaume-de-bronze', price: 400 },
-      { itemId: 'masque-de-renard', price: 1820 },
-      { itemId: 'mitre-du-clerc', price: 1820 },
+      { itemId: 'masque-de-renard', price: 1900 },
+      { itemId: 'mitre-du-clerc', price: 1900 },
       // 1820 et non 1770 : la règle est « un chapeau rare coûte au moins 1,5× le pécule d'arrivée », et
       // ce pécule a monté avec le recalage des niveaux de monstres (le revenu du parcours suit leur
       // niveau). 1770 passait sous la barre de trois pièces d'or. On aligne sur les deux autres rares
       // d'entrée de gamme plutôt que d'abaisser la règle.
-      { itemId: 'bandeau-du-moine', price: 1820 },
+      { itemId: 'bandeau-du-moine', price: 1900 },
     ],
   },
   morocc: {
@@ -183,7 +183,7 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
       { itemId: 'epee-du-croise', price: 9200 },
       { itemId: 'arc-de-braise', price: 9400 },
       { itemId: 'claymore', price: 9640 },
-      { itemId: 'baton-des-marees', price: 11000 },
+      { itemId: 'baton-des-marees', price: 13500 },
     ],
     armors: [
       { itemId: 'carapace-scarabee', price: 3000 },
