@@ -63,7 +63,7 @@ export type ModuleKind =
   // réservé aux biomes ROCHEUX / SOUTERRAINS (cave/montagne/carriere/enfer/jungle) — cavités franches
   | 'grotte-tunnel'
   // PIERRE FRAGILE (matière cassable) : entrées murées à percer, plancher qui cède
-  | 'grotte-scellee' | 'sol-fragile'
+  | 'grotte-scellee' | 'sol-fragile' | 'grotte-u-brisable'
   // GROTTE SOUS-MARINE EN U : lac en U NOYÉ SOUS UN TOIT DE ROCHE (grotte inondée) — on plonge, on
   // traverse le fond immergé sous un plafond de roche, on remonte de l'autre côté ; coffre au fond
   | 'grotte-noyee'
@@ -1265,11 +1265,15 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.platforms.push({ x: finCav - 3, alt: solCav + 1, w: 3 })
       p.props.push({ kind: 'coffre', x: finCav - 2, alt: solCav + 2 })
       if (groundMobs.length) p.spawns.push({ monsterId: groundMobs[0]!, x: finCav - 5, alt: solCav })
-      // ÉCHELLE DE REMONTÉE dans le puits — SANS palier propre. `poseLadderOn` en aurait ajouté un à
-      // `alt - 2`, large de 4, qui débordait vers la cavité et se retrouvait SOUS la dalle de plafond.
-      // Le chemin fait très bien le palier : il finit PILE au bord du puits (x = puitsX), donc le
-      // validateur le reconnaît comme sommet d'échelle (l.x ≤ p.x + p.w + 1, décalage de 2 rangées).
-      p.ladders.push({ x: cavX - 1, topAlt: alt + 2, h: alt + 2 })
+      // ÉCHELLE DE REMONTÉE dans le puits — SANS palier propre, et AU MILIEU du puits.
+      // `poseLadderOn` aurait ajouté un palier à `alt - 2`, large de 4, débordant vers la cavité et
+      // coincé SOUS la dalle de plafond. Le chemin fait très bien le palier : il finit PILE au bord du
+      // puits (x = puitsX), donc le validateur le reconnaît comme sommet (l.x ≤ p.x + p.w + 1).
+      // ⚠️ AU MILIEU, PAS CONTRE LE MUR À CASSER. Retour joueur : « l'échelle m'empêche de me rapprocher
+      // du mur à casser ». Collée à la cavité, elle occupait la seule colonne d'où l'on peut frapper : on
+      // s'y agrippait au lieu de taper. Le puits fait trois colonnes, alors on lui donne celle du milieu —
+      // une colonne libre pour TOMBER à gauche, une colonne libre pour FRAPPER à droite.
+      p.ladders.push({ x: puitsX + 1, topAlt: alt + 2, h: alt + 2 })
       p.exitAlt = alt
       break
     }
@@ -1303,6 +1307,64 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.exitAlt = alt
       break
     }
+    // ─── GROTTE SÈCHE EN U, SCELLÉE PAR DEUX PANS DE SOL FRAGILE ──────────────────────────────
+    case 'grotte-u-brisable': {
+      // Demande du joueur : « une grotte souterraine qui permet de passer via un U, mais on ne peut y
+      // accéder qu'en cassant les pierres en sautant dessus. »
+      //
+      // Deux pans de SOL FRAGILE posés à l'altitude EXACTE du chemin : rien ne les distingue d'une dalle
+      // normale. On passe dessus sans rien voir ; s'acharner à retomber sur le premier le fait céder, et le
+      // U s'ouvre. Le second, à l'autre bout, se casse PAR LE DESSOUS d'un coup de tête (le geste « façon
+      // Mario ») et fait ressortir bien plus loin sur le chemin — c'est le raccourci de qui a compris.
+      //
+      // ⚠️ JAMAIS UN ALLER SIMPLE. Une échelle occupe le puits d'ENTRÉE : qui n'a pas compris le coup de
+      // tête ressort toujours par où il est tombé. Sans elle, ne pas trouver la sortie enfermerait vivant —
+      // ce que ce projet tient pour son pire défaut.
+      //
+      // ⚠️ LA PROFONDEUR EST CELLE QU'UNE ÉCHELLE REMONTE (`MAX_LADDER_TILES - 2`), comme pour
+      // `grotte-scellee` : au-delà, l'échelle n'atteint plus le chemin et son palier se coince en route.
+      const altU = Math.min(MAX_LADDER_TILES - 2, Math.max(entryAlt, 9))
+      const rampU = Math.min(8, Math.max(2, (altU - entryAlt) * 2))
+      // 3 tuiles : le trou que le pan MASQUE reste franchissable au saut, donc le chemin de surface reste
+      // une vraie route même pour qui ne casse rien (les validateurs, eux, ne voient que le trou).
+      const PAN = 3
+      const QUEUE = 3
+      const xE = rampU + 2
+      const midU = Math.max(4, w - xE - 2 * PAN - QUEUE)
+      const xS = xE + PAN + midU
+      const finPans = Math.min(w - QUEUE, xS + PAN)
+      // ── CHEMIN DE SURFACE : trois segments, deux pans fragiles entre eux
+      p.platforms.push(...ramp(0, rampU, entryAlt, altU))
+      p.platforms.push({ x: rampU, alt: altU, w: xE - rampU })
+      p.platforms.push({ x: xE + PAN, alt: altU, w: xS - (xE + PAN) })
+      p.platforms.push({ x: finPans, alt: altU, w: w - finPans })
+      p.breakables.push({ x: xE, altBot: altU, altTop: altU, w: PAN })
+      p.breakables.push({ x: xS, altBot: altU, altTop: altU, w: finPans - xS })
+      // ── LE U : deux puits ouverts du sol au chemin, reliés par un couloir bas coiffé de roche. Le sol du
+      // monde fait le plancher — une plateforme de plus empilerait un étage marchable pour rien (même
+      // leçon que sur grotte-scellee).
+      if (altU - 1 >= 1) {
+        p.rocks.push({ x: rampU, altBot: 1, altTop: altU - 1, w: xE - rampU })
+        if (w - finPans > 0) p.rocks.push({ x: finPans, altBot: 1, altTop: altU - 1, w: w - finPans })
+        // PLAFOND du couloir : c'est lui qui fait le U. Les deux puits restent ouverts de bout en bout, le
+        // milieu est coiffé, donc on DOIT marcher au fond pour passer d'un puits à l'autre.
+        p.rocks.push({ x: xE + PAN, altBot: CAVE_CLEARANCE, altTop: altU - 1, w: xS - (xE + PAN), solid: true })
+      }
+      // ── RÉCOMPENSE au fond du couloir, et son gardien
+      // ⚠️ COFFRE SANS ALTITUDE, ET C'EST LA CONVENTION « POSÉ AU FOND ». Avec une altitude, le validateur
+      // exige une PLATEFORME pile dessous — or le plancher du couloir est le sol du MONDE, qui n'en est
+      // pas une. Sans altitude, il est simplement posé au sol, et `unreachableChests` ne lui reproche plus
+      // que d'être au-dessus d'un trou mortel (il ne l'est pas).
+      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: xE + PAN + Math.floor(midU / 2) })
+      const gardienU = groundMobs.find((id) => !MONSTERS[id]?.aquatic && !MONSTERS[id]?.aerial)
+      if (gardienU) p.spawns.push({ monsterId: gardienU, x: xE + PAN + 1, alt: 0 })
+      // ── ÉCHELLE DE REMONTÉE dans le puits d'ENTRÉE. Son sommet est le segment de chemin qui finit PILE
+      // au bord du puits (x = xE) : le validateur le reconnaît comme palier (décalage de 2 rangées).
+      p.ladders.push({ x: xE, topAlt: altU + 2, h: altU + 2 })
+      p.exitAlt = altU
+      break
+    }
+
     // ─── GROTTE SOUS-MARINE EN U : lac en U NOYÉ SOUS UN TOIT DE ROCHE, coffre au fond ────────
     case 'grotte-noyee': {
       // Grotte inondée : comme 'lac-en-u' (on plonge, on nage sous un plafond de roche IMMERGÉ au
@@ -4126,6 +4188,7 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   // l'altitude courante. `chest: true` : chacun cache un coffre derrière sa pierre.
   'grotte-scellee': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [16, 26], below: 'roche', above: 'roche', chest: true },
   'sol-fragile': { tier: 3, family: 'tension', entry: 'milieu', exit: 'milieu', width: [16, 24], below: 'roche', above: 'air', chest: true },
+  'grotte-u-brisable': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [24, 32], below: 'roche', above: 'air', chest: true },
   // GROTTE SOUS-MARINE EN U : lac en U noyé sous un toit de roche, coffre au fond (plongée récompensée)
   'grotte-noyee': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [18, 30], below: 'marine', above: 'roche', chest: true, water: true },
   // REFONTE DES MOTIFS D'EAU (vrais passages)

@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { buildLevelFromModules, CATALOG, type Module, type ModuleKind } from '../../src/data/level-modules'
-import { unreachablePlatforms } from '../../src/core/level-validator'
+import {
+  caveCeilingClearance, deadEndSurfaces, laddersToNowhere, oversizedLadders, unreachableChests,
+  unreachableLadders, unreachablePlatforms,
+} from '../../src/core/level-validator'
+import type { LevelDef } from '../../src/data/levels'
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 // CHAQUE MOTIF SE TIENT DEBOUT SEUL — ET C'EST UN TEST NÉ D'UN BUG QUI A COÛTÉ UNE JOURNÉE.
@@ -39,8 +43,33 @@ const plateauNeutre = (w: number, extra: Partial<Module> = {}): Module => ({
 const ov = (a: { x: number; w: number }, b: { x: number; w: number }) =>
   Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
 
-/** Défauts du motif planté seul entre deux plateaux : injoignables, et surfaces qui se recouvrent. */
-function mesure(kind: ModuleKind, w: number): { injoignables: number; recouvrements: number } {
+// ⚠️ CETTE BATTERIE A ÉTÉ AJOUTÉE APRÈS COUP, ET ELLE A ATTRAPÉ SON PREMIER BUG LE JOUR MÊME. Le test ne
+// regardait que les plateformes et les recouvrements : un COFFRE injoignable est passé sous le nez du test
+// dans un motif tout neuf (`grotte-u-brisable`), parce qu'un coffre porteur d'une altitude exige une
+// PLATEFORME pile dessous, et que le plancher du couloir était le sol du MONDE. Un motif ne se juge pas
+// sur ses seules plateformes.
+const BATTERIE: Record<string, (l: LevelDef) => number> = {
+  'coffre-injoignable': (l) => unreachableChests(l).length,
+  'échelle-sans-palier': (l) => laddersToNowhere(l).length,
+  'échelle-injoignable': (l) => unreachableLadders(l).length,
+  'échelle-hors-bornes': (l) => oversizedLadders(l).length,
+  'piège-sans-retour': (l) => deadEndSurfaces(l).length,
+  'plafond-bas': (l) => caveCeilingClearance(l).length,
+}
+
+// Motifs dont la batterie ci-dessus se plaint pour une raison VÉRIFIÉE et écrite. Même esprit que
+// l'INVENTAIRE : ce n'est pas une dérogation, c'est de la dette nommée.
+const INVENTAIRE_BATTERIE: Record<string, string> = {
+  // le pied de son échelle s'atteint au REBOND de trampoline, que computeReach ne simule pas
+  'trampoline-echelle': 'échelle-injoignable — pied atteint au rebond, hors modèle',
+  // motifs de MONTÉE : isolés entre deux plateaux plats, leur sommet n'a nulle part où continuer, donc le
+  // modèle les voit comme un cul-de-sac. Dans un terrain réel, le module suivant chaîne à cette altitude.
+  'lacs-cascade-montee': 'piège-sans-retour — sommet sans suite, artefact de l\'isolement',
+  'colonnes-perilleuses': 'piège-sans-retour — idem, et l\'une des 5 copies divergentes du switch',
+}
+
+/** Défauts du motif planté seul entre deux plateaux : injoignables, recouvrements, et batterie. */
+function mesure(kind: ModuleKind, w: number): { injoignables: number; recouvrements: number; batterie: string[] } {
   const meta = CATALOG[kind]!
   const modules: Module[] = [
     plateauNeutre(20, { spawnHere: true, startAlt: 0 }),
@@ -59,7 +88,8 @@ function mesure(kind: ModuleKind, w: number): { injoignables: number; recouvreme
   for (let i = 0; i < plats.length; i++) for (let j = i + 1; j < plats.length; j++) {
     if (plats[i]!.y === plats[j]!.y && ov(plats[i]!, plats[j]!) > 0) recouvrements++
   }
-  return { injoignables, recouvrements }
+  const batterie = Object.entries(BATTERIE).filter(([, f]) => f(l) > 0).map(([nom]) => nom)
+  return { injoignables, recouvrements, batterie }
 }
 
 // ⚠️ ON BALAYE TOUTES LES LARGEURS, PAS TROIS. La première version n'essayait que min / médiane / max, et
@@ -69,12 +99,14 @@ const tousLesMotifs = (Object.keys(CATALOG) as ModuleKind[]).map((kind) => {
   const [wmin, wmax] = CATALOG[kind]!.width
   const fautes: { w: number; quoi: string }[] = []
   const recouvre: { w: number; quoi: string }[] = []
+  const batterie = new Set<string>()
   for (let w = wmin; w <= wmax; w++) {
-    const { injoignables, recouvrements } = mesure(kind, w)
-    if (injoignables) fautes.push({ w, quoi: `${injoignables} injoignable(s)` })
-    if (recouvrements) recouvre.push({ w, quoi: `${recouvrements} recouvrement(s)` })
+    const m = mesure(kind, w)
+    if (m.injoignables) fautes.push({ w, quoi: `${m.injoignables} injoignable(s)` })
+    if (m.recouvrements) recouvre.push({ w, quoi: `${m.recouvrements} recouvrement(s)` })
+    for (const d of m.batterie) batterie.add(d)
   }
-  return { kind, fautes, recouvre }
+  return { kind, fautes, recouvre, batterie: [...batterie] }
 })
 
 describe('chaque motif se tient debout seul', () => {
@@ -95,6 +127,13 @@ describe('chaque motif se tient debout seul', () => {
       .filter((m) => m.recouvre.length > 0)
       .map((m) => `${m.kind} (${m.recouvre.map((f) => `largeur ${f.w} → ${f.quoi}`).join(', ')})`)
     expect(fautifs, `motifs qui se recouvrent :\n   ${fautifs.join('\n   ')}`).toEqual([])
+  })
+
+  it('aucun motif ne casse la batterie (coffres, échelles, pièges, plafonds)', () => {
+    const fautifs = tousLesMotifs
+      .filter((m) => m.batterie.length > 0 && !INVENTAIRE_BATTERIE[m.kind])
+      .map((m) => `${m.kind} → ${m.batterie.join(', ')}`)
+    expect(fautifs, `motifs qui cassent la batterie :\n   ${fautifs.join('\n   ')}`).toEqual([])
   })
 
   it('l\'inventaire ne contient que des motifs RÉELLEMENT encore fautifs', () => {

@@ -7,6 +7,7 @@ import type { LevelScene } from './LevelScene'
 import { VIEW_H, VIEW_W, centerCamera, fromLeft, fromRight } from '../core/viewport'
 import { PAD, MARGE_SURE, zoneJoystick } from './action-pad-layout'
 import { HUD_LEFT, centerOf } from './hud-layout'
+import { currentChainQuest, refreshQuestProgress } from '../core/quests'
 
 // ⚠️ TOUT LE HUD PASSE PAR CES DEUX HELPERS, PAS PAR fromLeft/fromRight DIRECTEMENT.
 // Retour du user sur iPhone 12 : « là avec la caméra de l'iPhone 12 je vois pas tout ». Les coins arrondis
@@ -59,6 +60,11 @@ export class UIScene extends Phaser.Scene {
   // gestion des compétences, inventaire) dont le retour est câblé en dur sur 'Level'.
   private levelKey = 'Level'
   private training = false
+  // bandeau de quête en cours (haut, centré) + mémoire des quêtes déjà FÊTÉES, pour ne notifier
+  // l'accomplissement qu'une fois (le rafraîchissement du HUD passe des dizaines de fois)
+  private questBg?: Phaser.GameObjects.Rectangle
+  private questTxt?: Phaser.GameObjects.Text
+  private questFetee = new Set<string>()
 
   constructor() { super('UI') }
 
@@ -290,6 +296,9 @@ export class UIScene extends Phaser.Scene {
       this.add.text(L(248), 64, 'SAC', { fontSize: '10px', color: '#ffffff', fontStyle: 'bold', stroke: '#000000', strokeThickness: 3 }).setOrigin(0.5).setDepth(50)
     }
 
+    // BANDEAU DE QUÊTE EN COURS (haut, centré) — masqué en entraînement, où il n'y a pas de quête.
+    if (!this.training) this.buildQuestTracker()
+
     // Écoute des mises à jour émises par la scène de jeu (Level ou Training)
     const level = this.scene.get(this.levelKey)
     level.events.on('player-hp', this.onPlayerHp)
@@ -432,8 +441,84 @@ export class UIScene extends Phaser.Scene {
     this.tweens.add({ targets: [title, body], alpha: 1, duration: 260, delay: 120 })
   }
 
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // BANDEAU DE QUÊTE EN COURS
+  //
+  // Retour joueur : « pense aussi à un visuel en jeu pour voir les quêtes en cours (ptet en haut de la
+  // fenêtre) avec une notif quand c'est accompli. là le jeu incite pas trop à les faire. »
+  //
+  // Le diagnostic était juste : une quête acceptée n'existait NULLE PART pendant le jeu. Il fallait
+  // retourner en ville, parler au garde et lire un panneau pour savoir où l'on en était — donc on
+  // l'oubliait. On affiche donc l'objectif et le compteur en permanence, et on FÊTE l'accomplissement au
+  // moment où il arrive, là où le joueur est : dans le niveau.
+  //
+  // La zone est déclarée dans `hud-layout.ts` (questTracker) pour que le test de non-recouvrement la
+  // couvre : c'est le seul créneau libre de la rangée haute, entre la vie à gauche et le son/pause à droite.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  private buildQuestTracker() {
+    const r = HUD_LEFT.questTracker
+    const cx = 480 // centre de l'écran dans cet espace (cf. viewport : [480 - VIEW_W/2, 480 + VIEW_W/2])
+    this.questBg = this.add.rectangle(cx, r.y + r.h / 2, r.w, r.h, 0x1b1b2a, 0.72)
+      .setOrigin(0.5).setDepth(48).setStrokeStyle(2, 0xffb300, 0.9).setVisible(false)
+    this.questTxt = this.add.text(cx, r.y + r.h / 2, '', {
+      fontSize: '13px', color: '#ffe082', fontStyle: 'bold', align: 'center',
+      wordWrap: { width: r.w - 16 },
+    }).setOrigin(0.5).setDepth(49).setVisible(false)
+    this.refreshQuestTracker()
+  }
+
+  private refreshQuestTracker() {
+    if (!this.questBg || !this.questTxt) return
+    const p = getPlayer()
+    // La quête AFFICHÉE est celle de la chaîne en cours, et seulement si elle est ACCEPTÉE : proposer ici
+    // une quête qu'on n'a pas prise ferait doublon avec le « ❗ » du garde, en ville.
+    const def = currentChainQuest(p)
+    const q = def ? p.quests[def.id] : undefined
+    if (!def || !q || q.claimed) {
+      this.questBg.setVisible(false)
+      this.questTxt.setVisible(false)
+      return
+    }
+    // On RECALCULE la progression ici : les compteurs de kills montent pendant le niveau, et personne
+    // d'autre ne rafraîchit la quête avant le retour en ville — c'est ce décalage qui donnait
+    // l'impression que les quêtes n'avançaient pas.
+    const etaitFini = q.done
+    refreshQuestProgress(p, def.id)
+    this.questBg.setVisible(true)
+    this.questTxt.setVisible(true)
+    if (q.done) {
+      this.questTxt.setText(`✅ ${def.name} — récompense prête chez le garde`)
+      this.questBg.setStrokeStyle(2, 0x66bb6a, 0.95)
+      // NOTIF À L'INSTANT OÙ ÇA BASCULE, une seule fois : le joueur doit apprendre la nouvelle sur le
+      // terrain, pas la découvrir en ville trois minutes plus tard.
+      if (!etaitFini && !this.questFetee.has(def.id)) {
+        this.questFetee.add(def.id)
+        this.notifierQueteFinie(def.name)
+      }
+    } else {
+      this.questTxt.setText(`📜 ${def.name}   ${q.progress}/${def.targetCount}`)
+      this.questBg.setStrokeStyle(2, 0xffb300, 0.9)
+    }
+  }
+
+  /** Bandeau de félicitations, calqué sur celui du passage de niveau (même grammaire visuelle). */
+  private notifierQueteFinie(nom: string) {
+    audio.playSfx('level-up')
+    const bg = this.add.rectangle(480, 62, 420, 30, 0x66bb6a, 0.96).setOrigin(0.5).setDepth(1500)
+    const txt = this.add.text(480, 62, `✅ QUÊTE ACCOMPLIE — ${nom}`, {
+      fontSize: '15px', color: '#0b2a12', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(1501)
+    bg.setScale(0.2, 1)
+    this.tweens.add({ targets: bg, scaleX: 1, duration: 220, ease: 'Back.out' })
+    this.tweens.add({
+      targets: [bg, txt], alpha: 0, delay: 2400, duration: 800,
+      onComplete: () => { bg.destroy(); txt.destroy() },
+    })
+  }
+
   refresh() {
     const p = getPlayer()
+    this.refreshQuestTracker()
     this.levelText.setText(`Nv ${p.level}`)
     this.goldText.setText(`${p.gold} or`)
     this.potionText.setText(`×${p.potions}`)

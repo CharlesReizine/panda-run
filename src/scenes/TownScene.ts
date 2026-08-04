@@ -4,7 +4,7 @@ import { save } from '../core/save'
 import { buyPotion, buyItem } from '../core/shop'
 import { canCraft, doCraft } from '../core/craft'
 import { canReforge, doReforge, reforgeCost, upgradedBonus, sellItem, sellValue, MAX_REFORGE_LEVEL } from '../core/reforge'
-import { acceptQuest, refreshQuestProgress, claimQuest, currentChainQuest } from '../core/quests'
+import { acceptQuest, refreshQuestProgress, claimQuest, currentChainQuest, questXpReward } from '../core/quests'
 import { POTION_PRICE, getTownStock, QUEST_CHAIN, type QuestDef, type ShopItemDef } from '../data/shops'
 import { WORLD_NODES } from '../data/worldmap'
 import { ITEMS, rarityColor, SLOT_ORDER, SLOT_LABEL_PLURAL } from '../data/items'
@@ -916,7 +916,9 @@ export class TownScene extends Phaser.Scene {
 
   // libellé de récompense d'une quête : or (+ potions) (+ objet nommé, coloré par rareté)
   private questRewardLabel(def: QuestDef): string {
-    const parts = [`${def.rewardGold} or`]
+    // l'XP EN TÊTE : c'est elle qui décide si on va faire la quête (retour joueur « faudrait gagner de
+    // l'xpppp »), et elle dépend du niveau courant, donc on l'affiche telle qu'elle sera versée.
+    const parts = [`${questXpReward(getPlayer(), def)} XP`, `${def.rewardGold} or`]
     if (def.rewardPotions) parts.push(`${def.rewardPotions} potion${def.rewardPotions > 1 ? 's' : ''}`)
     if (def.rewardItemId) parts.push(ITEMS[def.rewardItemId]!.name)
     return parts.join(' + ')

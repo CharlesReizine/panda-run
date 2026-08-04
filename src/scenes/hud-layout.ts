@@ -35,6 +35,12 @@ export const HUD_LEFT = {
   buffPill: { x: 12, y: 120, w: 104, h: 24 } as HudRect,
   // badge « points de compétence à dépenser » — n'apparaît que s'il en reste
   spBadge: { x: 40, y: 152, w: 152, h: 32 } as HudRect,
+  // BANDEAU DE QUÊTE EN COURS, en haut au CENTRE. Retour joueur : « pense aussi à un visuel en jeu pour
+  // voir les quêtes en cours (ptet en haut de la fenêtre) [...] là le jeu incite pas trop à les faire ».
+  // Le centre est le SEUL espace libre de la rangée haute : la colonne gauche porte la vie et l'XP, la
+  // droite le son, la pause et les fioles. On le déclare ici pour que le test de non-recouvrement le
+  // couvre comme les autres — c'est précisément ce fichier qui existe pour ça.
+  questTracker: { x: 320, y: 4, w: 320, h: 34 } as HudRect,
 }
 
 export const centerOf = (r: HudRect): { x: number; y: number } => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 })

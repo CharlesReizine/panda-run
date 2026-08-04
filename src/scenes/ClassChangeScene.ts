@@ -10,11 +10,28 @@ import { installUiClickSound } from '../ui/click-sound'
 import {
   CC, cardRect, cardFlow, portraitScale, splitSkills, fitName, fitSkill, trainingRect, type Rect,
 } from './classchange-layout'
+import {
+  DUREE_TOTALE, angleOndulation, clignotement, intensiteRayons, montreNouvelleForme, phaseA,
+  rotationRayons, voileBlanc,
+} from './evolution-anim'
+import { audio } from '../audio/audio-engine'
 
 const CHOICES: ClassId[] = ['swordsman', 'mage', 'archer']
 
 export class ClassChangeScene extends Phaser.Scene {
   private chosen = false
+  // séquence d'évolution en cours (cf. evolution-anim.ts pour la partition ; ici on ne fait qu'obéir)
+  private anim?: {
+    t0: number
+    echelle: number
+    rayons: Phaser.GameObjects.Image
+    vieux: Phaser.GameObjects.Image
+    neuf: Phaser.GameObjects.Image
+    eclatVieux: Phaser.GameObjects.Image
+    eclatNeuf: Phaser.GameObjects.Image
+    voile: Phaser.GameObjects.Rectangle
+    message: Phaser.GameObjects.Text
+  }
 
   constructor() { super('ClassChange') }
 
@@ -122,6 +139,7 @@ export class ClassChangeScene extends Phaser.Scene {
     // une exception depuis un gestionnaire de bouton s'affiche au joueur en pleine page.
     if (!canChangeClass(p) || id === 'novice') return
     this.chosen = true
+    const avant = p.classId // AVANT la mutation : c'est la forme qu'on montre au début de l'évolution
     changeClass(p, id)
     // ⚠️ ON N'OFFRE PLUS RIEN AU PASSAGE DE CLASSE, ET C'EST DEMANDÉ : « au passage de classe tu me mets
     // déjà un skill et tu l'équipes. Ça tu arrêtes, je veux pas ça. »
@@ -130,7 +148,7 @@ export class ClassChangeScene extends Phaser.Scene {
     // qu'il devait défaire. Les points de compétence sont là pour ça : il apprend ce qu'il veut, quand il
     // veut, depuis l'arbre des compétences.
     save(p)
-    this.finish(`Tu es maintenant ${CLASSES[id].name} !`)
+    this.finish(`Tu es maintenant ${CLASSES[id].name} !`, avant, id)
   }
 
   private evolve() {
@@ -143,20 +161,112 @@ export class ClassChangeScene extends Phaser.Scene {
     // devrait de toute façon pas proposer l'évolution dans ce cas ; ceci en est la preuve, pas l'excuse.
     if (!canEvolveClass(p)) return
     this.chosen = true
+    const avant = p.classId // AVANT la mutation
     const to = evolveClass(p)
     save(p)
-    this.finish(`Tu es maintenant ${CLASSES[to].name} !`)
+    this.finish(`Tu es maintenant ${CLASSES[to].name} !`, avant, to)
   }
 
-  private finish(message: string) {
-    const flash = this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0xffffff).setAlpha(0)
-    this.tweens.add({
-      targets: flash, alpha: 1, yoyo: true, duration: 300,
-      onComplete: () => this.scene.start('WorldMap'),
-    })
-    // le message partage sa ligne avec le bouton d'entraînement (l'écran n'a plus de place ailleurs) :
-    // c'est l'écart HORIZONTAL qui garantit le non-recouvrement, et il est vérifié par le test
-    this.add.text(480, CC.messageY, message, { fontSize: `${CC.messageFont}px`, color: '#ffd700' })
-      .setOrigin(0.5).setDepth(1)
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // L'ÉVOLUTION SE JOUE ICI — la partition est dans `evolution-anim.ts`, cette méthode n'en est que
+  // l'orchestre. Avant, c'était un flash blanc de 300 ms : le moment le plus marquant de la progression
+  // passait inaperçu (« je veux comme pokémon, quand ça évolue »).
+  //
+  // ⚠️ ON PILOTE DEPUIS `update`, PAS EN EMPILANT DES TWEENS. Quatre phases dont deux à cadence VARIABLE
+  // (le clignotement accélère) : en tweens il faudrait les chaîner à la main, et le moindre décalage de
+  // durée décollerait le voile de l'alternance. Lire l'instant courant dans des fonctions pures garde la
+  // séquence exacte par construction — et testable sans navigateur.
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  private finish(message: string, de: ClassId, vers: ClassId) {
+    // l'écran s'efface : on ne garde que le sujet, comme dans la référence
+    for (const o of this.children.list.slice()) o.destroy()
+    this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x0d1b2a)
+    audio.playSfx('level-up')
+
+    // ── FOND DE RAYONS, généré ici plutôt que chargé ──────────────────────────────────────────
+    // Demande du joueur : « génère-moi une image de fond qui a un peu de gueule ». On la DESSINE au lieu
+    // d'ajouter un PNG : le motif est une roue de rayons, donc quelques lignes de géométrie suffisent, et
+    // surtout elle TOURNE et s'intensifie avec la séquence — ce qu'une image plate ne saurait pas faire.
+    // Un asset aurait aussi alourdi le préchargement pour un écran vu deux fois par partie.
+    const CLE_RAYONS = 'evo-rayons'
+    if (!this.textures.exists(CLE_RAYONS)) {
+      const R = 256
+      const g = this.make.graphics({ x: 0, y: 0 })
+      const N = 18 // assez pour une roue lisible, pas au point de faire une bouillie en tournant
+      for (let i = 0; i < N; i++) {
+        const a0 = (i / N) * Math.PI * 2
+        g.fillStyle(0xffffff, i % 2 === 0 ? 0.30 : 0.12)
+        g.slice(R, R, R, a0, a0 + Math.PI / N, false)
+        g.fillPath()
+      }
+      g.generateTexture(CLE_RAYONS, R * 2, R * 2)
+      g.destroy()
+    }
+
+    const CY = 240 // un peu haut : le message de fin occupe le bas de l'écran
+    // ⚠️ 7 ET NON 12, ET C'EST L'ILLUSTRATION QUI COMMANDE. Demande : « fais l'image x3 ». Poussée au
+    // triple (4 → 12), la silhouette SORT du cadre — on ne voyait plus que la tête et le torse — et
+    // l'illustration source, petite, se délite en bouillie. On ne peut pas compenser par un filtre
+    // « pixels nets » : ces textures sont celles du jeu, changer leur filtrage pixelliserait tout le reste.
+    // Mesuré au banc : à 12 on ne voit plus que la tête et le torse, à 7 les pattes passent sous le
+    // message. 5,5 est le plus grand agrandissement qui garde le panda ENTIER, message compris — soit
+    // ~80 % de la hauteur d'écran, la place qu'occupe le sujet dans la référence.
+    const ECHELLE = 5.5
+    // la roue est posée SOUS le sujet, largement débordante (elle doit couvrir les coins en tournant)
+    const rayons = this.add.image(480, CY, CLE_RAYONS).setScale(3).setDepth(5).setAlpha(0)
+    const poser = (texture: string) => this.add.image(480, CY, texture).setScale(ECHELLE).setDepth(10)
+    const vieux = poser(`panda-${de}`)
+    const neuf = poser(`panda-${vers}`).setVisible(false)
+    // ÉCLAT : une copie BLANCHE de la même image posée par-dessus. C'est ce qui donne la silhouette
+    // lumineuse de la référence — un tint NORMAL ne sait pas éclaircir, il ne fait que multiplier la
+    // couleur. Il faut donc le mode FILL, qui REMPLACE la couleur du pixel.
+    // ⚠️ `setTintFill(couleur)` de Phaser 3 ne fait plus RIEN en Phaser 4 (méthode dépréciée, vide) : le
+    // mode est devenu un réglage à part. Écrit à l'ancienne, l'éclat aurait été une simple copie du panda
+    // en surimpression — donc rien de visible, et aucun test ne l'aurait dit.
+    const eclat = (texture: string) => poser(texture)
+      .setTint(0xffffff).setTintMode(Phaser.TintModes.FILL).setDepth(11).setAlpha(0)
+    const eclatVieux = eclat(`panda-${de}`)
+    const eclatNeuf = eclat(`panda-${vers}`).setVisible(false)
+
+    const voile = this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0xffffff).setAlpha(0).setDepth(20)
+    const messageTxt = this.add.text(480, CC.messageY, message, {
+      fontSize: `${CC.messageFont}px`, color: '#ffd700', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(30).setAlpha(0)
+
+    this.anim = { t0: this.time.now, echelle: ECHELLE, rayons, vieux, neuf, eclatVieux, eclatNeuf, voile, message: messageTxt }
+  }
+
+  update(time: number) {
+    const a = this.anim
+    if (!a) return
+    const t = time - a.t0
+    if (t >= DUREE_TOTALE) {
+      this.anim = undefined
+      this.scene.start('WorldMap')
+      return
+    }
+    // 0) la roue de rayons : elle enfle et accélère, sans clignoter (le sujet s'en charge)
+    a.rayons.setAlpha(0.55 * intensiteRayons(t))
+    a.rayons.setRotation(rotationRayons(t))
+    // 1) le balancement, sur la forme actuellement montrée
+    const angle = angleOndulation(t)
+    const nouvelle = montreNouvelleForme(t)
+    for (const o of [a.vieux, a.eclatVieux]) { o.setVisible(!nouvelle); o.setAngle(angle) }
+    for (const o of [a.neuf, a.eclatNeuf]) { o.setVisible(nouvelle); o.setAngle(angle) }
+    // 2) la lumière qui bat sur le sujet, d'enveloppe croissante
+    const lueur = clignotement(t)
+    a.eclatVieux.setAlpha(nouvelle ? 0 : lueur)
+    a.eclatNeuf.setAlpha(nouvelle ? lueur : 0)
+    // 3) le voile plein écran : il sature à 1 pendant la phase blanche, ce qui CACHE la bascule
+    a.voile.setAlpha(voileBlanc(t))
+    // 4) la révélation : le message se lève avec la lumière qui retombe, et l'image se pose à l'échelle
+    const rev = phaseA('revelation')
+    if (t >= rev.debut) {
+      const av = Math.min(1, (t - rev.debut) / rev.duree)
+      a.message.setAlpha(av)
+      const e = a.echelle * (1.18 - 0.18 * av) // arrive un peu trop grande, puis se pose
+      a.neuf.setScale(e)
+      a.eclatNeuf.setScale(e)
+    }
   }
 }

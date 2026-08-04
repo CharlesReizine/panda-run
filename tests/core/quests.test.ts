@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { newPlayer } from '../../src/core/player-state'
-import { acceptQuest, refreshQuestProgress, claimQuest, currentChainQuest } from '../../src/core/quests'
+import { acceptQuest, refreshQuestProgress, claimQuest, currentChainQuest, questXpReward } from '../../src/core/quests'
+import { xpToNext } from '../../src/core/progression'
 import { QUESTS, QUEST_CHAIN } from '../../src/data/shops'
 
 // ids réels de la chaîne (un par type)
@@ -157,5 +158,60 @@ describe('quêtes — chaîne du garde', () => {
     const first = QUEST_CHAIN[0]!
     acceptQuest(p, first.id)
     expect(currentChainQuest(p)!.id).toBe(first.id)
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// L'XP DE QUÊTE — retour joueur : « là le jeu incite pas trop à les faire. et faudrait gagner de l'xpppp »
+//
+// `claimQuest` versait de l'or, des potions et un objet, et ZÉRO XP : une quête ne faisait donc pas
+// progresser, alors que farmer trois minutes, si. L'XP est exprimée en PART DE NIVEAU (et non en nombre
+// d'XP en dur) pour rester juste quand la courbe bouge — son coefficient a déjà changé deux fois.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+describe('XP de quête', () => {
+  const finir = (p: ReturnType<typeof newPlayer>, def: typeof QUEST_CHAIN[number]) => {
+    acceptQuest(p, def.id)
+    p.quests[def.id] = { startCount: 0, progress: def.targetCount, done: true, claimed: false }
+  }
+
+  it('réclamer une quête DONNE de l\'XP', () => {
+    const p = newPlayer('Panda')
+    const avant = p.xp
+    const def = QUEST_CHAIN[0]!
+    finir(p, def)
+    expect(claimQuest(p, def.id)).toBe(true)
+    expect(p.xp + xpToNext(1) * (p.level - 1)).toBeGreaterThan(avant) // l'XP a bougé, niveau compris
+  })
+
+  it('une quête de CHASSE vaut un demi-niveau, une quête de BOSS un niveau plein', () => {
+    const p = newPlayer('Panda')
+    p.level = 10
+    const chasse = QUEST_CHAIN.find((d) => d.type === 'kill-any')!
+    const boss = QUEST_CHAIN.find((d) => d.type === 'kill-boss')!
+    expect(questXpReward(p, chasse)).toBe(Math.floor(xpToNext(10) * 0.5))
+    expect(questXpReward(p, boss)).toBe(xpToNext(10))
+  })
+
+  it('la récompense SUIT la courbe : elle vaut toujours la même part de niveau', () => {
+    // C'est tout l'intérêt de ne pas l'écrire en dur : à n'importe quel niveau, une quête de chasse
+    // reste un demi-niveau. Un nombre fixe vaudrait un demi-niveau au début et trois miettes à la fin.
+    const chasse = QUEST_CHAIN.find((d) => d.type === 'kill-any')!
+    for (const niveau of [1, 5, 20, 40]) {
+      const p = newPlayer('Panda')
+      p.level = niveau
+      expect(questXpReward(p, chasse) / xpToNext(niveau)).toBeCloseTo(0.5, 2)
+    }
+  })
+
+  it('l\'XP passe par grantXp : une quête peut FAIRE MONTER de niveau', () => {
+    // Le piège évité : ajouter à la main à `p.xp` laisserait le joueur au-dessus du palier sans jamais
+    // passer le niveau, et sans recevoir ses points de compétence — une progression qui semble se perdre.
+    const p = newPlayer('Panda')
+    p.xp = xpToNext(1) - 1 // à une XP du niveau 2
+    const def = QUEST_CHAIN[0]!
+    finir(p, def)
+    claimQuest(p, def.id)
+    expect(p.level).toBeGreaterThan(1)
+    expect(p.skillPoints).toBeGreaterThan(0)
   })
 })

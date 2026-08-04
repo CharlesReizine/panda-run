@@ -130,12 +130,12 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
       // 1450 et non 1300 : le pécule d'arrivée à Prontera a monté avec le contenu des terrains, et la
       // règle veut qu'un chapeau non commun coûte au moins une fois et demie ce pécule — un aller-retour
       // en plaine, minimum. Le prix suit le revenu du jeu, ce n'est pas un chiffre choisi à la main.
-      { itemId: 'chapeau-poring', price: 1880 },
+      { itemId: 'chapeau-poring', price: 1980 },
       { itemId: 'bonnet-champi', price: 470 },
       { itemId: 'bandeau-guerrier', price: 440 },
       { itemId: 'plume-eclaireur', price: 350 },
       { itemId: 'bonnet-laine', price: 380 },
-      { itemId: 'oreilles-chat', price: 1880 },
+      { itemId: 'oreilles-chat', price: 1980 },
       { itemId: 'lunettes-aviateur', price: 2340 },
       { itemId: 'chapeau-sorciere', price: 2540 },
       { itemId: 'casque-orc', price: 2140 },
@@ -150,13 +150,13 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
       { itemId: 'couronne-de-fleurs', price: 350 },
       { itemId: 'cagoule-de-voleur', price: 380 },
       { itemId: 'heaume-de-bronze', price: 400 },
-      { itemId: 'masque-de-renard', price: 1900 },
-      { itemId: 'mitre-du-clerc', price: 1900 },
+      { itemId: 'masque-de-renard', price: 1980 },
+      { itemId: 'mitre-du-clerc', price: 1980 },
       // 1820 et non 1770 : la règle est « un chapeau rare coûte au moins 1,5× le pécule d'arrivée », et
       // ce pécule a monté avec le recalage des niveaux de monstres (le revenu du parcours suit leur
       // niveau). 1770 passait sous la barre de trois pièces d'or. On aligne sur les deux autres rares
       // d'entrée de gamme plutôt que d'abaisser la règle.
-      { itemId: 'bandeau-du-moine', price: 1900 },
+      { itemId: 'bandeau-du-moine', price: 1980 },
     ],
   },
   morocc: {
