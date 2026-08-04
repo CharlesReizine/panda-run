@@ -2953,6 +2953,13 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     }
     pieces.push({ piece, x0: cursorX, w, kind: m.kind })
     cursorX += w
+    // ⚠️ IMPOSER UNE ALTITUDE PLANCHER ICI EST LA BONNE IDÉE, ET ELLE DEMANDE UNE REGRAVURE.
+    // Retour du joueur : « bah impose une hauteur minimale ou chais pas quoi » — il a raison, c'est la
+    // correction à la SOURCE du « deux sols empilés » (un plancher de module à l'altitude 0 ou 1 se
+    // confond avec le sol du monde). Essayé : `runningAlt = Math.max(2, piece.exitAlt)` fait tomber
+    // SOIXANTE-DIX tests — les motifs descendants ne rejoignent plus le sol, et les 58 plans gravés ont
+    // été validés avec l'ancien chaînage. Ce n'est pas un correctif, c'est un lot : modifier, regraver,
+    // resynchroniser les monstres, rejouer l'équilibrage. À faire, mais pas en passant.
     runningAlt = piece.exitAlt
 
   })
@@ -3337,6 +3344,30 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   //
   // ⚠️ SEULEMENT À UNE RANGÉE D'ÉCART. À deux, il reste un interstice — laid, mais c'est un relief, et
   // le supprimer déplacerait la surface marchable de deux rangées sous tout ce qui s'y accroche.
+  // ─── UNE PLATEFORME POSÉE **SUR** LA RANGÉE DU SOL EST UN DOUBLON PUR ────────────────────────
+  //
+  // Retour du joueur, trois fois : « y a deux sols qui sont juste empilés ». Je cherchais des corniches
+  // une rangée AU-DESSUS du sol ; le cas qu'il voyait était pire — une plateforme dessinée dans la
+  // MÊME case que le sol du monde, deux textures superposées au pixel près. Aucun test ne pouvait le
+  // voir : `superpositions` compare les plateformes entre elles et avec la roche, et le sol du monde
+  // n'est ni l'un ni l'autre.
+  //
+  // Ça arrive dès qu'un motif pose son plancher à l'altitude 0 (`alt = entryAlt` avec une entrée au
+  // sol). Un seul cas subsistait dans les plans gravés — sur `trampoline-plat`, dans Vallon, c'est-à-dire
+  // exactement le terrain qu'il testait. On le retire ici plutôt que dans le motif : c'est vrai de TOUS
+  // les motifs, présents et à venir, et le sol du monde porte déjà la marche et la collision.
+  for (let i = platforms.length - 1; i >= 0; i--) {
+    const p = platforms[i]!
+    if (p.solid || p.y < groundRow) continue
+    let surSol = false
+    for (let x = p.x; x < p.x + p.w && !surSol; x++) {
+      if (gaps.some((g) => x >= g.x && x < g.x + g.w)) continue
+      if (hazards.some((h) => h.kind === 'water' && x >= h.x && x < h.x + h.w)) continue
+      surSol = true
+    }
+    if (surSol) platforms.splice(i, 1)
+  }
+
   for (let i = platforms.length - 1; i >= 0; i--) {
     const p = platforms[i]!
     if (p.solid || p.y !== groundRow - 1) continue

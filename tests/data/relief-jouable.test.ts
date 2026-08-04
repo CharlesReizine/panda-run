@@ -28,6 +28,26 @@ describe('relief jouable', () => {
   // colonne où le sol du monde n'est pas foulable, un mur de roche à franchir, ou un coffre / trampoline
   // / pied d'échelle posé dessus. Le retrait segment par segment a été tenté : il fragmente le plancher
   // et fait tomber vingt-neuf tests d'atteignabilité. Un plancher se retire en entier ou pas du tout.
+  it('aucune plateforme n\'est dessinée DANS la rangée du sol du monde', () => {
+    // Le cas que le joueur voyait, et que rien ne regardait : une plateforme au MÊME endroit que le sol,
+    // deux textures dans la même case. `superpositions` compare les plateformes entre elles et avec la
+    // roche — le sol du monde n'est ni l'un ni l'autre, donc personne ne l'attrapait. Ça arrive dès
+    // qu'un motif pose son plancher à l'altitude 0.
+    const doublons: string[] = []
+    for (const l of nonBoss) {
+      const gr = groundRowFor(l.heightTiles)
+      for (const p of l.platforms) {
+        if (p.solid || p.y < gr) continue
+        for (let x = p.x; x < p.x + p.w; x++) {
+          if ((l.gaps ?? []).some((g) => x >= g.x && x < g.x + g.w)) continue
+          if ((l.hazards ?? []).some((h) => h.kind === 'water' && x >= h.x && x < h.x + h.w)) continue
+          doublons.push(`${l.id} x${p.x}+${p.w} y${p.y} (sol ${gr})`); break
+        }
+      }
+    }
+    expect(doublons, `plateformes dans le sol :\n   ${doublons.slice(0, 8).join('\n   ')}`).toEqual([])
+  })
+
   const TOLERANCE_COLLEES = 215
   it('peu de corniches restent collées au sol du monde', () => {
     const collees: string[] = []
