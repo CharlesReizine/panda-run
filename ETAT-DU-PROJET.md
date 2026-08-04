@@ -126,6 +126,9 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 | R336 | caméra : suivi horizontal direct (la zone morte faisait toute la largeur) |
 | R337 | sous-sol sombre · texture `rock-body` · échelles percées · caméra qui rattrape l'altitude acquise |
 | R338 | nom EXACT au chargement (le préfixe laissait une faute de frappe ouvrir la partie d'un autre) · ce fichier |
+| R346 | **19 motifs descendants au lieu de 4** (15 inversés par miroir gauche-droite) · catalogue dédoublonné (−1027 lignes mortes) · marches géantes 91 → 40 · `strictReach` entre dans la SÉLECTION des graines |
+| R345 | évolution de classe façon Pokémon · bandeau de quêtes + notif + XP · coffres fer/or enfin posés · `grotte-u-brisable` |
+| R344 | superpositions 44 → 0, filtre d'affichage supprimé · puits qu'on descend en tombant · pierre cassable par le dessous |
 | R343 | **plus aucun module ne déborde de sa portée** (298 → 0) · `ramp()` corrigé de façon asymétrique · 3 motifs qui posaient leur dernière pièce hors du module · `cascade-plus-haute` rendue joignable (elle ne l'était que par accident) · superpositions 14 → 1 · « départ dans l'eau » devient un critère de sélection de graine |
 
 ### Décisions de fond qui ne se rediscutent pas sans raison
@@ -146,6 +149,42 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 - **On ne fabrique pas du vide en le teintant.** Deux voiles translucides ont échoué (rayures, puis
   patchwork de rectangles sur la jungle). Le sous-sol est **opaque** et sa limite suit la silhouette du
   terrain : là où une plateforme la couvre, aucune arête ne se voit.
+
+---
+
+## ⇦ REPRENDRE ICI (fin de session du 4 août)
+
+**1. LE CHAMP DU PSEUDO PRÉ-REMPLI — à faire en premier, et c'est un risque de perte de partie.**
+Retour joueur : « le placeholder de prénom c'est Charly12 ou charly13 selon le nombre de comptes déjà
+créés, là c'est charlychoulove ». Vérifié : « charlychoulove » n'est écrit NULLE PART dans le code (les
+occurrences sont des commentaires d'anciens incidents) — c'est le nom MÉMORISÉ qui est pré-rempli.
+Or la clé du document EST le pseudo : valider sans réfléchir tombe donc sur la partie existante et
+l'autosave l'écrase. C'est la famille de bugs qui a déjà coûté cinq sauvegardes ici.
+Ce qu'il veut : un nom SUGGÉRÉ et libre (`Charly12`, `Charly13`… selon le nombre de parties), jamais un
+nom déjà pris. Dans `TitleScene`, bien distinguer ce qui est **pré-rempli** (validé par erreur) de ce qui
+est **suggéré en gris** (à taper pour l'accepter).
+
+**2. RETIRER LE SOL SOUS LES SAUTS CONTOURNABLES — ça vaut le coup de réessayer MAINTENANT.**
+Demande : « les sauts qu'on peut éviter, tu dégages le sol en dessous » (26 enchaînements mesurés).
+Quatre tentatives, quatre causes distinctes, toutes réelles :
+· creuser sous TOUTE la chaîne coupe le niveau en deux (le sol retiré est la route principale) → ne
+  creuser que l'INTÉRIEUR, deux colonnes pleines de chaque côté ;
+· le trou dépassait la largeur d'un saut → **corrigé** : `oversizedGaps` sait maintenant qu'un gouffre
+  franchi de bout en bout par une chaîne de plateformes n'est pas un gouffre ;
+· la chaîne avait une brèche → tolérance de chaînage resserrée à 3 tuiles ;
+· un coffre posé au sol se retrouvait au-dessus du vide → ne pas creuser sous un coffre sans altitude.
+La 4e tentative a échoué sur `plateforme-murée`, et **c'est cette cause-là qui est désormais réglée**
+(`strictReach` est entré dans la sélection des graines en R346). Le code de la passe est dans l'historique
+de la branche `lot-motifs-descendants` — il suffit de le remettre et de regraver.
+
+**3. Ce qui reste ouvert, par ordre de valeur.** 40 marches géantes (à-pics voulus par certains décors,
+pas par la rampe) · 3 motifs qui refusent le miroir (`passerelles-zigzag` : son sol est le vide, donc
+cul-de-sac ; les 2 cascades : jamais tirées, les motifs à plan d'eau passent par un autre chemin du
+planificateur) · 3 motifs inventoriés dans `motifs-isoles` avec un vrai défaut nommé, pas corrigé.
+
+**4. Prix de boutique touchés en R344/R345** (5 chapeaux + 1 bâton relevés) : les coffres de fer et d'or
+enrichissent le butin, donc la règle « un chapeau rare coûte 1,5× le pécule d'arrivée » ne tenait plus.
+C'est de l'équilibrage modifié sans arbitrage du joueur — à lui confirmer.
 
 ---
 
