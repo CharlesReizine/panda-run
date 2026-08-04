@@ -141,6 +141,18 @@ les sondes laissent des `vite preview` orphelins qui gardent leur port — un `-
 rabat en silence sur le serveur orphelin, donc sur une build d'il y a une heure. `pnpm verif` fait les
 choses dans l'ordre ; l'appel direct d'une sonde, non.
 
+**L'altitude plancher se pose DANS LE MOTIF, jamais au chaînage.** `runningAlt = Math.max(2, exitAlt)`
+fait démarrer le module suivant au-dessus de la surface que le précédent a laissée : le raccord ment et
+`passage-immerge` devient injoignable à toutes ses largeurs (plus 70 tests). En revanche
+`Math.max(ALT_PLANCHER, entryAlt)` dans le calcul de plancher de chaque motif marche : 215 « deux sols
+collés » → 77, au prix d'une regravure.
+
+**Relever les planchers remonte les altitudes d'entrée, donc raidit les rampes.** Effet de bord mesuré :
+les marches de rampe plus hautes qu'un saut passent de 1 à 13, sur deux motifs qui PLAFONNENT leur
+propre altitude (`grotte-scellee`, `echelle-descente-piegee`) — leur rampe d'accroche doit alors lâcher
+quarante rangées en huit tuiles. Dimensionner la rampe sur son dénivelé ne suffit pas : c'est le
+plafond d'altitude du motif qu'il faut retirer. Dette nommée dans `relief-jouable`.
+
 **Les clés d'objet en double ne sont vues que par `tsc`.** JS garde la dernière. Vérifié sur
 `SPECIAL_WATER_LEVELS`, `SPECIAL_FORCED`, `CATALOG`.
 

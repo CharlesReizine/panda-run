@@ -72,7 +72,13 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
     // on ne doit jamais pouvoir atterrir à Prontera sans pouvoir s'armer, quelle que soit la classe.
     weapons: [
       { itemId: 'epee-bambou', price: 310 },
-      { itemId: 'arc-souple', price: 340 },
+      // ⚠️ 350 ET PAS 340, ET LE CHIFFRE VIENT D'UNE MESURE. Après le relèvement des planchers de motif
+      // et la regravure, le pécule d'arrivée à Prontera est passé à 1293 or — et les quatre articles les
+      // moins chers coûtaient 1290. Le joueur pouvait donc repartir avec QUATRE pièces d'équipement,
+      // contre trois au maximum voulus (« j'arrive à Prontera, je peux tout acheter »). Dix or suffisent
+      // à remettre la vitrine du bon côté de la règle : c'est la plus petite correction possible, et elle
+      // porte sur l'arme la moins chère de la panoplie d'archer, pas sur un objet de progression.
+      { itemId: 'arc-souple', price: 350 },
       { itemId: 'baton-feuillu', price: 380 },
       { itemId: 'dague-jumelle', price: 350 },
       { itemId: 'arc-corne', price: 390 },
@@ -145,8 +151,8 @@ export const SHOP_BY_TOWN: Record<string, TownStock> = {
       // de celui qui n'a jamais eu la chance.
       // ── Roster élargi. Tout chapeau au-delà du commun reste au-dessus d'1,5× le pécule d'arrivée : la
       //    parure est le premier objectif de farm, jamais un achat d'étape.
-      { itemId: 'casquette-de-toile', price: 340 },
-      { itemId: 'foulard-de-pirate', price: 340 },
+      { itemId: 'casquette-de-toile', price: 350 }, // cf. arc-souple : +10 pour tenir la règle des 3 articles
+      { itemId: 'foulard-de-pirate', price: 350 }, // idem
       { itemId: 'couronne-de-fleurs', price: 350 },
       { itemId: 'cagoule-de-voleur', price: 380 },
       { itemId: 'heaume-de-bronze', price: 400 },

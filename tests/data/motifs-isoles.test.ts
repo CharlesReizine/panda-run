@@ -66,6 +66,12 @@ const INVENTAIRE_BATTERIE: Record<string, string> = {
   // modèle les voit comme un cul-de-sac. Dans un terrain réel, le module suivant chaîne à cette altitude.
   'lacs-cascade-montee': 'piège-sans-retour — sommet sans suite, artefact de l\'isolement',
   'colonnes-perilleuses': 'piège-sans-retour — idem, et l\'une des 5 copies divergentes du switch',
+  // ⚠️ APPARU AVEC L'ALTITUDE PLANCHER, et c'est le même artefact d'isolement. Le zigzag redescend
+  // jusqu'à `ALT_PLANCHER` au lieu de 1 : retourné en miroir, son pied se retrouve deux rangées
+  // au-dessus du plateau neutre qui le suit dans le test, et le modèle n'y voit plus de continuation.
+  // Dans un terrain réel le module suivant chaîne à cette altitude — `deadEndSurfaces` est vérifié sur
+  // les 58 terrains par reachable.test.
+  'echelle-zigzag-inverse': 'piege-sans-retour - pied sans suite, artefact de l\'isolement',
 }
 
 /** Défauts du motif planté seul entre deux plateaux : injoignables, recouvrements, et batterie. */

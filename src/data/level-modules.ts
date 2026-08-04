@@ -236,6 +236,19 @@ function mulberry32(a: number) {
   }
 }
 
+// ─── ALTITUDE MINIMALE D'UN PLANCHER DE MOTIF ───────────────────────────────────────────────
+// Retour du joueur, après trois captures du même défaut : « y a deux sols qui sont juste empilés, donc
+// si je marche sur le premier sans sauter je passe à travers le deuxième », puis « bah impose une
+// hauteur minimale ». Un plancher à l'altitude 0 se dessine DANS la rangée du sol du monde ; à
+// l'altitude 1, il s'y colle — deux bandes d'herbe sans un pouce d'air entre elles.
+//
+// ⚠️ ÇA SE POSE DANS LE MOTIF, PAS AU CHAÎNAGE. Borner `runningAlt` entre deux modules a été essayé et
+// c'est un piège : le module suivant démarrerait au-dessus de la surface que le précédent a réellement
+// laissée, donc sa rampe d'accroche partirait d'une altitude qui n'existe pas (`passage-immerge`
+// injoignable à toutes ses largeurs, plus soixante-dix tests de terrain). Un motif a le droit de
+// CHAÎNER au ras du sol ; il n'a pas le droit d'y DESSINER son plancher.
+const ALT_PLANCHER = 2
+
 const SIMPLE_JUMP_ROWS = 3 // marche maximale garantie au saut simple (rise ≈ 96px < 130px)
 
 // Hauteur MINIMALE d'une cascade remontable, en rangées. Retour joueur (R268) : « les cascades sont
@@ -984,7 +997,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     }
     case 'balcon': {
       // plateau + balcon surélevé (bonus optionnel), sortie = entrée
-      const alt = Math.max(1, entryAlt)
+      const alt = Math.max(ALT_PLANCHER, entryAlt)
       p.platforms.push({ x: 0, alt, w })
       p.platforms.push({ x: Math.floor(w / 3), alt: alt + SIMPLE_JUMP_ROWS, w: Math.max(4, Math.floor(w / 3)) })
       placeBirds(alt + 4)
@@ -999,7 +1012,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     }
     case 'double-sol': {
       // F8 : 2 étages plats reliés par une échelle, MÊME sortie que l'entrée (l'étage haut = bonus)
-      const alt = Math.max(1, entryAlt)
+      const alt = Math.max(ALT_PLANCHER, entryAlt)
       p.platforms.push({ x: 0, alt, w }) // sol bas, pleine largeur = chemin principal
       const xLad = Math.max(3, Math.floor(w * 0.35))
       const topAlt = alt + LADDER_H
@@ -1016,7 +1029,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     case 'triple-saut': {
       // sol à alt courant coupé de TROUS mortels (≤3 tuiles chacun, franchissables). Le motif change
       // le rythme des trous : croissant, régulier, irrégulier, ou triple saut serré.
-      const alt = Math.max(1, entryAlt)
+      const alt = Math.max(ALT_PLANCHER, entryAlt)
       const bank = 3
       p.platforms.push({ x: 0, alt, w: bank })
       let x = bank
@@ -1090,7 +1103,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     // ─── PHASE 2 — VERTICAL / étages (D2–D4) ─────────────────────────────────────────────────
     case 'zigzag': {
       // plateformes alternées contiguës (monte de 2, redescend de 1 → progression en dents de scie)
-      const alt = Math.max(1, entryAlt)
+      const alt = Math.max(ALT_PLANCHER, entryAlt)
       const seg = 4
       let x = 0, a = alt, i = 0
       while (x < w) {
@@ -1137,7 +1150,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     // ─── PHASE 2 — RISQUE / récompense (D2–D4) ───────────────────────────────────────────────
     case 'chemin-double': {
       // R23 : route HAUTE continue (sûre) + route BASSE à trous (rapide, risquée)
-      const lowAlt = Math.max(1, entryAlt)
+      const lowAlt = Math.max(ALT_PLANCHER, entryAlt)
       const highAlt = lowAlt + SIMPLE_JUMP_ROWS
       p.platforms.push({ x: 0, alt: lowAlt, w: 4 })
       let x = 4
@@ -1156,7 +1169,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     }
     case 'fausse-sortie': {
       // R28 : chemin continu + leurre surélevé sans issue (cul-de-sac à observer)
-      const alt = Math.max(1, entryAlt)
+      const alt = Math.max(ALT_PLANCHER, entryAlt)
       p.platforms.push({ x: 0, alt, w })
       p.platforms.push({ x: Math.floor(w / 3), alt: alt + SIMPLE_JUMP_ROWS, w: 5 }) // leurre
       p.exitAlt = alt
@@ -1164,7 +1177,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     }
     case 'detour-balcon': {
       // R26 : chemin principal au sol + balcon-trésor optionnel via échelle (sortie = entrée)
-      const alt = Math.max(1, entryAlt)
+      const alt = Math.max(ALT_PLANCHER, entryAlt)
       p.platforms.push({ x: 0, alt, w })
       const xLad = Math.max(3, Math.floor(w * 0.4))
       const topAlt = alt + LADDER_H
@@ -1210,7 +1223,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     case 'faux-plat': {
       // T16 : corniche plate (en hauteur) semée de PICS ISOLÉS à enjamber. Surface pleine + pics
       // d'1 tuile posés SUR la corniche à intervalles réguliers → on saute par-dessus.
-      const alt = Math.max(1, entryAlt)
+      const alt = Math.max(ALT_PLANCHER, entryAlt)
       p.platforms.push({ x: 0, alt, w })
       for (const sx of spread(w, 3)) p.spikes.push({ x: sx, w: 1, alt })
       p.exitAlt = alt
@@ -1230,7 +1243,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     case 'pics-quinconce': {
       // P31 : pics en QUINCONCE — lits de pics au sol de la corniche alternés avec des mini-corniches
       // surélevées elles aussi coiffées de pics → on slalome en hauteur.
-      const alt = Math.max(1, entryAlt)
+      const alt = Math.max(ALT_PLANCHER, entryAlt)
       p.platforms.push({ x: 0, alt, w })
       let x = 3, hi = false
       while (x < w - 4) {
@@ -1740,7 +1753,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // dernière passerelle est un PALIER LARGE jusqu'au bord droit (raccord au module suivant, au
       // sommet). ≤ 3 passerelles empilées par colonne (silhouette collines respectée, le vide ne
       // compte pas comme palier).
-      const base = Math.max(1, entryAlt)
+      const base = Math.max(ALT_PLANCHER, entryAlt)
       const STEP_RISE = SIMPLE_JUMP_ROWS // 3 : la diagonale reste franchissable, la verticale ne l'est plus
       const pw = 3
       const gapX = 2 // écart horizontal entre les deux colonnes (≤ portée de saut à +3 rangées)
@@ -1771,7 +1784,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // PLEIN continu : rater un saut = retomber sur le sol (pas de chute mortelle). Sol plein SOUS la
       // travée → fini le « miroir bizarre » (le sol ne suit plus la fréquence des passerelles). On
       // PLAFONNE à 4 passerelles (2 par colonne) : sol (1) + 2 passerelles = 3 paliers max (silhouette).
-      const base = Math.max(1, entryAlt)
+      const base = Math.max(ALT_PLANCHER, entryAlt)
       p.platforms.push({ x: 0, alt: base, w }) // SOL PLEIN pleine largeur (retombée sûre, jamais mortel)
       // passerelles flottantes en DENTS DE SCIE, chacune sur une COLONNE DISTINCTE (gauche→droite) →
       // sol (1) + AU PLUS 1 passerelle par colonne = 2 paliers (silhouette respectée). La dernière est
@@ -1985,7 +1998,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     case 'echelle-trou-echelle': {
       // On grimpe une 1ʳᵉ échelle jusqu'à un palier, on franchit un TROU mortel au saut, puis on grimpe
       // une 2ᵉ échelle décalée jusqu'au sommet. Deux étages d'escalade séparés par un vide franchissable.
-      const base = Math.max(1, entryAlt)
+      const base = Math.max(ALT_PLANCHER, entryAlt)
       const half = Math.max(8, Math.floor(w / 2))
       const land1 = poseLadder(p, 2, base, 0, 4, half - 3) // pied gauche + échelle 1 → palier1 (s'arrête avant le trou)
       p.gaps.push({ x: half - 3, w: 3 }) // TROU mortel entre le palier1 et le pied de l'échelle 2
@@ -1996,7 +2009,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     case 'echelle-zigzag': {
       // Une échelle mène à une suite de PASSERELLES en zigzag gauche-droite (montée puis redescente)
       // AU-DESSUS DU VIDE, jusqu'à la sortie. On grimpe, puis on slalome de passerelle en passerelle.
-      const base = Math.max(1, entryAlt)
+      const base = Math.max(ALT_PLANCHER, entryAlt)
       const landAlt = poseLadder(p, 2, base, 0, 5, 7) // échelle → petit palier de départ du zigzag
       const pw = 3
       let x = 7
@@ -2004,7 +2017,9 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const seq = [2, 2, -2, -2, 2] // monter, monter, redescendre, redescendre, remonter (dents de scie)
       for (const d of seq) {
         if (x + pw > w) break
-        a = Math.max(1, a + d)
+        // le zigzag redescend, mais jamais sous le plancher : sinon sa dernière passerelle se colle au
+        // sol du monde et, retourné en miroir, le motif devient un cul-de-sac pour le modèle de mouvement.
+        a = Math.max(ALT_PLANCHER, a + d)
         p.bridges.push({ x, alt: a, w: pw })
         x += pw + 2 // écart horizontal 2 (≤ portée de saut)
       }
@@ -2019,7 +2034,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     case 'echelles-decalees': {
       // Deux échelles nettement DÉCALÉES horizontalement, reliées par un large palier intermédiaire
       // (montée franche : on grimpe à gauche, on marche jusqu'à droite, on regrimpe). Pas de quinconce serré.
-      const base = Math.max(1, entryAlt)
+      const base = Math.max(ALT_PLANCHER, entryAlt)
       const mid = Math.max(7, Math.floor(w / 2))
       const land1 = poseLadder(p, 2, base, 0, 5, mid) // échelle 1 (gauche) → palier land1 (2..mid)
       const top = poseLadder(p, mid + 1, land1, mid, w - mid, w) // pied (mid..w) à land1 + échelle 2 (droite) → sommet
@@ -2785,7 +2800,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // Marches de TERRE espacées montant de SIMPLE_JUMP_ROWS (près du max de saut) avec un écart
       // horizontal → chaque marche force un VRAI saut (haut ET loin). SOL PLEIN continu dessous
       // (rater = retomber au sol, jamais mortel). ≤ 2 marches surélevées (sol + 2 = 3 paliers max).
-      const base = Math.max(1, entryAlt)
+      const base = Math.max(ALT_PLANCHER, entryAlt)
       p.platforms.push({ x: 0, alt: base, w }) // sol plein continu (retombée sûre)
       const rise = SIMPLE_JUMP_ROWS // +3 par marche (saut franc)
       const stepW = 3
@@ -2811,7 +2826,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
 
     // ─── ÉCHELLES SUCCESSIVES : échelle → court palier → 2ᵉ échelle (enchaînées, sans marche large) ──
     case 'echelles-successives': {
-      const base = Math.max(1, entryAlt)
+      const base = Math.max(ALT_PLANCHER, entryAlt)
       const x1 = 2
       const palRight = Math.min(w - 3, x1 + 7) // court palier de sortie de l'échelle 1
       const land1 = poseLadder(p, x1, base, 0, x1 + 3, palRight) // échelle 1 → petit palier
