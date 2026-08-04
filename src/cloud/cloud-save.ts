@@ -96,7 +96,15 @@ export async function chercher(key: string): Promise<Recherche> {
     const snap = await mod.getDoc(mod.doc(db, 'saves', key))
     if (snap.exists()) {
       const s = lireDoc(snap.data() as CloudDoc)
-      if (s) return { etat: 'trouve', save: s }
+      // ⚠️ LE DOCUMENT EXACT DOIT AUSSI PORTER LE BON NOM, ET CE CONTRÔLE MANQUAIT.
+      // `memeJoueur` n'était appliqué qu'au balayage de repli : un document trouvé à la clé exacte
+      // était rendu les yeux fermés. Mesuré dans la vraie base le 4 août : `saves/charlychoulove`
+      // contenait « megastock, niveau 1 » (poussé par erreur sous la clé du joueur précédent), et
+      // `chercher('charlychoulove')` le rendait — alors que le vrai chasseur 30, rangé sous une clé
+      // tronquée, attendait deux lignes plus bas et aurait été retrouvé par le balayage.
+      // La clé EST le pseudo : un document dont le nom interne dit autre chose est un accident, jamais
+      // la partie demandée. On l'ignore et on passe au repli.
+      if (s && memeJoueur(key, s.player.name ?? '', key)) return { etat: 'trouve', save: s }
     }
   } catch (e) {
     // on ne SAIT pas si la partie existe : surtout ne pas répondre « absent »

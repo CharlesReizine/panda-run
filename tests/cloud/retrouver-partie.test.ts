@@ -70,6 +70,25 @@ describe('retrouver la partie d\'un joueur', () => {
     expect(gagnant.savedAt).toBe(9000)
   })
 
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // LE DOCUMENT TROUVÉ À LA CLÉ EXACTE DOIT LUI AUSSI PORTER LE BON NOM
+  //
+  // Relevé dans la vraie base le 4 août — sixième perte de sauvegarde, et la seule où la donnée était
+  // encore là pour raconter ce qui s'était passé :
+  //
+  //   saves/charlychoulov  → nom « charlychoulove », chasseur 30   ← la vraie partie, clé tronquée
+  //   saves/charlychoulove → nom « megastock »,      novice 1      ← poussé par erreur sur cette clé
+  //
+  // `chercher('charlychoulove')` rendait le SECOND : le document existait à la clé exacte, donc il
+  // était rendu sans un regard pour le nom écrit dedans. Le contrôle `memeJoueur` n'était appliqué
+  // qu'au balayage de repli — lequel n'était jamais atteint. Le joueur voyait sa partie remplacée par
+  // un novice niveau 1, alors que son chasseur 30 dormait deux lignes plus haut.
+  it('un document à la clé exacte mais au NOM étranger n\'est pas la partie demandée', () => {
+    expect(memeJoueur('charlychoulove', 'megastock', 'charlychoulove')).toBe(false)
+    // et le repli, lui, retrouve bien la vraie partie sous sa clé tronquée
+    expect(memeJoueur('charlychoulov', 'charlychoulove', 'charlychoulove')).toBe(true)
+  })
+
   it('une clé courte ne revendique rien', () => {
     // le préfixe attrape-tout n'existe plus : « ab » ne peut plus prétendre à « abcdefgh »
     expect(memeJoueur('ab', 'quelconque', 'abcdefgh')).toBe(false)

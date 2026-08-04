@@ -8,7 +8,8 @@ import { logEvent } from '../core/logger'
 import { BUILD } from '../core/build'
 import { cloudAvailable, ensureUser } from '../cloud/auth'
 import { chercher, type Recherche } from '../cloud/cloud-save'
-import { pseudoKey, readActivePseudo, writeActivePseudo } from '../cloud/identity'
+import { pseudoKey, readActivePseudo, suggestionPseudo, writeActivePseudo } from '../cloud/identity'
+import { top as topClassement } from '../cloud/leaderboard'
 import { adoptCloud, setAutoPushKey } from '../cloud/sync-service'
 import { askPseudo } from '../ui/pseudo-prompt'
 import type { StampedSave } from '../core/save'
@@ -226,7 +227,10 @@ export class TitleScene extends Phaser.Scene {
 
   // NOUVELLE PARTIE — si le pseudo porte DÉJÀ une partie, on demande avant d'écraser.
   private async newGame() {
-    const pseudo = await askPseudo(readActivePseudo() ?? '')
+    // ⚠️ ON NE PRÉ-REMPLIT PAS AVEC LE PSEUDO MÉMORISÉ SUR CET APPAREIL. C'était le pseudo de la partie
+    // EN COURS : valider sans réfléchir visait donc la partie existante, et l'écrasait. On propose à la
+    // place un nom NEUF, affiché en gris, jamais pris par personne (cf. identity.suggestionPseudo).
+    const pseudo = await askPseudo('', await this.suggestionLibre())
     if (pseudo === null) return
     const key = pseudoKey(pseudo)
     if (!key) { this.say('Ce pseudo ne contient aucun caractère utilisable.', '#ffab91'); return }
@@ -248,6 +252,20 @@ export class TitleScene extends Phaser.Scene {
       return
     }
     this.startFresh(pseudo, key)
+  }
+
+  /**
+   * Un pseudo libre à proposer pour une nouvelle partie. Le classement donne les noms déjà pris ; s'il
+   * est injoignable, on suggère quand même (la confirmation d'écrasement reste le garde-fou, et un
+   * réseau absent ne doit pas empêcher de commencer à jouer).
+   */
+  private async suggestionLibre(): Promise<string> {
+    if (!cloudAvailable()) return suggestionPseudo([])
+    try {
+      return suggestionPseudo((await topClassement(50)).map((l) => l.pseudo))
+    } catch {
+      return suggestionPseudo([])
+    }
   }
 
   // Panneau de confirmation générique : un titre, un corps, et deux à trois choix.
@@ -300,18 +318,24 @@ export class TitleScene extends Phaser.Scene {
     // censées être égales mais calculées séparément finissent toujours par diverger — ici, elles ne
     // peuvent plus.
     const p = newPlayer(key)
+    // ⚠️ LA CLÉ S'ARME AVANT LA PREMIÈRE SAUVEGARDE, PAS APRÈS. `save()` déclenche le crochet onSaved,
+    // qui programme une poussée avec la clé COURANTE : armée après, cette première poussée partait sous
+    // le pseudo du joueur PRÉCÉDENT (celui pré-rempli au démarrage) et écrasait sa partie. C'est ce qui
+    // est arrivé le 4 août. `setAutoPushKey` annule désormais aussi toute poussée en attente à chaque
+    // changement d'identité — les deux gestes se complètent, aucun ne remplace l'autre.
+    setAutoPushKey(key)
     setPlayer(p)
     save(p)
     writeActivePseudo(pseudo)
-    setAutoPushKey(key)
     this.left = true
     this.scene.start('LevelIntro', { levelId: 'plaine-1', fromNode: 'plaine-1', targetNode: 'plaine-1', dir: 'forward' })
   }
 
   private adopt(pseudo: string, key: string, cloud: StampedSave) {
+    // même précaution qu'à `startFresh` : `adoptCloud` écrit en local, donc déclenche onSaved.
+    setAutoPushKey(key)
     adoptCloud(cloud)
     writeActivePseudo(pseudo)
-    setAutoPushKey(key)
     setPlayer(cloud.player)
     this.left = true
     this.scene.start('WorldMap')

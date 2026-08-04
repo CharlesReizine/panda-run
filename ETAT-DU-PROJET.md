@@ -11,7 +11,7 @@ qui reste à faire. Il se met à jour à chaque lot livré.
 ## Vérifier et déployer
 
 ```bash
-pnpm verif       # tsc + 1690 tests + build + les six sondes navigateur
+pnpm verif       # tsc + 1734 tests + build + les six sondes navigateur
 npx firebase-tools deploy --only hosting
 ```
 
@@ -50,7 +50,7 @@ rares). Les traiter fait partie du cycle, pas après.
 
 ### ⚠️ Toucher à la génération, c'est un cycle complet
 
-modifier → **regraver (6 à 7 minutes)** → resynchroniser les monstres → 1690 tests → six sondes → déployer.
+modifier → **regraver (6 à 7 minutes)** → resynchroniser les monstres → 1734 tests → six sondes → déployer.
 
 Trois tentatives ont échoué le 3 août faute d'avoir tenu ce cycle jusqu'au bout. Deux règles en découlent :
 
@@ -84,6 +84,31 @@ Supprimé décor par décor, et prouvé sans effet (géométrie des 58 terrains 
 cheval sur plusieurs tranches doit être **re-révélé sur toute la fenêtre**, pas seulement sur la tranche
 qui vient d'entrer : c'est le bug « le sol disparaît », arrivé deux fois.
 
+**Une profondeur de cuve ne se déduit JAMAIS de la hauteur du monde.** L'assembleur écrivait
+`h = groundRow + 1 - top` : le fond d'un bassin descendait au sol du terrain. Anodin à 16 rangées de
+haut, mortel à 45 — trente cuves étaient devenues improngeables, coffre au fond compris. La profondeur
+est désormais bornée par ce qu'une apnée permet (`profondeurCuveMax`, calé sur le tier), et on COMBLE en
+roche sous le nouveau fond. Corollaire : « sans y = au sol » ne veut plus dire « au sol du MONDE » —
+`spawnFeetRow` et le repositionnement des props résolvent le fond réel, sinon requins et coffres
+finissent dans le socle.
+
+**Un motif ne creuse jamais plus bas que `PROFONDEUR_MOTIF`.** S'il pose de la géométrie sous le fond
+visé (marches de lit, plafond immergé), l'assembleur RENONCE à rogner la cuve — il faudrait murer ce que
+le motif vient d'écrire. C'est ce qui rendait `bassin-creuse`, `lac-en-u`, `grotte-noyee` et
+`boyau-immerge` incapables d'être bornés. Leur lit et leurs plafonds immergés pendent désormais de la
+BERGE, plus du sol du monde.
+
+**La rampe d'accroche des motifs INVERSÉS ne passait pas par `addPedestals`.** Elle est posée après le
+`return` de la branche miroir : elle n'avait donc pas de socle, les socles des voisins la muraient des
+deux côtés, et il restait un rectangle de décor de fond au milieu du terrain. 142 poches closes, dont
+celles des captures du joueur. Un comblement de sécurité tourne en plus à l'assemblage
+(`sealedVoids` → dalles de roche NON solides : les déclarer solides faisait aussitôt crier
+`caveCeilingClearance` sur six « plafonds de grotte » qui n'en sont pas).
+
+**Un socle n'enjambe jamais une échelle — et on renonce à TOUTE la bande, pas à sa colonne.** Épargner
+la seule colonne laisserait une fente d'une tuile murée des deux côtés et coiffée : une poche close avec
+l'échelle dedans. Une corniche qui surplombe une montée est un surplomb, et n'a pas de corps.
+
 **Les clés d'objet en double ne sont vues que par `tsc`.** JS garde la dernière. Vérifié sur
 `SPECIAL_WATER_LEVELS`, `SPECIAL_FORCED`, `CATALOG`.
 
@@ -97,7 +122,7 @@ qui vient d'entrer : c'est le bug « le sol disparaît », arrivé deux fois.
 
 ## Sauvegarde — la partie la plus réparée du jeu
 
-Cinq pertes de sauvegarde successives, **toutes avec une suite de tests verte**. Les fonctions pures
+**Six** pertes de sauvegarde successives, **toutes avec une suite de tests verte**. Les fonctions pures
 étaient correctes ; le défaut vivait chaque fois dans l'enchaînement au sein de `TitleScene`, qu'aucun test
 ne peut atteindre (une scène Phaser ne s'instancie pas). D'où les règles actuelles :
 
@@ -113,6 +138,14 @@ ne peut atteindre (une scène Phaser ne s'instancie pas). D'où les règles actu
    charlychoulov et ça m'a chargé charlychoulove ». Une lettre oubliée ouvrait la partie d'un autre, que
    l'autosave écrasait ensuite.
 6. **`load()` ne lève jamais** et valide la forme : un JSON abîmé est traité comme absent.
+7. **Le nom EXACT vaut aussi pour le document trouvé À LA CLÉ.** `memeJoueur` n'était appliqué qu'au
+   balayage de repli : un document rangé à la bonne clé mais portant le nom d'un autre était rendu les
+   yeux fermés. C'est la sixième perte (4 août) — et son seul correctif a suffi à rendre la partie.
+8. **Une poussée automatique en attente appartient à l'identité qui l'a demandée.** Changer de pseudo
+   l'annule, et la clé s'arme AVANT la première sauvegarde. Sans ces deux gestes, la première
+   sauvegarde d'une partie neuve part sous le pseudo du joueur précédent, trois secondes plus tard.
+9. **Ce qui est PRÉ-REMPLI peut être validé par erreur** : on n'y met jamais le nom d'une partie qui
+   existe. « Nouvelle partie » ne propose qu'une SUGGESTION en gris, libre par construction.
 
 La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la matrice complète.
 
@@ -122,6 +155,8 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 | Build | Ce qui a changé |
 |---|---|
+| R348 | **sixième perte de sauvegarde élucidée et réparée sans écriture cloud** (poussée auto armée sur le pseudo précédent · document exact rendu sans contrôle du nom · repli « panda » résiduel) · pseudo SUGGÉRÉ au lieu de pré-rempli |
+| R347 | **lacs plongeables** (fond borné par l'apnée, socle de pierre dessous) · **plus une seule poche de vide close** (142 → 0) · **plus une seule échelle murée** · trois valideurs neufs, deux entrés dans la sélection de graines |
 | R332 | clé = nom du joueur · mitraillette en tir continu + éventail ±15° · zone morte de caméra |
 | R333 | **pierre cassable** (matière + 2 motifs + greffe sur `grotte-noyee`) · corniches de pierre nue comblées · trampoline recadré · attaques du ciel soumises à la gravité |
 | R334 | `chercher()` à trois états · synchro qui ne pousse plus à l'aveugle · délai 6 s → 20 s |
@@ -155,17 +190,48 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 ---
 
-## ⇦ REPRENDRE ICI (fin de session du 4 août)
+## ⇦ REPRENDRE ICI (fin de session du 4 août, après les lots R347 et R348)
 
-**1. LE CHAMP DU PSEUDO PRÉ-REMPLI — à faire en premier, et c'est un risque de perte de partie.**
+**0. ✅ LA SIXIÈME PERTE DE SAUVEGARDE A EU LIEU — ET ELLE EST RÉPARÉE SANS AVOIR ÉCRIT DANS LE CLOUD.**
+Constat : `smoke-sauvegarde` rouge, `saves/charlychoulove` contenait « megastock, niveau 1, novice ».
+Lecture de la vraie base (REST, en lecture seule) :
+
+| document | nom inscrit dedans | niveau | écrit le |
+|---|---|---|---|
+| `saves/charlychoulov` | charlychoulove | **30 chasseur** | 3 août 12 h 50 |
+| `saves/panda` | charlychoulove | 29 archer | 2 août 19 h 02 |
+| `saves/charlychoulove` | megastock | 1 novice | **4 août 10 h 58** |
+| `saves/megastock` | megastock | 3 novice | 4 août 11 h 18 |
+
+La vraie partie n'avait jamais disparu : elle dormait sous une clé tronquée, et c'est la CLÉ du joueur
+qui avait été écrasée par la partie d'un autre personnage. Trois défauts, tous corrigés :
+
+- **la poussée automatique était armée avec le pseudo PRÉCÉDENT.** `startFresh` sauvegardait AVANT
+  d'armer la nouvelle clé ; le crochet `onSaved` programmait donc une poussée à +3 s portant l'ancienne
+  clé, et `setAutoPushKey` ne l'annulait pas. Trois secondes plus tard, le niveau 1 partait sur
+  `saves/charlychoulove`. Corrigé des deux côtés : la clé s'arme avant la première sauvegarde, ET tout
+  changement d'identité annule la poussée en attente (`tests/cloud/poussee-auto.test.ts`, mutation-testé).
+- **`chercher()` faisait confiance au document trouvé à la clé exacte.** `memeJoueur` n'était appliqué
+  qu'au balayage de repli, jamais atteint puisque le document existait. Il est appliqué aux deux :
+  la lecture rejette le document étranger et le repli retrouve le chasseur 30. **C'est ce seul correctif
+  qui a rendu la partie au joueur** — aucune écriture dans Firestore.
+- **le repli « panda » survivait dans `ui/pseudo-prompt.ts`.** Il avait été supprimé de `pseudoKey` mais
+  pas là : un champ vide rangeait tout le monde dans le même document (d'où `saves/panda`).
+
+⚠️ **`saves/charlychoulove` (megastock niv 1), `saves/charlychoulov`, `saves/panda` sont toujours là.**
+Rien n'a été supprimé : le repli par le nom les rend inoffensifs, et tant qu'ils existent la trace de
+l'incident aussi. À nettoyer un jour, sans urgence.
+
+**1. ✅ LE CHAMP DU PSEUDO N'EST PLUS PRÉ-REMPLI SUR « NOUVELLE PARTIE ».**
 Retour joueur : « le placeholder de prénom c'est Charly12 ou charly13 selon le nombre de comptes déjà
 créés, là c'est charlychoulove ». Vérifié : « charlychoulove » n'est écrit NULLE PART dans le code (les
 occurrences sont des commentaires d'anciens incidents) — c'est le nom MÉMORISÉ qui est pré-rempli.
 Or la clé du document EST le pseudo : valider sans réfléchir tombe donc sur la partie existante et
 l'autosave l'écrase. C'est la famille de bugs qui a déjà coûté cinq sauvegardes ici.
-Ce qu'il veut : un nom SUGGÉRÉ et libre (`Charly12`, `Charly13`… selon le nombre de parties), jamais un
-nom déjà pris. Dans `TitleScene`, bien distinguer ce qui est **pré-rempli** (validé par erreur) de ce qui
-est **suggéré en gris** (à taper pour l'accepter).
+Fait : « Continuer » pré-remplit toujours (on retape rarement son propre nom), « Nouvelle partie » ne
+pré-remplit plus rien et affiche EN GRIS un nom libre (`panda13` selon le nombre de comptes connus,
+`identity.suggestionPseudo`, jamais un pseudo déjà pris). Valider à vide prend la suggestion ; sans
+suggestion utilisable, la saisie refuse au lieu d'inventer un nom.
 
 **2. RETIRER LE SOL SOUS LES SAUTS CONTOURNABLES — ça vaut le coup de réessayer MAINTENANT.**
 Demande : « les sauts qu'on peut éviter, tu dégages le sol en dessous » (26 enchaînements mesurés).
@@ -184,6 +250,13 @@ de la branche `lot-motifs-descendants` — il suffit de le remettre et de regrav
 pas par la rampe) · 3 motifs qui refusent le miroir (`passerelles-zigzag` : son sol est le vide, donc
 cul-de-sac ; les 2 cascades : jamais tirées, les motifs à plan d'eau passent par un autre chemin du
 planificateur) · 3 motifs inventoriés dans `motifs-isoles` avec un vrai défaut nommé, pas corrigé.
+
+**3 bis. R347 N'A PAS DEMANDÉ DE REGRAVURE, et c'est une exception qui mérite d'être motivée.**
+Les trois correctifs sont des corrections de CAUSE dans l'assemblage : ils s'appliquent au plan gravé
+au moment de le rejouer. `tests/data/graines.test.ts` rejoue la validation complète sur les 58 plans et
+passe — les plans restent donc valides. Regraver n'aurait rien corrigé et aurait entraîné le resync des
+monstres, `balance-invariant` et `shop-economy` par-dessus le marché. La règle générale ne change pas :
+**on regrave dès que les plans gravés ne valident plus.** Ici, ils validaient.
 
 **4. Prix de boutique touchés en R344/R345** (5 chapeaux + 1 bâton relevés) : les coffres de fer et d'or
 enrichissent le butin, donc la règle « un chapeau rare coûte 1,5× le pécule d'arrivée » ne tenait plus.

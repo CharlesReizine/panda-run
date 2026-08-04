@@ -9,8 +9,15 @@
 
 import { PSEUDO_MAX, sanitizePseudo } from '../cloud/identity'
 
-/** Affiche la saisie et résout avec le pseudo canonique, ou `null` si le joueur annule. */
-export function askPseudo(current = ''): Promise<string | null> {
+/**
+ * Affiche la saisie et résout avec le pseudo canonique, ou `null` si le joueur annule.
+ *
+ * `current` PRÉ-REMPLIT le champ (chemin « Continuer » : on retape rarement son propre nom).
+ * `suggestion` ne fait que S'AFFICHER EN GRIS (chemin « Nouvelle partie ») : elle sert de repli si le
+ * joueur valide à vide, mais elle n'est pas dans le champ, donc valider sans lire ne peut pas viser la
+ * partie de quelqu'un d'autre. Les deux ne se mélangent jamais — c'est le sens de la distinction.
+ */
+export function askPseudo(current = '', suggestion = ''): Promise<string | null> {
   return new Promise((resolve) => {
     const back = document.createElement('div')
     back.style.cssText = [
@@ -36,7 +43,7 @@ export function askPseudo(current = ''): Promise<string | null> {
     input.maxLength = PSEUDO_MAX
     input.autocomplete = 'off'
     input.spellcheck = false
-    input.placeholder = 'panda'
+    input.placeholder = sanitizePseudo(suggestion) || 'panda'
     // pas de majuscule auto ni de correction : le champ n'accepte que des minuscules
     input.setAttribute('autocapitalize', 'none')
     input.setAttribute('autocorrect', 'off')
@@ -83,8 +90,22 @@ export function askPseudo(current = ''): Promise<string | null> {
       back.remove()
       resolve(value)
     }
-    // un nom vide n'a pas de sens : on retombe sur « panda » plutôt que de bloquer le joueur
-    const submit = () => close(sanitizePseudo(input.value) || 'panda')
+    // ⚠️ PLUS DE REPLI « panda », ET C'EST LA MÊME CORRECTION QU'EN identity.pseudoKey — elle n'avait
+    // simplement jamais été portée jusqu'ici. Un champ vide envoyait tout le monde dans le MÊME
+    // document : c'est comme ça que `saves/panda` s'est retrouvé à contenir « charlychoulove, archer
+    // 29 ». On retombe sur la SUGGESTION (libre par construction) ; à défaut, on refuse de valider
+    // plutôt que d'inventer un nom que le joueur ne saura pas retaper.
+    const submit = () => {
+      const choisi = sanitizePseudo(input.value) || sanitizePseudo(suggestion)
+      if (!choisi) {
+        hint.textContent = 'Il faut un nom pour retrouver ta partie plus tard.'
+        hint.style.color = '#ffab91'
+        hint.style.opacity = '1'
+        input.focus()
+        return
+      }
+      close(choisi)
+    }
 
     ok.addEventListener('click', submit)
     cancel.addEventListener('click', () => close(null))

@@ -107,12 +107,40 @@ let autoKey: string | null = null
 let attached = false
 
 export function setAutoPushKey(key: string | null): void {
+  // ══════════════════════════════════════════════════════════════════════════════════════════════
+  // ⚠️ CHANGER D'IDENTITÉ ANNULE TOUTE POUSSÉE EN ATTENTE — ET C'EST LA SIXIÈME PERTE DE SAUVEGARDE
+  //
+  // Relevé dans la vraie base le 4 août : `saves/charlychoulove` contenait « megastock, niveau 1,
+  // novice », écrit à 10 h 58 — l'instant exact où une NOUVELLE partie a été créée. Le chasseur 30 du
+  // joueur était intact ailleurs (`saves/charlychoulov`) ; c'est bien sa clé À LUI qui avait été
+  // écrasée par la partie de quelqu'un d'autre.
+  //
+  // L'enchaînement, à la milliseconde près :
+  //   1. au démarrage, `TitleScene` arme la poussée avec le pseudo MÉMORISÉ (charlychoulove) ;
+  //   2. `startFresh` appelle `save(nouveauPerso)` — le crochet onSaved programme une poussée à
+  //      +3 s, avec la clé encore armée, donc celle de l'ancien joueur ;
+  //   3. `setAutoPushKey('megastock')` change bien la clé COURANTE… mais la poussée déjà programmée
+  //      garde la sienne, figée dans sa fermeture ;
+  //   4. trois secondes plus tard, le niveau 1 part sur `saves/charlychoulove`.
+  //
+  // Une poussée en attente appartient à l'identité qui l'a demandée. Quand cette identité change, il
+  // n'existe AUCUN cas où la livrer est correct : soit c'est la même clé et on la reprogrammera, soit
+  // c'en est une autre et on est en train d'écrire chez quelqu'un d'autre. On l'annule donc.
+  if (key !== autoKey) annulerPousseeEnAttente()
   autoKey = key
   if (attached) return
   attached = true
   onSaved((player, savedAt) => {
     if (autoKey) schedulePush(autoKey, player, savedAt)
   })
+}
+
+/** Annule la poussée débouncée en attente, s'il y en a une. Rend `true` si quelque chose a été annulé. */
+export function annulerPousseeEnAttente(): boolean {
+  if (!pending) return false
+  clearTimeout(pending)
+  pending = null
+  return true
 }
 
 export function schedulePush(key: string, player: PlayerState, savedAt: number, delayMs = 3000): void {

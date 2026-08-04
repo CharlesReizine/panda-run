@@ -45,6 +45,28 @@ export function pseudoKey(pseudo: string): string {
   return sanitizePseudo(pseudo)
 }
 
+/**
+ * Pseudo SUGGÉRÉ pour une nouvelle partie : `base` + un numéro qui n'est pris par personne.
+ *
+ * ⚠️ SUGGÉRER, CE N'EST PAS PRÉ-REMPLIR, et c'est toute la raison d'être de cette fonction. Le champ
+ * était pré-rempli avec le pseudo MÉMORISÉ sur l'appareil : sur « Nouvelle partie », valider sans
+ * réfléchir visait donc la partie existante. Retour du joueur : « le placeholder de prénom c'est
+ * Charly12 ou charly13 selon le nombre de comptes déjà créés, là c'est charlychoulove ». Il décrit
+ * exactement le bon comportement — un nom NEUF, jamais celui de quelqu'un qui joue déjà.
+ *
+ * Le numéro part du nombre de comptes connus (« charly13 » quand il y en a douze) puis monte jusqu'à
+ * tomber sur un nom libre : on ne propose JAMAIS un pseudo déjà pris, même si la liste est trouée.
+ */
+export function suggestionPseudo(pris: Iterable<string>, base = 'panda'): string {
+  const occupes = new Set([...pris].map(sanitizePseudo).filter(Boolean))
+  const racine = sanitizePseudo(base) || 'panda'
+  for (let n = occupes.size + 1; n < occupes.size + 1000; n++) {
+    const essai = sanitizePseudo(`${racine}${n}`)
+    if (essai && !occupes.has(essai)) return essai
+  }
+  return racine // inatteignable en pratique : mille noms consécutifs pris
+}
+
 const ACTIVE_KEY = 'panda-run-pseudo'
 
 function safeStorage(): Storage | null {
