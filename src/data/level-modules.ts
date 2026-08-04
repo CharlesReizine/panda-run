@@ -3769,6 +3769,67 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
       && (b.w > a.w || (b.w === a.w && j < i)))) gaps.splice(i, 1)
   }
 
+  // ─── UN SOCLE SANS COIFFE N'A PLUS DE RAISON D'EXISTER ───────────────────────────────────────
+  //
+  // Retour du joueur, capture à l'appui : « encore de la pierre qui vole au-dessus du sol, ça continue
+  // d'arriver ». Trois colonnes de roche nues, montant du sol jusqu'au ciel, sans un brin d'herbe
+  // dessus. Son intuition était juste : « je pense que c'est dû au fait que la couche du bas tu la
+  // comptes pas pareil. »
+  //
+  // La cause est en amont, dans mes propres passes : un socle est posé pour porter une plateforme, puis
+  // cette plateforme est retirée (doublon avec le sol du monde, ou rognage de double plancher) — et le
+  // socle survit à sa coiffe. Il ne porte plus rien, ne se marche pas, et se lit comme un mur planté au
+  // milieu du décor.
+  //
+  // ⚠️ ON NE REGARDE QUE LES SOCLES, PAS TOUTE LA PIERRE. Une dalle qui ne touche pas le sol est autre
+  // chose — plafond de grotte, coiffe d'échelle suspendue, paroi de cuve — et elle a le droit de n'avoir
+  // rien au-dessus. Le critère est donc « elle descend jusqu'au sol ET rien ne la coiffe ».
+  for (let i = rockBands.length - 1; i >= 0; i--) {
+    const r = rockBands[i]!
+    if (r.y + r.h - 1 < groundRow - 1) continue // ne touche pas le sol : ce n'est pas un socle
+    const chevauche = (x: number, w: number) => x < r.x + r.w && x + w > r.x
+    const coiffe = platforms.some((p) => p.y === r.y - 1 && chevauche(p.x, p.w))
+      || rockBands.some((o) => o !== r && o.y + o.h === r.y && chevauche(o.x, o.w))
+      || breakables.some((b) => b.y + b.h === r.y && chevauche(b.x, b.w))
+      || hazards.some((h) => h.kind === 'water' && chevauche(h.x, h.w))
+      || (ladders ?? []).some((l) => l.x >= r.x && l.x < r.x + r.w)
+    if (!coiffe) rockBands.splice(i, 1)
+  }
+
+  // ─── UNE TERRE POSÉE SUR DU PLEIN EST SOLIDE, PAS TRAVERSABLE ────────────────────────────────
+  //
+  // Retour du joueur : « quand j'ai de la pierre et direct au-dessus du sol, je peux être sur la pierre
+  // et du coup marcher à travers le sol. Ça c'est impoooossible. En gros je rentre par le côté et je
+  // passe à travers la terre. Il faudrait que dans le cas où j'ai de la terre sur de la pierre, je
+  // puisse pas passer à travers la terre. »
+  //
+  // Il a raison, et la règle est plus simple que le défaut : une plateforme de terre est TRAVERSABLE
+  // PAR LE BAS (`landsFromAbove`) pour qu'on puisse sauter dedans depuis dessous. C'est tout son
+  // intérêt quand elle FLOTTE. Mais quand elle coiffe une masse de pierre ou le sol du monde, il n'y a
+  // rien dessous d'où sauter : la traversée ne sert plus à rien, et elle se retourne contre le joueur —
+  // on entre par le côté et on se retrouve DANS le décor.
+  //
+  // ⚠️ ON LE MARQUE DANS LA DONNÉE, PAS AU RENDU. Le faire seulement dans LevelScene ferait diverger la
+  // physique et les validateurs : le modèle croirait qu'on traverse là où le jeu bloque, et
+  // l'atteignabilité deviendrait un mensonge.
+  //
+  // ⚠️ ET C'EST `ancree`, PAS `solid`. `solid` veut dire « marche de PIERRE » : il change la TEXTURE
+  // autant que la collision. L'utiliser ici repeindrait 2534 plateformes de terre en roche — la moitié
+  // du jeu. `ancree` ne touche qu'à la collision : la terre reste de la terre, elle cesse juste d'être
+  // un rideau qu'on traverse.
+  for (const p of platforms) {
+    if (p.solid) continue
+    let poseeSurDuPlein = true
+    for (let x = p.x; x < p.x + p.w && poseeSurDuPlein; x++) {
+      const sousElle = p.y + 1
+      const surRoche = rockBands.some((r) => x >= r.x && x < r.x + r.w && sousElle >= r.y && sousElle < r.y + r.h)
+      const surSol = sousElle >= groundRow && !gaps.some((g) => x >= g.x && x < g.x + g.w)
+      const autrePlat = platforms.some((q) => q !== p && q.y === sousElle && x >= q.x && x < q.x + q.w)
+      if (!surRoche && !surSol && !autrePlat) poseeSurDuPlein = false
+    }
+    if (poseeSurDuPlein) p.ancree = true
+  }
+
   // ─── FOND DE CUVE REMONTÉ : CE QUI SE POSE « AU SOL » SE POSE SUR LE FOND ────────────────────
   // La convention du jeu est « sans y = au sol du monde », et elle suffisait tant qu'une cuve
   // descendait jusque-là. Depuis la borne d'apnée, le fond d'un bassin est bien plus haut : un coffre

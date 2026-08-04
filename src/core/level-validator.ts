@@ -1070,7 +1070,8 @@ export function sealedVoids(level: LevelDef): SealedVoid[] {
     set(x, groundRow, MASSIF); set(x, groundRow + 1, MASSIF)
   }
   // plateformes : la terre est one-way, la pierre (`solid`) est un vrai mur
-  for (const p of level.platforms) for (let x = p.x; x < p.x + p.w; x++) set(x, p.y, p.solid ? MASSIF : ONE_WAY)
+  // une terre ANCRÉE (posée sur de la matière) ne se traverse plus par le bas : elle vaut un mur.
+  for (const p of level.platforms) for (let x = p.x; x < p.x + p.w; x++) set(x, p.y, p.solid || p.ancree ? MASSIF : ONE_WAY)
   // pierre fragile : on la casse → ce qu'elle ferme reste accessible
   for (const b of level.breakables ?? []) {
     for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) set(x, y, VIDE)

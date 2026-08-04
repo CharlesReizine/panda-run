@@ -489,7 +489,12 @@ export class LevelScene extends Phaser.Scene {
         this.add.tileSprite(p.x * TILE, p.y * TILE, p.w * TILE, TILE, 'basin-wall').setOrigin(0, 0).setDepth(-4)
         this.addStaticBand(platforms, p.x * TILE, p.y * TILE, p.w * TILE, TILE)
       } else {
-        // MARCHE DE TERRE : plateforme one-way (traversable par le bas, on se pose dessus en retombant).
+        // MARCHE DE TERRE. Traversable par le bas SEULEMENT SI ELLE FLOTTE (`!p.ancree`) : c'est là que
+        // le one-way a un sens, on saute dedans depuis dessous. Posée sur de la pierre ou sur le sol, il
+        // n'y a rien dessous d'où sauter — et la traversée se retourne contre le joueur : « je rentre
+        // par le côté et je passe à travers la terre, c'est impoooossible ». Elle garde sa texture de
+        // terre (c'en est), elle perd juste sa perméabilité.
+        const groupe = p.ancree ? platforms : oneWay
         // ⚠️ PERCÉE AU CROISEMENT D'UNE ÉCHELLE. « Une échelle que je peux pas descendre », puis « faut
         // élargir un peu pour laisser un trou à côté de l'échelle pour remonter (et descendre) ». Laisser
         // la corniche pleine et se contenter de la rendre traversable ne suffit pas : le passage doit se
@@ -499,7 +504,10 @@ export class LevelScene extends Phaser.Scene {
         const traversee = echellesQuiTraversent(p)
         for (const seg of percerPourEchelles(p, traversee)) {
           this.add.tileSprite(seg.x * TILE, p.y * TILE, seg.w * TILE, TILE, platformKey).setOrigin(0, 0).setDepth(-4)
-          this.addStaticBand(oneWay, seg.x * TILE, p.y * TILE, seg.w * TILE, TILE, true)
+          // le groupe change la PERMÉABILITÉ, pas l'épaisseur : une terre ancrée entre dans `platforms`
+          // (collision pleine), une terre qui flotte reste one-way. Le trou d'échelle, lui, reste percé
+          // dans les deux cas — c'est le passage vertical, et il doit se voir.
+          this.addStaticBand(groupe, seg.x * TILE, p.y * TILE, seg.w * TILE, TILE, groupe === oneWay)
         }
       }
     }

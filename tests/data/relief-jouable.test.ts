@@ -17,6 +17,59 @@ import { MARCHES_RAMPE } from '../../src/data/level-modules'
 const nonBoss = Object.values(LEVELS).filter((l) => !l.boss)
 
 describe('relief jouable', () => {
+  // ── « encore de la pierre qui vole au-dessus du sol » ────────────────────────────────────────
+  // Trois colonnes de roche nues montant du sol au ciel, sans un brin d'herbe dessus. Son intuition
+  // était juste : « je pense que c'est dû au fait que la couche du bas tu la comptes pas pareil ». Un
+  // socle est posé pour porter une plateforme ; quand une passe de nettoyage retire cette plateforme
+  // (doublon avec le sol du monde, rognage de double plancher), le socle survit à sa coiffe.
+  //
+  // ⚠️ ON NE JUGE QUE LES SOCLES. Une dalle qui NE touche PAS le sol est autre chose — plafond de
+  // grotte, coiffe d'échelle suspendue, paroi de cuve — et elle a parfaitement le droit de n'avoir rien
+  // au-dessus. Le critère est « elle descend jusqu'au sol ET rien ne la coiffe ».
+  it('aucun socle de pierre ne monte du sol sans rien porter', () => {
+    const nus: string[] = []
+    for (const l of nonBoss) {
+      const gr = groundRowFor(l.heightTiles)
+      for (const r of l.rockBands ?? []) {
+        if (r.y + r.h - 1 < gr - 1) continue
+        const ch = (x: number, w: number) => x < r.x + r.w && x + w > r.x
+        const coiffe = l.platforms.some((p) => p.y === r.y - 1 && ch(p.x, p.w))
+          || (l.rockBands ?? []).some((o) => o !== r && o.y + o.h === r.y && ch(o.x, o.w))
+          || (l.breakables ?? []).some((b) => b.y + b.h === r.y && ch(b.x, b.w))
+          || (l.hazards ?? []).some((h) => h.kind === 'water' && ch(h.x, h.w))
+          || (l.ladders ?? []).some((la) => la.x >= r.x && la.x < r.x + r.w)
+        if (!coiffe) nus.push(`${l.id} x${r.x}+${r.w} y${r.y}h${r.h}`)
+      }
+    }
+    expect(nus, `socles nus :\n   ${nus.slice(0, 8).join('\n   ')}`).toEqual([])
+  })
+
+  // ── « quand j'ai de la terre sur de la pierre je passe à travers, c'est impoooossible » ──────
+  // Une plateforme de terre est traversable par le BAS — c'est tout son intérêt quand elle FLOTTE. Posée
+  // sur de la pierre ou sur le sol, il n'y a rien dessous d'où sauter, et la traversée se retourne
+  // contre le joueur : on entre par le côté et on se retrouve DANS le décor. Le joueur a demandé la
+  // matière qui manquait : « de la terre surface, mais pas les plateaux de terre qui volent, et ce
+  // truc-là est infranchissable ». C'est `ancree` — même texture, collision pleine.
+  it('toute terre posée sur de la matière est infranchissable', () => {
+    const perméables: string[] = []
+    for (const l of nonBoss) {
+      const gr = groundRowFor(l.heightTiles)
+      for (const p of l.platforms) {
+        if (p.solid || p.ancree) continue
+        let surDuPlein = true
+        for (let x = p.x; x < p.x + p.w && surDuPlein; x++) {
+          const sous = p.y + 1
+          const roc = (l.rockBands ?? []).some((r) => x >= r.x && x < r.x + r.w && sous >= r.y && sous < r.y + r.h)
+          const sol = sous >= gr && !(l.gaps ?? []).some((g) => x >= g.x && x < g.x + g.w)
+          const autre = l.platforms.some((q) => q !== p && q.y === sous && x >= q.x && x < q.x + q.w)
+          if (!roc && !sol && !autre) surDuPlein = false
+        }
+        if (surDuPlein) perméables.push(`${l.id} x${p.x}+${p.w} y${p.y}`)
+      }
+    }
+    expect(perméables, `terres traversables posées sur du plein :\n   ${perméables.slice(0, 8).join('\n   ')}`).toEqual([])
+  })
+
   // ── 0) « deux sols juste empilés » ───────────────────────────────────────────────────────────
   // Retour du joueur, capture à l'appui : « y a deux sols qui sont juste empilés, donc si je marche sur
   // le premier sans sauter, je passe à travers le deuxième. On a dit pas deux sols trop proches en

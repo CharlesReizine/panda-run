@@ -21,7 +21,11 @@ export interface LevelDef {
   // RIGIDE — collision PLEINE (on ne la traverse pas, ni par le bas ni par les côtés). Absent →
   // plateforme de TERRE one-way (traversable par le bas, cf. landsFromAbove). Les marches solides
   // sont posées ISOLÉES (trou d'air entre chaque) pour ne jamais coincer le panda.
-  platforms: { x: number; y: number; w: number; solid?: boolean }[]
+  // `ancree` : plateforme de TERRE (texture de biome) mais à COLLISION PLEINE, parce qu'elle repose sur
+  // de la matière. Distinct de `solid`, qui veut dire « marche de PIERRE » — texture ET collision. Les
+  // confondre repeindrait la moitié du jeu en roche. Retour du joueur : « quand j'ai de la terre sur de
+  // la pierre, je peux rentrer par le côté et passer à travers la terre, c'est impoooossible ».
+  platforms: { x: number; y: number; w: number; solid?: boolean; ancree?: boolean }[]
   // x en tuiles ; y (tuiles) OPTIONNEL = rangée de la corniche sur laquelle le monstre apparaît POSÉ
   // (pas en l'air, pas dans le sol). Absent → au sol. Sert à peupler la VERTICALE (monstres en hauteur).
   spawns: { monsterId: string; x: number; y?: number }[]

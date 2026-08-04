@@ -153,6 +153,18 @@ propre altitude (`grotte-scellee`, `echelle-descente-piegee`) — leur rampe d'a
 quarante rangées en huit tuiles. Dimensionner la rampe sur son dénivelé ne suffit pas : c'est le
 plafond d'altitude du motif qu'il faut retirer. Dette nommée dans `relief-jouable`.
 
+**`solid` VEUT DIRE « PIERRE », PAS « INFRANCHISSABLE » — et les confondre repeint la moitié du jeu.**
+Il change la TEXTURE (maçonnerie) autant que la collision. Pour rendre une terre infranchissable sans
+la transformer en roche, il a fallu une troisième matière : `ancree`. Une plateforme de terre est
+traversable par le bas quand elle FLOTTE (c'est tout son intérêt) ; posée sur de la pierre ou sur le
+sol, il n'y a rien dessous d'où sauter, et la traversée se retourne contre le joueur.
+
+**Un socle survit à sa coiffe si on ne le surveille pas.** Les passes qui retirent une plateforme
+(doublon avec le sol, rognage de double plancher) laissaient debout le socle de pierre posé pour la
+porter : des colonnes de roche nues montant du sol au ciel. 66 cas. Le garde-fou ne juge QUE les dalles
+qui descendent jusqu'au sol — un plafond de grotte ou une coiffe d'échelle suspendue a le droit de
+n'avoir rien au-dessus.
+
 **Les clés d'objet en double ne sont vues que par `tsc`.** JS garde la dernière. Vérifié sur
 `SPECIAL_WATER_LEVELS`, `SPECIAL_FORCED`, `CATALOG`.
 
