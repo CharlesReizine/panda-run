@@ -1115,3 +1115,60 @@ export function sealedVoids(level: LevelDef): SealedVoid[] {
   }
   return out
 }
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// UN ENCHAÎNEMENT DE SAUTS NE SE CONTOURNE PAS EN MARCHANT DESSOUS
+//
+// Demande du joueur : « les sauts qu'on peut éviter, tu dégages le sol en dessous ». Une suite de
+// plateformes suspendues avec du sol praticable juste en dessous, c'est du contenu décoratif : on
+// passe dessous en marchant, on ne saute jamais. Mesuré à l'introduction : des chaînes sur presque
+// tous les terrains, jusqu'à six plateformes d'affilée avec dix-huit rangées de sol utilisable dessous.
+//
+// ⚠️ LES DEUX SEUILS NE SONT PAS DES RÉGLAGES DE CONFORT, ILS SONT CONTRAINTS.
+// L'écart de chaînage vaut 3 tuiles parce que c'est la portée d'un saut à plat (`maxJumpGapPx`) : une
+// chaîne plus lâche que ça ne « couvre » plus le trou qu'on creuse dessous, et `oversizedGaps` le
+// refuserait — à juste titre, puisqu'on aurait fabriqué un gouffre infranchissable. Les deux règles
+// doivent rester d'accord, sinon le générateur ne trouve plus une seule graine.
+const CHAINE_ECART = 3 // tuiles entre deux plateformes de la même chaîne (= portée d'un saut à plat)
+const CHAINE_DY = 4    // dénivelé maximal entre deux plateformes de la même chaîne
+const CHAINE_MIN = 3   // en dessous, ce n'est pas un « enchaînement », c'est un obstacle isolé
+
+export interface ChaineContournable { x: number; w: number; plats: number; row: number }
+
+/** Chaînes de plateformes suspendues qu'on peut éviter en marchant sur le sol, juste en dessous. */
+export function chainesContournables(level: LevelDef): ChaineContournable[] {
+  const groundRow = groundRowFor(level.heightTiles)
+  const gaps = level.gaps ?? []
+  const eaux = (level.hazards ?? []).filter((h) => h.kind === 'water')
+  const rocs = level.rockBands ?? []
+  // le sol de cette colonne se marche-t-il vraiment ? (ni trou, ni cuve, ni enterré sous la roche)
+  const solPraticable = (x: number): boolean => {
+    if (gaps.some((g) => x >= g.x && x < g.x + g.w)) return false
+    if (eaux.some((h) => x >= h.x && x < h.x + h.w)) return false
+    return !rocs.some((r) => x >= r.x && x < r.x + r.w && r.y <= groundRow - 1 && r.y + r.h > groundRow - 1)
+  }
+  const suspendue = (p: { x: number; y: number; w: number }): boolean => {
+    if (p.y >= groundRow - 2) return false // trop près du sol : ce n'est pas une plateforme « en l'air »
+    for (let x = p.x; x < p.x + p.w; x++) if (!solPraticable(x)) return false
+    return true
+  }
+
+  const out: ChaineContournable[] = []
+  const plats = [...level.platforms].sort((a, b) => a.x - b.x)
+  let chaine: typeof plats = []
+  const clore = () => {
+    if (chaine.length >= CHAINE_MIN) {
+      const a = chaine[0]!, z = chaine[chaine.length - 1]!
+      out.push({ x: a.x, w: z.x + z.w - a.x, plats: chaine.length, row: a.y })
+    }
+    chaine = []
+  }
+  for (const p of plats) {
+    if (!suspendue(p)) { clore(); continue }
+    const prec = chaine[chaine.length - 1]
+    if (prec && p.x - (prec.x + prec.w) <= CHAINE_ECART && Math.abs(p.y - prec.y) <= CHAINE_DY) chaine.push(p)
+    else { clore(); chaine = [p] }
+  }
+  clore()
+  return out
+}

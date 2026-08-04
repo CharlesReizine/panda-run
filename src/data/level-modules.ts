@@ -15,9 +15,9 @@
 // - silhouette COLLINES : on monte puis on redescend ; ≤ 3 paliers empilés partout ; hauteur du
 //   monde = enveloppe des modules (souvent ~22-34 tuiles, pas de tour géante).
 
-import { sealedVoids } from '../core/level-validator'
+import { chainesContournables, deadEndSurfaces, sealedVoids, unreachablePlatforms } from '../core/level-validator'
 import type { LevelDef } from './levels'
-import { MIN_LADDER_TILES, MAX_LADDER_TILES } from '../core/platforming'
+import { MIN_LADDER_TILES, MAX_LADDER_TILES, maxJumpTiles } from '../core/platforming'
 import { comblements } from '../core/roche'
 import { MONSTERS } from './monsters'
 
@@ -381,6 +381,13 @@ function pushVariedCeiling(p: Piece, w: number, alt: number, variant: number) {
 // Rampe de paliers : suite de plateformes ADJACENTES de fromAlt à toAlt par marches ≤3 rangées.
 // Les alt ≤ 0 (niveau du sol) ne posent PAS de plateforme (on marche sur le sol) — sauf si
 // keepGround (utile quand le sol est gappé et qu'il faut une vraie plateforme).
+// Marche maximale qu'une RAMPE a le droit de produire. On tolère la hauteur de SAUT (4 rangées) et
+// non `SIMPLE_JUMP_ROWS` (3) : une rampe descendante ne se saute pas, on TOMBE dessus, et une marche
+// de la hauteur d'un saut reste franchissable dans les deux sens. Au-delà, c'est une falaise — c'est
+// ce que le joueur appelait « les marches géantes ».
+const MARCHE_MAX = Math.floor(maxJumpTiles())
+export const MARCHES_RAMPE: { de: number; a: number; w: number; kind: string }[] = []
+let motifCourant = '?'
 function ramp(x0: number, w: number, fromAlt: number, toAlt: number, keepGround = false): { x: number; alt: number; w: number }[] {
   const diff = toAlt - fromAlt
   const countVoulu = Math.max(1, Math.ceil(Math.abs(diff) / SIMPLE_JUMP_ROWS))
@@ -415,6 +422,10 @@ function ramp(x0: number, w: number, fromAlt: number, toAlt: number, keepGround 
     if (segw <= 0) break
     if (alt >= 1 || keepGround) out.push({ x, alt: Math.max(keepGround ? 0 : 1, alt), w: segw })
     x += segw
+  }
+  for (let i = 1; i < out.length; i++) {
+    const d = Math.abs(out[i]!.alt - out[i - 1]!.alt)
+    if (d > MARCHE_MAX) MARCHES_RAMPE.push({ de: out[i - 1]!.alt, a: out[i]!.alt, w, kind: motifCourant })
   }
   return out
 }
@@ -635,6 +646,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     return out
   }
 
+  motifCourant = m.kind
   const bank = 3 // largeur des berges solides d'entrée/sortie
   // DÉPART TOUJOURS SÛR : le module de spawn ne pose AUCUN monstre (ni au sol, ni en l'air) → le
   // panda apparaît seul sur son plateau. La marge de sécurité autour du x de départ est en plus
@@ -879,8 +891,15 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // allocation séquentielle : corniche basse | colonne (2) | ÉCHELLE parallèle + jetée | corniche
       // haute (5) | rampe de redescente. La rampe montante ne tient plus (une cascade de 4× le panda
       // dépasse ce qu'un escalier de paliers peut couvrir en largeur) → une échelle donne l'accès garanti.
-      const L = Math.max(4, Math.floor(w * 0.22))
       const cornW = 5
+      // ⚠️ LA REDESCENTE SE RÉSERVE SA LARGEUR AVANT QUE LA CORNICHE BASSE NE PRENNE LA SIENNE.
+      // L'allocation était séquentielle et la rampe finale héritait de ce qui restait : sur un module
+      // serré, il lui restait trois tuiles pour lâcher quinze rangées, soit des marches de cinq — la
+      // « marche géante » que le joueur voyait. Un palier de descente tient en UNE tuile, donc la place
+      // nécessaire se calcule : une tuile par marche de la hauteur d'un saut.
+      const besoinDescente = Math.ceil(Math.max(0, top - exitAlt) / MARCHE_MAX)
+      const dispo = w - 4 - cornW // tout sauf la colonne d'eau et la corniche haute
+      const L = Math.max(4, Math.min(Math.floor(w * 0.22), dispo - besoinDescente))
       p.platforms.push({ x: 0, alt: low, w: L }) // corniche basse d'accès
       p.waters.push({ x: L, w: 4, kind: 'cascade', bankAlt: top }) // colonne LARGE (2×) : on la GRIMPE (chute mortelle au fond)
       // plus d'échelle parallèle (retour joueur) : la corniche haute est JOINTIVE au bord droit de la
@@ -1261,8 +1280,15 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // à GAUCHE et à DROITE du rideau, courant DESCENDANT qu'on remonte en maintenant HAUT)
       const low = Math.max(entryAlt, 1)
       const top = low + cascadeRise(rng) // cascade HAUTE (≥ 4× le panda)
-      const L = Math.max(4, Math.floor(w * 0.22))
       const cornW = 5
+      // ⚠️ LA REDESCENTE SE RÉSERVE SA LARGEUR AVANT QUE LA CORNICHE BASSE NE PRENNE LA SIENNE.
+      // L'allocation était séquentielle et la rampe finale héritait de ce qui restait : sur un module
+      // serré, il lui restait trois tuiles pour lâcher quinze rangées, soit des marches de cinq — la
+      // « marche géante » que le joueur voyait. Un palier de descente tient en UNE tuile, donc la place
+      // nécessaire se calcule : une tuile par marche de la hauteur d'un saut.
+      const besoinDescente = Math.ceil(Math.max(0, top - exitAlt) / MARCHE_MAX)
+      const dispo = w - 4 - cornW // tout sauf la colonne d'eau et la corniche haute
+      const L = Math.max(4, Math.min(Math.floor(w * 0.22), dispo - besoinDescente))
       p.platforms.push({ x: 0, alt: low, w: L }) // corniche basse collée à gauche du rideau
       p.waters.push({ x: L, w: 4, kind: 'cascade', bankAlt: top }) // rideau LARGE (2×) : on GRIMPE la colonne
       // corniche de sortie JOINTIVE au bord droit du rideau (on émerge en grimpant, plus d'échelle)
@@ -1405,7 +1431,12 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // allait se coincer SOUS la dalle de plafond de la cavité — « je peux marcher du sable même s'il y
       // a de la pierre dessus », retour joueur, vu sur plaine-3 et jungle-3.
       const alt = Math.min(MAX_LADDER_TILES - 2, Math.max(entryAlt, 10))
-      const rampW = Math.min(8, Math.max(2, (alt - entryAlt) * 2))
+      // ⚠️ VALEUR ABSOLUE, ET SON ABSENCE FABRIQUAIT DES FALAISES. La largeur de la rampe d'accroche
+      // suivait `(alt - entryAlt)` : en DESCENTE la différence est négative, le `max(2, …)` la ramenait
+      // à DEUX tuiles, et `ramp()` n'avait plus qu'à lâcher tout le dénivelé d'un coup — mesuré 27 → 11,
+      // seize rangées en deux tuiles. La rampe a besoin de place dans les deux sens ; seul le SIGNE du
+      // dénivelé change, pas la place qu'il réclame.
+      const rampW = Math.min(8, Math.max(2, Math.abs(alt - entryAlt) * 2))
       const cavW = Math.min(8, Math.max(5, Math.floor(w * 0.32)))
       // ⚠️ TROIS COLONNES, ET L'ÉCHELLE CONTRE LA CAVITÉ : ON DESCEND EN TOMBANT, PAS EN GRIMPANT.
       // Demande du joueur : « c'est bizarre de descendre par l'échelle, je voudrais un trou là pour
@@ -1478,7 +1509,12 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // Un pan du chemin est en pierre fissurée. On peut passer dessus sans y penser ; s'acharner à
       // retomber dessus le fait CÉDER, et on découvre une chambre au trésor sous le chemin.
       const alt = Math.max(entryAlt, 9)
-      const rampW = Math.min(8, Math.max(2, (alt - entryAlt) * 2))
+      // ⚠️ VALEUR ABSOLUE, ET SON ABSENCE FABRIQUAIT DES FALAISES. La largeur de la rampe d'accroche
+      // suivait `(alt - entryAlt)` : en DESCENTE la différence est négative, le `max(2, …)` la ramenait
+      // à DEUX tuiles, et `ramp()` n'avait plus qu'à lâcher tout le dénivelé d'un coup — mesuré 27 → 11,
+      // seize rangées en deux tuiles. La rampe a besoin de place dans les deux sens ; seul le SIGNE du
+      // dénivelé change, pas la place qu'il réclame.
+      const rampW = Math.min(8, Math.max(2, Math.abs(alt - entryAlt) * 2))
       const dalleW = 4
       const dalleX = Math.max(rampW + 2, Math.floor(w / 2) - Math.floor(dalleW / 2))
       const finDalle = dalleX + dalleW
@@ -1519,7 +1555,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // ⚠️ LA PROFONDEUR EST CELLE QU'UNE ÉCHELLE REMONTE (`MAX_LADDER_TILES - 2`), comme pour
       // `grotte-scellee` : au-delà, l'échelle n'atteint plus le chemin et son palier se coince en route.
       const altU = Math.min(MAX_LADDER_TILES - 2, Math.max(entryAlt, 9))
-      const rampU = Math.min(8, Math.max(2, (altU - entryAlt) * 2))
+      const rampU = Math.min(8, Math.max(2, Math.abs(altU - entryAlt) * 2)) // valeur absolue : cf. grotte-scellee
       // 3 tuiles : le trou que le pan MASQUE reste franchissable au saut, donc le chemin de surface reste
       // une vraie route même pour qui ne casse rien (les validateurs, eux, ne voient que le trou).
       const PAN = 3
@@ -2784,7 +2820,7 @@ export interface AssembleOpts {
 // le souffle du tier permet : le tier est grossier (un biome tier 3 se croise du niveau 20 au
 // niveau 40), donc on se cale sur son terrain le PLUS PRÉCOCE. `tests/data/lacs-apnee.test.ts`
 // mesure terrain par terrain et tombe si l'un d'eux passe à travers.
-const PROFONDEUR_CUVE: Record<Tier, number> = { 1: 8, 2: 10, 3: 13, 4: 15, 5: 16 }
+const PROFONDEUR_CUVE: Record<Tier, number> = { 1: 8, 2: 9, 3: 13, 4: 15, 5: 16 }
 export function profondeurCuveMax(tier?: Tier): number {
   return PROFONDEUR_CUVE[tier ?? 1]
 }
@@ -3096,6 +3132,143 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   // sous la terre au lieu d'offrir un recoin de maçonnerie. Ne comble que l'impraticable, cf. roche.ts.
   rockBands.push(...comblements(rockBands, platforms))
 
+  // ─── LE SOL SOUS UN ENCHAÎNEMENT DE SAUTS CONTOURNABLE EST RETIRÉ ────────────────────────────
+  //
+  // Demande du joueur : « les sauts qu'on peut éviter, tu dégages le sol en dessous ». Une suite de
+  // plateformes suspendues avec du sol praticable dessous est du contenu que personne ne joue : on
+  // passe dessous en marchant. On creuse donc, et sauter devient le chemin.
+  //
+  // ⚠️ QUATRE TENTATIVES ONT ÉCHOUÉ ICI, POUR QUATRE RAISONS DISTINCTES, ET TOUTES SONT ENCODÉES
+  // CI-DESSOUS. Ce n'est pas un correctif prudent par tempérament, c'est la liste des factures payées :
+  //
+  //   1. creuser sous TOUTE la chaîne coupait le terrain en deux — le sol retiré était la route
+  //      principale, les plateformes n'étaient que la variante haute. 53 tests rouges. On ne creuse
+  //      donc que l'INTÉRIEUR, en laissant MARGE colonnes pleines de chaque côté : on garde les deux
+  //      appuis d'entrée et de sortie, et le trou reste encadré ;
+  //   2. le trou dépassait la portée d'un saut → `oversizedGaps` sait désormais qu'un gouffre couvert
+  //      de bout en bout par une chaîne de plateformes n'est pas un gouffre. Les deux règles partagent
+  //      la même borne (CHAINE_ECART = portée d'un saut à plat) : si l'une bouge, l'autre casse ;
+  //   3. la chaîne avait une brèche → tolérance de chaînage resserrée à 3 tuiles (cf. le valideur) ;
+  //   4. un coffre posé au sol se retrouvait au-dessus du vide → on ne creuse sous RIEN qui se pose
+  //      « au sol » sans altitude (coffre, monstre, décor), ni sous un pied d'échelle, ni sous le
+  //      départ ou la sortie.
+  //
+  // Le trou est creusé AVANT le comblement des poches closes, et c'est volontaire : une poche qu'on
+  // vient d'ouvrir par le bas n'est plus close, donc on ne la rebouche pas juste après l'avoir percée.
+  const MARGE_CHAINE = 2 // colonnes pleines conservées à chaque bout de la chaîne
+  const intouchable = new Set<number>()
+  for (const g of gaps) for (let x = g.x; x < g.x + g.w; x++) intouchable.add(x)
+  for (const h of hazards) for (let x = h.x; x < h.x + h.w; x++) intouchable.add(x)
+  for (const r of rockBands) {
+    if (r.y > groundRow - 1 || r.y + r.h <= groundRow - 1) continue // ne touche pas la surface du sol
+    for (let x = r.x; x < r.x + r.w; x++) intouchable.add(x)
+  }
+  for (const pr of props) if (pr.y === undefined) { intouchable.add(pr.x - 1); intouchable.add(pr.x); intouchable.add(pr.x + 1) }
+  for (const sp of spawns) if (sp.y === undefined) { intouchable.add(sp.x - 1); intouchable.add(sp.x); intouchable.add(sp.x + 1) }
+  for (const la of ladders) for (let d = -1; d <= 1; d++) intouchable.add(la.x + d)
+  for (const pt of [start, exit]) if (pt) for (let d = -2; d <= 2; d++) intouchable.add(pt.x + d)
+  // un trampoline REPOSE sur la surface qu'il touche : creuser dessous le laisse voler (desert-5 l'a
+  // montré au premier essai). Sa largeur dépasse sa colonne, d'où la marge.
+  for (const tr of trampolines) for (let d = -2; d <= 2; d++) intouchable.add(tr.x + d)
+
+  const geo = () => ({
+    id: opts.id, name: opts.name, biome: opts.biome, widthTiles: totalWidth, heightTiles,
+    platforms, spawns: [], gaps, hazards, rockBands, bridges, ladders, trampolines,
+    ...(start ? { start } : {}), ...(exit ? { exit } : {}),
+  })
+  // ⚠️ ON MESURE LES PIÈGES AVANT DE CREUSER, PAS SEULEMENT APRÈS. Certains terrains en ont déjà
+  // (la sélection de graines les écartera) : exiger zéro après coup ferait porter au creusement la
+  // faute d'un autre, et on renoncerait à creuser là où il n'y a rien à se reprocher.
+  const piegesAvant = deadEndSurfaces(geo()).length
+  const injoignablesAvant = unreachablePlatforms(geo()).length
+  const creuses: number[] = [] // index, dans `gaps`, des trous posés par cette passe
+
+  for (const chaine of chainesContournables(geo())) {
+    const debut = chaine.x + MARGE_CHAINE
+    const fin = chaine.x + chaine.w - MARGE_CHAINE // exclu
+    let courant = -1
+    const poser = (x: number) => {
+      if (courant >= 0 && x - courant > 0) { creuses.push(gaps.length); gaps.push({ x: courant, w: x - courant }) }
+      courant = -1
+    }
+    for (let x = debut; x < fin; x++) {
+      if (intouchable.has(x)) { poser(x); continue }
+      if (courant < 0) courant = x
+    }
+    poser(fin)
+  }
+
+  // ─── DEUX SURFACES À MOINS D'UN SAUT L'UNE DE L'AUTRE : ON ROGNE LE RECOUVREMENT ─────────────
+  //
+  // Retour du joueur : « j'en ai vu une qui revient et ça perturbe ». Deux corniches de terre à une ou
+  // deux rangées d'écart qui se recouvrent, c'est un DOUBLE PLANCHER : on ne sait plus sur laquelle on
+  // marche, on se cogne à celle du dessus, et la plus basse ne sert à rien puisqu'on ne tient pas
+  // debout dessous. Mesuré : soixante paires sur les 58 terrains.
+  //
+  // ⚠️ ON ROGNE, ON NE REHAUSSE PAS. Rehausser la corniche du dessus a été tenté et rend la génération
+  // INSOLUBLE (plus de dix-huit minutes de recherche sans une graine valide, contre cent secondes
+  // d'habitude) : déplacer une surface casse toutes les liaisons calculées autour d'elle. Rogner ne
+  // déplace rien — on retire la partie REDONDANTE de la plus COURTE des deux, celle qui a le plus de
+  // chances d'être un accessoire et non la route. Et on garde le garde-fou des passes de nettoyage :
+  // jamais de moignon sous LARGEUR_UTILE, sinon on ampute un appui au lieu de nettoyer un doublon.
+  const rognages: { p: { x: number; w: number }; x: number; w: number }[] = []
+  const ECART_DOUBLE_PLANCHER = 2 // rangées : au-delà, on passe dessous debout, ce n'est plus un doublon
+  // ⚠️ ON NE ROGNE PAS SOUS CE QUI EST POSÉ DESSUS. Une corniche porte parfois un monstre, un coffre ou
+  // un trampoline : la raccourcir laisse l'objet en l'air, et c'est ce que `monstersOffSurface` a
+  // signalé au premier essai (jungle-1, montagne-2). Un doublon visuel vaut mieux qu'un ours qui vole.
+  const ancrees = new Set<number>()
+  // marge de ±1 : `monstersOffSurface` tolère qu'un mob déborde d'une tuile de sa corniche, donc la
+  // corniche doit survivre une tuile au-delà de lui aussi.
+  for (const sp of spawns) if (sp.y !== undefined) for (let d = -1; d <= 1; d++) ancrees.add(sp.x + d)
+  for (const pr of props) if (pr.y !== undefined) for (let d = -1; d <= 1; d++) ancrees.add(pr.x + d)
+  for (const tr of trampolines) for (let d = -2; d <= 2; d++) ancrees.add(tr.x + d)
+  for (const la of ladders) { ancrees.add(la.x); ancrees.add(la.x + 1) }
+  for (const pt of [start, exit]) if (pt) for (let d = -1; d <= 1; d++) ancrees.add(pt.x + d)
+  const porteQuelqueChose = (x0: number, x1: number) => {
+    for (let x = x0; x < x1; x++) if (ancrees.has(x)) return true
+    return false
+  }
+  for (let i = 0; i < platforms.length; i++) for (let j = 0; j < platforms.length; j++) {
+    if (i === j) continue
+    const a = platforms[i]!, b = platforms[j]!
+    if (a.solid || b.solid) continue // la pierre pleine est un mur, pas une corniche : hors sujet
+    const dy = Math.abs(a.y - b.y)
+    if (dy === 0 || dy > ECART_DOUBLE_PLANCHER) continue
+    if (a.w > b.w || (a.w === b.w && i < j)) continue // c'est à l'autre d'être rognée
+    const chev = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
+    if (chev < 3) continue
+    const reste = a.x < b.x ? b.x - a.x : (a.x + a.w > b.x + b.w ? a.x + a.w - (b.x + b.w) : 0)
+    if (reste > 0 && reste < LARGEUR_UTILE) continue // le moignon ne se recevrait plus au saut
+    // le segment qu'on s'apprête à retirer : de `a` moins ce qui reste du bon côté
+    const perduX = reste === 0 ? a.x : (a.x < b.x ? b.x : a.x)
+    const perduFin = reste === 0 ? a.x + a.w : (a.x < b.x ? a.x + a.w : b.x + b.w)
+    if (porteQuelqueChose(perduX, perduFin)) continue
+    rognages.push({ p: a, x: a.x, w: a.w })
+    if (reste === 0) { a.w = 0; continue } // entièrement doublée : elle disparaît
+    if (a.x < b.x) a.w = b.x - a.x
+    else { const fin = a.x + a.w; a.x = b.x + b.w; a.w = fin - a.x }
+  }
+  for (let i = platforms.length - 1; i >= 0; i--) if (platforms[i]!.w <= 0) platforms.splice(i, 1)
+
+  // ⚠️ ET ON REBOUCHE SI LE CREUSEMENT A FABRIQUÉ UN PIÈGE SANS RETOUR. C'est la première cause de
+  // l'échec de 2026-08-03 (« le sol qu'on creuse EST la route principale ») : la chaîne de plateformes
+  // n'est la route que si le modèle de mouvement sait la parcourir. Quand il ne sait pas — carriere-1,
+  // quatorze surfaces devenues des culs-de-sac au premier essai — on retire les trous un par un, du
+  // dernier au premier, jusqu'à retomber sur le compte d'origine. On perd un creusement, jamais un
+  // terrain. Le coût est de DEUX parcours dans le cas normal, et il n'augmente que sur les terrains
+  // qui régressent vraiment.
+  // On défait D'ABORD les rognages (moins précieux : ils ne font que du ménage visuel), puis les trous.
+  const regresse = () => deadEndSurfaces(geo()).length > piegesAvant
+    || unreachablePlatforms(geo()).length > injoignablesAvant
+  if ((creuses.length || rognages.length) && regresse()) {
+    for (let i = rognages.length - 1; i >= 0 && regresse(); i--) {
+      const r = rognages[i]!
+      if (r.p.w <= 0 || !platforms.includes(r.p as typeof platforms[number])) platforms.push(r.p as typeof platforms[number])
+      r.p.x = r.x; r.p.w = r.w
+    }
+    for (let i = creuses.length - 1; i >= 0 && regresse(); i--) gaps.splice(creuses[i]!, 1)
+  }
+
   // ─── AUCUNE POCHE DE VIDE CLOSE : ON COMBLE EN PIERRE ────────────────────────────────────────
   //
   // Retour joueur, deux captures : « une poche d'air entourée par un carré d'herbe mais inaccessible »,
@@ -3149,6 +3322,46 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   spawns.length = 0
   spawns.push(...cleanedSpawns)
 
+  // ─── AUCUN MONSTRE SUR UNE CORNICHE QUI N'EXISTE PLUS ────────────────────────────────────────
+  //
+  // Un spawn porteur d'une rangée annonce « je me tiens sur CETTE surface ». Or plusieurs passes
+  // d'assemblage ROGNENT les plateformes après coup — le dédoublonnage, et depuis ce lot le nettoyage
+  // des doubles planchers. Quand le segment rogné est celui qui portait le monstre, il se retrouve en
+  // l'air : `monstersOffSurface` l'a signalé sur jungle-1 et montagne-2.
+  //
+  // ⚠️ MÊME TOLÉRANCE QUE LE VALIDATEUR (±1 tuile), sinon on déplacerait des monstres parfaitement
+  // posés — un mob a le droit de déborder d'une tuile de sa corniche, c'est ce que le jeu affiche.
+  // Même geste que l'anti-roche juste au-dessus : on décale vers la colonne valide la plus proche, et
+  // on RETIRE à défaut. Un monstre en moins vaut mieux qu'un monstre qui flotte.
+  const surSurface = (x: number, row: number) =>
+    platforms.some((p) => x >= p.x - 1 && x <= p.x + p.w && p.y === row)
+    || bridges.some((b) => x >= b.x - 1 && x <= b.x + b.w && b.y === row)
+  const poses: LevelDef['spawns'] = []
+  for (const s of spawns) {
+    if (s.y === undefined || surSurface(s.x, s.y)) { poses.push(s); continue }
+    let nx: number | null = null
+    for (let d = 1; d <= 12 && nx === null; d++) {
+      for (const cand of [s.x - d, s.x + d]) {
+        if (cand >= 1 && cand < totalWidth - 1 && surSurface(cand, s.y) && !bodyInRock(cand, s.y)) { nx = cand; break }
+      }
+    }
+    if (nx !== null) { poses.push({ ...s, x: nx }); continue }
+    // ⚠️ ON REPOSE AU SOL PLUTÔT QUE DE SUPPRIMER, ET CE N'EST PAS DU CONFORT. Le niveau calibré d'une
+    // espèce dérive du PREMIER biome où elle apparaît (cf. core/mob-level) : retirer le dernier faucon
+    // d'un biome précoce le fait bondir de 12 à 23, et tout l'équilibrage suit. Un filet de sécurité
+    // n'a pas le droit de changer la calibration du jeu — il replace, il ne dépeuple pas.
+    const solLibre = (x: number) => x >= 1 && x < totalWidth - 1
+      && !gaps.some((g) => x >= g.x && x < g.x + g.w)
+      && !hazards.some((h) => h.kind === 'water' && x >= h.x && x < h.x + h.w)
+      && !bodyInRock(x, groundRow)
+    let sx: number | null = solLibre(s.x) ? s.x : null
+    for (let d = 1; d <= 12 && sx === null; d++) {
+      for (const cand of [s.x - d, s.x + d]) if (solLibre(cand)) { sx = cand; break }
+    }
+    if (sx !== null) { const { y: _ignore, ...auSol } = s; poses.push({ ...auSol, x: sx }); continue }
+  }
+  spawns.length = 0
+  spawns.push(...poses)
 
   // ─── AUCUN DÉCOR, AUCUN COFFRE ENCHÂSSÉ DANS LA PIERRE ────────────────────────────────────────
   //

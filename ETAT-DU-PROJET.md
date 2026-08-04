@@ -11,7 +11,7 @@ qui reste à faire. Il se met à jour à chaque lot livré.
 ## Vérifier et déployer
 
 ```bash
-pnpm verif       # tsc + 1734 tests + build + les six sondes navigateur
+pnpm verif       # tsc + 1737 tests + build + les six sondes navigateur
 npx firebase-tools deploy --only hosting
 ```
 
@@ -50,7 +50,7 @@ rares). Les traiter fait partie du cycle, pas après.
 
 ### ⚠️ Toucher à la génération, c'est un cycle complet
 
-modifier → **regraver (6 à 7 minutes)** → resynchroniser les monstres → 1734 tests → six sondes → déployer.
+modifier → **regraver (6 à 7 minutes)** → resynchroniser les monstres → 1737 tests → six sondes → déployer.
 
 Trois tentatives ont échoué le 3 août faute d'avoir tenu ce cycle jusqu'au bout. Deux règles en découlent :
 
@@ -109,6 +109,17 @@ celles des captures du joueur. Un comblement de sécurité tourne en plus à l'a
 la seule colonne laisserait une fente d'une tuile murée des deux côtés et coiffée : une poche close avec
 l'échelle dedans. Une corniche qui surplombe une montée est un surplomb, et n'a pas de corps.
 
+**Une largeur de rampe se calcule en VALEUR ABSOLUE.** `grotte-scellee` et `grotte-u-brisable`
+dimensionnaient leur rampe d'accroche sur `(alt - entryAlt) * 2` : en DESCENTE la différence est
+négative, le `max(2, …)` la ramenait à deux tuiles, et `ramp()` lâchait seize rangées d'un coup. Seul
+le SIGNE du dénivelé change, jamais la place qu'il réclame.
+
+**Un filet de sécurité n'a pas le droit de dépeupler.** Le nouveau replacement des monstres dont la
+corniche a été rognée les SUPPRIMAIT quand il ne trouvait pas de surface. Or le niveau calibré d'une
+espèce dérive du PREMIER biome où elle apparaît : retirer le dernier faucon d'un biome précoce l'a
+fait bondir de 12 à 23, et tout l'équilibrage a suivi. Il repose donc au sol, et ne retire qu'en
+dernier recours.
+
 **Les clés d'objet en double ne sont vues que par `tsc`.** JS garde la dernière. Vérifié sur
 `SPECIAL_WATER_LEVELS`, `SPECIAL_FORCED`, `CATALOG`.
 
@@ -155,6 +166,7 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 | Build | Ce qui a changé |
 |---|---|
+| R349 | **les trois dettes de relief traitées** : sol retiré sous les enchaînements de sauts contournables (174 → 6) · doubles planchers rognés (60 → 15) · marches géantes de rampe (11 → 1) · resynchro des niveaux de monstres |
 | R348 | **sixième perte de sauvegarde élucidée et réparée sans écriture cloud** (poussée auto armée sur le pseudo précédent · document exact rendu sans contrôle du nom · repli « panda » résiduel) · pseudo SUGGÉRÉ au lieu de pré-rempli |
 | R347 | **lacs plongeables** (fond borné par l'apnée, socle de pierre dessous) · **plus une seule poche de vide close** (142 → 0) · **plus une seule échelle murée** · trois valideurs neufs, deux entrés dans la sélection de graines |
 | R332 | clé = nom du joueur · mitraillette en tir continu + éventail ±15° · zone morte de caméra |
@@ -233,7 +245,11 @@ pré-remplit plus rien et affiche EN GRIS un nom libre (`panda13` selon le nombr
 `identity.suggestionPseudo`, jamais un pseudo déjà pris). Valider à vide prend la suggestion ; sans
 suggestion utilisable, la saisie refuse au lieu d'inventer un nom.
 
-**2. RETIRER LE SOL SOUS LES SAUTS CONTOURNABLES — ça vaut le coup de réessayer MAINTENANT.**
+**2. ✅ LE SOL SOUS LES SAUTS CONTOURNABLES EST RETIRÉ (174 chaînes → 6).** La passe n'avait jamais
+été commitée — seul son ÉCHEC l'avait été. Réécrite avec les quatre causes encodées, plus une
+cinquième découverte au premier essai : creuser peut fabriquer un piège sans retour là où le modèle de
+mouvement ne sait pas parcourir la chaîne (carriere-1, quatorze surfaces). La passe mesure donc les
+pièges AVANT de creuser et rebouche un par un si le compte monte. Historique de la tentative :
 Demande : « les sauts qu'on peut éviter, tu dégages le sol en dessous » (26 enchaînements mesurés).
 Quatre tentatives, quatre causes distinctes, toutes réelles :
 · creuser sous TOUTE la chaîne coupe le niveau en deux (le sol retiré est la route principale) → ne
@@ -242,16 +258,21 @@ Quatre tentatives, quatre causes distinctes, toutes réelles :
   franchi de bout en bout par une chaîne de plateformes n'est pas un gouffre ;
 · la chaîne avait une brèche → tolérance de chaînage resserrée à 3 tuiles ;
 · un coffre posé au sol se retrouvait au-dessus du vide → ne pas creuser sous un coffre sans altitude.
-La 4e tentative a échoué sur `plateforme-murée`, et **c'est cette cause-là qui est désormais réglée**
-(`strictReach` est entré dans la sélection des graines en R346). Le code de la passe est dans l'historique
-de la branche `lot-motifs-descendants` — il suffit de le remettre et de regraver.
+La 4e tentative avait échoué sur `plateforme-murée`, réglée en R346. Garde-fou : `tests/data/relief-jouable.test.ts`.
 
-**3. Ce qui reste ouvert, par ordre de valeur.** 40 marches géantes (à-pics voulus par certains décors,
-pas par la rampe) · 3 motifs qui refusent le miroir (`passerelles-zigzag` : son sol est le vide, donc
-cul-de-sac ; les 2 cascades : jamais tirées, les motifs à plan d'eau passent par un autre chemin du
-planificateur) · 3 motifs inventoriés dans `motifs-isoles` avec un vrai défaut nommé, pas corrigé.
+**3. ✅ DOUBLES PLANCHERS (60 → 15) ET MARCHES GÉANTES DE RAMPE (11 → 1).** Les deux mesures vivent
+désormais dans `tests/data/relief-jouable.test.ts` avec leur tolérance et sa raison, au lieu de dormir
+en chiffres périmés ici. Ce qui reste :
+· **les 15 doubles planchers sont aux COUTURES entre modules** (x en fin de module : 121-135, 565-586,
+  619, 682) — deux voisins posent chacun leur corniche de raccord à une ou deux rangées d'écart. Ça se
+  corrige côté couture, pas côté nettoyage : le rognage n'ose pas trancher un appui de liaison ;
+· **la marche géante restante est un arbitrage** : une cascade « au moins 4× le panda » dans un module
+  étroit ne laisse pas la place d'adoucir sa berge descendante ;
+· 3 motifs qui refusent le miroir (`passerelles-zigzag` : son sol est le vide, donc cul-de-sac ; les 2
+  cascades : jamais tirées) · 5 motifs inventoriés dans `motifs-isoles`, dont 3 sont des artefacts du
+  modèle de mesure et non des défauts.
 
-**3 bis. R347 N'A PAS DEMANDÉ DE REGRAVURE, et c'est une exception qui mérite d'être motivée.**
+**3 bis. NI R347 NI R349 N'ONT DEMANDÉ DE REGRAVURE, et c'est une exception qui mérite d'être motivée.**
 Les trois correctifs sont des corrections de CAUSE dans l'assemblage : ils s'appliquent au plan gravé
 au moment de le rejouer. `tests/data/graines.test.ts` rejoue la validation complète sur les 58 plans et
 passe — les plans restent donc valides. Regraver n'aurait rien corrigé et aurait entraîné le resync des

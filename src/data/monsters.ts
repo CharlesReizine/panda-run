@@ -70,7 +70,7 @@ const list: MonsterDef[] = [
   // ═══ Route alternative — cave ═══
   M({ id: 'squelette', name: 'Squelette', lore: 'Os blanchis animés par un vieux sortilège, il cliquette dans le noir sans jamais se lasser.', color: 0xe8e8e8, xp: 900, level: 28, role: 'normal', speed: 50, behavior: 'contact', drops: [goldMid, potion] }),
   M({ id: 'chauve-souris', name: 'Chauve-souris', lore: 'Bestiole nerveuse et imprévisible, elle zigzague dans l\'ombre et pique dès qu\'on baisse la garde.', color: 0x6b4f9e, xp: 600, level: 26, role: 'rapide', speed: 120, behavior: 'charge', drops: [goldMid, potion, mat('croc-de-loup', 0.15)] }),
-  M({ id: 'fantome', name: 'Fantôme', lore: 'Âme errante et mélancolique qui hante les cavernes et souffle des projectiles glacés.', color: 0xb2ebf2, xp: 700, level: 26, role: 'distant', speed: 35, behavior: 'projectile', drops: [goldMid, potion, mat('gemme-brute', 0.1)] }),
+  M({ id: 'fantome', name: 'Fantôme', lore: 'Âme errante et mélancolique qui hante les cavernes et souffle des projectiles glacés.', color: 0xb2ebf2, xp: 700, level: 28, role: 'distant', speed: 35, behavior: 'projectile', drops: [goldMid, potion, mat('gemme-brute', 0.1)] }),
   M({ id: 'mage-noir', name: 'Mage noir', lore: 'Sorcier félon tapi dans l\'obscurité, il tisse ses maléfices à distance, sournois et calculateur.', color: 0x7e57c2, xp: 850, level: 26, role: 'distant', speed: 45, behavior: 'caster', drops: [goldMid, potion, mat('gemme-brute', 0.1)] }),
   // MVP — élites rares (mvp: true) : stats POSÉES À LA MAIN (versions surpuissantes, drops rares)
   {
@@ -107,7 +107,7 @@ const list: MonsterDef[] = [
     ],
   },
   {
-    id: 'spectre-ancien', name: 'Spectre ancien', lore: 'Revenant millénaire drapé de brume, son regard vide glace le sang de qui ose l\'approcher.', color: 0xb39ddb, hp: 920, atk: 195, def: 36, xp: 6800, level: 30, speed: 45, behavior: 'projectile', mvp: true,
+    id: 'spectre-ancien', name: 'Spectre ancien', lore: 'Revenant millénaire drapé de brume, son regard vide glace le sang de qui ose l\'approcher.', color: 0xb39ddb, hp: 920, atk: 195, def: 36, xp: 6800, level: 32, speed: 45, behavior: 'projectile', mvp: true,
     drops: [
       { kind: 'gold', chance: 1, min: 120, max: 200 },
       { kind: 'potion', chance: 0.0714, min: 1, max: 1 },
@@ -176,7 +176,7 @@ const list: MonsterDef[] = [
   // ═══ Zone 5 — cimetière ═══
   M({ id: 'goule', name: 'Goule', lore: 'Charognarde des tombes, vorace et griffue, elle traque la chair fraîche au fond du cimetière.', color: 0x556b2f, xp: 3200, level: 28, role: 'costaud', speed: 70, behavior: 'contact', drops: [goldMid, potion, mat('gemme-brute', 0.1), { kind: 'item', itemId: 'baton-feuillu', chance: 0.03, min: 1, max: 1 }] }),
   M({ id: 'banshee', name: 'Banshee', lore: 'Spectre plaintif au hurlement funeste, son chant déchirant transperce l\'âme à distance.', color: 0x9575cd, xp: 3000, level: 30, role: 'distant', speed: 50, behavior: 'projectile', drops: [goldMid, potion, mat('gemme-brute', 0.1)] }),
-  M({ id: 'pretre-goule', name: 'Prêtre-goule', lore: 'Officiant corrompu des morts, il psalmodie des malédictions et anime les ombres à sa guise.', color: 0x455a64, xp: 3200, level: 28, role: 'distant', speed: 40, behavior: 'caster', drops: [goldMid, potion, mat('gemme-brute', 0.1)] }),
+  M({ id: 'pretre-goule', name: 'Prêtre-goule', lore: 'Officiant corrompu des morts, il psalmodie des malédictions et anime les ombres à sa guise.', color: 0x455a64, xp: 3200, level: 30, role: 'distant', speed: 40, behavior: 'caster', drops: [goldMid, potion, mat('gemme-brute', 0.1)] }),
   M({ id: 'totem-maudit', name: 'Totem maudit', lore: 'Mât funéraire gravé de visages hurlants, scellé au sol : il vomit des feux follets maudits sur qui s\'approche.', color: 0x5a4636, xp: 3100, level: 28, role: 'distant', speed: 0, behavior: 'projectile', drops: [goldMid, potion, mat('bois-brut', 0.3), mat('gemme-brute', 0.1)] }),
   M({ id: 'liche-mineure', name: 'Liche mineure', lore: 'Nécromancien desséché dont l\'âme s\'accroche encore aux os : de loin, elle darde des salves de givre nécrotique sur les vivants.', color: 0x6a7b8c, xp: 3200, level: 30, role: 'distant', speed: 40, behavior: 'projectile', drops: [goldMid, potion, mat('gemme-brute', 0.1)] }),
   // ═══ Zone 6 — enfer ═══
