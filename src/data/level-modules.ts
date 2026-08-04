@@ -2953,13 +2953,14 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     }
     pieces.push({ piece, x0: cursorX, w, kind: m.kind })
     cursorX += w
-    // ⚠️ IMPOSER UNE ALTITUDE PLANCHER ICI EST LA BONNE IDÉE, ET ELLE DEMANDE UNE REGRAVURE.
-    // Retour du joueur : « bah impose une hauteur minimale ou chais pas quoi » — il a raison, c'est la
-    // correction à la SOURCE du « deux sols empilés » (un plancher de module à l'altitude 0 ou 1 se
-    // confond avec le sol du monde). Essayé : `runningAlt = Math.max(2, piece.exitAlt)` fait tomber
-    // SOIXANTE-DIX tests — les motifs descendants ne rejoignent plus le sol, et les 58 plans gravés ont
-    // été validés avec l'ancien chaînage. Ce n'est pas un correctif, c'est un lot : modifier, regraver,
-    // resynchroniser les monstres, rejouer l'équilibrage. À faire, mais pas en passant.
+    // ⚠️ NE PAS BORNER L'ALTITUDE DE CHAÎNAGE ICI — ESSAYÉ, ET C'EST UN PIÈGE.
+    // « Impose une hauteur minimale » est la bonne intuition contre les « deux sols empilés », mais pas
+    // à cet endroit : `runningAlt = Math.max(2, piece.exitAlt)` fait DÉMARRER le module suivant deux
+    // rangées au-dessus de la surface que le précédent a réellement laissée. Le raccord ment, la rampe
+    // d'accroche part d'une altitude qui n'existe pas, et le motif devient injoignable — mesuré sur
+    // `passage-immerge`, injoignable à TOUTES ses largeurs, en plus de soixante-dix tests de terrain.
+    // La vraie correction est en aval : un motif a le droit de chaîner au ras du sol, il n'a pas le
+    // droit d'y DESSINER un plancher (cf. le nettoyage des planchers en doublon, plus bas).
     runningAlt = piece.exitAlt
 
   })
@@ -3392,6 +3393,11 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     //     sans ce garde a muré une plateforme d'enfer-2) ;
     //   · un coffre, un trampoline, un pied d'échelle, le départ ou la sortie. Les MONSTRES, eux,
     //     n'arrêtent rien : le filet de fin d'assemblage les repose au sol, pile une rangée dessous.
+    // ⚠️ LE CONTRÔLE DÉBORDE D'UNE COLONNE DE CHAQUE CÔTÉ, ET Y RENONCER COÛTE HUIT TESTS. Resserré à
+    // la seule portée de la corniche, le nettoyage devient trop gourmand : il retire des corniches qui
+    // servaient de raccord au module voisin (atteignabilité stricte, superpositions, quatre plans
+    // gravés). Une colonne de marge de chaque côté est le prix à payer pour ne retirer que du doublon
+    // franc — c'est ce qui limite la passe à 41 corniches sur 256, et c'est assumé.
     let colle = true
     for (let x = p.x - 1; x <= p.x + p.w && colle; x++) if (!solPorteur(x)) colle = false
     if (!colle) continue
