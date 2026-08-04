@@ -15,6 +15,7 @@
 // - silhouette COLLINES : on monte puis on redescend ; ≤ 3 paliers empilés partout ; hauteur du
 //   monde = enveloppe des modules (souvent ~22-34 tuiles, pas de tour géante).
 
+import { sealedVoids } from '../core/level-validator'
 import type { LevelDef } from './levels'
 import { MIN_LADDER_TILES, MAX_LADDER_TILES } from '../core/platforming'
 import { comblements } from '../core/roche'
@@ -322,10 +323,19 @@ function addPedestals(p: Piece, w: number) {
   // fusionne les colonnes de même altitude de coiffe en une seule bande de roche (1 → alt-1)
   let runX = -1
   let runAlt = 0
+  // ⚠️ UN SOCLE NE SE COULE JAMAIS AUTOUR D'UNE ÉCHELLE, ET LA NUANCE EST QU'ON RENONCE À TOUTE LA
+  // BANDE, PAS SEULEMENT À SA COLONNE. Retour joueur, capture à l'appui : « un chevauchement pierre /
+  // échelle qui rend le terrain infaisable » — la corniche de sortie du zigzag court au-dessus des
+  // échelles, et son socle les enterrait sur neuf rangées. Épargner la seule colonne de l'échelle ne
+  // règle rien : il resterait une fente d'une tuile murée des deux côtés et coiffée par la corniche,
+  // c'est-à-dire une poche close (cf. sealedVoids) avec l'échelle dedans. Une corniche qui surplombe
+  // une montée est un SURPLOMB : elle n'a pas de corps, et c'est très bien ainsi.
+  const echelleDans = (x0: number, x1: number, alt: number) =>
+    p.ladders.some((l) => l.x >= x0 && l.x < x1 && l.topAlt - l.h < alt)
   const flush = (endX: number) => {
     // altBot 0 : le socle descend jusque DANS la bande de sol du monde (pas de liseré de fond
     // visible entre le bas de la falaise et le sol). Rendu derrière le sol (depth), sans collision.
-    if (runX >= 0 && runAlt >= 2) p.rocks.push({ x: runX, altBot: 0, altTop: runAlt - 1, w: endX - runX })
+    if (runX >= 0 && runAlt >= 2 && !echelleDans(runX, endX, runAlt)) p.rocks.push({ x: runX, altBot: 0, altTop: runAlt - 1, w: endX - runX })
     runX = -1
     runAlt = 0
   }
@@ -605,7 +615,21 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     const decalage = Math.max(0, entryAlt - sommet)
     decalerAlt(retourne, decalage) // décale la géométrie ET son exitAlt
     const out = emptyPiece(retourne.exitAlt)
-    out.platforms.push(...ramp(0, LARGEUR_ACCROCHE, entryAlt, sommet + decalage))
+    const accroche = ramp(0, LARGEUR_ACCROCHE, entryAlt, sommet + decalage)
+    out.platforms.push(...accroche)
+    // ⚠️ LA RAMPE D'ACCROCHE A BESOIN DE SON PROPRE SOCLE, ET SON ABSENCE A CREUSÉ 142 TROUS.
+    // `addPedestals` tourne à la FIN de buildModule ; cette branche-ci RETOURNE avant d'y arriver, et
+    // le motif de base a été bâti par un appel séparé — il a donc reçu son socle, pas la rampe. Résultat
+    // à l'écran (captures du joueur) : une plateforme qui court au-dessus du vide, un socle de pierre de
+    // chaque côté, et entre les deux un rectangle de décor de fond où l'on n'entrera jamais. « Un carré
+    // de terre vide et bizarre. » On comble donc sous la rampe, avec exactement la même règle que le
+    // reste du module (rien sous un module à fond de VIDE : ses corniches DOIVENT flotter).
+    if (m.fillBelow === 'sol' || m.fillBelow === 'marine' || m.fillBelow === 'cascade' || m.fillBelow === 'lave') {
+      const socle = emptyPiece(0)
+      socle.platforms.push(...accroche.map((pl) => ({ ...pl })))
+      addPedestals(socle, LARGEUR_ACCROCHE)
+      out.rocks.push(...socle.rocks)
+    }
     fusionner(out, retourne)
     out.exitAlt = retourne.exitAlt
     return out
@@ -1297,7 +1321,12 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // plafond (on y refait surface pour respirer) → traversée toujours tenable dans l'apnée (5 s).
       // toit du tunnel : eau libre du fond jusqu'à ceilBotAlt (le panda nage dessous). Borné pour
       // garder À LA FOIS un dégagement de nage (≥ 2 rangées) et une roche assez épaisse (≥ 2 rangées).
-      const ceilBotAlt = Math.min(4, Math.max(2, bankAlt - 2))
+      // ⚠️ LE PLAFOND IMMERGÉ PEND DE LA SURFACE, IL NE REPOSE PLUS SUR LE FOND DU MONDE.
+      // Il était calé à `min(4, …)`, c'est-à-dire deux à quatre rangées au-dessus du sol du TERRAIN :
+      // le tunnel se retrouvait donc tout au fond, et plonger l'atteindre coûtait `bankAlt` rangées —
+      // trente sur un module d'entrée haute, soit bien plus qu'une apnée. On l'accroche à la berge :
+      // TUNNEL_NAGE rangées d'eau libre dessous, le tout dans la profondeur qu'un débutant peut plonger.
+      const ceilBotAlt = Math.max(2, Math.min(bankAlt - 2, bankAlt - PROFONDEUR_MOTIF + 1 + TUNNEL_NAGE))
       const midX = wx + colW
       const midW = ww - 2 * colW
       const maxRock = 7 // longueur de roche max entre deux poches d'air (borne la nage en apnée)
@@ -1544,7 +1573,12 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const ww = Math.max(2 * colW + 4, w - 2 * rampW)
       p.waters.push({ x: wx, w: ww, kind: basinKind, bankAlt }) // cuve close, surface plane
       // PLAFOND IMMERGÉ au MILIEU (force la plongée : impossible de faire surface au centre)
-      const ceilBotAlt = Math.min(4, Math.max(2, bankAlt - 2))
+      // ⚠️ LE PLAFOND IMMERGÉ PEND DE LA SURFACE, IL NE REPOSE PLUS SUR LE FOND DU MONDE.
+      // Il était calé à `min(4, …)`, c'est-à-dire deux à quatre rangées au-dessus du sol du TERRAIN :
+      // le tunnel se retrouvait donc tout au fond, et plonger l'atteindre coûtait `bankAlt` rangées —
+      // trente sur un module d'entrée haute, soit bien plus qu'une apnée. On l'accroche à la berge :
+      // TUNNEL_NAGE rangées d'eau libre dessous, le tout dans la profondeur qu'un débutant peut plonger.
+      const ceilBotAlt = Math.max(2, Math.min(bankAlt - 2, bankAlt - PROFONDEUR_MOTIF + 1 + TUNNEL_NAGE))
       const midX = wx + colW
       const midW = ww - 2 * colW
       const maxRock = 7
@@ -1773,7 +1807,12 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const ww = Math.max(2 * colW + 4, w - 2 * rampW)
       p.waters.push({ x: wx, w: ww, kind: 'marine', bankAlt, openSide: 'right' })
       // plafond de roche IMMERGÉ au milieu (force la nage sous la surface, comme lac-en-u)
-      const ceilBotAlt = Math.min(4, Math.max(2, bankAlt - 2))
+      // ⚠️ LE PLAFOND IMMERGÉ PEND DE LA SURFACE, IL NE REPOSE PLUS SUR LE FOND DU MONDE.
+      // Il était calé à `min(4, …)`, c'est-à-dire deux à quatre rangées au-dessus du sol du TERRAIN :
+      // le tunnel se retrouvait donc tout au fond, et plonger l'atteindre coûtait `bankAlt` rangées —
+      // trente sur un module d'entrée haute, soit bien plus qu'une apnée. On l'accroche à la berge :
+      // TUNNEL_NAGE rangées d'eau libre dessous, le tout dans la profondeur qu'un débutant peut plonger.
+      const ceilBotAlt = Math.max(2, Math.min(bankAlt - 2, bankAlt - PROFONDEUR_MOTIF + 1 + TUNNEL_NAGE))
       const midX = wx + colW
       const midW = ww - 2 * colW
       const maxRock = 7
@@ -2145,10 +2184,18 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
 
       // LIT EN ESCALIER : marches de pierre descendant de chaque berge vers le centre. Le nombre de
       // marches suit la largeur — sur un bassin étroit, deux paliers suffisent à donner la pente.
+      //
+      // ⚠️ LE LIT NE SUIT PLUS `bankAlt`, ET C'EST LA CORRECTION DU « lac trop profond ». Le pas de
+      // descente valait `(bankAlt - 1) / (nMarches + 1)` : sur un module d'entrée haute, la dernière
+      // marche tombait à une rangée du sol du monde, donc trente rangées sous la berge. Deux
+      // conséquences, toutes deux mauvaises : le coffre du fond devenait inatteignable en une apnée,
+      // et l'assembleur ne pouvait plus remonter le fond de la cuve (il aurait muré ces marches).
+      // Le lit se creuse donc dans PROFONDEUR_MOTIF rangées, quelle que soit la hauteur de la berge.
       const nMarches = Math.max(2, Math.min(4, Math.floor(ww / 6)))
       const marcheW = Math.max(2, Math.floor((ww / 2 - 2) / nMarches))
+      const litBas = Math.max(1, bankAlt - PROFONDEUR_MOTIF + 1) // altitude de la marche la plus basse
       for (let k = 0; k < nMarches; k++) {
-        const alt = bankAlt - 1 - k * Math.max(1, Math.floor((bankAlt - 1) / (nMarches + 1)))
+        const alt = Math.max(litBas, bankAlt - 1 - k * Math.max(1, Math.floor((PROFONDEUR_MOTIF - 1) / (nMarches + 1))))
         if (alt < 1) break
         p.platforms.push({ x: wx + k * marcheW, alt, w: marcheW, solid: true })
         p.platforms.push({ x: wx + ww - (k + 1) * marcheW, alt, w: marcheW, solid: true })
@@ -2719,7 +2766,37 @@ export interface AssembleOpts {
   name: string
   biome: string
   seed?: string
+  // Tier du biome — sert UNIQUEMENT à borner la profondeur des cuves (cf. profondeurCuveMax).
+  // Absent → on retombe sur la borne la plus stricte, celle d'un joueur de niveau 1.
+  tier?: Tier
 }
+
+// ─── PROFONDEUR MAXIMALE D'UNE CUVE NOYANTE, PAR TIER DE BIOME ──────────────────────────────
+//
+// Une cuve doit se plonger ET se remonter dans une seule apnée : deux fois la profondeur, à la
+// vitesse de nage, dans la réserve de souffle du joueur à son niveau attendu (cf. core/breath et
+// level-validator.maxDiveRows, qui est le juge). La réserve grandit avec le niveau, donc les lacs
+// ont le droit de se creuser à mesure qu'on avance — c'est la progression voulue, et c'est aussi
+// pour ça que ce n'est pas UNE constante : plafonner tout le jeu à la borne du niveau 1 rendrait
+// les cuves de fin de jeu ridicules.
+//
+// ⚠️ CES CHIFFRES SONT DES BORNES DE SÉCURITÉ, PAS DES CIBLES. Ils sont volontairement SOUS ce que
+// le souffle du tier permet : le tier est grossier (un biome tier 3 se croise du niveau 20 au
+// niveau 40), donc on se cale sur son terrain le PLUS PRÉCOCE. `tests/data/lacs-apnee.test.ts`
+// mesure terrain par terrain et tombe si l'un d'eux passe à travers.
+const PROFONDEUR_CUVE: Record<Tier, number> = { 1: 8, 2: 10, 3: 13, 4: 15, 5: 16 }
+export function profondeurCuveMax(tier?: Tier): number {
+  return PROFONDEUR_CUVE[tier ?? 1]
+}
+
+// Profondeur sous laquelle un MOTIF ne creuse jamais de géométrie (marches de lit, boyau, cavité).
+// C'est la borne du tier le plus strict : un motif qui descend plus bas empêche l'assembleur de
+// combler sous la cuve — il faudrait murer ce que le motif vient de poser — et la cuve reste alors
+// aussi profonde que le monde. Autrement dit : un motif creuse dans ce qu'un débutant peut plonger,
+// et c'est l'assembleur qui offre la profondeur supplémentaire des biomes avancés.
+export const PROFONDEUR_MOTIF = PROFONDEUR_CUVE[1]
+// Rangées d'eau libre sous un plafond immergé : de quoi nager sans frotter la roche.
+const TUNNEL_NAGE = 3
 
 // ─── Assembleur : modules → LevelDef ────────────────────────────────────────────────────────
 // Modules ayant posé de la géométrie HORS de la portée qui leur était allouée. Doit rester vide ;
@@ -2729,7 +2806,7 @@ export const DEBORDEMENTS: { id: string; kind: string; w: number; x: number; pw:
 export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): LevelDef {
   const seed = hashSeed(opts.seed ?? opts.id)
   // 1) pièces en espace altitude, chaînées (entrée = altitude courante)
-  const pieces: { piece: Piece; x0: number; w: number }[] = []
+  const pieces: { piece: Piece; x0: number; w: number; kind: ModuleKind }[] = []
   let cursorX = 2 // petite marge de bord gauche
   // DÉPART STANDARDISÉ (phase 2b) : le PREMIER module est TOUJOURS une bande PLATE à UN SEUL niveau
   // de sol — pas de rampe d'amorce (qui empilait des paliers « à deux niveaux » au spawn), pas de
@@ -2776,7 +2853,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
       const fautif = piece.platforms.find(horsPortee) ?? piece.rocks.find(horsPortee)
       if (fautif) DEBORDEMENTS.push({ id: opts.id, kind: m.kind, w, x: fautif.x, pw: fautif.w })
     }
-    pieces.push({ piece, x0: cursorX, w })
+    pieces.push({ piece, x0: cursorX, w, kind: m.kind })
     cursorX += w
     runningAlt = piece.exitAlt
 
@@ -2819,7 +2896,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   let start: LevelDef['start']
   let exit: LevelDef['exit']
 
-  for (const { piece, x0 } of pieces) {
+  for (const { piece, x0, kind } of pieces) {
     for (const pl of piece.platforms) platforms.push({ x: x0 + pl.x, y: row(pl.alt), w: pl.w, ...(pl.solid ? { solid: true } : {}) })
     for (const b of piece.bridges) bridges.push({ x: x0 + b.x, y: row(b.alt), w: b.w })
     for (const t of piece.trampolines) trampolines.push({ x: x0 + t.x, y: row(t.alt) })
@@ -2849,10 +2926,47 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
           gaps.push({ x: x0 + wtr.x, w: wtr.w }) // VIDE sous la cascade → descendre au fond = mort
         }
       } else {
-        // CUVE de fond plein (marine OU lave) : le FOND repose TOUJOURS sur le SOL PLEIN, sans espace
-        // vide. On étend le liquide jusqu'à recouvrir la surface du sol (rangée groundRow) → jamais de
-        // liquide qui vole. 'lave' = cuve de pierre MORTELLE (enfer) ; 'marine' = bassin de noyade.
-        hazards.push({ kind: 'water', x: x0 + wtr.x, w: wtr.w, top, h: Math.max(2, groundRow + 1 - top), water: wtr.kind === 'lave' ? 'lave' : 'basin', ...(wtr.openSide ? { openSide: wtr.openSide } : {}) })
+        // ─── CUVE de fond plein (marine OU lave) ───────────────────────────────────────────────
+        //
+        // ⚠️ LE FOND NE DESCEND PLUS JUSQU'AU SOL DU MONDE, ET C'EST LA CORRECTION D'UN DÉFAUT QUI A
+        // RENDU TRENTE LACS MORTELS. La règle d'origine — « le liquide descend jusqu'à recouvrir la
+        // rangée groundRow » — servait à ce qu'aucune cuve ne VOLE, et à cette fin elle était juste.
+        // Mais elle liait la PROFONDEUR d'un bassin à la HAUTEUR DU MONDE : écrite quand les terrains
+        // faisaient 16 rangées, elle a produit des cuves de 30 à 50 rangées le jour où ils en ont fait
+        // 45 à 70. Retour joueur : « les lacs sont trop profonds, y a 0 moyen que j'atteigne ça sans
+        // mourir » — et le jeu pose un COFFRE au fond, donc la récompense était inatteignable.
+        //
+        // La cuve est donc BORNÉE par ce qu'une apnée permet (profondeurCuveMax, calé sur le tier du
+        // biome), et on COMBLE EN ROCHE sous le nouveau fond : le lac ne vole pas, il repose sur un
+        // socle. On ne comble que si l'espace est LIBRE — un boyau immergé ou une grotte sous la cuve
+        // se ferait murer, ce qui casserait le motif. Dans ce cas on laisse la cuve telle quelle, et
+        // c'est `tests/data/lacs-apnee.test.ts` qui le dira.
+        const profMax = profondeurCuveMax(opts.tier)
+        let bottomAlt = 0
+        if (wtr.bankAlt + 1 > profMax) {
+          const cible = Math.max(0, wtr.bankAlt - profMax + 1)
+          // l'espace sous le fond visé est-il vierge ? (sinon on ne comble pas, donc on ne rogne pas)
+          const chevauche = (x: number, w: number) => x < wtr.x + wtr.w && x + w > wtr.x
+          const libre =
+            !piece.platforms.some((pl) => chevauche(pl.x, pl.w) && pl.alt < cible)
+            && !piece.rocks.some((rk) => chevauche(rk.x, rk.w) && rk.altBot < cible)
+            && !piece.breakables.some((bk) => chevauche(bk.x, bk.w) && bk.altBot < cible)
+            && !piece.ladders.some((la) => chevauche(la.x, 1) && la.topAlt - la.h < cible)
+            && !piece.gaps.some((g) => chevauche(g.x, g.w))
+            // une CASCADE qui retombe dans cette cuve ne descend pas sous sa surface (bottomAlt) :
+            // elle n'occupe donc rien sous le fond visé et n'empêche pas de combler. Une cascade SANS
+            // fond, elle, coule jusqu'au bas de la carte — et une autre cuve, on ne présume rien.
+            && !piece.waters.some((o) => o !== wtr && chevauche(o.x, o.w)
+              && (o.kind !== 'cascade' || o.bottomAlt === undefined || o.bottomAlt < cible))
+            && !piece.bridges.some((b) => chevauche(b.x, b.w) && b.alt < cible)
+          if (libre) bottomAlt = cible
+        }
+        const bottomRow = bottomAlt > 0 ? row(bottomAlt) : groundRow
+        hazards.push({ kind: 'water', x: x0 + wtr.x, w: wtr.w, top, h: Math.max(2, bottomRow + 1 - top), water: wtr.kind === 'lave' ? 'lave' : 'basin', ...(wtr.openSide ? { openSide: wtr.openSide } : {}) })
+        if (bottomAlt > 0) {
+          // socle de roche sous la cuve, de l'altitude 0 (dans la bande de sol) au fond exclu
+          rockBands.push({ x: x0 + wtr.x, y: bottomRow + 1, w: wtr.w, h: groundRow + 1 - bottomRow })
+        }
       }
     }
     for (const s of piece.spawns) spawns.push({ monsterId: s.monsterId, x: x0 + s.x, ...(s.alt !== undefined ? { y: row(s.alt) } : {}) })
@@ -2981,6 +3095,38 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   // terre trop proche pour qu'on passe, on COMBLE l'air entre les deux — la pierre redevient le corps
   // sous la terre au lieu d'offrir un recoin de maçonnerie. Ne comble que l'impraticable, cf. roche.ts.
   rockBands.push(...comblements(rockBands, platforms))
+
+  // ─── AUCUNE POCHE DE VIDE CLOSE : ON COMBLE EN PIERRE ────────────────────────────────────────
+  //
+  // Retour joueur, deux captures : « une poche d'air entourée par un carré d'herbe mais inaccessible »,
+  // « un carré de terre vide et bizarre ». Une corniche court au-dessus du vide, les socles des modules
+  // voisins murent ce vide à gauche et à droite, le sol le ferme en bas : il reste un rectangle de
+  // décor de fond au milieu du terrain, où personne n'entrera jamais.
+  //
+  // ⚠️ ON COMBLE, ON NE CREUSE PAS, et c'est un arbitrage assumé. L'autre issue serait d'ouvrir la poche
+  // par le bas (un vrai trou mortel). Mais un module ne sait pas si son voisin va le murer — c'est
+  // justement pour ça que le défaut existe — et creuser un trou sous une corniche change la JOUABILITÉ
+  // (« creuser sous toute la chaîne coupe le niveau en deux », 53 tests rouges le 3 août). Combler ne
+  // change RIEN de jouable : on remplit un espace où le panda ne peut pas se rendre, et le rendu retrouve
+  // ce que le jeu affirme partout ailleurs — sous une coiffe de biome, il y a de la pierre.
+  //
+  // Post-traitement d'assemblage, donc les plans gravés restent valables : c'est la géométrie produite
+  // qu'on répare, pas le plan de modules. `tests/data/poches-closes.test.ts` en est le garde-fou.
+  for (const poche of sealedVoids({
+    id: opts.id, name: opts.name, biome: opts.biome, widthTiles: totalWidth, heightTiles,
+    platforms, spawns: [], gaps, rockBands, ...(breakables.length ? { breakables } : {}),
+  })) {
+    // ⚠️ ON NE COMBLE JAMAIS UNE POCHE QUI CONTIENT UNE ÉCHELLE. Une échelle enfermée dans la pierre
+    // est le défaut qu'on vient de corriger ailleurs (cf. laddersInRock) : la couler dans du roc le
+    // rendrait invisible au lieu de le supprimer. On laisse la poche telle quelle, et le test tombe.
+    if (ladders.some((l) => l.x >= poche.x && l.x < poche.x + poche.w
+      && l.y < poche.y + poche.h && l.y + l.h > poche.y)) continue
+    // ⚠️ SANS `solid`, ET C'EST DÉLIBÉRÉ. Le comblement remplit un espace où le panda ne peut pas se
+    // rendre : la collision n'y change rien pour lui. En revanche, le déclarer SOLIDE le ferait entrer
+    // dans les validateurs qui raisonnent sur les plafonds d'un CHEMIN — `caveCeilingClearance` a
+    // aussitôt vu six « plafonds de grotte trop bas » sur plaine-6, là où il n'y a ni grotte ni chemin.
+    for (const seg of poche.runs) rockBands.push({ x: seg.x, y: seg.y, w: seg.w, h: 1 })
+  }
 
   // ANTI-ROCHE (règle user : AUCUN monstre DANS la pierre — « impossible ») : si le CORPS d'un spawn
   // (la rangée juste au-dessus de ses pieds) chevauche une dalle de roche, on le DÉCALE horizontalement
@@ -3216,6 +3362,25 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
       })
     })
     safeSpawns.sort((a, b) => a.x - b.x)
+  }
+
+  // ─── FOND DE CUVE REMONTÉ : CE QUI SE POSE « AU SOL » SE POSE SUR LE FOND ────────────────────
+  // La convention du jeu est « sans y = au sol du monde », et elle suffisait tant qu'une cuve
+  // descendait jusque-là. Depuis la borne d'apnée, le fond d'un bassin est bien plus haut : un coffre
+  // de plongée ou un banc de requins posés « au sol » se retrouveraient DANS le socle de pierre coulé
+  // sous le lac. On les repose donc sur le fond réel — et seulement dans les cuves effectivement
+  // rognées, pour ne rien changer partout ailleurs.
+  //
+  // ⚠️ ON NE TOUCHE PAS AUX SPAWNS, ET C'EST UNE CONVENTION QU'IL FAUT RESPECTER, PAS CONTOURNER.
+  // « Un mob aquatique est IMMERGÉ, posé au fond, SANS rangée imposée » (tests/data/mobs-aquatiques) :
+  // lui écrire un `y` le colle à une rangée et le fait juger comme un marcheur. C'est donc la LECTURE
+  // du « sans y » qui doit connaître le fond des cuves — cf. `spawnFeetRow` (core/level-validator),
+  // partagée par les validateurs et par la scène.
+  for (const h of hazards) {
+    if (h.kind !== 'water' || h.water === 'cascade' || h.top === undefined || h.h === undefined) continue
+    const fond = h.top + h.h - 1
+    if (fond >= groundRow) continue // cuve non rognée : la convention historique suffit
+    for (const pr of props) if (pr.y === undefined && pr.x >= h.x && pr.x < h.x + h.w) pr.y = fond
   }
 
   return {

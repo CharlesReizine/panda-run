@@ -8,7 +8,7 @@
 // sommet d'une échelle est donc atteignable dès que son pied l'est, ce que le simple
 // `unreachablePlatforms` de platforming.ts (sauts uniquement) ne sait pas modéliser.
 
-import { groundRowFor, canReach, canReachByBounce, maxJumpGapPx, MAX_LADDER_TILES, TILE, type Plat } from './platforming'
+import { groundRowFor, canReach, canReachByBounce, maxJumpGapPx, MAX_LADDER_TILES, SWIM_SPEED, TILE, type Plat } from './platforming'
 import type { LevelDef } from '../data/levels'
 import { estCoffre } from '../data/props'
 
@@ -413,12 +413,36 @@ export function oversizedGaps(level: LevelDef): GapProblem[] {
 // zone n'est pas accessible »). Un spawn dont le CORPS (la rangée juste au-dessus des pieds) tombe dans
 // une dalle de roche SOLIDE est enterré → injouable (on ne peut ni l'atteindre ni le tuer). Se poser SUR
 // une dalle (sommet de la dalle = rangée des pieds) reste valide : la roche est alors SOUS les pieds.
-export function monstersInRock(level: LevelDef): SpawnProblem[] {
+// ─── RANGÉE OÙ UN SPAWN POSE LES PIEDS ──────────────────────────────────────────────────────
+// Sans `y`, un monstre se pose « au sol ». Mais le sol d'une CUVE n'est plus celui du monde depuis que
+// la profondeur des bassins est bornée par l'apnée : sous le fond, il y a le socle de pierre. Un
+// nageur lu « au sol du monde » se retrouverait donc dans la roche — alors que sa convention dit
+// exactement l'inverse (« posé au FOND, sans rangée imposée », cf. tests/data/mobs-aquatiques).
+// Cette résolution est PARTAGÉE par les validateurs et par LevelScene : deux lectures divergentes du
+// même « sans y » remettraient les requins dans la pierre d'un côté ou de l'autre.
+export function spawnFeetRow(level: LevelDef, s: { x: number; y?: number }): number {
+  if (s.y !== undefined) return s.y
   const groundRow = groundRowFor(level.heightTiles)
+  // Toute eau couvrant la colonne compte, cascade comprise : une cascade qui s'arrête au-dessus du sol
+  // (elle retombe dans un bassin) laisse elle aussi de la pierre sous elle. On retient le fond le PLUS
+  // BAS — donc la position la plus profonde encore mouillée — et on s'abstient dès qu'une des eaux
+  // descend jusqu'au sol du monde : là, la convention historique est exacte.
+  let fondMax: number | undefined
+  for (const h of level.hazards ?? []) {
+    if (h.kind !== 'water' || h.top === undefined || h.h === undefined) continue
+    if (s.x < h.x || s.x >= h.x + h.w) continue
+    const fond = h.top + h.h - 1
+    if (fond >= groundRow) return groundRow
+    fondMax = fondMax === undefined ? fond : Math.max(fondMax, fond)
+  }
+  return fondMax === undefined ? groundRow : fondMax + 1
+}
+
+export function monstersInRock(level: LevelDef): SpawnProblem[] {
   const rocks = level.rockBands ?? [] // TOUTE dalle de roche (il n'y a pas de « pierre décorative » : la pierre est de la pierre)
   const out: SpawnProblem[] = []
   for (const s of level.spawns) {
-    const feet = s.y ?? groundRow
+    const feet = spawnFeetRow(level, s)
     const body = feet - 1 // rangée du corps, juste au-dessus des pieds
     if (rocks.some((r) => s.x >= r.x && s.x < r.x + r.w && body >= r.y && body < r.y + r.h)) {
       out.push({ monsterId: s.monsterId, x: s.x, y: feet, reason: 'enfermé-dans-la-roche' })
@@ -573,7 +597,17 @@ export function unreachableChests(level: LevelDef): ChestProblem[] {
     if (c.y !== undefined) {
       // coffre POSÉ sur une plateforme : elle doit exister ET être atteignable
       const plat = level.platforms.find((p) => c.x >= p.x && c.x < p.x + p.w && c.y === p.y - 1)
-      if (!plat || bad.has(plat)) out.push({ x: c.x, y: c.y })
+      if (plat && !bad.has(plat)) continue
+      // ⚠️ SINON, IL PEUT ÊTRE POSÉ AU FOND D'UNE CUVE, et ce cas est né avec la borne d'apnée : le
+      // fond d'un bassin n'est plus le sol du monde, donc le coffre de plongée porte désormais une
+      // rangée EXPLICITE (celle du fond) au lieu de la convention « sans y = au sol ». Sous lui il n'y
+      // a pas de plateforme mais le socle de pierre de la cuve — on le juge donc comme ce qu'il est,
+      // un coffre de plongée : la cuve doit s'entrer et se ressortir à la nage.
+      const cuve = (level.hazards ?? []).find((h) => h.kind === 'water' && h.water === 'basin'
+        && c.x >= h.x && c.x < h.x + h.w
+        && h.top !== undefined && h.h !== undefined && c.y! >= h.top && c.y! <= h.top + h.h - 1)
+      if (cuve && bottomChestReachable(level, c.x, reachSurfaces, reach.groundRow)) continue
+      out.push({ x: c.x, y: c.y })
       continue
     }
     // coffre AU FOND (sans y) : au sol marchable, ou au fond d'un bassin atteignable à la NAGE
@@ -920,6 +954,164 @@ export function deadEndSurfaces(level: LevelDef): DeadEndProblem[] {
     if (canReachExit.has(i) || canDie[i]) continue
     const s = surfaces[i]!
     out.push({ x: s.x, y: s.y, w: s.w, kind: s.kind })
+  }
+  return out
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// UNE ÉCHELLE NE TRAVERSE JAMAIS DE LA PIERRE
+//
+// Retour joueur, capture à l'appui : « je te montre un chevauchement pierre / échelle qui rend le
+// terrain infaisable ». Une dalle de roche est SOLIDE dans tous les sens (règle maison : « y a pas
+// de pierre décorative ») ; une échelle qui la traverse s'arrête donc net au contact, et tout ce
+// qu'elle desservait devient injoignable. Le défaut est invisible aux autres validateurs :
+// `unreachableLadders` regarde le PIED, `laddersToNowhere` regarde le SOMMET — aucun ne regarde ce
+// qu'il y a ENTRE les deux. Mesuré à l'introduction : 4 cas, tous des échelles SUSPENDUES (`hung`)
+// posées dans la masse de roche voisine.
+export interface LadderRockProblem { x: number; y: number; h: number; rows: number }
+export function laddersInRock(level: LevelDef): LadderRockProblem[] {
+  const out: LadderRockProblem[] = []
+  for (const l of level.ladders ?? []) {
+    const bottom = l.y + l.h // exclusif
+    for (const r of level.rockBands ?? []) {
+      if (!r.solid) continue
+      if (l.x < r.x || l.x >= r.x + r.w) continue
+      const rows = Math.min(bottom, r.y + r.h) - Math.max(l.y, r.y)
+      if (rows > 0) out.push({ x: l.x, y: l.y, h: l.h, rows })
+    }
+  }
+  return out
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// UNE CUVE SE PLONGE ET SE REMONTE DANS UNE SEULE APNÉE
+//
+// Retour joueur : « sur les premiers terrains les lacs sont trop profonds, y a 0 moyen que
+// j'atteigne ça sans mourir ». Vérifié : le fond d'un bassin descendait TOUJOURS jusqu'au sol du
+// monde, or la hauteur des terrains a triplé — un bassin dont la berge est à mi-hauteur faisait
+// 29 rangées de fond, soit 12 s d'aller-retour pour 5,5 s de souffle. Et le jeu pose un coffre
+// au fond : la récompense était donc littéralement inatteignable.
+//
+// ⚠️ LE BUDGET EST LE SOUFFLE SEUL, PAS « souffle + 5 s de survie ». Les cinq secondes qui suivent
+// l'épuisement de la barre sont un compte à rebours de MORT (cf. LevelScene.updateWater) : les
+// compter dans le budget reviendrait à exiger du joueur qu'il remonte en se noyant déjà.
+const MARGE_APNEE = 0.7 // on ne consomme que 70 % de la barre : il faut viser le coffre, pas frôler la noyade
+
+/** Profondeur maximale (rangées) qu'une cuve peut avoir pour rester plongeable avec ce souffle. */
+export function maxDiveRows(breathMs: number, marge = MARGE_APNEE): number {
+  // aller-retour : 2 × profondeur × TILE px parcourus à SWIM_SPEED px/s
+  return Math.floor((breathMs * marge * SWIM_SPEED) / (2 * 1000 * TILE))
+}
+
+export interface DeepBasinProblem { x: number; w: number; top: number; depth: number; max: number }
+/**
+ * Cuves NOYANTES plus profondes que `max` rangées. Les cascades remontables sont exclues (on n'y perd
+ * pas son souffle) ; la lave aussi (on n'y nage pas, y tomber tue — c'est le contrat).
+ *
+ * La borne est passée en RANGÉES, pas en millisecondes, parce que ses deux appelants ne la connaissent
+ * pas de la même façon : le test la dérive du souffle réel du terrain (`maxDiveRows(breathMaxMs(nv))`),
+ * la sélection de graines la tient du tier du biome (`profondeurCuveMax`). Une seule unité, deux
+ * sources — au lieu d'un convertisseur qui n'aurait servi qu'à retraduire l'un dans l'autre.
+ */
+export function overDeepBasins(level: LevelDef, max: number): DeepBasinProblem[] {
+  const groundRow = groundRowFor(level.heightTiles)
+  const out: DeepBasinProblem[] = []
+  for (const h of level.hazards ?? []) {
+    if (h.kind !== 'water' || h.water === 'cascade' || h.water === 'lave') continue
+    const top = h.top ?? groundRow - 2
+    const bottom = h.h !== undefined ? top + h.h - 1 : groundRow + 1
+    const depth = bottom - top + 1
+    if (depth > max) out.push({ x: h.x, w: h.w, top, depth, max })
+  }
+  return out
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// AUCUNE POCHE DE VIDE SANS ENTRÉE
+//
+// Retour joueur, capture à l'appui : « j'avais de l'herbe et une poche d'air entourée par un carré
+// d'herbe mais inaccessible », « un carré de terre vide et bizarre ». Ce sont des puits fermés :
+// deux socles de pierre côte à côte, la colonne entre les deux laissée vide, et une plateforme qui
+// passe par-dessus et lui met un couvercle. On voit le décor de fond à travers un trou dans le
+// terrain, et on n'y entrera jamais.
+//
+// ⚠️ LE MODÈLE EST DIRECTIONNEL, ET C'EST TOUT LE SUJET. Une plateforme de TERRE se traverse par le
+// BAS (one-way, cf. LevelScene.landsFromAbove) mais jamais par le haut : la modéliser comme un mur
+// crierait au loup sur toutes les corniches posées sur un socle, et la modéliser comme du vide
+// raterait précisément le défaut signalé (le couvercle). On entre donc dans une case de plateforme
+// UNIQUEMENT en montant. La pierre FRAGILE, elle, est franchissable (il suffit de taper) : ce
+// qu'elle scelle n'est pas une poche close.
+const VIDE = 0, MASSIF = 1, ONE_WAY = 2
+
+// `runs` = les segments horizontaux exacts de la poche, rangée par rangée. La boîte englobante ne
+// suffit pas à COMBLER : une poche en L déborderait sur de la géométrie voisine.
+export interface SealedVoid { x: number; y: number; w: number; h: number; cells: number; runs: { x: number; y: number; w: number }[] }
+export function sealedVoids(level: LevelDef): SealedVoid[] {
+  const W = level.widthTiles
+  const H = level.heightTiles ?? 16
+  const groundRow = groundRowFor(level.heightTiles)
+  const grid = new Uint8Array(W * H)
+  const set = (x: number, y: number, v: number) => { if (x >= 0 && x < W && y >= 0 && y < H) grid[y * W + x] = v }
+
+  for (const r of level.rockBands ?? []) {
+    for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) set(x, y, MASSIF)
+  }
+  // sol du monde : deux rangées pleines, percées par les trous mortels
+  for (let x = 0; x < W; x++) {
+    if ((level.gaps ?? []).some((g) => x >= g.x && x < g.x + g.w)) continue
+    set(x, groundRow, MASSIF); set(x, groundRow + 1, MASSIF)
+  }
+  // plateformes : la terre est one-way, la pierre (`solid`) est un vrai mur
+  for (const p of level.platforms) for (let x = p.x; x < p.x + p.w; x++) set(x, p.y, p.solid ? MASSIF : ONE_WAY)
+  // pierre fragile : on la casse → ce qu'elle ferme reste accessible
+  for (const b of level.breakables ?? []) {
+    for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) set(x, y, VIDE)
+  }
+
+  const seen = new Uint8Array(W * H)
+  const stack: number[] = []
+  // entrer dans une case : jamais dans du massif ; dans une plateforme one-way, seulement en MONTANT
+  const visit = (x: number, y: number, dy: number) => {
+    if (x < 0 || x >= W || y < 0 || y >= H) return
+    const i = y * W + x
+    if (seen[i] || grid[i] === MASSIF || (grid[i] === ONE_WAY && dy >= 0)) return
+    seen[i] = 1; stack.push(i)
+  }
+  for (let x = 0; x < W; x++) { visit(x, 0, -1); visit(x, H - 1, -1) }
+  for (let y = 0; y < H; y++) { visit(0, y, -1); visit(W - 1, y, -1) }
+  while (stack.length) {
+    const i = stack.pop()!
+    const x = i % W, y = (i - x) / W
+    visit(x + 1, y, 0); visit(x - 1, y, 0); visit(x, y + 1, 1); visit(x, y - 1, -1)
+  }
+
+  const marked = new Uint8Array(W * H)
+  const out: SealedVoid[] = []
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x
+    if (grid[i] !== VIDE || seen[i] || marked[i]) continue
+    const blob = [i]; marked[i] = 1
+    let x0 = x, x1 = x, y0 = y, y1 = y
+    for (let k = 0; k < blob.length; k++) {
+      const j = blob[k]!, jx = j % W, jy = (j - jx) / W
+      x0 = Math.min(x0, jx); x1 = Math.max(x1, jx); y0 = Math.min(y0, jy); y1 = Math.max(y1, jy)
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        const nx = jx + dx, ny = jy + dy
+        if (nx < 0 || nx >= W || ny < 0 || ny >= H) continue
+        const n = ny * W + nx
+        if (grid[n] !== VIDE || seen[n] || marked[n]) continue
+        marked[n] = 1; blob.push(n)
+      }
+    }
+    // segments horizontaux, rangée par rangée (tri par y puis x, puis fusion des cases contiguës)
+    const runs: { x: number; y: number; w: number }[] = []
+    for (const j of blob.sort((a, b) => a - b)) {
+      const jx = j % W, jy = (j - jx) / W
+      const last = runs[runs.length - 1]
+      if (last && last.y === jy && last.x + last.w === jx) last.w++
+      else runs.push({ x: jx, y: jy, w: 1 })
+    }
+    out.push({ x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1, cells: blob.length, runs })
   }
   return out
 }

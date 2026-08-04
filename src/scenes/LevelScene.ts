@@ -9,6 +9,7 @@ import { FlameWall } from '../entities/FlameWall'
 import { MONSTERS } from '../data/monsters'
 import type { MonsterDef } from '../core/types'
 import { PROPS, estCoffre } from '../data/props'
+import { spawnFeetRow } from '../core/level-validator'
 import { MATERIALS } from '../data/materials'
 import { ITEMS, rarityColor } from '../data/items'
 import { physicalDamage, inMeleeReach } from '../core/combat'
@@ -812,7 +813,7 @@ export class LevelScene extends Phaser.Scene {
     // ce qu'on a détruit à l'éloignement transforme le moindre aller-retour en ferme à XP. Chaque fiche
     // de spawn garde donc son état — mort ou vivant — et les PV du monstre au moment où il a disparu :
     // on s'éloigne d'un ours entamé, on le retrouve entamé.
-    this.fichesSpawn = cappedSpawns.map((s) => ({ def: MONSTERS[s.monsterId]!, x: s.x * TILE, yTile: s.y ?? this.groundRow, mort: false, pv: null, vivant: null }))
+    this.fichesSpawn = cappedSpawns.map((s) => ({ def: MONSTERS[s.monsterId]!, x: s.x * TILE, yTile: spawnFeetRow(this.levelDef, s), mort: false, pv: null, vivant: null }))
     this.majMonstresProches()
 
     // le groupe applique ses defaults (allowGravity: true, immovable: false) à chaque ajout et
@@ -1140,11 +1141,16 @@ export class LevelScene extends Phaser.Scene {
         // départage par ordre d'ajout, donc la pierre couvre l'herbe. La nappe d'eau (−3) passe
         // par-dessus et la teinte — le fond se lit sous l'eau au lieu d'être plaqué dessus, ce qui
         // serait le cas à la profondeur des parois (−2).
-        const solPx = this.groundRow * TILE
-        const epaisseur = Math.max(TILE, (waterBottom + 1) * TILE - solPx)
+        // ⚠️ LE FOND EST CELUI DE LA CUVE, PAS LE SOL DU MONDE. Il l'était tant qu'un bassin
+        // descendait forcément jusqu'en bas ; depuis que la profondeur est bornée par l'apnée (cf.
+        // level-modules.profondeurCuveMax), une cuve rognée a son fond BIEN AU-DESSUS du sol, et
+        // tapisser à `groundRow` laissait le fond de pierre sous le socle — donc invisible, et le
+        // lac reposait à l'écran sur de l'herbe vue à travers l'eau.
+        const solPx = (waterBottom + 1) * TILE
+        const epaisseur = Math.max(TILE, (this.groundRow + 2) * TILE - solPx)
         this.add.tileSprite(xPx, solPx, wPx, epaisseur, 'basin-wall').setOrigin(0, 0).setDepth(-4)
-        // déco posée sur la SURFACE du sol (fond du lac) — l'eau recouvre désormais le sol plein
-        this.addBasinBottomDeco(hz.x, hz.x + hz.w - 1, this.groundRow - 1)
+        // déco posée sur la SURFACE du fond de la cuve — l'eau la recouvre
+        this.addBasinBottomDeco(hz.x, hz.x + hz.w - 1, waterBottom)
         // POISSONS : de gros cercles ROUGES qui dérivent dans le bassin (placeholder décoratif, sans
         // visuel dédié ni dégâts — au plus simple : ils vont et viennent dans l'eau).
         this.addFish(new Phaser.Geom.Rectangle(xPx, topPx, wPx, heightPx))

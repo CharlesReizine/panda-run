@@ -70,13 +70,21 @@ describe('niveaux et carte', () => {
     }
   })
 
-  it('les coffres sont posés sur une plateforme existante (x dans [p.x, p.x+p.w), y = p.y - 1)', () => {
+  it('les coffres reposent sur quelque chose : plateforme, sol du monde, ou fond de cuve', () => {
+    // ⚠️ TROIS APPUIS LÉGITIMES, ET LE TROISIÈME EST NÉ AVEC LA BORNE D'APNÉE. Un coffre de plongée se
+    // posait « au sol du monde » (sans y), parce qu'un bassin descendait jusque-là. Depuis que la
+    // profondeur des cuves est bornée par le souffle (cf. level-modules.profondeurCuveMax), le fond
+    // d'un lac est bien plus haut et le coffre porte la rangée EXPLICITE de ce fond. Sous lui il n'y a
+    // pas de plateforme : il y a le socle de pierre de la cuve, ce qui est un appui parfaitement réel.
     for (const l of Object.values(LEVELS)) {
       const chests = (l.props ?? []).filter((p) => estCoffre(p.kind))
       for (const c of chests) {
-        const onGround = c.y === undefined // posé au sol
+        const onGround = c.y === undefined // posé au sol du monde
         const onPlatform = l.platforms.some((p) => c.x >= p.x && c.x < p.x + p.w && c.y === p.y - 1)
-        expect(onGround || onPlatform, `${l.id}: coffre x=${c.x} y=${c.y}`).toBe(true)
+        const onBasinFloor = (l.hazards ?? []).some((h) => h.kind === 'water' && h.water === 'basin'
+          && c.x >= h.x && c.x < h.x + h.w
+          && h.top !== undefined && h.h !== undefined && c.y === h.top + h.h - 1)
+        expect(onGround || onPlatform || onBasinFloor, `${l.id}: coffre x=${c.x} y=${c.y}`).toBe(true)
       }
     }
   })

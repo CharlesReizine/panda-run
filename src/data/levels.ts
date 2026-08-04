@@ -108,12 +108,12 @@ export interface LevelDef {
   boss?: string
 }
 
-import { buildLevelFromModules, composeLevel, planModules, countFeatureModules, type ComposeOpts, type Module, type ModuleKind, type Tier, CATALOG } from './level-modules'
+import { buildLevelFromModules, composeLevel, planModules, countFeatureModules, profondeurCuveMax, type ComposeOpts, type Module, type ModuleKind, type Tier, CATALOG } from './level-modules'
 import {
   overStackedColumns, unlevelWaterBanks, deadEndSurfaces, suspendedWaterBanks,
   unreachablePlatforms, laddersToNowhere, unreachableLadders, unreachableChests,
   oversizedGaps, oversizedLadders, monstersOffSurface, startExitProblems, caveCeilingClearance,
-  longEmptyFlats, monstersInRock, strictReach,} from '../core/level-validator'
+  longEmptyFlats, monstersInRock, strictReach, laddersInRock, overDeepBasins,} from '../core/level-validator'
 
 // ─── PLANS DE TERRAIN PRÉCALCULÉS ────────────────────────────────────────────────────────────────
 //
@@ -669,6 +669,13 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
     && longEmptyFlats(l, maxFlat).length === 0 && deadEndSurfaces(l).length === 0
     && unreachablePlatforms(l).length === 0 && unreachableLadders(l).length === 0
     && unreachableChests(l).length === 0
+    // ⚠️ CES DEUX-LÀ SONT DÉSORMAIS DES CAUSES CORRIGÉES, ET ILS RESTENT ICI EN FILET. Les échelles
+    // murées et les cuves hors budget d'apnée ne peuvent plus naître (socle qui épargne les échelles,
+    // fond de cuve borné par le souffle) — mais l'assembleur RENONCE à rogner une cuve quand un motif a
+    // creusé sous elle, et ce renoncement dépend de la largeur tirée. C'est exactement le genre de
+    // défaut qu'une graine doit se voir refuser plutôt que d'attendre le test.
+    && laddersInRock(l).length === 0
+    && overDeepBasins(l, profondeurCuveMax(pool.tier)).length === 0
     // ⚠️ L'ATTEIGNABILITÉ STRICTE ENTRE DANS LA SÉLECTION, avec la MÊME exemption que la validation
     // finale (les « terrains hauts », dont les murs de roche sont le motif). Sans elle, le générateur
     // acceptait des terrains que la validation rejetait ensuite : 10 terrains sortaient avec des
@@ -691,7 +698,7 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   // a eu lieu à la gravure, et tests/data/graines.test.ts la rejoue intégralement à chaque exécution.
   const grave = REGRAVER ? undefined : PLANS_GRAVES[id]
   if (grave) {
-    const l = buildLevelFromModules(grave.modules as Module[], { id, name, biome, seed: grave.seed })
+    const l = buildLevelFromModules(grave.modules as Module[], { id, name, biome, seed: grave.seed, tier: pool.tier })
     LEVEL_MODULE_KINDS[id] = grave.modules.map((m) => m.kind as ModuleKind)
     PLANS_CHOISIS[id] = grave as { seed: string; modules: Module[] }
     return l
@@ -707,7 +714,7 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
   let chosen = salts[0]!
   let midChoisi = midBaseCount
   let planChoisi = planModules({ ...({ ...base, midCount: midChoisi } as ComposeOpts), seed: chosen })
-  let level = buildLevelFromModules(planChoisi, { id, name, biome, seed: chosen })
+  let level = buildLevelFromModules(planChoisi, { id, name, biome, seed: chosen, tier: pool.tier })
   // ⚠️ UN MOTIF IMPOSÉ EST UNE PRÉFÉRENCE, PAS UN CONTRAT. Certains terrains se voient imposer des motifs
   // à géométrie exigeante (grande cascade, échelles de lianes…). Quand le reste du terrain change autour
   // d'eux — et il change à chaque fois qu'on touche au générateur, le compteur « le moins servi » étant
@@ -736,7 +743,7 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
       let found = false
       for (const seed of salts) {
         const pl = planModules({ ...b, seed })
-        const l = buildLevelFromModules(pl, { id, name, biome, seed })
+        const l = buildLevelFromModules(pl, { id, name, biome, seed, tier: pool.tier })
         if (!cleanAt(l, maxFlat)) continue
         if (!found) { found = true; planChoisi = pl; level = l; chosen = seed; midChoisi = mid }
         if (countFeatureModules(pl.map((m) => m.kind)) >= featureFloor) {

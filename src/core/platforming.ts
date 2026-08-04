@@ -16,6 +16,12 @@ export const GROUND_ROW = 14 // rangée du sol par défaut (= DEFAULT_HEIGHT_TIL
 export const GRAVITY = 1875
 export const JUMP_SPEED = 700 // magnitude de la vitesse de saut
 export const RUN_SPEED = 275
+// Vitesse VERTICALE de nage (px/s), en montée comme en descente. Déclarée ICI et pas dans Player
+// parce qu'elle n'est pas qu'un réglage de ressenti : c'est elle qui décide, avec la réserve de
+// souffle (core/breath), de la PROFONDEUR qu'une cuve peut avoir sans être un piège mortel. Le
+// générateur en dépend (cf. level-validator.maxDiveRows) ; deux copies dériveraient, et la cuve
+// deviendrait infranchissable sans qu'aucun test ne le voie.
+export const SWIM_SPEED = 150
 // Le sol est TOUJOURS au bas du monde : deux rangées pleines (sol + sous-sol) → groundRow = h - 2.
 export function groundRowFor(heightTiles = DEFAULT_HEIGHT_TILES): number {
   return heightTiles - 2
