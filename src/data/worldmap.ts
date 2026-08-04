@@ -156,3 +156,28 @@ export function isNodeUnlocked(nodeId: string, completedLevels: string[]): boole
   }
   return false
 }
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// OÙ VA-T-ON RENDRE SA QUÊTE ?
+//
+// Retour du joueur : « pour le statut des quêtes il faut afficher la ville où je dois aller chercher
+// la récompense ». Le bandeau disait « récompense prête chez le garde » — vrai, mais inutile : le
+// garde tient une échoppe dans CHAQUE ville, et le joueur ne sait pas laquelle est la plus proche.
+//
+// On répond donc par la carte : la ville la plus proche du nœud courant, en nombre de traversées.
+// Recherche en LARGEUR, pas en distance à vol d'oiseau — ce qui compte est le nombre de terrains à
+// traverser, pas les pixels sur l'écran de carte.
+export function villeLaPlusProche(depuis: string): MapNode | null {
+  const vu = new Set([depuis])
+  let front = [depuis]
+  for (let profondeur = 0; front.length && profondeur < WORLD_NODES.length; profondeur++) {
+    const villes = front.map((id) => nodeById.get(id)).filter((n): n is MapNode => !!n && n.type === 'town')
+    // à égalité de distance, on départage par l'ordre de la carte : déterministe, et c'est l'ordre
+    // de progression du jeu (Prontera avant Morocc).
+    if (villes.length) return villes[0]!
+    const suivant: string[] = []
+    for (const id of front) for (const v of neighborsOf(id)) if (!vu.has(v)) { vu.add(v); suivant.push(v) }
+    front = suivant
+  }
+  return null
+}

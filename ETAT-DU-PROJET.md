@@ -11,7 +11,7 @@ qui reste à faire. Il se met à jour à chaque lot livré.
 ## Vérifier et déployer
 
 ```bash
-pnpm verif       # tsc + 1737 tests + build + les six sondes navigateur
+pnpm verif       # tsc + 1741 tests + build + les six sondes navigateur
 npx firebase-tools deploy --only hosting
 ```
 
@@ -50,7 +50,7 @@ rares). Les traiter fait partie du cycle, pas après.
 
 ### ⚠️ Toucher à la génération, c'est un cycle complet
 
-modifier → **regraver (6 à 7 minutes)** → resynchroniser les monstres → 1737 tests → six sondes → déployer.
+modifier → **regraver (6 à 7 minutes)** → resynchroniser les monstres → 1741 tests → six sondes → déployer.
 
 Trois tentatives ont échoué le 3 août faute d'avoir tenu ce cycle jusqu'au bout. Deux règles en découlent :
 
@@ -120,6 +120,15 @@ espèce dérive du PREMIER biome où elle apparaît : retirer le dernier faucon 
 fait bondir de 12 à 23, et tout l'équilibrage a suivi. Il repose donc au sol, et ne retire qu'en
 dernier recours.
 
+**Trois contraintes verrouillent la chambre de `sol-fragile`, et elles se contredisent si on en bouge
+une.** L'échelle de remontée doit (1) faire au moins `MIN_LADDER_TILES`, (2) déboucher deux rangées
+au-dessus du chemin pour que `isLadderTop` la voie, (3) ne pas ajouter un 4e palier dans sa colonne
+(`overStackedColumns`). Une seule profondeur de chambre satisfait les trois : `MIN_LADDER_TILES - 2`
+sous le chemin, sans palier intermédiaire. Et son puits ne passe PAS dans la dalle cassable — on ne
+frappe pas vers le haut en étant agrippé, donc y déboucher est un cul-de-sac. La dalle est raccourcie
+d'une tuile et le puits est coiffé de gazon. Chercher à déplacer le puits en trouant le socle a fait
+tomber trente-cinq tests ; approfondir la chambre sans corriger le reste, vingt-sept.
+
 **Les clés d'objet en double ne sont vues que par `tsc`.** JS garde la dernière. Vérifié sur
 `SPECIAL_WATER_LEVELS`, `SPECIAL_FORCED`, `CATALOG`.
 
@@ -166,6 +175,7 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 | Build | Ce qui a changé |
 |---|---|
+| R351 | **`sol-fragile` était injouable** : son échelle de remontée débouchait sous la dalle cassable (qu'on ne peut pas frapper depuis une échelle) · trous redondants nettoyés · le bandeau de quête nomme la ville où rendre la récompense |
 | R350 | **doubles planchers à ZÉRO** : `sol-fragile` posait le palier de son échelle une rangée au-dessus du chemin · une colonne d'échelle est enfin un passage vertical pour `sealedVoids` · coutures entre modules MESURÉES : aucune n'est infranchissable |
 | R349 | **les trois dettes de relief traitées** : sol retiré sous les enchaînements de sauts contournables (174 → 6) · doubles planchers rognés (60 → 15) · marches géantes de rampe (11 → 1) · resynchro des niveaux de monstres |
 | R348 | **sixième perte de sauvegarde élucidée et réparée sans écriture cloud** (poussée auto armée sur le pseudo précédent · document exact rendu sans contrôle du nom · repli « panda » résiduel) · pseudo SUGGÉRÉ au lieu de pré-rempli |

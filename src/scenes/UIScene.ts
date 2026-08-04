@@ -6,6 +6,7 @@ import { audio } from '../audio/audio-engine'
 import type { LevelScene } from './LevelScene'
 import { VIEW_H, VIEW_W, centerCamera, fromLeft, fromRight } from '../core/viewport'
 import { PAD, MARGE_SURE, zoneJoystick } from './action-pad-layout'
+import { villeLaPlusProche } from '../data/worldmap'
 import { HUD_LEFT, centerOf } from './hud-layout'
 import { currentChainQuest, refreshQuestProgress } from '../core/quests'
 
@@ -487,7 +488,13 @@ export class UIScene extends Phaser.Scene {
     this.questBg.setVisible(true)
     this.questTxt.setVisible(true)
     if (q.done) {
-      this.questTxt.setText(`✅ ${def.name} — récompense prête chez le garde`)
+      // ⚠️ ON NOMME LA VILLE, PAS SEULEMENT LE PNJ. « Récompense prête chez le garde » était exact et
+      // inutilisable : le garde tient une échoppe dans chaque ville, et rien ne disait laquelle. Retour
+      // du joueur : « il faut afficher la ville où je dois aller chercher la récompense ».
+      const ville = villeLaPlusProche(p.currentNode)
+      this.questTxt.setText(ville
+        ? `✅ ${def.name} — récompense chez le garde, à ${ville.name}`
+        : `✅ ${def.name} — récompense prête chez le garde`)
       this.questBg.setStrokeStyle(2, 0x66bb6a, 0.95)
       // NOTIF À L'INSTANT OÙ ÇA BASCULE, une seule fois : le joueur doit apprendre la nouvelle sur le
       // terrain, pas la découvrir en ville trois minutes plus tard.

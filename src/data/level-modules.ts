@@ -888,11 +888,17 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // RAMPE DE PALIERS parallèle garantit l'accès à la corniche haute au saut simple (reachable.test) ;
       // la cascade est le raccourci fun.
       const low = Math.max(entryAlt, 1)
-      const top = low + cascadeRise(rng) // cascade HAUTE (≥ 4× le panda) : plus jamais franchissable au saut
+      // ⚠️ UNE CASCADE N'EST PAS PLUS HAUTE QUE CE QUE SON MODULE PEUT REDESCENDRE. Le tirage était
+      // libre : sur un module étroit, il ne restait plus que trois tuiles pour lâcher quinze rangées,
+      // soit des marches de cinq — la dernière « marche géante » du jeu. On plafonne donc par la place
+      // réellement disponible (une tuile par marche de la hauteur d'un saut), sans jamais descendre
+      // sous les quatre rangées qui font l'identité du motif (« ≥ 4× le panda »).
+      const cornW = 5
+      const placeDescente = Math.max(1, w - 4 - 4 - cornW) // total moins la colonne d'eau, la corniche basse minimale et la haute
+      const top = Math.max(low + 4, Math.min(low + cascadeRise(rng), exitAlt + MARCHE_MAX * placeDescente))
       // allocation séquentielle : corniche basse | colonne (2) | ÉCHELLE parallèle + jetée | corniche
       // haute (5) | rampe de redescente. La rampe montante ne tient plus (une cascade de 4× le panda
       // dépasse ce qu'un escalier de paliers peut couvrir en largeur) → une échelle donne l'accès garanti.
-      const cornW = 5
       // ⚠️ LA REDESCENTE SE RÉSERVE SA LARGEUR AVANT QUE LA CORNICHE BASSE NE PRENNE LA SIENNE.
       // L'allocation était séquentielle et la rampe finale héritait de ce qui restait : sur un module
       // serré, il lui restait trois tuiles pour lâcher quinze rangées, soit des marches de cinq — la
@@ -1519,13 +1525,30 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const dalleW = 4
       const dalleX = Math.max(rampW + 2, Math.floor(w / 2) - Math.floor(dalleW / 2))
       const finDalle = dalleX + dalleW
-      const solChambre = Math.max(1, alt - 6)
+      // ⚠️ LA PROFONDEUR N'EST PAS UN CHOIX : ELLE EST DICTÉE PAR L'ÉCHELLE QUI EN REMONTE.
+      // Une échelle fait au minimum `MIN_LADDER_TILES` et son sommet doit tomber deux rangées au-dessus
+      // du chemin (règle du décalage pieds↔centre, cf. isLadderTop). Toute autre profondeur oblige à
+      // glisser un palier intermédiaire — et ce palier fait un QUATRIÈME étage dans la colonne, ce que
+      // `overStackedColumns` refuse (mesuré : huit terrains rouges). Une seule valeur satisfait tout le
+      // monde, et c'est celle-ci.
+      const solChambre = Math.max(1, alt - (MIN_LADDER_TILES - 2))
       p.platforms.push(...ramp(0, rampW, entryAlt, alt))
       p.platforms.push({ x: rampW, alt, w: dalleX - rampW })
       if (w - finDalle > 0) p.platforms.push({ x: finDalle, alt, w: w - finDalle })
-      // le PAN FRAGILE tient le rôle du sol, à l'altitude exacte du chemin : rien ne le distingue d'une
-      // dalle normale, sinon la matière — c'est le motif entier.
-      p.breakables.push({ x: dalleX, altBot: alt, altTop: alt, w: dalleW })
+      // ─── LE PAN FRAGILE, ET LA TUILE DE GAZON QUI LE BORDE ────────────────────────────────────
+      //
+      // ⚠️ LA DERNIÈRE COLONNE DE LA DALLE EST DU GAZON, PAS DE LA PIERRE FRAGILE, PARCE QUE L'ÉCHELLE
+      // DE REMONTÉE PASSE PAR LÀ. Retour du joueur, capture à l'appui : « l'échelle vole et en haut je
+      // peux pas remonter à cause du sol cassable en haut, que je peux pas casser du coup ». Il a
+      // raison sur toute la ligne : on ne frappe pas vers le haut en étant agrippé à une échelle, donc
+      // déboucher sous la pierre fragile est un cul-de-sac — la chambre au trésor n'avait plus de
+      // sortie. Sa solution est celle retenue : « full gazon à gauche, et à droite le truc cassable ».
+      //
+      // On raccourcit donc la dalle d'une colonne au lieu de déplacer le puits : bouger le puits
+      // obligeait à trouer le socle de pierre, ce qui a fait tomber trente-cinq tests (atteignabilité
+      // stricte, poches closes, motifs isolés). La dalle, elle, ne porte rien.
+      p.breakables.push({ x: dalleX, altBot: alt, altTop: alt, w: dalleW - 1 })
+      p.platforms.push({ x: finDalle - 1, alt, w: 1 }) // le gazon au-dessus du puits
       if (alt - 1 >= 1) {
         // socle démarré après la rampe (cf. grotte-scellee : à x=0 il enterrait les paliers d'accroche)
         p.rocks.push({ x: rampW, altBot: 1, altTop: alt - 1, w: dalleX - rampW })
@@ -1536,18 +1559,13 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       p.props.push({ kind: 'coffre', x: dalleX + 1, alt: solChambre + 1 })
       // ─── ÉCHELLE DE REMONTÉE : casser le sol ne doit pas être un aller simple ─────────────────
       //
-      // ⚠️ SON PALIER FAIT UNE TUILE, ET C'EST LA CORRECTION DU « DOUBLE PLANCHER ». Elle passait par
-      // `poseLadderOn`, dont le palier part TOUJOURS vers la droite depuis le montant sur au moins
-      // quatre tuiles : posé une rangée au-dessus du chemin (le montant fait `MIN_LADDER_TILES`, son
-      // palier tombe deux rangées sous le sommet), il venait RECOUVRIR ce chemin sur trois colonnes.
-      // Huit terrains portaient ce doublon — « j'en ai vu une qui revient et ça perturbe ».
-      //
-      // Le palier n'a aucune raison de s'étendre : on en sort d'un pas sur le chemin, juste à côté.
-      // Une seule tuile, pile sur le montant — assez pour que `isLadderTop` reconnaisse le sommet,
-      // trop peu pour recouvrir quoi que ce soit.
-      const hEchelle = Math.max(MIN_LADDER_TILES, Math.min(MAX_LADDER_TILES, alt - solChambre))
-      p.ladders.push({ x: finDalle - 1, topAlt: solChambre + hEchelle, h: hEchelle })
-      p.platforms.push({ x: finDalle - 1, alt: solChambre + hEchelle - 2, w: 1 })
+      // ⚠️ ELLE N'A PLUS DE PALIER À ELLE, ET C'EST LA FIN DU « DOUBLE PLANCHER ». Elle passait par
+      // `poseLadderOn`, dont le palier part TOUJOURS vers la droite depuis le montant, sur au moins
+      // quatre tuiles : posé une rangée au-dessus du chemin, il venait le RECOUVRIR sur trois colonnes.
+      // Huit terrains portaient ce doublon — « j'en ai vu une qui revient et ça perturbe ». Le chemin
+      // lui-même fait le palier ; il suffit que l'échelle débouche à la bonne hauteur.
+      // Aucun palier propre : la tuile de gazon posée plus haut, au-dessus du puits, EST son palier.
+      p.ladders.push({ x: finDalle - 1, topAlt: alt + 2, h: MIN_LADDER_TILES })
       p.exitAlt = alt
       break
     }
@@ -3589,6 +3607,17 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
       })
     })
     safeSpawns.sort((a, b) => a.x - b.x)
+  }
+
+  // ─── PAS DEUX FOIS LE MÊME TROU ──────────────────────────────────────────────────────────────
+  // Plusieurs passes posent des `gaps` (motifs, cascades au-dessus du vide, creusement sous les sauts
+  // contournables) et rien ne les empêchait de se recouvrir. Une entrée entièrement contenue dans une
+  // autre ne creuse rien de plus : elle ne fait qu'alourdir la donnée et fausser tout comptage de
+  // trous. Mesuré : 1360 entrées pour 480 trous réels, dont 14 purement redondantes.
+  for (let i = gaps.length - 1; i >= 0; i--) {
+    const a = gaps[i]!
+    if (gaps.some((b, j) => j !== i && b.x <= a.x && b.x + b.w >= a.x + a.w
+      && (b.w > a.w || (b.w === a.w && j < i)))) gaps.splice(i, 1)
   }
 
   // ─── FOND DE CUVE REMONTÉ : CE QUI SE POSE « AU SOL » SE POSE SUR LE FOND ────────────────────
