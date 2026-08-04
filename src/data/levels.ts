@@ -113,8 +113,7 @@ import {
   overStackedColumns, unlevelWaterBanks, deadEndSurfaces, suspendedWaterBanks,
   unreachablePlatforms, laddersToNowhere, unreachableLadders, unreachableChests,
   oversizedGaps, oversizedLadders, monstersOffSurface, startExitProblems, caveCeilingClearance,
-  longEmptyFlats, monstersInRock,
-} from '../core/level-validator'
+  longEmptyFlats, monstersInRock, strictReach,} from '../core/level-validator'
 
 // ─── PLANS DE TERRAIN PRÉCALCULÉS ────────────────────────────────────────────────────────────────
 //
@@ -670,6 +669,12 @@ function terrain(id: string, name: string, biome: string, rank: number): LevelDe
     && longEmptyFlats(l, maxFlat).length === 0 && deadEndSurfaces(l).length === 0
     && unreachablePlatforms(l).length === 0 && unreachableLadders(l).length === 0
     && unreachableChests(l).length === 0
+    // ⚠️ L'ATTEIGNABILITÉ STRICTE ENTRE DANS LA SÉLECTION, avec la MÊME exemption que la validation
+    // finale (les « terrains hauts », dont les murs de roche sont le motif). Sans elle, le générateur
+    // acceptait des terrains que la validation rejetait ensuite : 10 terrains sortaient avec des
+    // plateformes MURÉES et re-tirer les dés n'y changeait rien — les deux étapes ne jugeaient pas la
+    // même chose. C'est ce désaccord qui empêchait de livrer les motifs descendants.
+    && (TERRAINS_HAUTS[id] !== undefined || strictReach(l).badPlats.length === 0)
     // ⚠️ L'ATTEIGNABILITÉ STRICTE RESTE HORS DE CETTE CHAÎNE, ET C'EST UN ARBITRAGE, PAS UN OUBLI.
     // Elle est vérifiée par tests/core/reachable-strict.test.ts sur tous les terrains, donc rien ne passe
     // en douce. L'ajouter ici semblait plus propre — un invariant testé devrait guider la sélection —
