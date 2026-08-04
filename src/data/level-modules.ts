@@ -386,6 +386,7 @@ function pushVariedCeiling(p: Piece, w: number, alt: number, variant: number) {
 // de la hauteur d'un saut reste franchissable dans les deux sens. Au-delà, c'est une falaise — c'est
 // ce que le joueur appelait « les marches géantes ».
 const MARCHE_MAX = Math.floor(maxJumpTiles())
+export const PORTEES: Record<string, { kind: string; x0: number; w: number }[]> = {}
 export const MARCHES_RAMPE: { de: number; a: number; w: number; kind: string }[] = []
 let motifCourant = '?'
 function ramp(x0: number, w: number, fromAlt: number, toAlt: number, keepGround = false): { x: number; alt: number; w: number }[] {
@@ -1533,8 +1534,20 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       }
       p.platforms.push({ x: dalleX, alt: solChambre, w: dalleW }) // sol de la chambre
       p.props.push({ kind: 'coffre', x: dalleX + 1, alt: solChambre + 1 })
-      // ÉCHELLE DE REMONTÉE : casser le sol ne doit pas être un aller simple
-      poseLadderOn(p, finDalle - 1, solChambre, dalleX, Math.max(MIN_LADDER_TILES, Math.min(MAX_LADDER_TILES, alt - solChambre)))
+      // ─── ÉCHELLE DE REMONTÉE : casser le sol ne doit pas être un aller simple ─────────────────
+      //
+      // ⚠️ SON PALIER FAIT UNE TUILE, ET C'EST LA CORRECTION DU « DOUBLE PLANCHER ». Elle passait par
+      // `poseLadderOn`, dont le palier part TOUJOURS vers la droite depuis le montant sur au moins
+      // quatre tuiles : posé une rangée au-dessus du chemin (le montant fait `MIN_LADDER_TILES`, son
+      // palier tombe deux rangées sous le sommet), il venait RECOUVRIR ce chemin sur trois colonnes.
+      // Huit terrains portaient ce doublon — « j'en ai vu une qui revient et ça perturbe ».
+      //
+      // Le palier n'a aucune raison de s'étendre : on en sort d'un pas sur le chemin, juste à côté.
+      // Une seule tuile, pile sur le montant — assez pour que `isLadderTop` reconnaisse le sommet,
+      // trop peu pour recouvrir quoi que ce soit.
+      const hEchelle = Math.max(MIN_LADDER_TILES, Math.min(MAX_LADDER_TILES, alt - solChambre))
+      p.ladders.push({ x: finDalle - 1, topAlt: solChambre + hEchelle, h: hEchelle })
+      p.platforms.push({ x: finDalle - 1, alt: solChambre + hEchelle - 2, w: 1 })
       p.exitAlt = alt
       break
     }
@@ -2932,6 +2945,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   let start: LevelDef['start']
   let exit: LevelDef['exit']
 
+  PORTEES[opts.id] = pieces.map((p) => ({ kind: p.kind, x0: p.x0, w: p.w }))
   for (const { piece, x0, kind } of pieces) {
     for (const pl of piece.platforms) platforms.push({ x: x0 + pl.x, y: row(pl.alt), w: pl.w, ...(pl.solid ? { solid: true } : {}) })
     for (const b of piece.bridges) bridges.push({ x: x0 + b.x, y: row(b.alt), w: b.w })

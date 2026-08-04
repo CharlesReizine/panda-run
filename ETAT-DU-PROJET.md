@@ -166,6 +166,7 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 | Build | Ce qui a changé |
 |---|---|
+| R350 | **doubles planchers à ZÉRO** : `sol-fragile` posait le palier de son échelle une rangée au-dessus du chemin · une colonne d'échelle est enfin un passage vertical pour `sealedVoids` · coutures entre modules MESURÉES : aucune n'est infranchissable |
 | R349 | **les trois dettes de relief traitées** : sol retiré sous les enchaînements de sauts contournables (174 → 6) · doubles planchers rognés (60 → 15) · marches géantes de rampe (11 → 1) · resynchro des niveaux de monstres |
 | R348 | **sixième perte de sauvegarde élucidée et réparée sans écriture cloud** (poussée auto armée sur le pseudo précédent · document exact rendu sans contrôle du nom · repli « panda » résiduel) · pseudo SUGGÉRÉ au lieu de pré-rempli |
 | R347 | **lacs plongeables** (fond borné par l'apnée, socle de pierre dessous) · **plus une seule poche de vide close** (142 → 0) · **plus une seule échelle murée** · trois valideurs neufs, deux entrés dans la sélection de graines |
@@ -263,9 +264,12 @@ La 4e tentative avait échoué sur `plateforme-murée`, réglée en R346. Garde-
 **3. ✅ DOUBLES PLANCHERS (60 → 15) ET MARCHES GÉANTES DE RAMPE (11 → 1).** Les deux mesures vivent
 désormais dans `tests/data/relief-jouable.test.ts` avec leur tolérance et sa raison, au lieu de dormir
 en chiffres périmés ici. Ce qui reste :
-· **les 15 doubles planchers sont aux COUTURES entre modules** (x en fin de module : 121-135, 565-586,
-  619, 682) — deux voisins posent chacun leur corniche de raccord à une ou deux rangées d'écart. Ça se
-  corrige côté couture, pas côté nettoyage : le rognage n'ose pas trancher un appui de liaison ;
+· **les doubles planchers sont à ZÉRO** (l'hypothèse « c'est aux coutures » était FAUSSE : la mesure a
+  montré deux motifs, et eux seuls — `sol-fragile`, corrigé, et `pics-quinconce`, dont les languettes à
+  +2 sont le motif même) ;
+· **les coutures entre modules ont été mesurées : aucune n'est infranchissable** sur les 58 terrains.
+  Le chaînage par altitude et la rampe d'accroche font leur travail — il n'y a pas de « combo qui pose
+  problème » entre motifs, tous les défauts restants sont INTERNES à un motif ;
 · **la marche géante restante est un arbitrage** : une cascade « au moins 4× le panda » dans un module
   étroit ne laisse pas la place d'adoucir sa berge descendante ;
 · 3 motifs qui refusent le miroir (`passerelles-zigzag` : son sol est le vide, donc cul-de-sac ; les 2

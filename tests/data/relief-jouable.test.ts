@@ -18,9 +18,14 @@ const nonBoss = Object.values(LEVELS).filter((l) => !l.boss)
 describe('relief jouable', () => {
   // ── 1) « les sauts qu'on peut éviter, tu dégages le sol en dessous » ─────────────────────────
   // Une suite de plateformes suspendues avec du sol praticable dessous ne se joue jamais : on passe
-  // dessous en marchant. La passe de creusement (level-modules) retire ce sol. Elle ne peut pas tout
-  // faire : une chaîne dont l'intérieur porte un coffre, un pied d'échelle ou un trampoline reste
-  // intacte — on ne creuse pas sous ce qui se pose au sol. Mesuré : 174 chaînes avant, 6 après.
+  // dessous en marchant. La passe de creusement (level-modules) retire ce sol. Mesuré : 174 avant, 6
+  // après, et les six restantes sont NOMMÉES, pas subies :
+  //   · desert-1 et desert-8 : chaînes de 3 et 5 tuiles dans `cascade-large-pierre` — en gardant deux
+  //     colonnes pleines de chaque côté (sans quoi on coupe le terrain en deux), il ne reste pas
+  //     d'intérieur à creuser. Une chaîne aussi courte ne se « contourne » d'ailleurs guère ;
+  //   · carriere-1, quatre chaînes : creuser y fabriquait un piège sans retour, et la passe a REBOUCHÉ.
+  //     Le modèle de mouvement ne sait pas parcourir ces chaînes-là, donc le sol du dessous est la
+  //     seule route. C'est le garde-fou qui parle, pas un oubli.
   const TOLERANCE_CHAINES = 6
   it('les enchaînements de sauts ne se contournent pas en marchant dessous', () => {
     const restantes = nonBoss.flatMap((l) => chainesContournables(l).map((c) => `${l.id} x${c.x}+${c.w} (${c.plats} plateformes)`))
@@ -32,14 +37,20 @@ describe('relief jouable', () => {
   // laquelle on marche, et la plus basse ne sert à rien puisqu'on ne tient pas debout dessous. La
   // passe de rognage retire le recouvrement de la plus courte — sauf quand elle porte quelque chose
   // (un monstre, un coffre, un trampoline), auquel cas un doublon visuel vaut mieux qu'un ours qui
-  // vole. Mesuré : 60 paires avant, 15 après.
+  // vole. Mesuré : 60 paires avant la passe, 15 après, ZÉRO une fois les deux motifs fautifs corrigés.
   //
-  // ⚠️ LE RÉSIDU EST CONCENTRÉ AUX COUTURES ENTRE MODULES, et c'est le prochain fil à tirer. Les x
-  // restants tombent presque tous en fin de module (121-135, 565-586, 619, 682) : deux modules
-  // voisins posent chacun leur corniche de raccord, à une ou deux rangées l'une de l'autre. Le rognage
-  // ne peut pas trancher là sans risquer d'amputer un appui de liaison — ça se corrige côté couture,
-  // pas côté nettoyage.
-  const TOLERANCE_DOUBLES = 15
+  // ⚠️ LE CORRECTIF DE `sol-fragile` A ÉTÉ TROUVÉ AU TROISIÈME ESSAI, et les deux ratés valent d'être
+  // sus. Approfondir la chambre pour que le palier retombe pile sur le chemin rendait tout un pan de
+  // carriere-1 injoignable ; supprimer le palier et faire déboucher l'échelle sur le chemin lui-même
+  // laissait son pied hors de la chambre. Ce qui marche est plus bête : le palier fait UNE tuile, pile
+  // sur le montant. Assez pour que `isLadderTop` reconnaisse le sommet, trop peu pour recouvrir.
+  //
+  // ⚠️ LE RÉSIDU N'ÉTAIT PAS AUX COUTURES ENTRE MODULES — l'hypothèse était fausse, la mesure l'a dit.
+  // Les quinze venaient de DEUX motifs, et d'eux seuls : `sol-fragile` (8) dont le palier de remontée
+  // atterrissait une rangée au-dessus du chemin, corrigé à la source ; et `pics-quinconce` (7), qui
+  // pose exprès des languettes deux rangées au-dessus de son sol — ce n'est pas un défaut, c'est le
+  // motif, et le critère ci-dessous le reconnaît maintenant.
+  const TOLERANCE_DOUBLES = 0
   it('deux corniches ne se recouvrent pas à moins d\'un saut l\'une de l\'autre', () => {
     const paires: string[] = []
     for (const l of nonBoss) {
@@ -50,6 +61,13 @@ describe('relief jouable', () => {
         const dy = Math.abs(a.y - b.y)
         if (dy === 0 || dy > 2) continue
         if (Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) < 3) continue
+        // ⚠️ UNE MINI-CORNICHE AU-DESSUS D'UN LONG SOL N'EST PAS UN DOUBLE PLANCHER, C'EST UN OBSTACLE.
+        // `pics-quinconce` pose exprès des paliers de 3 tuiles deux rangées au-dessus de son sol pour
+        // qu'on slalome en hauteur : c'est le motif entier. Un double plancher, ce sont deux surfaces
+        // qui se lisent toutes les deux comme « le sol » ; une languette de 3 tuiles au-dessus d'une
+        // bande dix fois plus longue se lit comme un relief, et on passe dessous debout.
+        const haut = a.y < b.y ? a : b, bas = a.y < b.y ? b : a
+        if (haut.w <= 3 && bas.w >= haut.w * 3) continue
         paires.push(`${l.id} y${a.y}/${b.y} x${Math.max(a.x, b.x)}`)
       }
     }

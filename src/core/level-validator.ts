@@ -1067,6 +1067,12 @@ export function sealedVoids(level: LevelDef): SealedVoid[] {
   for (const b of level.breakables ?? []) {
     for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) set(x, y, VIDE)
   }
+  // ⚠️ UNE COLONNE D'ÉCHELLE EST UN PASSAGE VERTICAL, DANS LES DEUX SENS. C'était le trou du modèle :
+  // agrippé à une échelle, le panda TRAVERSE les corniches de terre (LevelScene.landsFromAbove), et le
+  // rendu perce même la corniche au croisement pour que ça se voie (core/vide). Sans cette ligne, tout
+  // puits desservi par une échelle passait pour une poche close — et le comblement automatique aurait
+  // muré l'échelle, c'est-à-dire fabriqué exactement le défaut qu'on venait de corriger ailleurs.
+  for (const l of level.ladders ?? []) for (let y = l.y; y < l.y + l.h; y++) set(l.x, y, VIDE)
 
   const seen = new Uint8Array(W * H)
   const stack: number[] = []
