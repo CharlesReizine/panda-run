@@ -380,7 +380,33 @@ export function oversizedGaps(level: LevelDef): GapProblem[] {
   const max = maxJumpGapPx()
   const cascades = cascadeColumns(level)
   const underCascade = (g: GapProblem) => cascades.some((c) => c.x <= g.x && c.x + c.w >= g.x + g.w)
-  return (level.gaps ?? []).filter((g) => g.w * TILE > max && !underCascade(g)).map((g) => ({ x: g.x, w: g.w }))
+  // ⚠️ UN GOUFFRE FRANCHI PAR UN PONT N'EST PAS UN GOUFFRE. Cette règle existe pour interdire les fossés
+  // infranchissables, pas les vides SPECTACULAIRES : si une suite de plateformes couvre le trou de bout en
+  // bout, il se traverse par le haut, et c'est même tout l'intérêt. Sans cette nuance, impossible de
+  // retirer le sol sous un enchaînement de sauts contournable (demande du joueur : « les sauts qu'on peut
+  // éviter, tu dégages le sol en dessous ») — les 10 terrains concernés partaient en rouge.
+  // On exige une couverture CONTINUE : chaque colonne du trou doit avoir une plateforme au-dessus, et deux
+  // plateformes consécutives ne doivent pas être plus éloignées qu'un saut. Une couverture trouée ne
+  // sauverait rien, elle déplacerait le piège.
+  const enjambe = (g: GapProblem): boolean => {
+    const dessus = level.platforms
+      .filter((p) => p.x + p.w > g.x && p.x < g.x + g.w)
+      .sort((a, b) => a.x - b.x)
+    if (!dessus.length) return false
+    let couvert = g.x
+    for (const p of dessus) {
+      if (p.x > couvert) {
+        if ((p.x - couvert) * TILE > max) return false // brèche plus large qu'un saut : ce n'est plus un pont
+        couvert = p.x
+      }
+      couvert = Math.max(couvert, p.x + p.w)
+      if (couvert >= g.x + g.w) return true
+    }
+    return false
+  }
+  return (level.gaps ?? [])
+    .filter((g) => g.w * TILE > max && !underCascade(g) && !enjambe(g))
+    .map((g) => ({ x: g.x, w: g.w }))
 }
 
 // MONSTRE EMPRISONNÉ DANS LA ROCHE (retour user : « aucun monstre ne doit être dans de la roche, cette
