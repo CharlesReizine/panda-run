@@ -11,7 +11,7 @@ qui reste à faire. Il se met à jour à chaque lot livré.
 ## Vérifier et déployer
 
 ```bash
-pnpm verif       # tsc + 1741 tests + build + les six sondes navigateur
+pnpm verif       # tsc + 1751 tests + build + les six sondes navigateur
 npx firebase-tools deploy --only hosting
 ```
 
@@ -22,7 +22,7 @@ partir plusieurs builds cassées : une régression passe rarement là où on la 
 |---|---|
 | `smoke-boot` | erreur JS au démarrage — a laissé partir une build morte en production |
 | `smoke-sauvegarde` | un échec de lecture cloud déguisé en « partie absente » ; persistance après reload |
-| `smoke-ecrans` | les 13 écrans, bouton par bouton — l'entraînement plantait à chaque frame |
+| `smoke-ecrans` | les 14 écrans, bouton par bouton — l'entraînement plantait à chaque frame |
 | `smoke-culling` | objet masqué alors qu'il est dans la vue — « le sol disparaît » |
 | `smoke-pierre` | la pierre fragile s'use puis cède, une tuile à la fois |
 | `smoke-niveaux` | tous les terrains tournent, et mesure le rebond du trampoline |
@@ -50,7 +50,7 @@ rares). Les traiter fait partie du cycle, pas après.
 
 ### ⚠️ Toucher à la génération, c'est un cycle complet
 
-modifier → **regraver (6 à 7 minutes)** → resynchroniser les monstres → 1741 tests → six sondes → déployer.
+modifier → **regraver (6 à 7 minutes)** → resynchroniser les monstres → 1751 tests → six sondes → déployer.
 
 Trois tentatives ont échoué le 3 août faute d'avoir tenu ce cycle jusqu'au bout. Deux règles en découlent :
 
@@ -129,6 +129,18 @@ frappe pas vers le haut en étant agrippé, donc y déboucher est un cul-de-sac.
 d'une tuile et le puits est coiffé de gazon. Chercher à déplacer le puits en trouant le socle a fait
 tomber trente-cinq tests ; approfondir la chambre sans corriger le reste, vingt-sept.
 
+**Une échelle ne traverse AUCUNE matière — la pierre fragile comprise.** Elle est « franchissable par
+construction » (il suffit de taper) sauf agrippé à une échelle : on ne frappe pas vers le haut dans
+cette position. Un pan fragile au-dessus d'une échelle est donc un mur. `grotte-u-brisable` plantait la
+sienne DANS son propre pan : le pan qu'on casse pour entrer se refermait sur qui voulait ressortir, sur
+huit terrains. `laddersInRock` regarde désormais les deux matières.
+
+**Une sonde qui n'a pas rebuild ment.** `smoke-ecrans` sert `dist/` : lancée sans `pnpm build`, elle a
+déclaré un écran neuf « inactif après démarrage » alors qu'il n'était simplement pas dans la build. Et
+les sondes laissent des `vite preview` orphelins qui gardent leur port — un `--strictPort` suivant se
+rabat en silence sur le serveur orphelin, donc sur une build d'il y a une heure. `pnpm verif` fait les
+choses dans l'ordre ; l'appel direct d'une sonde, non.
+
 **Les clés d'objet en double ne sont vues que par `tsc`.** JS garde la dernière. Vérifié sur
 `SPECIAL_WATER_LEVELS`, `SPECIAL_FORCED`, `CATALOG`.
 
@@ -175,6 +187,7 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 | Build | Ce qui a changé |
 |---|---|
+| R352 | **journal de quêtes** (bandeau permanent et cliquable, notif qui dit où aller) · `grotte-u-brisable` : l'échelle montait DANS son propre pan fragile — piège sans retour · 41 corniches collées au sol du monde retirées |
 | R351 | **`sol-fragile` était injouable** : son échelle de remontée débouchait sous la dalle cassable (qu'on ne peut pas frapper depuis une échelle) · trous redondants nettoyés · le bandeau de quête nomme la ville où rendre la récompense |
 | R350 | **doubles planchers à ZÉRO** : `sol-fragile` posait le palier de son échelle une rangée au-dessus du chemin · une colonne d'échelle est enfin un passage vertical pour `sealedVoids` · coutures entre modules MESURÉES : aucune n'est infranchissable |
 | R349 | **les trois dettes de relief traitées** : sol retiré sous les enchaînements de sauts contournables (174 → 6) · doubles planchers rognés (60 → 15) · marches géantes de rampe (11 → 1) · resynchro des niveaux de monstres |

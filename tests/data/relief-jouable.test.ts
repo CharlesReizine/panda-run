@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { LEVELS } from '../../src/data/levels'
 import { chainesContournables } from '../../src/core/level-validator'
+import { groundRowFor } from '../../src/core/platforming'
 import { MARCHES_RAMPE } from '../../src/data/level-modules'
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -16,6 +17,32 @@ import { MARCHES_RAMPE } from '../../src/data/level-modules'
 const nonBoss = Object.values(LEVELS).filter((l) => !l.boss)
 
 describe('relief jouable', () => {
+  // ── 0) « deux sols juste empilés » ───────────────────────────────────────────────────────────
+  // Retour du joueur, capture à l'appui : « y a deux sols qui sont juste empilés, donc si je marche sur
+  // le premier sans sauter, je passe à travers le deuxième. On a dit pas deux sols trop proches en
+  // hauteur. » Le test des doubles planchers ne pouvait pas le voir : il compare les plateformes ENTRE
+  // ELLES, et le sol du MONDE n'en est pas une. Un module dont le plancher tombe à l'altitude 1 pose
+  // donc une bande d'herbe collée sur celle du sol.
+  //
+  // La passe d'assemblage en retire ce qu'elle peut. Ce qui reste est épargné pour une raison : une
+  // colonne où le sol du monde n'est pas foulable, un mur de roche à franchir, ou un coffre / trampoline
+  // / pied d'échelle posé dessus. Le retrait segment par segment a été tenté : il fragmente le plancher
+  // et fait tomber vingt-neuf tests d'atteignabilité. Un plancher se retire en entier ou pas du tout.
+  const TOLERANCE_COLLEES = 215
+  it('peu de corniches restent collées au sol du monde', () => {
+    const collees: string[] = []
+    for (const l of nonBoss) {
+      const gr = groundRowFor(l.heightTiles)
+      for (const p of l.platforms) {
+        if (p.solid || p.y !== gr - 1) continue
+        if ((l.gaps ?? []).some((g) => p.x >= g.x && p.x < g.x + g.w)) continue
+        if ((l.hazards ?? []).some((h) => h.kind === 'water' && p.x >= h.x && p.x < h.x + h.w)) continue
+        collees.push(`${l.id} x${p.x}+${p.w}`)
+      }
+    }
+    expect(collees.length, `corniches collées au sol :\n   ${collees.slice(0, 10).join('\n   ')}`).toBeLessThanOrEqual(TOLERANCE_COLLEES)
+  })
+
   // ── 1) « les sauts qu'on peut éviter, tu dégages le sol en dessous » ─────────────────────────
   // Une suite de plateformes suspendues avec du sol praticable dessous ne se joue jamais : on passe
   // dessous en marchant. La passe de creusement (level-modules) retire ce sol. Mesuré : 174 avant, 6

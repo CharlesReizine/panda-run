@@ -17,11 +17,18 @@ import { laddersInRock } from '../../src/core/level-validator'
 //
 // Les quatre cas relevés à l'introduction étaient TOUS des échelles SUSPENDUES (`hung`), posées dans
 // le socle de pierre du module voisin : plaine-2 x385, montagne-2 x463, cimetiere-2 x40, enfer-7 x38.
+//
+// ⚠️ LA PIERRE FRAGILE COMPTE AUTANT QUE LA ROCHE, et l'avoir exclue a livré un piège sans retour.
+// Elle est « franchissable par construction » — il suffit de taper — sauf agrippé à une échelle : on
+// ne frappe pas vers le haut dans cette position. Huit terrains portaient une échelle de
+// `grotte-u-brisable` plantée dans son propre pan fragile : le pan qu'on casse pour ENTRER se
+// refermait sur qui voulait RESSORTIR. « Y a du terrain destructible en haut de l'échelle qui bloque
+// la sortie. »
 
 describe('échelles et roche', () => {
   it("aucune échelle n'est traversée par une dalle de roche solide", () => {
     const fautes = Object.values(LEVELS)
-      .flatMap((l) => laddersInRock(l).map((p) => `${l.id} échelle x${p.x} y${p.y} h${p.h} — ${p.rows} rangée(s) dans la pierre`))
+      .flatMap((l) => laddersInRock(l).map((p) => `${l.id} échelle x${p.x} y${p.y} h${p.h} — ${p.rows} rangée(s) dans ${p.matiere}`))
     expect(fautes, `${fautes.length} échelle(s) murée(s) :\n   ${fautes.slice(0, 8).join('\n   ')}`).toEqual([])
   })
 })

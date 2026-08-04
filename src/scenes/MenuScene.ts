@@ -103,6 +103,7 @@ export class MenuScene extends Phaser.Scene {
       // l'arbre de compétences REMPLACE la liste qui débordait ici
       ['✦ Compétences', 0x1565c0, () => this.scene.start('SkillEquip', { levelKey: 'Menu', standalone: true })],
       ['🎒 Inventaire', 0x37474f, () => this.scene.start('Inventory', { return: 'Menu' })],
+      ['📜 Quêtes', 0x37474f, () => this.scene.start('QuestLog', { return: 'Menu' })],
       ['📖 Bestiaire', 0x37474f, () => this.scene.start('Bestiary')],
       ['⚔ Entraînement', 0x37474f, () => this.scene.start('Training')],
     ]

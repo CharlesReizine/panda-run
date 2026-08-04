@@ -968,16 +968,24 @@ export function deadEndSurfaces(level: LevelDef): DeadEndProblem[] {
 // `unreachableLadders` regarde le PIED, `laddersToNowhere` regarde le SOMMET — aucun ne regarde ce
 // qu'il y a ENTRE les deux. Mesuré à l'introduction : 4 cas, tous des échelles SUSPENDUES (`hung`)
 // posées dans la masse de roche voisine.
-export interface LadderRockProblem { x: number; y: number; h: number; rows: number }
+export interface LadderRockProblem { x: number; y: number; h: number; rows: number; matiere: 'roche' | 'pierre-fragile' }
 export function laddersInRock(level: LevelDef): LadderRockProblem[] {
   const out: LadderRockProblem[] = []
+  // ⚠️ LA PIERRE FRAGILE COMPTE AUTANT QUE LA ROCHE, ET L'OUBLIER A LIVRÉ UN PIÈGE SANS RETOUR.
+  // Elle est « franchissable par construction » — il suffit de taper — sauf justement quand on est
+  // AGRIPPÉ À UNE ÉCHELLE : on ne frappe pas vers le haut dans cette position. Un pan fragile au-dessus
+  // d'une échelle est donc un mur, et rien d'autre. Retour du joueur sur `grotte-u-brisable` : « y a du
+  // terrain destructible en haut de l'échelle qui bloque la sortie ».
+  const matieres: { x: number; y: number; w: number; h: number; quoi: 'roche' | 'pierre-fragile' }[] = [
+    ...(level.rockBands ?? []).filter((r) => r.solid).map((r) => ({ ...r, quoi: 'roche' as const })),
+    ...(level.breakables ?? []).map((b) => ({ x: b.x, y: b.y, w: b.w, h: b.h, quoi: 'pierre-fragile' as const })),
+  ]
   for (const l of level.ladders ?? []) {
     const bottom = l.y + l.h // exclusif
-    for (const r of level.rockBands ?? []) {
-      if (!r.solid) continue
-      if (l.x < r.x || l.x >= r.x + r.w) continue
-      const rows = Math.min(bottom, r.y + r.h) - Math.max(l.y, r.y)
-      if (rows > 0) out.push({ x: l.x, y: l.y, h: l.h, rows })
+    for (const m of matieres) {
+      if (l.x < m.x || l.x >= m.x + m.w) continue
+      const rows = Math.min(bottom, m.y + m.h) - Math.max(l.y, m.y)
+      if (rows > 0) out.push({ x: l.x, y: l.y, h: l.h, rows, matiere: m.quoi })
     }
   }
   return out

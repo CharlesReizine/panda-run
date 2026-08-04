@@ -1606,7 +1606,8 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // monde fait le plancher — une plateforme de plus empilerait un étage marchable pour rien (même
       // leçon que sur grotte-scellee).
       if (altU - 1 >= 1) {
-        p.rocks.push({ x: rampU, altBot: 1, altTop: altU - 1, w: xE - rampU })
+        // ⚠️ LE SOCLE S'ARRÊTE UNE COLONNE AVANT LE PUITS : c'est là que descend l'échelle de remontée.
+        if (xE - rampU - 1 > 0) p.rocks.push({ x: rampU, altBot: 1, altTop: altU - 1, w: xE - rampU - 1 })
         if (w - finPans > 0) p.rocks.push({ x: finPans, altBot: 1, altTop: altU - 1, w: w - finPans })
         // PLAFOND du couloir : c'est lui qui fait le U. Les deux puits restent ouverts de bout en bout, le
         // milieu est coiffé, donc on DOIT marcher au fond pour passer d'un puits à l'autre.
@@ -1620,9 +1621,18 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: xE + PAN + Math.floor(midU / 2) })
       const gardienU = groundMobs.find((id) => !MONSTERS[id]?.aquatic && !MONSTERS[id]?.aerial)
       if (gardienU) p.spawns.push({ monsterId: gardienU, x: xE + PAN + 1, alt: 0 })
-      // ── ÉCHELLE DE REMONTÉE dans le puits d'ENTRÉE. Son sommet est le segment de chemin qui finit PILE
-      // au bord du puits (x = xE) : le validateur le reconnaît comme palier (décalage de 2 rangées).
-      p.ladders.push({ x: xE, topAlt: altU + 2, h: altU + 2 })
+      // ── ÉCHELLE DE REMONTÉE dans le puits d'ENTRÉE.
+      //
+      // ⚠️ ELLE MONTAIT DANS LA COLONNE DU PAN FRAGILE, ET ÇA RENDAIT LA SORTIE IMPOSSIBLE. Retour du
+      // joueur, capture à l'appui : « y a du terrain destructible en haut de l'échelle qui bloque la
+      // sortie ». Exact, et c'est fatal : on ne frappe pas vers le haut en étant agrippé à une échelle,
+      // donc le pan qu'on vient de casser pour ENTRER se referme sur qui veut RESSORTIR — la grotte
+      // devient le piège sans retour que ce motif jurait de ne jamais être.
+      //
+      // L'échelle se plante donc une colonne AVANT le pan, dans le dernier carreau du chemin : ce
+      // carreau est du sol normal, il fait le palier, et le socle de pierre lui laisse la place (cf.
+      // ci-dessus). Le pan fragile garde sa largeur — il n'a jamais eu besoin de porter l'échelle.
+      p.ladders.push({ x: xE - 1, topAlt: altU + 2, h: altU + 2 })
       p.exitAlt = altU
       break
     }
@@ -3260,6 +3270,17 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     for (let x = x0; x < x1; x++) if (ancrees.has(x)) return true
     return false
   }
+  // Sous-ensemble des ancrages que RIEN ne sait replacer : coffres, trampolines, pieds d'échelle,
+  // départ et sortie. Les monstres n'y sont pas — le filet de fin d'assemblage les repose au sol.
+  const ancresDures = new Set<number>()
+  for (const pr of props) if (pr.y !== undefined) for (let d = -1; d <= 1; d++) ancresDures.add(pr.x + d)
+  for (const tr of trampolines) for (let d = -2; d <= 2; d++) ancresDures.add(tr.x + d)
+  for (const la of ladders) { ancresDures.add(la.x); ancresDures.add(la.x + 1) }
+  for (const pt of [start, exit]) if (pt) for (let d = -1; d <= 1; d++) ancresDures.add(pt.x + d)
+  const ancreesDures = (x0: number, x1: number) => {
+    for (let x = x0; x < x1; x++) if (ancresDures.has(x)) return true
+    return false
+  }
   for (let i = 0; i < platforms.length; i++) for (let j = 0; j < platforms.length; j++) {
     if (i === j) continue
     const a = platforms[i]!, b = platforms[j]!
@@ -3279,6 +3300,52 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     if (reste === 0) { a.w = 0; continue } // entièrement doublée : elle disparaît
     if (a.x < b.x) a.w = b.x - a.x
     else { const fin = a.x + a.w; a.x = b.x + b.w; a.w = fin - a.x }
+  }
+  // ─── UNE CORNICHE COLLÉE AU SOL DU MONDE N'EST PAS UN ÉTAGE, C'EST UN DOUBLON ────────────────
+  //
+  // Retour du joueur, capture à l'appui : « y a deux sols qui sont juste empilés, donc si je marche
+  // sur le premier sans sauter je passe à travers le deuxième. On a dit pas deux sols trop proches en
+  // hauteur pour éviter ce genre d'écueil. » Exact, et le cas échappait au nettoyage précédent parce
+  // que celui-ci ne compare que les plateformes ENTRE ELLES : le sol du monde n'en est pas une.
+  //
+  // Un module dont le plancher tombe à l'altitude 1 pose une plateforme sur la rangée juste au-dessus
+  // du sol : deux bandes d'herbe l'une sur l'autre, sans un pouce d'air entre les deux. Mesuré : 256
+  // occurrences, réparties sur une trentaine de motifs — ce n'est pas un motif fautif, c'est une
+  // conséquence mécanique de `alt = 1`. On retire donc la corniche : le sol du monde porte déjà la
+  // marche et la collision, et rien de jouable ne change.
+  //
+  // ⚠️ SEULEMENT À UNE RANGÉE D'ÉCART. À deux, il reste un interstice — laid, mais c'est un relief, et
+  // le supprimer déplacerait la surface marchable de deux rangées sous tout ce qui s'y accroche.
+  for (let i = platforms.length - 1; i >= 0; i--) {
+    const p = platforms[i]!
+    if (p.solid || p.y !== groundRow - 1) continue
+    const solPorteur = (x: number) => !gaps.some((g) => x >= g.x && x < g.x + g.w)
+      && !hazards.some((h) => h.kind === 'water' && x >= h.x && x < h.x + h.w)
+      // ⚠️ ON NE REJETTE QUE LES MURS, PAS LES SOCLES. Une dalle qui couvre la rangée du sol est le CORPS
+      // du terrain (socle de mesa, comblement) : elle ne gêne rien, la surface reste au même endroit.
+      // Une dalle qui MONTE au-dessus, en revanche, est un mur : la corniche est peut-être le seul pont
+      // par-dessus, et la retirer a muré une plateforme d'enfer-2. Le premier jet confondait les deux et
+      // rejetait 196 corniches sur 256 pour rien.
+      && !rockBands.some((r) => x >= r.x && x < r.x + r.w && r.y < groundRow - 1 && r.y + r.h > groundRow - 1)
+    // ⚠️ TOUT OU RIEN, ET C'EST UN ARBITRAGE MESURÉ. Une corniche de module court souvent sur toute sa
+    // portée, et une seule colonne interdite (un trou, une cuve, un coffre) suffit à l'épargner : 215
+    // corniches sur 256 survivent ainsi. Le retrait SEGMENT PAR SEGMENT a été écrit puis abandonné — il
+    // fragmente le plancher du module en morceaux disjoints, et vingt-neuf tests d'atteignabilité
+    // tombent. Un plancher, ça se retire en entier ou pas du tout.
+    //
+    // Ce qui épargne une corniche :
+    //   · une colonne où le sol du monde n'est pas foulable (trou, cuve) — sans lui, la corniche EST le
+    //     chemin ;
+    //   · un MUR de roche à moins d'une colonne : elle est peut-être le seul pont par-dessus (retirer
+    //     sans ce garde a muré une plateforme d'enfer-2) ;
+    //   · un coffre, un trampoline, un pied d'échelle, le départ ou la sortie. Les MONSTRES, eux,
+    //     n'arrêtent rien : le filet de fin d'assemblage les repose au sol, pile une rangée dessous.
+    let colle = true
+    for (let x = p.x - 1; x <= p.x + p.w && colle; x++) if (!solPorteur(x)) colle = false
+    if (!colle) continue
+    if (ancreesDures(p.x, p.x + p.w)) continue
+    rognages.push({ p, x: p.x, w: p.w })
+    p.w = 0
   }
   for (let i = platforms.length - 1; i >= 0; i--) if (platforms[i]!.w <= 0) platforms.splice(i, 1)
 

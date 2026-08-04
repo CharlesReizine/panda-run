@@ -24,6 +24,7 @@ import { InventoryScene } from './scenes/InventoryScene'
 import { ClassChangeScene } from './scenes/ClassChangeScene'
 import { SkillEquipScene } from './scenes/SkillEquipScene'
 import { BestiaryScene } from './scenes/BestiaryScene'
+import { QuestLogScene } from './scenes/QuestLogScene'
 import { TrainingScene } from './scenes/TrainingScene'
 import { LeaderboardScene } from './scenes/LeaderboardScene'
 import { GRAVITY } from './core/platforming'
@@ -76,7 +77,7 @@ try {
     // on gère TOUT l'audio via notre moteur Web Audio (src/audio) → on désactive le gestionnaire
     // de son de Phaser, qui créait un 2e AudioContext (échec « failed to start audio device » sur iOS)
     audio: { noAudio: true },
-    scene: [BootScene, PreloadScene, TitleScene, WorldMapScene, LevelIntroScene, TownScene, LevelScene, UIScene, PauseScene, MenuScene, InventoryScene, ClassChangeScene, SkillEquipScene, BestiaryScene, TrainingScene, LeaderboardScene],
+    scene: [BootScene, PreloadScene, TitleScene, WorldMapScene, LevelIntroScene, TownScene, LevelScene, UIScene, PauseScene, MenuScene, InventoryScene, ClassChangeScene, SkillEquipScene, BestiaryScene, QuestLogScene, TrainingScene, LeaderboardScene],
   })
 } catch (err) {
   logError('boot', err)

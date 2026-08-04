@@ -27,6 +27,7 @@ const ECRANS = [
   ['Menu', undefined],
   ['Inventory', undefined],
   ['Bestiary', undefined],
+  ['QuestLog', undefined],
   ['Leaderboard', undefined],
   ['SkillEquip', { standalone: true }],
   ['ClassChange', undefined],

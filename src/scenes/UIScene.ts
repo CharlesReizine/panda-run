@@ -65,6 +65,8 @@ export class UIScene extends Phaser.Scene {
   // l'accomplissement qu'une fois (le rafraîchissement du HUD passe des dizaines de fois)
   private questBg?: Phaser.GameObjects.Rectangle
   private questTxt?: Phaser.GameObjects.Text
+  /** dernier compteur affiché par quête : sert à ne faire clignoter le bandeau qu'aux VRAIES avancées */
+  private dernierCompteur = new Map<string, number>()
   private questFetee = new Set<string>()
 
   constructor() { super('UI') }
@@ -465,7 +467,32 @@ export class UIScene extends Phaser.Scene {
       fontSize: '13px', color: '#ffe082', fontStyle: 'bold', align: 'center',
       wordWrap: { width: r.w - 16 },
     }).setOrigin(0.5).setDepth(49).setVisible(false)
+    // PORTE VERS LE JOURNAL : on tape le bandeau, on voit tout. La pause est mise EXACTEMENT comme
+    // pour l'écran de pause (mêmes scènes suspendues) — le journal sait revenir d'où il vient.
+    this.questBg.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.ouvrirJournal())
     this.refreshQuestTracker()
+  }
+
+  /** Éclat bref du bandeau de quête : attire l'œil sans couper le jeu. */
+  private eclatBandeau(couleur: number) {
+    if (!this.questBg) return
+    const bg = this.questBg
+    this.tweens.killTweensOf(bg)
+    bg.setScale(1)
+    this.tweens.add({ targets: bg, scaleX: 1.06, scaleY: 1.3, duration: 130, yoyo: true, repeat: 2, onComplete: () => bg.setScale(1) })
+    this.add.rectangle(bg.x, bg.y, bg.width, bg.height, couleur, 0.35).setOrigin(0.5).setDepth(47)
+      .setAlpha(0.6)
+      .setName('eclat-quete')
+    const halo = this.children.getByName('eclat-quete') as Phaser.GameObjects.Rectangle | null
+    if (halo) this.tweens.add({ targets: halo, alpha: 0, duration: 700, onComplete: () => halo.destroy() })
+  }
+
+  /** Ouvre le journal de quêtes depuis le jeu, en suspendant proprement le terrain. */
+  private ouvrirJournal() {
+    const jeu = this.scene.manager.getScenes(true).find((sc) => sc.scene.key === 'Level' || sc.scene.key === 'Training')
+    if (jeu) this.scene.pause(jeu.scene.key)
+    this.scene.pause('UI')
+    this.scene.launch('QuestLog', { fromGame: true })
   }
 
   private refreshQuestTracker() {
@@ -475,11 +502,18 @@ export class UIScene extends Phaser.Scene {
     // une quête qu'on n'a pas prise ferait doublon avec le « ❗ » du garde, en ville.
     const def = currentChainQuest(p)
     const q = def ? p.quests[def.id] : undefined
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    // ⚠️ LE BANDEAU NE DISPARAÎT PLUS, ET C'EST TOUTE LA DEMANDE. Il s'effaçait dès qu'aucune quête
+    // n'était en cours : le joueur n'avait alors AUCUNE trace des quêtes à l'écran, donc aucune raison
+    // d'y penser. Retour du joueur : « je vois bien un truc comme pour les skills, avec un état passif
+    // "voir quêtes", et quand il se passe un truc une notif plus claire, qui donne envie de voir ».
+    // Il reste donc là, discret, et sert de PORTE vers le journal — comme le bouton des compétences.
     if (!def || !q || q.claimed) {
-      this.questBg.setVisible(false)
-      this.questTxt.setVisible(false)
+      this.questBg.setVisible(true).setStrokeStyle(2, 0x546e7a, 0.7).setFillStyle(0x1b1b2a, 0.55)
+      this.questTxt.setVisible(true).setColor('#90a4ae').setText('📜 Voir les quêtes')
       return
     }
+    this.questBg.setFillStyle(0x1b1b2a, 0.72)
     // On RECALCULE la progression ici : les compteurs de kills montent pendant le niveau, et personne
     // d'autre ne rafraîchit la quête avant le retour en ville — c'est ce décalage qui donnait
     // l'impression que les quêtes n'avançaient pas.
@@ -500,26 +534,49 @@ export class UIScene extends Phaser.Scene {
       // terrain, pas la découvrir en ville trois minutes plus tard.
       if (!etaitFini && !this.questFetee.has(def.id)) {
         this.questFetee.add(def.id)
-        this.notifierQueteFinie(def.name)
+        this.notifierQueteFinie(def.name, ville?.name)
+        this.eclatBandeau(0x66bb6a)
       }
     } else {
       this.questTxt.setText(`📜 ${def.name}   ${q.progress}/${def.targetCount}`)
       this.questBg.setStrokeStyle(2, 0xffb300, 0.9)
+      // ⚠️ LE BANDEAU CLIGNOTE À CHAQUE AVANCÉE. Un compteur qui change tout seul en haut de l'écran
+      // passe inaperçu pendant un combat : c'est précisément ce qui donnait l'impression que les
+      // quêtes n'avançaient jamais. Un éclat d'une demi-seconde suffit à attirer l'œil sans gêner.
+      if (this.dernierCompteur.get(def.id) !== q.progress) {
+        this.dernierCompteur.set(def.id, q.progress)
+        this.eclatBandeau(0xffd54f)
+      }
     }
   }
 
-  /** Bandeau de félicitations, calqué sur celui du passage de niveau (même grammaire visuelle). */
-  private notifierQueteFinie(nom: string) {
+  /**
+   * Bandeau de félicitations, calqué sur celui du passage de niveau (même grammaire visuelle).
+   *
+   * ⚠️ IL DIT CE QU'IL FAUT FAIRE ENSUITE, PAS SEULEMENT CE QUI VIENT D'ARRIVER. « ✅ QUÊTE ACCOMPLIE »
+   * était une félicitation sans suite : le joueur savait qu'il avait fini, pas où aller, ni qu'un
+   * journal existait. Retour du joueur : « quand il se passe un truc, une notif plus claire, qui donne
+   * envie de voir ». On ajoute donc la ville et l'invitation à ouvrir le journal — et le bandeau du HUD
+   * s'illumine en même temps, pour que l'œil fasse le lien entre la notification et la porte d'entrée.
+   */
+  private notifierQueteFinie(nom: string, ville?: string) {
     audio.playSfx('level-up')
-    const bg = this.add.rectangle(480, 62, 420, 30, 0x66bb6a, 0.96).setOrigin(0.5).setDepth(1500)
-    const txt = this.add.text(480, 62, `✅ QUÊTE ACCOMPLIE — ${nom}`, {
+    const bg = this.add.rectangle(480, 68, 560, 48, 0x66bb6a, 0.96).setOrigin(0.5).setDepth(1500)
+    const txt = this.add.text(480, 58, `✅ QUÊTE ACCOMPLIE — ${nom}`, {
       fontSize: '15px', color: '#0b2a12', fontStyle: 'bold',
+    }).setOrigin(0.5).setDepth(1501)
+    const suite = this.add.text(480, 78, ville
+      ? `Récompense chez le garde, à ${ville}  ·  touche 📜 pour voir tes quêtes`
+      : 'Récompense chez le garde  ·  touche 📜 pour voir tes quêtes', {
+      fontSize: '11px', color: '#123d1c',
     }).setOrigin(0.5).setDepth(1501)
     bg.setScale(0.2, 1)
     this.tweens.add({ targets: bg, scaleX: 1, duration: 220, ease: 'Back.out' })
     this.tweens.add({
-      targets: [bg, txt], alpha: 0, delay: 2400, duration: 800,
-      onComplete: () => { bg.destroy(); txt.destroy() },
+      // ⚠️ PLUS LONGTEMPS QU'UN PASSAGE DE NIVEAU (2,4 s → 4 s) : celui-ci porte une INSTRUCTION,
+      // pas seulement une félicitation, et il y a deux lignes à lire au milieu d'un combat.
+      targets: [bg, txt, suite], alpha: 0, delay: 4000, duration: 800,
+      onComplete: () => { bg.destroy(); txt.destroy(); suite.destroy() },
     })
   }
 
