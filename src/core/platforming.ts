@@ -177,3 +177,45 @@ export function unreachablePlatforms(platforms: Plat[], widthTiles: number, grou
   }
   return platforms.filter((_, i) => !reachable.has(i))
 }
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// SE POSER SUR LA CORNICHE EN LÂCHANT UNE ÉCHELLE
+//
+// Retour du joueur, capture à l'appui : « quand je suis en haut de l'échelle, je tombe encore même si
+// je marche juste et je suis pas sur l'échelle », puis « l'échelle me permet de faire un bug graphique
+// bizarre, je passe sous la terre ». Sur l'image, le panda est à MOITIÉ ENFONCÉ dans la corniche.
+//
+// ⚠️ LA CAUSE EST DANS LA RÈGLE DU ONE-WAY, PAS DANS LE TERRAIN. Une corniche de terre ne bloque que
+// si les pieds étaient AU-DESSUS d'elle à la frame précédente — c'est ce qui empêche de se coincer
+// contre la contremarche d'un escalier. Or, agrippé à une échelle, on TRAVERSE les corniches : on lâche
+// donc en étant déjà DANS la tuile, la condition est fausse pour toujours, et on passe au travers.
+//
+// On corrige à l'instant du lâcher, pas dans la règle de collision : la relâcher rouvrirait le
+// coincement d'escalier, qui a coûté assez cher comme ça.
+//
+// Fonction PURE : une scène Phaser ne s'instancie pas en test, et c'est précisément dans ces
+// enchaînements-là que les défauts se logent.
+
+/** Une corniche traversable, en tuiles. `y` est la rangée de son DESSUS. */
+export interface Corniche { x: number; y: number; w: number }
+
+/**
+ * De combien de pixels remonter le panda pour qu'il se pose sur la corniche qu'il traverse.
+ *
+ * `basPx` = position de ses pieds ; `xPx` = son centre. Rend 0 quand il n'y a rien à corriger :
+ * aucune corniche sous lui, ou il est déjà au-dessus (on ne le fait jamais DESCENDRE).
+ */
+export function releveApresEchelle(basPx: number, xPx: number, corniches: Corniche[]): number {
+  const colonne = Math.floor(xPx / TILE)
+  const rangeePieds = Math.floor((basPx - 1) / TILE)
+  for (const c of corniches) {
+    if (colonne < c.x || colonne >= c.x + c.w) continue
+    // le dessus de la corniche est la tuile des pieds, ou celle juste en dessous ; au-delà le panda
+    // est franchement en l'air et doit retomber normalement.
+    if (c.y !== rangeePieds && c.y !== rangeePieds + 1) continue
+    const dessus = c.y * TILE
+    if (basPx <= dessus) return 0 // déjà posé
+    return basPx - dessus
+  }
+  return 0
+}

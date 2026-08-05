@@ -29,7 +29,7 @@ import { rangeeImpact, atteignableDuCiel, HORS_MONDE, type GeoChute } from '../c
 import { zoneMorte, lerpVertical, LERP_X, LERP_Y_CALME } from '../core/camera-suivi'
 import type { DropEntry, SkillDef } from '../core/types'
 import type { UIScene } from './UIScene'
-import { TILE, DEFAULT_HEIGHT_TILES, groundRowFor, GRAVITY, landsOnOneWayPlatform } from '../core/platforming'
+import { TILE, DEFAULT_HEIGHT_TILES, groundRowFor, GRAVITY, landsOnOneWayPlatform, releveApresEchelle } from '../core/platforming'
 import { breathMaxMs, BREATH_BASE_MS } from '../core/breath'
 import { BIOMES } from '../data/biomes'
 import { bgKeyFor, bgPathFor } from '../data/level-backgrounds'
@@ -199,6 +199,8 @@ export class LevelScene extends Phaser.Scene {
   // vitesse de chute de la frame PRÉCÉDENTE. Indispensable : Arcade remet velocity.y à zéro en séparant
   // les corps, donc au moment où le callback de collision tourne, la vitesse d'impact est DÉJÀ perdue.
   private vitesseChuteAvant = 0
+  /** état « agrippé » de la frame précédente : sert à détecter l'instant où l'on QUITTE une échelle */
+  private surEchelleAvant = false
   // temps passé au sol (ms). Sert à décider quand la caméra rattrape l'altitude acquise, cf. camera-suivi.
   private msAuSol = 0
   private nextBounceAt = 0
@@ -1715,6 +1717,19 @@ export class LevelScene extends Phaser.Scene {
     const plat = (platObj as Phaser.Physics.Arcade.Sprite).body as Phaser.Physics.Arcade.StaticBody
     const margin = Math.abs(pb.velocity.y) * (this.game.loop.delta / 1000) + 4
     return landsOnOneWayPlatform(pb.prev.y + pb.height, pb.velocity.y, plat.top + margin)
+  }
+
+  /** Repose le panda sur la corniche dans laquelle il se trouve, au moment où il lâche une échelle. */
+  private poserApresEchelle() {
+    const body = this.player?.body as Phaser.Physics.Arcade.Body | undefined
+    if (!body) return
+    // la DÉCISION vit dans core/platforming (pure, testée) ; la scène ne fait que l'appliquer.
+    // Seules les corniches TRAVERSABLES comptent : une pleine ne l'a jamais laissé entrer.
+    const dy = releveApresEchelle(body.bottom, this.player.x,
+      this.levelDef.platforms.filter((p) => !p.solid && !p.ancree))
+    if (dy <= 0) return
+    this.player.setPosition(this.player.x, this.player.y - dy)
+    body.reset(this.player.x, this.player.y)
   }
 
   createExit() {
@@ -5283,6 +5298,24 @@ export class LevelScene extends Phaser.Scene {
     }
     // zones verticales chevauchées (échelle / eau) lues sur le centre du panda
     const onLad = this.ladderRects.find((r) => r.contains(this.player.x, this.player.y))
+    // ─── EN QUITTANT L'ÉCHELLE, ON SE POSE SUR LA CORNICHE, ON NE LA TRAVERSE PAS ───────────────
+    //
+    // Retour du joueur, capture à l'appui : « quand je suis en haut de l'échelle, je tombe encore même
+    // si je marche juste et je suis pas sur l'échelle », puis « l'échelle me permet de faire un bug
+    // graphique bizarre, je passe sous la terre ». Sur l'image, le panda est à MOITIÉ ENFONCÉ dans la
+    // corniche.
+    //
+    // ⚠️ LA CAUSE EST DANS LA RÈGLE DU ONE-WAY, PAS DANS LE TERRAIN. `landsFromAbove` exige que les
+    // pieds aient été AU-DESSUS du dessus de la corniche à la frame précédente — c'est ce qui empêche
+    // de se coincer contre une contremarche. Or, agrippé, on traverse les corniches : on lâche donc
+    // l'échelle en étant DÉJÀ dans la tuile, la condition est fausse pour toujours, et on tombe au
+    // travers en marchant.
+    //
+    // On rattrape au moment exact du lâcher : si les pieds sont dans la tuile d'une corniche
+    // traversable, on les repose sur son dessus. Un seul geste, à la frontière entre les deux états —
+    // pas une exception permanente dans la règle de collision, qui rouvrirait le coincement d'escalier.
+    if (this.surEchelleAvant && !onLad) this.poserApresEchelle()
+    this.surEchelleAvant = !!onLad
     this.player.onLadder = !!onLad
     if (onLad) this.player.ladderCenterX = onLad.centerX
     // cascade REMONTABLE : on nage/grimpe dedans sans noyade (inCascade) ; le bassin marine, lui,

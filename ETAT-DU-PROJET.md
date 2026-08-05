@@ -153,6 +153,13 @@ propre altitude (`grotte-scellee`, `echelle-descente-piegee`) — leur rampe d'a
 quarante rangées en huit tuiles. Dimensionner la rampe sur son dénivelé ne suffit pas : c'est le
 plafond d'altitude du motif qu'il faut retirer. Dette nommée dans `relief-jouable`.
 
+**Une corniche one-way ne rattrape jamais qui est DÉJÀ dedans.** Elle ne bloque que si les pieds
+étaient au-dessus à la frame précédente — c'est ce qui empêche de se coincer contre la contremarche d'un
+escalier, et ça ne se relâche pas. Mais agrippé à une échelle on TRAVERSE les corniches : on lâche donc
+en étant déjà dans la tuile, la condition est fausse pour toujours, et on marche au travers. La
+correction se fait à l'INSTANT du lâcher (`releveApresEchelle`, pure et testée), pas dans la règle de
+collision.
+
 **On ne fabrique pas du vide en le dessinant — QUATRIÈME fois dans `core/vide.ts`.** Le perçage de la
 corniche au croisement d'une échelle existait « pour que le passage se voie ». Mais un trou dans le
 décor est un trou dans la COLLISION : marcher dessus, c'était tomber, même sans être agrippé, même quand
