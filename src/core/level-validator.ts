@@ -8,7 +8,7 @@
 // sommet d'une échelle est donc atteignable dès que son pied l'est, ce que le simple
 // `unreachablePlatforms` de platforming.ts (sauts uniquement) ne sait pas modéliser.
 
-import { groundRowFor, canReach, canReachByBounce, maxJumpGapPx, MAX_LADDER_TILES, SWIM_SPEED, TILE, type Plat } from './platforming'
+import { groundRowFor, canReach, canReachByBounce, maxJumpGapPx, maxJumpTiles, MAX_LADDER_TILES, SWIM_SPEED, TILE, type Plat } from './platforming'
 import type { LevelDef } from '../data/levels'
 import { estCoffre } from '../data/props'
 
@@ -1185,5 +1185,94 @@ export function chainesContournables(level: LevelDef): ChaineContournable[] {
     else { clore(); chaine = [p] }
   }
   clore()
+  return out
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// LE MUR QU'ON SE PREND EN MARCHANT TOUT DROIT
+//
+// Retour du joueur : « Colline, le terrain est infaisable dès le début, y a un giga mur trop haut pour
+// être sauté. Comment ça passe tes tests ??? »
+//
+// ⚠️ IL AVAIT RAISON, ET AUCUN VALIDATEUR NE POUVAIT LE VOIR — c'est la leçon. `unreachablePlatforms`,
+// `strictReach`, `deadEndSurfaces` et `unreachableLadders` répondaient tous ZÉRO sur ce terrain. Ils
+// raisonnent en GRAPHE : « existe-t-il un chemin, quel qu'il soit, vers cette plateforme ? » — et il en
+// existait un, par un enchaînement d'échelles suspendues à l'autre bout. Le joueur, lui, ne parcourt pas
+// un graphe : il avance vers la droite et se cogne. Un terrain peut être entièrement « atteignable » et
+// parfaitement infaisable.
+//
+// Ce validateur modélise donc le geste, pas la topologie : on lit la SILHOUETTE marchable colonne par
+// colonne, et on refuse une marche montante plus haute qu'un saut quand rien, à portée, ne permet de la
+// franchir autrement (échelle, trampoline, cascade remontable).
+
+export interface MurProblem { x: number; de: number; a: number; hauteur: number }
+
+/** Surface marchable la plus HAUTE d'une colonne (rangée), ou `null` si l'on ne peut pas s'y tenir. */
+function silhouetteAt(level: LevelDef, x: number, groundRow: number): number | null {
+  let best: number | null = null
+  const garde = (row: number) => { if (best === null || row < best) best = row }
+  for (const p of level.platforms) if (x >= p.x && x < p.x + p.w) garde(p.y)
+  for (const b of level.bridges ?? []) if (x >= b.x && x < b.x + b.w) garde(b.y)
+  // le DESSUS d'une dalle de roche se marche (c'est le principe des mesas)
+  for (const r of level.rockBands ?? []) if (x >= r.x && x < r.x + r.w) garde(r.y)
+  const trou = (level.gaps ?? []).some((g) => x >= g.x && x < g.x + g.w)
+  const eau = (level.hazards ?? []).some((h) => h.kind === 'water' && x >= h.x && x < h.x + h.w)
+  if (!trou && !eau) garde(groundRow)
+  return best
+}
+
+/**
+ * Marches MONTANTES infranchissables sur la silhouette marchable, de gauche à droite.
+ *
+ * `aide` couvre tout ce qui permet de monter autrement qu'au saut : une échelle, un trampoline ou une
+ * cascade remontable à moins de `PORTEE_AIDE` colonnes de la marche. On ne signale donc que les murs
+ * qu'AUCUN moyen du bord ne franchit.
+ */
+const PORTEE_AIDE = 3
+export function marchesInfranchissables(level: LevelDef): MurProblem[] {
+  const groundRow = groundRowFor(level.heightTiles)
+  const maxMontee = Math.floor(maxJumpTiles()) // rangées franchissables d'un saut
+  const aides: number[] = [
+    ...(level.ladders ?? []).map((l) => l.x),
+    ...(level.trampolines ?? []).map((t) => t.x),
+    ...(level.hazards ?? []).filter((h) => h.kind === 'water' && h.water === 'cascade')
+      .flatMap((h) => Array.from({ length: h.w }, (_, i) => h.x + i)),
+  ]
+  const aideProche = (x: number) => aides.some((a) => Math.abs(a - x) <= PORTEE_AIDE)
+
+  // ⚠️ ON NE JUGE QUE LE RELIEF PLEIN, JAMAIS LES MARCHES ISOLÉES — et c'est la nuance qui rend ce
+  // validateur utilisable. Comparer deux colonnes voisines comptait chaque marche d'`escalier-pierre`
+  // comme un mur (79 faux positifs à lui seul) : ces marches sont posées ISOLÉES, avec un trou d'air
+  // entre chaque, et on les SAUTE — c'est le motif entier. Une mesa, elle, est une masse : on marche
+  // dessus, et si la marche suivante fait huit rangées on se cogne, point.
+  //
+  // Le discriminant est donc « y a-t-il de la matière juste sous cette surface ? ». Sur une mesa, oui
+  // des deux côtés ; sur une marche isolée, non — il y a de l'air, et l'air veut dire « saute ».
+  const pleinSous = (x: number, row: number): boolean => {
+    if (row >= groundRow) return true // le sol du monde est plein par définition
+    if ((level.rockBands ?? []).some((r) => x >= r.x && x < r.x + r.w && row + 1 >= r.y && row + 1 < r.y + r.h)) return true
+    return level.platforms.some((p) => x >= p.x && x < p.x + p.w && p.y === row + 1)
+  }
+
+  // ⚠️ ET ON REGARDE EN AVANT SUR TOUTE LA PORTÉE D'UN SAUT. Comparer la seule colonne voisine comptait
+  // aussi comme mur le pied de chaque marche d'`escalier-pierre` : ses blocs montent de deux rangées
+  // avec deux tuiles de trou, et on les enjambe — depuis le bloc, la marche suivante est à portée. Les
+  // deux conditions sont donc nécessaires : du plein des deux côtés (c'est un relief, pas une marche
+  // isolée) ET rien d'atteignable devant (on est vraiment coincé).
+  const portee = Math.floor(maxJumpGapPx() / TILE)
+  const out: MurProblem[] = []
+  for (let x = 0; x < level.widthTiles - 1; x++) {
+    const ici = silhouetteAt(level, x, groundRow)
+    if (ici === null || aideProche(x) || !pleinSous(x, ici)) continue
+    let plusHaut: number | null = null
+    let passe = false
+    for (let d = 1; d <= portee && !passe; d++) {
+      const devant = silhouetteAt(level, x + d, groundRow)
+      if (devant === null || aideProche(x + d)) { passe = true; break } // trou (on tombe) ou aide : pas un mur
+      if (ici - devant <= maxMontee) passe = true // à portée de saut, ou plus bas
+      else if (plusHaut === null && pleinSous(x + d, devant)) plusHaut = devant
+    }
+    if (!passe && plusHaut !== null) out.push({ x: x + 1, de: ici, a: plusHaut, hauteur: ici - plusHaut })
+  }
   return out
 }

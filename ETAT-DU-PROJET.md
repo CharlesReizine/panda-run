@@ -11,7 +11,7 @@ qui reste à faire. Il se met à jour à chaque lot livré.
 ## Vérifier et déployer
 
 ```bash
-pnpm verif       # tsc + 1761 tests + build + les six sondes navigateur
+pnpm verif       # tsc + 1764 tests + build + les six sondes navigateur
 npx firebase-tools deploy --only hosting
 ```
 
@@ -50,7 +50,7 @@ rares). Les traiter fait partie du cycle, pas après.
 
 ### ⚠️ Toucher à la génération, c'est un cycle complet
 
-modifier → **regraver (6 à 7 minutes)** → resynchroniser les monstres → 1761 tests → six sondes → déployer.
+modifier → **regraver (6 à 7 minutes)** → resynchroniser les monstres → 1764 tests → six sondes → déployer.
 
 Trois tentatives ont échoué le 3 août faute d'avoir tenu ce cycle jusqu'au bout. Deux règles en découlent :
 
@@ -152,6 +152,19 @@ les marches de rampe plus hautes qu'un saut passent de 1 à 13, sur deux motifs 
 propre altitude (`grotte-scellee`, `echelle-descente-piegee`) — leur rampe d'accroche doit alors lâcher
 quarante rangées en huit tuiles. Dimensionner la rampe sur son dénivelé ne suffit pas : c'est le
 plafond d'altitude du motif qu'il faut retirer. Dette nommée dans `relief-jouable`.
+
+**UN TERRAIN PEUT ÊTRE ENTIÈREMENT « ATTEIGNABLE » ET PARFAITEMENT INFAISABLE.** C'est le trou de tout
+l'outillage, et il aura fallu qu'un joueur se cogne pour qu'on le voie. Sur Colline, `unreachablePlatforms`,
+`strictReach`, `deadEndSurfaces` et `unreachableLadders` répondaient tous ZÉRO devant un mur de huit
+rangées au tout début du terrain : ils raisonnent en GRAPHE (« existe-t-il un chemin, quel qu'il soit ? »)
+et il en existait un, par des échelles suspendues à l'autre bout du module. Le joueur, lui, avance vers
+la droite et se cogne. `marchesInfranchissables` mesure la SILHOUETTE, pas la topologie.
+
+**La rampe d'accroche des motifs INVERSÉS s'arrête en route quand la montée dépasse six tuiles.**
+`ramp()` ne borne pas ses paliers en montée (raidir rend infranchissable) : elle en calcule six, n'a la
+place que pour trois, et coupe. D'où l'escalier 35 → 32 → 29 → 26 puis un mur de huit rangées. Élargir
+l'accroche en deux passes (bâtir le motif pour connaître son sommet, puis rejouer) SUPPRIME le mur —
+et fait tomber 24 tests plus une regravure. C'est un lot, il est chiffré, il reste à faire.
 
 **L'assemblage s'est alourdi lot après lot, et des tests tombaient en TIMEOUT — pas sur leur verdict.**
 Comblement des poches, rognage des doubles planchers, contrôle des pièges avant creusement : chaque

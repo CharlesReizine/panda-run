@@ -621,6 +621,31 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
   // haut — le cas normal — et monte sinon).
   const origine = INVERSES[m.kind]
   if (origine) {
+    // ⚠️ LA RAMPE D'ACCROCHE PREND LA LARGEUR QUE SON DÉNIVELÉ EXIGE — SINON ELLE S'ARRÊTE EN ROUTE.
+    // Retour du joueur : « Colline, le terrain est infaisable dès le début, y a un giga mur trop haut
+    // pour être sauté. » Mesuré sur place : une rampe qui devait MONTER de dix-sept rangées dans les six
+    // tuiles réservées. `ramp()` ne borne pas le nombre de paliers en montée (raidir une montée la rend
+    // infranchissable, cf. son propre commentaire) : il en calcule six, n'a la place que pour trois, et
+    // s'arrête là. Résultat à l'écran : un escalier 35 → 32 → 29 → 26, puis un mur de HUIT rangées d'un
+    // coup jusqu'au motif. Aucun validateur ne le voyait — ils raisonnent en graphe, et un chemin
+    // existait par ailleurs (des échelles suspendues à l'autre bout du module).
+    //
+    // On réserve donc deux tuiles par palier nécessaire, borné par ce que le module peut céder : le
+    // motif retourné garde au moins dix tuiles pour exister.
+    // ⚠️ LA RAMPE D'ACCROCHE PEUT S'ARRÊTER EN ROUTE, ET C'EST LE « GIGA MUR » DE COLLINE.
+    // Elle relie l'altitude courante au SOMMET du motif retourné. `ramp()` ne borne PAS le nombre de
+    // paliers en montée (raidir une montée la rend infranchissable, cf. son propre commentaire) : sur
+    // une accroche de six tuiles qui doit grimper dix-sept rangées, il en calcule six, n'a la place que
+    // pour trois, et s'arrête là. À l'écran : un escalier 35 → 32 → 29 → 26, puis un mur de HUIT rangées
+    // jusqu'au motif. Aucun validateur ne le voyait — ils raisonnent en graphe, et un chemin existait
+    // par ailleurs (des échelles suspendues à l'autre bout du module).
+    //
+    // ⚠️ ÉLARGIR L'ACCROCHE MARCHE, ET DEMANDE UN LOT ENTIER. Mesuré : deux passes (bâtir le motif une
+    // fois pour connaître son sommet, puis rejouer avec la largeur que la montée réclame) suppriment le
+    // mur du début de Colline. Mais la géométrie de tous les motifs inversés bouge : 24 tests tombent,
+    // dont quatre recouvrements d'une tuile entre la dernière marche de la rampe et la première
+    // plateforme du motif retourné, et il faut regraver les 58 plans. À faire proprement, pas en
+    // passant : `tests/data/relief-jouable.test.ts` garde le compte et nomme les terrains.
     const wBase = Math.max(10, w - LARGEUR_ACCROCHE)
     const base = buildModule({ ...m, kind: origine }, rng, wBase, 1)
     const sommet = base.exitAlt
