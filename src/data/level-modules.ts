@@ -640,17 +640,22 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     // jusqu'au motif. Aucun validateur ne le voyait — ils raisonnent en graphe, et un chemin existait
     // par ailleurs (des échelles suspendues à l'autre bout du module).
     //
-    // ⚠️ ÉLARGIR L'ACCROCHE MARCHE, ET DEMANDE UN LOT ENTIER. Mesuré : deux passes (bâtir le motif une
-    // fois pour connaître son sommet, puis rejouer avec la largeur que la montée réclame) suppriment le
-    // mur du début de Colline. Mais la géométrie de tous les motifs inversés bouge : 24 tests tombent,
-    // dont quatre recouvrements d'une tuile entre la dernière marche de la rampe et la première
-    // plateforme du motif retourné, et il faut regraver les 58 plans. À faire proprement, pas en
-    // passant : `tests/data/relief-jouable.test.ts` garde le compte et nomme les terrains.
-    const wBase = Math.max(10, w - LARGEUR_ACCROCHE)
+    // ⚠️ DEUX PASSES, PARCE QUE LA MONTÉE N'EST CONNUE QU'APRÈS COUP. La rampe relie l'altitude courante
+    // au SOMMET du motif retourné — or ce sommet est l'altitude de sortie du motif d'origine, qu'on ne
+    // connaît qu'une fois celui-ci construit. On le bâtit donc une première fois pour la mesurer, puis
+    // on recommence avec la largeur d'accroche qu'elle réclame. `buildModule` est PUR : le rejouer ne
+    // coûte que du calcul, et ça évite d'inventer une formule qui devinerait le sommet.
+    //
+    // Deux tuiles par palier nécessaire, et le motif retourné garde au moins dix tuiles pour exister.
+    const largeurPour = (montee: number) => Math.max(LARGEUR_ACCROCHE,
+      Math.min(Math.ceil(Math.abs(montee) / SIMPLE_JUMP_ROWS) * 2, Math.max(0, w - 10)))
+    const sommetEssai = buildModule({ ...m, kind: origine }, rng, Math.max(10, w - LARGEUR_ACCROCHE), 1).exitAlt
+    const largeurAccroche = largeurPour(sommetEssai - entryAlt)
+    const wBase = Math.max(10, w - largeurAccroche)
     const base = buildModule({ ...m, kind: origine }, rng, wBase, 1)
     const sommet = base.exitAlt
     const retourne = miroirHorizontal(base, wBase)
-    decalerX(retourne, LARGEUR_ACCROCHE)
+    decalerX(retourne, largeurAccroche)
     // ⚠️ L'ALTITUDE DE SORTIE SE RETOURNE AUSSI. Le miroir déplace la géométrie mais `exitAlt` restait
     // celle de l'original — son SOMMET — alors que le motif retourné sort par son PIED. Le module
     // annonçait donc une sortie à la même altitude que son entrée : le terrain ne redescendait pas d'un
@@ -665,7 +670,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     const decalage = Math.max(0, entryAlt - sommet)
     decalerAlt(retourne, decalage) // décale la géométrie ET son exitAlt
     const out = emptyPiece(retourne.exitAlt)
-    const accroche = ramp(0, LARGEUR_ACCROCHE, entryAlt, sommet + decalage)
+    const accroche = ramp(0, largeurAccroche, entryAlt, sommet + decalage)
     out.platforms.push(...accroche)
     // ⚠️ LA RAMPE D'ACCROCHE A BESOIN DE SON PROPRE SOCLE, ET SON ABSENCE A CREUSÉ 142 TROUS.
     // `addPedestals` tourne à la FIN de buildModule ; cette branche-ci RETOURNE avant d'y arriver, et
@@ -677,7 +682,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     if (m.fillBelow === 'sol' || m.fillBelow === 'marine' || m.fillBelow === 'cascade' || m.fillBelow === 'lave') {
       const socle = emptyPiece(0)
       socle.platforms.push(...accroche.map((pl) => ({ ...pl })))
-      addPedestals(socle, LARGEUR_ACCROCHE)
+      addPedestals(socle, largeurAccroche)
       out.rocks.push(...socle.rocks)
     }
     fusionner(out, retourne)
@@ -3185,7 +3190,12 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
         if (b.w > a.w || (b.w === a.w && j < i)) {
           // `a` est la moins large : on la rogne au segment qui dépasse, ou on la retire
           const reste = a.x < b.x ? b.x - a.x : (a.x + a.w > b.x + b.w ? a.x + a.w - (b.x + b.w) : 0)
-          if (reste > 0 && reste < LARGEUR_UTILE) continue // cf. le garde-fou ci-dessus
+          // ⚠️ PAS DE GARDE-FOU DE LARGEUR ICI, ET C'EST DÉMONTRABLE. Ailleurs, rogner une corniche peut
+          // amputer un appui — d'où `LARGEUR_UTILE`. Mais ces deux-là sont sur la MÊME RANGÉE : ce qu'on
+          // retire de la plus courte est, par construction, déjà couvert par la plus large, au même
+          // niveau. Aucun appui ne disparaît, seulement une texture en double. Le garde-fou hérité
+          // laissait passer les chevauchements dont le reste faisait moins de trois tuiles — des bavures
+          // de couture entre une rampe d'accroche et le motif qu'elle raccorde, visibles à l'écran.
           if (a.x < b.x) a.w = b.x - a.x
           else if (a.x + a.w > b.x + b.w) { const fin = a.x + a.w; a.x = b.x + b.w; a.w = fin - a.x }
           else { platforms.splice(i, 1) }

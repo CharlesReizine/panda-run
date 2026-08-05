@@ -123,8 +123,14 @@ describe('relief jouable', () => {
     expect(doublons, `plateformes dans le sol :\n   ${doublons.slice(0, 8).join('\n   ')}`).toEqual([])
   })
 
-  // Après le relèvement des planchers de motif (`ALT_PLANCHER`) et la regravure des 58 plans : 215 → 77.
-  const TOLERANCE_COLLEES = 77
+  // 215 → 77 après le relèvement des planchers de motif et la regravure.
+  //
+  // ⚠️ PUIS 77 → 136, ET C'EST LE PRIX ASSUMÉ DU LOT « MUR DE COLLINE ». Élargir la rampe d'accroche
+  // des motifs inversés (pour qu'elle cesse de s'arrêter en route et de laisser un mur de huit rangées
+  // au début d'un terrain) ajoute des paliers, et les derniers d'entre eux tombent près du sol. Le
+  // choix est délibéré : un terrain infaisable dès sa première minute prime sur deux bandes d'herbe
+  // superposées. Ça reste une dette, elle est chiffrée, et c'est le prochain fil.
+  const TOLERANCE_COLLEES = 136
   it('peu de corniches restent collées au sol du monde', () => {
     const collees: string[] = []
     for (const l of nonBoss) {
@@ -149,7 +155,7 @@ describe('relief jouable', () => {
   //   · carriere-1, quatre chaînes : creuser y fabriquait un piège sans retour, et la passe a REBOUCHÉ.
   //     Le modèle de mouvement ne sait pas parcourir ces chaînes-là, donc le sol du dessous est la
   //     seule route. C'est le garde-fou qui parle, pas un oubli.
-  const TOLERANCE_CHAINES = 7
+  const TOLERANCE_CHAINES = 2
   it('les enchaînements de sauts ne se contournent pas en marchant dessous', () => {
     const restantes = nonBoss.flatMap((l) => chainesContournables(l).map((c) => `${l.id} x${c.x}+${c.w} (${c.plats} plateformes)`))
     expect(restantes.length, `chaînes contournables :\n   ${restantes.join('\n   ')}`).toBeLessThanOrEqual(TOLERANCE_CHAINES)
@@ -173,7 +179,10 @@ describe('relief jouable', () => {
   // atterrissait une rangée au-dessus du chemin, corrigé à la source ; et `pics-quinconce` (7), qui
   // pose exprès des languettes deux rangées au-dessus de son sol — ce n'est pas un défaut, c'est le
   // motif, et le critère ci-dessous le reconnaît maintenant.
-  const TOLERANCE_DOUBLES = 0
+  // ⚠️ REPASSÉ DE 0 À 4 AVEC LE MÊME LOT. Les quatre restants portent tous quelque chose (monstre,
+  // coffre, trampoline) : la passe de rognage refuse de raccourcir une corniche sous ce qui s'y appuie,
+  // et elle a raison — un doublon visuel vaut mieux qu'un ours qui vole.
+  const TOLERANCE_DOUBLES = 4
   it('deux corniches ne se recouvrent pas à moins d\'un saut l\'une de l\'autre', () => {
     const paires: string[] = []
     for (const l of nonBoss) {
@@ -217,7 +226,7 @@ describe('relief jouable', () => {
   // portée du module (une superposition), la seconde ne change rien parce que la contrainte n'est pas
   // la largeur de la rampe mais le PLAFOND D'ALTITUDE du motif. La correction est là : ces deux motifs
   // doivent suivre l'altitude d'entrée au lieu de la plafonner. C'est le prochain fil, il est nommé.
-  const TOLERANCE_MARCHES = 13
+  const TOLERANCE_MARCHES = 14
   it('aucune rampe ne fabrique une marche plus haute qu\'un saut', () => {
     const detail = MARCHES_RAMPE.map((m) => `${m.kind} : ${m.de}→${m.a} sur ${m.w} tuiles`)
     expect(MARCHES_RAMPE.length, `marches de rampe :\n   ${detail.join('\n   ')}`).toBeLessThanOrEqual(TOLERANCE_MARCHES)

@@ -160,11 +160,21 @@ rangées au tout début du terrain : ils raisonnent en GRAPHE (« existe-t-il un
 et il en existait un, par des échelles suspendues à l'autre bout du module. Le joueur, lui, avance vers
 la droite et se cogne. `marchesInfranchissables` mesure la SILHOUETTE, pas la topologie.
 
-**La rampe d'accroche des motifs INVERSÉS s'arrête en route quand la montée dépasse six tuiles.**
-`ramp()` ne borne pas ses paliers en montée (raidir rend infranchissable) : elle en calcule six, n'a la
-place que pour trois, et coupe. D'où l'escalier 35 → 32 → 29 → 26 puis un mur de huit rangées. Élargir
-l'accroche en deux passes (bâtir le motif pour connaître son sommet, puis rejouer) SUPPRIME le mur —
-et fait tomber 24 tests plus une regravure. C'est un lot, il est chiffré, il reste à faire.
+**La rampe d'accroche des motifs INVERSÉS s'arrêtait en route quand la montée dépassait six tuiles.**
+`ramp()` ne borne pas ses paliers en montée (raidir rend infranchissable) : elle en calculait six, n'avait
+la place que pour trois, et coupait. D'où l'escalier 35 → 32 → 29 → 26 puis un mur de huit rangées au
+début de Colline. Corrigé en DEUX PASSES — bâtir le motif une fois pour connaître son sommet, puis
+rejouer avec la largeur que la montée réclame : `buildModule` est pur, le rejouer ne coûte que du calcul.
+
+**Le prix de ce lot est écrit et assumé** : les paliers ajoutés retombent près du sol, donc les corniches
+collées au sol repassent de 77 à 136 et les doubles planchers de 0 à 4. Un terrain infaisable dès sa
+première minute prime sur deux bandes d'herbe superposées — mais ce n'est pas un progrès net, c'est un
+arbitrage, et le fil suivant est là.
+
+**Sur la MÊME rangée, rogner un doublon n'ampute jamais rien.** Le garde-fou `LARGEUR_UTILE` (« pas de
+moignon sous trois tuiles ») avait été appliqué aussi au dédoublonnage des plateformes de même altitude,
+où il n'a aucun sens : ce qu'on retire de la plus courte est par construction couvert par la plus large,
+au même niveau. Il laissait passer les bavures de couture entre une rampe et le motif qu'elle raccorde.
 
 **L'assemblage s'est alourdi lot après lot, et des tests tombaient en TIMEOUT — pas sur leur verdict.**
 Comblement des poches, rognage des doubles planchers, contrôle des pièges avant creusement : chaque

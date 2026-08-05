@@ -23,22 +23,26 @@ import { marchesInfranchissables } from '../../src/core/level-validator'
 // ne dit pas « tout va bien », il dit « ça n'a pas empiré ». Les faire baisser est un progrès ; les
 // monter demande une raison écrite.
 //
-// LA CAUSE PRINCIPALE EST IDENTIFIÉE ET CHIFFRÉE, pas encore corrigée : la rampe d'accroche des motifs
-// INVERSÉS s'arrête en route quand la montée dépasse ce que six tuiles permettent (cf. le commentaire
-// dans level-modules, branche miroir). L'élargir supprime le mur du début de Colline — et fait tomber
-// 24 tests, dont quatre recouvrements d'une tuile, plus une regravure des 58 plans. C'est un lot.
+// LA CAUSE PRINCIPALE A ÉTÉ CORRIGÉE : la rampe d'accroche des motifs INVERSÉS s'arrêtait en route
+// quand la montée dépassait ce que six tuiles permettent, laissant un mur de huit rangées au début de
+// Colline. Elle prend désormais la largeur que son dénivelé réclame, mesurée en deux passes (bâtir le
+// motif pour connaître son sommet, puis rejouer). 202 murs → 172, et Colline commence par un chemin.
+//
+// ⚠️ CE LOT A UN PRIX, ET IL EST ÉCRIT : les paliers ajoutés retombent près du sol, donc les corniches
+// collées au sol repassent de 77 à 136 (cf. relief-jouable). Un terrain infaisable dès sa première
+// minute prime sur deux bandes d'herbe superposées — mais c'est une dette, pas un progrès net.
 
 const nonBoss = Object.values(LEVELS).filter((l) => !l.boss)
 
 // Comptes relevés le 5 août, terrain par terrain. Un terrain qui EMPIRE fait tomber le test avec son nom.
 const SEUILS: Record<string, number> = {
-  'plaine-1': 2, 'plaine-2': 1, 'plaine-3': 4, 'plaine-4': 1, 'plaine-5': 4, 'plaine-6': 4, 'plaine-7': 1,
+  'plaine-1': 1, 'plaine-2': 1, 'plaine-3': 0, 'plaine-4': 1, 'plaine-5': 3, 'plaine-6': 2, 'plaine-7': 1,
 }
 
 describe('murs infranchissables', () => {
   it('le total ne remonte pas', () => {
     const total = nonBoss.reduce((n, l) => n + marchesInfranchissables(l).length, 0)
-    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(202)
+    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(172)
   })
 
   it('aucun terrain de plaine n\'empire', () => {
