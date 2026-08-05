@@ -28,21 +28,22 @@ import { marchesInfranchissables } from '../../src/core/level-validator'
 // Colline. Elle prend désormais la largeur que son dénivelé réclame, mesurée en deux passes (bâtir le
 // motif pour connaître son sommet, puis rejouer). 202 murs → 172, et Colline commence par un chemin.
 //
-// ⚠️ CE LOT A UN PRIX, ET IL EST ÉCRIT : les paliers ajoutés retombent près du sol, donc les corniches
-// collées au sol repassent de 77 à 136 (cf. relief-jouable). Un terrain infaisable dès sa première
-// minute prime sur deux bandes d'herbe superposées — mais c'est une dette, pas un progrès net.
+// LE PRIX A ENSUITE ÉTÉ REMBOURSÉ. Les paliers ajoutés retombaient près du sol (corniches collées 77 →
+// 136). Deux corrections l'ont effacé : une rampe ne pose plus de palier à l'altitude 1 (le sol du monde
+// EST déjà cette surface), et les cinq derniers motifs qui plantaient leur plancher à 1 ont été relevés.
+// Après regravure : murs 202 → 160, marches de rampe 13 → 0, collées 136 → 82, doubles planchers 4 → 2.
 
 const nonBoss = Object.values(LEVELS).filter((l) => !l.boss)
 
 // Comptes relevés le 5 août, terrain par terrain. Un terrain qui EMPIRE fait tomber le test avec son nom.
 const SEUILS: Record<string, number> = {
-  'plaine-1': 1, 'plaine-2': 1, 'plaine-3': 0, 'plaine-4': 1, 'plaine-5': 3, 'plaine-6': 2, 'plaine-7': 1,
+  'plaine-1': 1, 'plaine-2': 1, 'plaine-3': 2, 'plaine-4': 3, 'plaine-5': 4, 'plaine-6': 1, 'plaine-7': 3,
 }
 
 describe('murs infranchissables', () => {
   it('le total ne remonte pas', () => {
     const total = nonBoss.reduce((n, l) => n + marchesInfranchissables(l).length, 0)
-    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(172)
+    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(160)
   })
 
   it('aucun terrain de plaine n\'empire', () => {

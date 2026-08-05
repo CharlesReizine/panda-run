@@ -434,7 +434,14 @@ function ramp(x0: number, w: number, fromAlt: number, toAlt: number, keepGround 
     const reste = x0 + w - x
     const segw = i === count - 1 ? reste : Math.min(segW, reste)
     if (segw <= 0) break
-    if (alt >= 1 || keepGround) out.push({ x, alt: Math.max(keepGround ? 0 : 1, alt), w: segw })
+    // ⚠️ PAS DE PALIER À L'ALTITUDE 1 : LE SOL DU MONDE EST DÉJÀ CETTE SURFACE. Une rampe qui redescend
+    // finissait par un palier collé sur la rangée du sol — deux bandes d'herbe l'une sur l'autre, le
+    // défaut que le joueur a signalé trois fois (« y a deux sols qui sont juste empilés »). Le
+    // supprimer ne retire aucun appui : on pose le pied une rangée plus bas, sur le sol, qui est là.
+    // `keepGround` reste l'exception explicite — c'est le drapeau des rampes qui DOIVENT border un trou.
+    const altFinale = Math.max(keepGround ? 0 : 1, alt)
+    const colleAuSol = !keepGround && altFinale <= 1
+    if ((alt >= 1 || keepGround) && !colleAuSol) out.push({ x, alt: altFinale, w: segw })
     x += segw
   }
   for (let i = 1; i < out.length; i++) {
@@ -479,7 +486,7 @@ function poseLadderOn(p: Piece, xLad: number, footAlt: number, landRight: number
 // l'altitude du palier de sommet.
 function poseTower(p: Piece, w: number, entryAlt: number, stages: number): number {
   const seg = Math.max(6, Math.floor((w - 4) / (stages + 1)))
-  let footAlt = Math.max(1, entryAlt)
+  let footAlt = Math.max(ALT_PLANCHER, entryAlt)
   p.platforms.push({ x: 0, alt: footAlt, w: seg + 2 }) // plateforme-pied initiale
   let x = 2
   for (let i = 0; i < stages; i++) {
@@ -1318,7 +1325,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       const GAP = 2
       const stepW = 4
       const pitch = stepW + GAP // 6 tuiles par marche
-      const from = Math.max(1, entryAlt)
+      const from = Math.max(ALT_PLANCHER, entryAlt)
       // autant de marches que la largeur en contient (≥2), la DERNIÈRE étant un large palier qui
       // rejoint le bord droit du module (contigu au module suivant → chaînage reachable).
       const count = Math.max(2, Math.min(5, Math.floor((w - stepW) / pitch) + 1))
@@ -1909,7 +1916,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
 
     // ─── CASCADE-BASSIN : une cascade remontable qui TOMBE dans un bassin marine (coffre au fond) ──
     case 'cascade-bassin': {
-      const low = Math.max(1, entryAlt)
+      const low = Math.max(ALT_PLANCHER, entryAlt)
       const bankAlt = low + 2
       const rampW = 3
       p.platforms.push(...ramp(0, rampW, low, bankAlt)) // berge gauche vers la surface du bassin
@@ -2654,7 +2661,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // en DIAGONALE vers la suivante (décalée vers le HAUT et la DROITE, travées qui se CHEVAUCHENT),
       // jusqu'à enjamber sur le plateau de SORTIE (dont le bord est un peu SOUS le sommet de la dernière
       // échelle). Rater = on retombe sur le sol de la grotte et on recommence. Pente régulière.
-      const floor = Math.max(1, entryAlt)
+      const floor = Math.max(ALT_PLANCHER, entryAlt)
       const H = LADDER_H     // longueur d'échelle (≥ MIN_LADDER_TILES)
       const DX = 4           // écart horizontal ENTRE échelles : un cran de plus que le saut à plat →
                              // on saute en diagonale, sensation « je vais me rater » voulue (cf. HUNG_JUMP_COLS)
@@ -2690,7 +2697,7 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     // mais on BONDIT alternativement à GAUCHE puis à DROITE en montant → un chevron/zigzag serré dans une
     // bande verticale étroite (2 colonnes). Plus nerveux que la pente régulière des echelles-lianes. ────
     case 'echelles-zigzag': {
-      const floor = Math.max(1, entryAlt)
+      const floor = Math.max(ALT_PLANCHER, entryAlt)
       const H = LADDER_H
       const DX = 4      // écart entre les 2 colonnes (saut diagonal ≤ HUNG_JUMP_COLS)
       const STEP = 6    // gain d'altitude par échelle : > (H+2)/2 → deux échelles d'une même colonne ne se chevauchent JAMAIS

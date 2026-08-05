@@ -166,10 +166,16 @@ la place que pour trois, et coupait. D'où l'escalier 35 → 32 → 29 → 26 pu
 début de Colline. Corrigé en DEUX PASSES — bâtir le motif une fois pour connaître son sommet, puis
 rejouer avec la largeur que la montée réclame : `buildModule` est pur, le rejouer ne coûte que du calcul.
 
-**Le prix de ce lot est écrit et assumé** : les paliers ajoutés retombent près du sol, donc les corniches
-collées au sol repassent de 77 à 136 et les doubles planchers de 0 à 4. Un terrain infaisable dès sa
-première minute prime sur deux bandes d'herbe superposées — mais ce n'est pas un progrès net, c'est un
-arbitrage, et le fil suivant est là.
+**Le prix de ce lot a été remboursé au tour suivant.** Les paliers ajoutés retombaient près du sol
+(corniches collées 77 → 136, doubles planchers 0 → 4). Deux corrections l'ont effacé : **une rampe ne
+pose plus de palier à l'altitude 1** — le sol du monde EST déjà cette surface, l'y doubler ne donne aucun
+appui de plus — et les cinq derniers motifs qui plantaient leur plancher à 1 ont été relevés. Bilan final
+contre l'état d'avant le lot : murs 202 → 160, marches de rampe 13 → **0**, collées 77 → 82, doubles
+0 → 2.
+
+⚠️ **LE DÉFAUT N'ÉTAIT PAS LA PENTE D'UNE RAMPE, C'ÉTAIT SON DERNIER PAS.** Deux tentatives pour
+dimensionner la rampe sur son dénivelé avaient échoué (débordement de portée, puis sans effet). Supprimer
+le palier qui écrase le sol fait tomber les « marches géantes » à zéro d'un coup.
 
 **Sur la MÊME rangée, rogner un doublon n'ampute jamais rien.** Le garde-fou `LARGEUR_UTILE` (« pas de
 moignon sous trois tuiles ») avait été appliqué aussi au dédoublonnage des plateformes de même altitude,

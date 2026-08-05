@@ -125,12 +125,11 @@ describe('relief jouable', () => {
 
   // 215 → 77 après le relèvement des planchers de motif et la regravure.
   //
-  // ⚠️ PUIS 77 → 136, ET C'EST LE PRIX ASSUMÉ DU LOT « MUR DE COLLINE ». Élargir la rampe d'accroche
-  // des motifs inversés (pour qu'elle cesse de s'arrêter en route et de laisser un mur de huit rangées
-  // au début d'un terrain) ajoute des paliers, et les derniers d'entre eux tombent près du sol. Le
-  // choix est délibéré : un terrain infaisable dès sa première minute prime sur deux bandes d'herbe
-  // superposées. Ça reste une dette, elle est chiffrée, et c'est le prochain fil.
-  const TOLERANCE_COLLEES = 136
+  // ⚠️ PUIS 77 → 136 AVEC LE LOT « MUR DE COLLINE » (des paliers en plus, dont les derniers tombent près
+  // du sol), PUIS 136 → 82 EN REMBOURSANT CETTE DETTE. Deux corrections : une rampe ne pose plus de
+  // palier à l'altitude 1 — le sol du monde EST déjà cette surface, et l'y doubler ne donne aucun appui
+  // de plus — et les cinq derniers motifs qui plantaient leur plancher à 1 ont été relevés.
+  const TOLERANCE_COLLEES = 82
   it('peu de corniches restent collées au sol du monde', () => {
     const collees: string[] = []
     for (const l of nonBoss) {
@@ -182,7 +181,7 @@ describe('relief jouable', () => {
   // ⚠️ REPASSÉ DE 0 À 4 AVEC LE MÊME LOT. Les quatre restants portent tous quelque chose (monstre,
   // coffre, trampoline) : la passe de rognage refuse de raccourcir une corniche sous ce qui s'y appuie,
   // et elle a raison — un doublon visuel vaut mieux qu'un ours qui vole.
-  const TOLERANCE_DOUBLES = 4
+  const TOLERANCE_DOUBLES = 2
   it('deux corniches ne se recouvrent pas à moins d\'un saut l\'une de l\'autre', () => {
     const paires: string[] = []
     for (const l of nonBoss) {
@@ -215,18 +214,16 @@ describe('relief jouable', () => {
   // Le cas restant est un arbitrage, pas un oubli : une cascade « au moins quatre fois le panda »
   // dans un module étroit ne laisse pas la place d'adoucir sa berge descendante. Aucune rampe ne peut
   // faire mieux avec trois tuiles — il faudrait raccourcir la cascade, c'est-à-dire renoncer au motif.
-  // ⚠️ CETTE TOLÉRANCE A AUGMENTÉ, ET C'EST UNE RÉGRESSION ASSUMÉE, PAS UN RÉGLAGE. Elle valait 1.
-  // Relever les planchers de motif (`ALT_PLANCHER`, qui fait passer les « deux sols collés » de 215 à
-  // 77) a mécaniquement remonté les altitudes d'entrée. Or deux motifs PLAFONNENT leur propre altitude
-  // — `grotte-scellee` (7 cas) la borne à `MAX_LADDER_TILES - 2`, `echelle-descente-piegee` (6 cas)
-  // plante son pied d'échelle au ras du sol — donc leur rampe d'accroche doit désormais lâcher quarante
-  // à soixante rangées dans sept ou huit tuiles. Ce ne sont plus des marches.
+  // ⚠️ ELLE EST À ZÉRO, ET C'EST LA MÊME CORRECTION QUI L'Y A RAMENÉE. Elle avait grimpé à 13 puis 14 :
+  // relever les planchers de motif avait remonté les altitudes d'entrée, et les rampes des motifs qui
+  // PLAFONNENT leur propre altitude (`grotte-scellee`, `echelle-descente-piegee`) devaient alors lâcher
+  // quarante rangées en huit tuiles. Deux tentatives pour dimensionner la rampe sur son dénivelé ont
+  // échoué (débordement de portée, puis sans effet).
   //
-  // Deux tentatives pour dimensionner la rampe sur son dénivelé ont échoué : la première déborde de la
-  // portée du module (une superposition), la seconde ne change rien parce que la contrainte n'est pas
-  // la largeur de la rampe mais le PLAFOND D'ALTITUDE du motif. La correction est là : ces deux motifs
-  // doivent suivre l'altitude d'entrée au lieu de la plafonner. C'est le prochain fil, il est nommé.
-  const TOLERANCE_MARCHES = 14
+  // Ce qui a marché est ailleurs et plus simple : une rampe ne pose plus de palier à l'altitude 1. Le
+  // dernier palier n'écrase plus le sol du monde, la marche qui le précédait disparaît avec lui, et le
+  // compte tombe à zéro. Le défaut n'était pas la pente : c'était son dernier pas.
+  const TOLERANCE_MARCHES = 0
   it('aucune rampe ne fabrique une marche plus haute qu\'un saut', () => {
     const detail = MARCHES_RAMPE.map((m) => `${m.kind} : ${m.de}→${m.a} sur ${m.w} tuiles`)
     expect(MARCHES_RAMPE.length, `marches de rampe :\n   ${detail.join('\n   ')}`).toBeLessThanOrEqual(TOLERANCE_MARCHES)
