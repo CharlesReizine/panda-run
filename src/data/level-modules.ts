@@ -17,7 +17,7 @@
 
 import { chainesContournables, deadEndSurfaces, sealedVoids, unreachablePlatforms } from '../core/level-validator'
 import type { LevelDef } from './levels'
-import { MIN_LADDER_TILES, MAX_LADDER_TILES, maxJumpTiles } from '../core/platforming'
+import { MIN_LADDER_TILES, MAX_LADDER_TILES, maxJumpTiles, maxJumpGapPx, TILE } from '../core/platforming'
 import { comblements } from '../core/roche'
 import { MONSTERS } from './monsters'
 
@@ -3836,6 +3836,61 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
       || hazards.some((h) => h.kind === 'water' && chevauche(h.x, h.w))
       || (ladders ?? []).some((l) => l.x >= r.x && l.x < r.x + r.w)
     if (!coiffe) rockBands.splice(i, 1)
+  }
+
+  // Un puits plus large que ça n'est plus un piège : c'est un couloir, et on le franchit d'un saut.
+  const PUITS_LARGEUR_MAX = Math.floor(maxJumpGapPx() / TILE)
+
+  // ─── UN PUITS ÉTROIT ENTRE DEUX SOCLES EST UN PIÈGE : ON LE COMBLE ───────────────────────────
+  //
+  // `escalier-pierre` pose ses marches de pierre ISOLÉES, avec un trou d'air entre chaque — c'est ce qui
+  // empêche de se coincer, et le motif promet noir sur blanc « rater un saut = retomber au sol, jamais
+  // de piège ». Mais chaque marche reçoit un SOCLE jusqu'au sol : le trou d'air devient un PUITS de deux
+  // tuiles, muré de roche des deux côtés et fermé par le sol. On y tombe, et on ne remonte plus. Relevé
+  // sur cave-1 : trois marches, deux puits de huit rangées. Cinquante-quatre des « murs » comptés sur
+  // l'ensemble du jeu venaient de là.
+  //
+  // ⚠️ ON COMBLE EN ÉLARGISSANT LE SOCLE DU BAS, ON N'EMPILE PAS UNE BANDE NEUVE. Deux tentatives dans
+  // l'autre sens ont échoué pour des raisons opposées, et les deux valent d'être retenues :
+  //   — retirer le socle des marches : elles flottent, et les coffres qui s'y appuyaient partent en l'air ;
+  //   — pousser une bande de remplissage : son sommet est nu, et c'est précisément ce que la passe des
+  //     socles nus interdit — « de la pierre qui vole au-dessus du sol », le défaut d'à côté.
+  // Élargir le socle du bas garde une seule bande, toujours coiffée par SA marche : le puits se comble
+  // jusqu'à la surface de la marche basse, l'escalier reste lisible (contremarches de deux rangées,
+  // franchissables), et plus rien ne se referme sur le joueur.
+  {
+    /** le socle (bande touchant le sol) le plus HAUT sur cette colonne, ou null si la colonne est libre */
+    const socleEn = (x: number): { r: (typeof rockBands)[number]; i: number } | null => {
+      let best: { r: (typeof rockBands)[number]; i: number } | null = null
+      for (let i = 0; i < rockBands.length; i++) {
+        const r = rockBands[i]!
+        if (x < r.x || x >= r.x + r.w) continue
+        if (r.y + r.h - 1 < groundRow - 1) continue // ne descend pas jusqu'au sol : ce n'est pas un socle
+        if (best === null || r.y < best.r.y) best = { r, i }
+      }
+      return best
+    }
+    for (let x = 1; x < totalWidth - 1; x++) {
+      if (socleEn(x)) continue
+      let fin = x
+      while (fin < totalWidth && !socleEn(fin)) fin++
+      const largeur = fin - x
+      x = fin - 1
+      if (largeur > PUITS_LARGEUR_MAX) continue
+      const bordG = socleEn(fin - largeur - 1)?.r, bordD = socleEn(fin)?.r
+      if (!bordG || !bordD) continue
+      // rien qui traverse le puits ne doit être enseveli : coffre posé au sol, échelle, eau, cassable
+      const dansLePuits = (px: number) => px >= fin - largeur && px < fin
+      if (props.some((pr) => dansLePuits(pr.x))) continue
+      if ((ladders ?? []).some((l) => dansLePuits(l.x))) continue
+      if (hazards.some((h) => h.x < fin && h.x + h.w > fin - largeur)) continue
+      if (breakables.some((b) => b.x < fin && b.x + b.w > fin - largeur)) continue
+      if (platforms.some((pl) => pl.x < fin && pl.x + pl.w > fin - largeur)) continue
+      // on élargit la marche BASSE (le y le plus grand) jusqu'à toucher l'autre : une seule bande, coiffée
+      const bord = bordG.y >= bordD.y ? bordG : bordD
+      if (bord === bordG) bord.w = fin - bord.x
+      else { bord.w += bord.x - (fin - largeur); bord.x = fin - largeur }
+    }
   }
 
   // ─── UNE TERRE POSÉE SUR DU PLEIN EST SOLIDE, PAS TRAVERSABLE ────────────────────────────────
