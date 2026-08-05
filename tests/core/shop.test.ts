@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { newPlayer } from '../../src/core/player-state'
+import { newPlayer, POTIONS_DEPART } from '../../src/core/player-state'
 import { buyPotion, buyItem } from '../../src/core/shop'
 import { POTION_PRICE } from '../../src/data/shops'
 
@@ -9,7 +9,7 @@ describe('shop', () => {
     p.gold = POTION_PRICE
     expect(buyPotion(p)).toBe(true)
     expect(p.gold).toBe(0)
-    expect(p.potions).toBe(2) // 1 de départ + 1 achetée
+    expect(p.potions).toBe(POTIONS_DEPART + 1) // le stock de départ + 1 achetée
   })
 
   it('refuse l\'achat de potion si pas assez d\'or', () => {
@@ -17,7 +17,7 @@ describe('shop', () => {
     p.gold = POTION_PRICE - 1
     expect(buyPotion(p)).toBe(false)
     expect(p.gold).toBe(POTION_PRICE - 1)
-    expect(p.potions).toBe(1)
+    expect(p.potions).toBe(POTIONS_DEPART)
   })
 
   it('achète un objet et l\'ajoute à l\'inventaire', () => {

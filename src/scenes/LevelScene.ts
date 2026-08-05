@@ -13,7 +13,7 @@ import { spawnFeetRow } from '../core/level-validator'
 import { HUD_LEFT } from './hud-layout'
 import { MATERIALS } from '../data/materials'
 import { ITEMS, rarityColor } from '../data/items'
-import { physicalDamage, inMeleeReach } from '../core/combat'
+import { physicalDamage, inMeleeReach, degatsSubis } from '../core/combat'
 import { grantXp, playerXpGain } from '../core/progression'
 import { emptyControls, mergeControls, type ControlsState } from '../core/controls'
 import { getPlayer } from '../state'
@@ -849,13 +849,15 @@ export class LevelScene extends Phaser.Scene {
       const g = this.add.graphics().setDepth(-8)
       const x0 = a.x * TILE, wpx = a.w * TILE
       const y0 = (a.y + 1) * TILE          // sous le tablier : le tablier, lui, est une plateforme
-      // AU-DESSUS D'UN GOUFFRE, ON NE DESSINE PAS TRENTE TUILES DE PILE. Un viaduc peut surplomber la
-      // vallée de 26 rangées : tracées en entier, les piles deviennent deux barres grises qui traversent
-      // l'écran de haut en bas et mangent tout le décor (constaté sur capture). On les borne à sept
-      // rangées et on les ESTOMPE sur les deux dernières — la pierre s'enfonce dans l'ombre du gouffre,
-      // ce qui dit la profondeur bien mieux qu'un trait qui continue.
-      const hTuiles = a.fill === 'eau' ? a.h : Math.min(a.h, 7)
-      const bornee = hTuiles < a.h
+      // ⚠️ LES PILES DESCENDENT JUSQU'AU SOL, MÊME AU-DESSUS D'UN GOUFFRE — ET C'EST UN REVIREMENT.
+      // Elles étaient bornées à sept rangées puis estompées dans l'ombre, au motif qu'un viaduc de 26
+      // rangées devient « deux barres grises qui mangent tout le décor ». Demande du joueur, sans
+      // ambiguïté : « les ponts / viaduc, fais des pieds qui vont jusqu'au sol ». Il a raison sur le
+      // fond, et c'est le même principe que le reste du terrain : une pile se lit par son APPUI. Coupée
+      // en l'air, elle ne dit pas « c'est profond », elle dit « ça flotte » — le défaut qu'on passe nos
+      // journées à traquer partout ailleurs. Le tracé en piles + arcs (on voit à travers) est justement
+      // ce qui empêche l'aplat gris : c'est de la dentelle de pierre, pas un mur.
+      const hTuiles = a.h
       const basY = y0 + hTuiles * TILE     // là où les piles se posent (ou se perdent dans l'ombre)
       const pierre = 0x6f7d8a, pierreOmbre = 0x49535d, pierreClaire = 0x94a2ae
 
@@ -874,14 +876,9 @@ export class LevelScene extends Phaser.Scene {
         g.fillStyle(pierreOmbre).fillRect(px, y0, ePile, basY - y0)
         g.fillStyle(pierre).fillRect(px, y0, ePile - 3, basY - y0)
         g.fillStyle(pierreClaire, 0.5).fillRect(px, y0, 3, basY - y0)
-        if (bornee) {
-          // fondu vers l'ombre : quatre bandes de plus en plus sombres au lieu d'une coupe nette
-          for (let f = 0; f < 4; f++) {
-            g.fillStyle(0x1a1f24, 0.22 + f * 0.24)
-            g.fillRect(px - 1, basY - (4 - f) * 14, ePile + 2, 14)
-          }
-        } else {
-          // socle évasé : un pied plus large, c'est ce qui donne l'assise à l'œil
+        {
+          // SOCLE ÉVASÉ, TOUJOURS : un pied plus large, c'est ce qui donne l'assise à l'œil. Il n'y a
+          // plus de cas « pile coupée en l'air » à estomper — elles vont toutes au sol.
           g.fillStyle(pierreOmbre).fillRect(px - 4, basY - 10, ePile + 8, 10)
         }
       }
@@ -1984,7 +1981,9 @@ export class LevelScene extends Phaser.Scene {
     if ((globalThis as { __pandaGodMode?: boolean }).__pandaGodMode) return
     if (this.time.now < this.invulnUntil || this.player.hp <= 0) return
     this.invulnUntil = this.time.now + 800
-    const dmg = physicalDamage(rawAtk, this.player.stats.def)
+    // remise de 10 % sur les dégâts de mob (cf. core/combat.degatsSubis) : la voie du joueur, et
+    // elle seule — la noyade, la lave et les flammes gardent leur barème.
+    const dmg = degatsSubis(rawAtk, this.player.stats.def)
     const maxHp = this.player.stats.maxHp
     const hpBefore = this.player.hp
     this.showDamageNumber(this.player.x, this.player.y - 44, dmg, true) // chiffre ROUGE au-dessus de la tête

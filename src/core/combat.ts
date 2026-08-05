@@ -21,6 +21,25 @@ export function physicalDamage(atk: number, def: number, multiplier = 1): number
   return Math.max(1, Math.round((atk * multiplier - def) * RYTHME_COMBAT))
 }
 
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// LES MOBS TAPENT 10 % MOINS FORT
+//
+// Demande du joueur, dans le même souffle que les dix potions de départ : « baisse de 10 % les dégâts
+// faits par les mobs ». Les deux visent la même chose — la prise en main.
+//
+// ⚠️ ON RÉDUIT LE DÉGÂT, PAS L'ATTAQUE. Passer le coefficient à `physicalDamage` l'appliquerait AVANT
+// la soustraction de la défense : sur un joueur bien équipé, 10 % d'attaque en moins peut valoir 40 %
+// de dégât en moins (la défense mange une part fixe), et sur un joueur nu presque rien. En le posant
+// sur le RÉSULTAT, la baisse vaut exactement 10 % pour tout le monde, ce qui est ce qui a été demandé.
+//
+// Le plancher de 1 est conservé : un coup qui ne fait rien du tout ne se comprend pas.
+export const DEGATS_MOBS_MULT = 0.9
+
+/** Dégât subi par le JOUEUR d'un coup de monstre ou de boss (la seule voie qui porte la remise). */
+export function degatsSubis(atk: number, def: number): number {
+  return Math.max(1, Math.round(physicalDamage(atk, def) * DEGATS_MOBS_MULT))
+}
+
 // Une cible est à portée de mêlée si elle est devant (ou pile sur le perso) et pas trop
 // décalée verticalement. La tolérance verticale (90) absorbe l'écart de hauteur entre le
 // centre du panda (grand sprite) et celui des monstres (petits). dxFacing = (cible.x - perso.x) * facing.

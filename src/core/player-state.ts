@@ -43,6 +43,20 @@ export function recordKill(p: PlayerState, monsterId: string): void {
   p.killsByMonster[monsterId] = (p.killsByMonster[monsterId] ?? 0) + 1
 }
 
+/**
+ * Potions en poche au tout début d'une partie.
+ *
+ * ⚠️ DIX, PAS UNE. Retour du joueur : « fais commencer le jeu avec 10 potions, apparemment c'est un peu
+ * galère au début à prendre en main ». Une seule potion, c'est un seul droit à l'erreur avant de
+ * recommencer le terrain — et les premières minutes sont justement celles où l'on ne connaît ni la
+ * portée des attaques ni le rebond du trampoline. Le stock ne coûte rien à l'équilibrage (les potions
+ * s'achètent en ville pour trois fois rien) : ce qui manquait, c'était l'AMORCE.
+ *
+ * Exportée pour que les tests la LISENT au lieu de la recopier : deux copies d'un même chiffre
+ * finissent toujours par diverger.
+ */
+export const POTIONS_DEPART = 10
+
 export function newPlayer(name: string): PlayerState {
   return {
     name,
@@ -57,7 +71,7 @@ export function newPlayer(name: string): PlayerState {
     skillLevels: {},
     equippedSkills: [null, null, null, null],
     gold: 0,
-    potions: 1,
+    potions: POTIONS_DEPART,
     inventory: [],
     equipment: {},
     upgrades: {},
