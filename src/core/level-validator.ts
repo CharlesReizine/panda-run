@@ -1171,8 +1171,34 @@ export function chainesContournables(level: LevelDef): ChaineContournable[] {
   const out: ChaineContournable[] = []
   const plats = [...level.platforms].sort((a, b) => a.x - b.x)
   let chaine: typeof plats = []
+  // ⚠️ UNE CHAÎNE QUI DÉBOUCHE SUR UNE FALAISE N'EST PAS UN DÉTOUR : C'EST LE SEUL CHEMIN.
+  //
+  // Ce validateur traque la « grimpette gratuite » — trois plateformes alignées au-dessus d'un sol qu'on
+  // pouvait tout simplement longer. Mais la même silhouette sert aussi d'ESCALIER contre une face de
+  // mesa : on la monte parce qu'en bas, ça ne passe pas. Sans cette nuance, on condamne le remède en
+  // même temps que le mal — et c'est arrivé, sur foret-1 et foret-2, dès la première pose d'escaliers.
+  //
+  // Le discriminant est le sommet de la chaîne : s'il touche, à portée de saut, une surface PLEINE
+  // perchée hors d'atteinte depuis le sol, alors la chaîne dessert quelque chose et on la laisse vivre.
+  const maxMontee = Math.floor(maxJumpTiles())
+  const adosseeAUneFalaise = (bloc: typeof plats): boolean => {
+    const sommet = bloc.reduce((m, p) => (p.y < m.y ? p : m))
+    const gauche = Math.min(...bloc.map((p) => p.x)) - JUMP_COLS
+    const droite = Math.max(...bloc.map((p) => p.x + p.w)) + JUMP_COLS
+    for (let x = Math.max(0, gauche); x <= Math.min(level.widthTiles - 1, droite); x++) {
+      const surf = silhouetteAt(level, x, groundRow)
+      if (surf === null || surf >= groundRow) continue
+      if (groundRow - surf <= maxMontee) continue // atteignable depuis le sol : pas une falaise
+      if (Math.abs(surf - sommet.y) > maxMontee) continue // hors de portée du sommet : la chaîne n'y mène pas
+      const plein = rocs.some((r) => x >= r.x && x < r.x + r.w && surf + 1 >= r.y && surf + 1 < r.y + r.h)
+        || level.platforms.some((p) => x >= p.x && x < p.x + p.w && p.y === surf + 1)
+      if (plein) return true
+    }
+    return false
+  }
+
   const clore = () => {
-    if (chaine.length >= CHAINE_MIN) {
+    if (chaine.length >= CHAINE_MIN && !adosseeAUneFalaise(chaine)) {
       const a = chaine[0]!, z = chaine[chaine.length - 1]!
       out.push({ x: a.x, w: z.x + z.w - a.x, plats: chaine.length, row: a.y })
     }

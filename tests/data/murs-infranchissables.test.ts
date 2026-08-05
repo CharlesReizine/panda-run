@@ -35,15 +35,20 @@ import { marchesInfranchissables } from '../../src/core/level-validator'
 
 const nonBoss = Object.values(LEVELS).filter((l) => !l.boss)
 
-// Comptes relevés le 5 août, terrain par terrain. Un terrain qui EMPIRE fait tomber le test avec son nom.
+// Comptes relevés le 5 août, terrain par terrain, APRÈS le comblement des puits et la pose des escaliers
+// de falaise. Un terrain qui EMPIRE fait tomber le test avec son nom.
 const SEUILS: Record<string, number> = {
-  'plaine-1': 1, 'plaine-2': 1, 'plaine-3': 2, 'plaine-4': 3, 'plaine-5': 4, 'plaine-6': 1, 'plaine-7': 3,
+  'plaine-1': 1, 'plaine-2': 1, 'plaine-3': 2, 'plaine-4': 3, 'plaine-5': 2, 'plaine-6': 0, 'plaine-7': 1,
 }
 
 describe('murs infranchissables', () => {
   it('le total ne remonte pas', () => {
     const total = nonBoss.reduce((n, l) => n + marchesInfranchissables(l).length, 0)
-    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(160)
+    // ⚠️ CE PLAFOND EST UN CLIQUET : il descend, il ne remonte jamais. 160 au relevé initial, 94 après le
+    // comblement des puits entre marches de pierre, 66 après la pose d'escaliers contre les falaises.
+    // Le baisser à chaque gain est ce qui empêche une passe suivante de reperdre le terrain gagné sans
+    // que personne ne le voie — c'est exactement comme ça que les 160 étaient arrivés.
+    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(66)
   })
 
   it('aucun terrain de plaine n\'empire', () => {

@@ -15,7 +15,7 @@
 // - silhouette COLLINES : on monte puis on redescend ; ≤ 3 paliers empilés partout ; hauteur du
 //   monde = enveloppe des modules (souvent ~22-34 tuiles, pas de tour géante).
 
-import { chainesContournables, deadEndSurfaces, sealedVoids, unreachablePlatforms } from '../core/level-validator'
+import { chainesContournables, deadEndSurfaces, marchesInfranchissables, overStackedColumns, sealedVoids, unreachablePlatforms } from '../core/level-validator'
 import type { LevelDef } from './levels'
 import { MIN_LADDER_TILES, MAX_LADDER_TILES, maxJumpTiles, maxJumpGapPx, TILE } from '../core/platforming'
 import { comblements } from '../core/roche'
@@ -3890,6 +3890,84 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
       const bord = bordG.y >= bordD.y ? bordG : bordD
       if (bord === bordG) bord.w = fin - bord.x
       else { bord.w += bord.x - (fin - largeur); bord.x = fin - largeur }
+    }
+  }
+
+  // ─── UNE FALAISE SE FRANCHIT EN DEUX FOIS : ON LUI POSE UNE MARCHE ───────────────────────────
+  //
+  // « Colline : le terrain est infaisable dès le début, y a un giga mur trop haut pour être sauté. »
+  // Les validateurs de graphe ne pouvaient pas le voir : ils demandent « cette plateforme est-elle
+  // atteignable ? », jamais « puis-je avancer d'un pas ? ». Un terrain peut être intégralement
+  // atteignable et rester injouable — il suffit d'une face de mesa de huit rangées en travers du
+  // chemin. `marchesInfranchissables` la voit ; cette passe-ci la répare.
+  //
+  // Le remède est une MARCHE DE PIERRE flottante à mi-hauteur, deux tuiles de large, posée EN ARRIÈRE
+  // de la face : on saute dessus depuis le sol bas, puis de là sur le sommet. Deux sauts au lieu d'un
+  // impossible. On ne touche pas à la falaise elle-même — la retailler déferait les mesas, et le motif
+  // qui les pose a ses raisons.
+  //
+  // ⚠️ ON REPOSE TOUT SI LA MOINDRE AUTRE PROMESSE RECULE. Une marche mal placée fabrique une plateforme
+  // injoignable ou un cul-de-sac, et le remède serait pire que le mal : on mesure avant, on mesure
+  // après, et au premier recul le terrain repart tel qu'il était. C'est le protocole déjà éprouvé au
+  // creusement sous les chaînes contournables.
+  {
+    const sauteRangees = Math.floor(maxJumpTiles())
+    const probe = () => ({ ...geo(), breakables })
+    // ⚠️ LA BATTERIE DE REPLI COMPTE QUATRE PROMESSES, PAS DEUX. Les deux premières versions n'en
+    // mesuraient que deux, et l'escalier cassait les autres sans qu'on le voie : ses marches empilaient
+    // un QUATRIÈME palier sur des colonnes déjà chargées, et trois marches alignées au-dessus d'un sol
+    // praticable se lisent comme une CHAÎNE CONTOURNABLE — la grimpette gratuite qu'on a passé la soirée
+    // à supprimer. Un remède qui rouvre le défaut d'à côté n'est pas un remède.
+    const mesure = () => ({
+      pieges: deadEndSurfaces(probe()).length, orphelines: unreachablePlatforms(probe()).length,
+      empiles: overStackedColumns(probe()).length, chaines: chainesContournables(probe()).length,
+    })
+    const avant = mesure()
+    const posees: typeof platforms = []
+    /** paliers déjà empilés sur cette colonne, sol du monde compris (cf. overStackedColumns) */
+    const paliers = (x: number) => (gaps.some((g) => x >= g.x && x < g.x + g.w) ? 0 : 1)
+      + platforms.filter((p) => x >= p.x && x < p.x + p.w).length
+      + bridges.filter((b) => x >= b.x && x < b.x + b.w).length
+    const occupe = (x: number, y: number) =>
+      rockBands.some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h)
+      || breakables.some((b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h)
+      || platforms.some((p) => x >= p.x && x < p.x + p.w && p.y === y)
+      || hazards.some((h) => x >= h.x && x < h.x + h.w && y >= (h.top ?? 0) && y < (h.top ?? 0) + (h.h ?? 1))
+      || (ladders ?? []).some((l) => l.x === x && y >= l.y && y < l.y + l.h)
+
+    for (const mur of marchesInfranchissables(probe())) {
+      // Un saut ne monte que de DEUX rangées : une falaise de huit s'escalade en quatre fois, pas en
+      // deux. On pose donc un ESCALIER de marches de pierre, chacune à portée de la précédente, la plus
+      // haute collée à la face. Quatre-vingt-six des quatre-vingt-quatorze murs mesurés dépassaient la
+      // portée d'une marche unique : c'est l'escalier ou rien.
+      const marches = Math.ceil(mur.hauteur / sauteRangees) - 1
+      if (marches < 1) continue
+      const largeur = 2 * marches // les colonnes qu'il faut, EN ARRIÈRE de la face
+      const xBase = mur.x - largeur
+      if (xBase < 1 || mur.x > totalWidth) continue
+      const candidates: typeof platforms = []
+      let libre = true
+      for (let k = 1; k <= marches && libre; k++) {
+        const y = mur.de - sauteRangees * k
+        if (y <= mur.a) break // on a déjà rejoint le sommet : les marches restantes seraient en l'air
+        const x = mur.x - 2 * (marches - k + 1)
+        // la marche ET la rangée au-dessus doivent être libres, sinon on se cogne la tête en montant
+        for (let dx = 0; dx < 2; dx++) if (occupe(x + dx, y) || occupe(x + dx, y - 1)) libre = false
+        // et jamais un QUATRIÈME palier sur une colonne : la règle des trois étages vaut aussi pour nous
+        for (let dx = 0; dx < 2; dx++) if (paliers(x + dx) >= 3) libre = false
+        if (libre) candidates.push({ x, y, w: 2, solid: true })
+      }
+      if (!libre || !candidates.length) continue
+      for (const m of candidates) { platforms.push(m); posees.push(m) }
+    }
+
+    if (posees.length) {
+      const apres = mesure()
+      if (apres.pieges > avant.pieges || apres.orphelines > avant.orphelines
+        || apres.empiles > avant.empiles || apres.chaines > avant.chaines) {
+        { const T=(globalThis as any).__T ??= {}; T.rollback=(T.rollback??0)+1; T.rbN=(T.rbN??0)+posees.length }
+        for (const m of posees) platforms.splice(platforms.indexOf(m), 1)
+      }
     }
   }
 
