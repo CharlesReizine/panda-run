@@ -17,6 +17,28 @@ import { MARCHES_RAMPE } from '../../src/data/level-modules'
 const nonBoss = Object.values(LEVELS).filter((l) => !l.boss)
 
 describe('relief jouable', () => {
+  // ── « on passe à travers le sol quand on est sur de la terre sous une échelle » ───────────────
+  // La corniche était PERCÉE à la colonne de l'échelle « pour que le passage se voie » — un vrai trou
+  // dans la collision : marcher dessus, c'était tomber, même sans être agrippé, même quand l'échelle
+  // monte. Le perçage est retiré (cf. core/vide) : agrippé, on traverse déjà les corniches de terre.
+  //
+  // Il reste une contrainte, et c'est celle que ce test garde : une corniche traversée par une échelle
+  // ne doit JAMAIS porter la collision pleine. `landsFromAbove` ne s'applique qu'au groupe one-way ;
+  // une corniche `ancree` ou `solid` bloquerait le grimpeur en chemin, et l'échelle ne mènerait nulle
+  // part. 487 corniches sont traversées dans le jeu — il n'en faut aucune.
+  it('aucune corniche traversée par une échelle ne bloque le grimpeur', () => {
+    const bloquantes: string[] = []
+    for (const l of nonBoss) {
+      for (const p of l.platforms) {
+        if (!p.solid && !p.ancree) continue
+        const traversee = (l.ladders ?? []).some((la) => la.x >= p.x && la.x < p.x + p.w
+          && p.y > la.y && p.y < la.y + la.h)
+        if (traversee) bloquantes.push(`${l.id} x${p.x}+${p.w} y${p.y}${p.solid ? ' (pierre)' : ' (terre ancrée)'}`)
+      }
+    }
+    expect(bloquantes, `corniches bloquantes :\n   ${bloquantes.slice(0, 8).join('\n   ')}`).toEqual([])
+  })
+
   // ── « encore de la pierre qui vole au-dessus du sol » ────────────────────────────────────────
   // Trois colonnes de roche nues montant du sol au ciel, sans un brin d'herbe dessus. Son intuition
   // était juste : « je pense que c'est dû au fait que la couche du bas tu la comptes pas pareil ». Un

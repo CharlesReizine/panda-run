@@ -3827,7 +3827,12 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
       const autrePlat = platforms.some((q) => q !== p && q.y === sousElle && x >= q.x && x < q.x + q.w)
       if (!surRoche && !surSol && !autrePlat) poseeSurDuPlein = false
     }
-    if (poseeSurDuPlein) p.ancree = true
+    // ⚠️ JAMAIS SOUS UNE ÉCHELLE QUI LA TRAVERSE. La collision pleine ne connaît pas `landsFromAbove` :
+    // elle bloquerait le grimpeur au passage, et l'échelle ne desservirait plus rien. Une corniche
+    // traversée reste donc one-way — on se pose dessus en retombant, on la franchit en grimpant.
+    const traverseeParEchelle = ladders.some((l) => l.x >= p.x && l.x < p.x + p.w
+      && p.y > l.y && p.y < l.y + l.h)
+    if (poseeSurDuPlein && !traverseeParEchelle) p.ancree = true
   }
 
   // ─── FOND DE CUVE REMONTÉ : CE QUI SE POSE « AU SOL » SE POSE SUR LE FOND ────────────────────

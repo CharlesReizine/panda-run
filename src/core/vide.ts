@@ -17,54 +17,24 @@
 // génération. Tant que le socle de pierre est là, il est solide, et le montrer autrement est un piège.
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// TROU DE PASSAGE AU CROISEMENT D'UNE ÉCHELLE
+// LE TROU DE PASSAGE AU CROISEMENT D'UNE ÉCHELLE A ÉTÉ RETIRÉ — QUATRIÈME TENTATIVE, MÊME LEÇON
 //
-// « Une échelle que je peux pas descendre » puis « faut élargir un peu pour laisser un trou à côté de
-// l'échelle pour remonter ». Une échelle traverse souvent une corniche de terre : en descendant, le panda
-// se posait dessus et le voyage s'arrêtait là.
+// Il perçait la corniche à la colonne de l'échelle, « pour que le passage se VOIE » : sans quoi, disait
+// le raisonnement, rien n'indique au joueur qu'on peut franchir la marche, et l'échelle a l'air de
+// buter dans le sol.
 //
-// Deux réponses, complémentaires, et il faut les deux :
-//   · agrippé à une échelle, les corniches de terre ne bloquent plus (LevelScene.landsFromAbove) ;
-//   · et la corniche est PERCÉE au croisement, pour que le passage se VOIE — sans quoi le joueur n'a
-//     aucune raison de croire qu'on peut traverser, et l'échelle a toujours l'air de buter dans le sol.
+// ⚠️ MAIS UN TROU DANS LE DÉCOR EST UN TROU DANS LA COLLISION. Retour du joueur : « on passe à travers
+// le sol quand on est sur de la terre sous une échelle (même quand l'échelle monte), sans être agrippé
+// ou quoi, juste en marchant ou en sautant là ». Marcher sur cette corniche, c'était tomber.
 //
-// ⚠️ ON NE PERCE QUE SI LA CORNICHE RESTE PRATICABLE DES DEUX CÔTÉS. Percer une corniche de trois tuiles
-// la couperait en deux moignons, et percer à son extrémité la raccourcirait sans rien ouvrir. D'où les
-// gardes sur la largeur restante : le trou ne doit jamais transformer un chemin en piège.
-
-/** Segment de plateforme après perçage. Tuiles. */
-export interface Segment { x: number; w: number }
-
-/** Largeur du trou percé au croisement : l'échelle plus une colonne, « un peu élargi » comme demandé. */
-export const TROU_ECHELLE_W = 2
-
-/** Tuiles minimales à conserver de chaque côté du trou pour que la corniche reste un chemin. */
-export const RESTE_MIN = 2
-
-/**
- * Perce une plateforme aux colonnes des échelles qui la traversent.
- *
- * Renvoie les segments à conserver (la plateforme d'origine si aucun perçage n'est possible).
- */
-export function percerPourEchelles(
-  plat: { x: number; w: number },
-  echellesX: number[],
-): Segment[] {
-  let segments: Segment[] = [{ x: plat.x, w: plat.w }]
-  for (const lx of echellesX) {
-    const trouDebut = lx
-    const trouFin = lx + TROU_ECHELLE_W
-    const suivants: Segment[] = []
-    for (const s of segments) {
-      const fin = s.x + s.w
-      if (trouFin <= s.x || trouDebut >= fin) { suivants.push(s); continue } // le trou est ailleurs
-      const gauche = trouDebut - s.x
-      const droite = fin - trouFin
-      // le trou toucherait un bord, ou laisserait un moignon : on ne perce pas ce segment
-      if (gauche < RESTE_MIN || droite < RESTE_MIN) { suivants.push(s); continue }
-      suivants.push({ x: s.x, w: gauche }, { x: trouFin, w: droite })
-    }
-    segments = suivants
-  }
-  return segments
-}
+// Et le perçage ne servait à rien : traverser était DÉJÀ permis, et mieux — agrippé à une échelle, les
+// corniches de terre ne bloquent plus (`LevelScene.landsFromAbove`). Le montant dessiné par-dessus la
+// corniche dit où l'on passe ; il n'y avait pas besoin d'ouvrir le sol pour le dire.
+//
+// C'est la QUATRIÈME fois que ce fichier apprend la même chose : on ne fabrique pas du vide en le
+// dessinant. Le vide se creuse dans la génération, là où les validateurs et la physique le voient
+// ensemble — jamais à la pose, dans le dos du modèle.
+//
+// Conséquence à garder en tête : une corniche traversée par une échelle ne doit JAMAIS porter la
+// collision pleine (`ancree`, cf. data/levels), car celle-ci ignore `landsFromAbove` et bloquerait le
+// grimpeur. C'est garanti à l'assemblage.

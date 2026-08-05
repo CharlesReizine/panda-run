@@ -153,6 +153,16 @@ propre altitude (`grotte-scellee`, `echelle-descente-piegee`) — leur rampe d'a
 quarante rangées en huit tuiles. Dimensionner la rampe sur son dénivelé ne suffit pas : c'est le
 plafond d'altitude du motif qu'il faut retirer. Dette nommée dans `relief-jouable`.
 
+**On ne fabrique pas du vide en le dessinant — QUATRIÈME fois dans `core/vide.ts`.** Le perçage de la
+corniche au croisement d'une échelle existait « pour que le passage se voie ». Mais un trou dans le
+décor est un trou dans la COLLISION : marcher dessus, c'était tomber, même sans être agrippé, même quand
+l'échelle monte. Et il ne servait à rien — agrippé, les corniches de terre ne bloquent déjà plus
+(`landsFromAbove`). Retiré, fonction supprimée, leçon gardée dans le fichier.
+
+**Corollaire : une corniche traversée par une échelle ne doit JAMAIS être `ancree` ni `solid`.**
+`landsFromAbove` ne s'applique qu'au groupe one-way ; la collision pleine bloquerait le grimpeur en
+chemin. 487 corniches sont traversées dans le jeu, et `relief-jouable` exige qu'aucune ne bloque.
+
 **`solid` VEUT DIRE « PIERRE », PAS « INFRANCHISSABLE » — et les confondre repeint la moitié du jeu.**
 Il change la TEXTURE (maçonnerie) autant que la collision. Pour rendre une terre infranchissable sans
 la transformer en roche, il a fallu une troisième matière : `ancree`. Une plateforme de terre est

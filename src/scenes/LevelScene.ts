@@ -26,7 +26,6 @@ import { hpRegenPerSec } from '../core/stats'
 import { rollDrops, rollChestRareItem } from '../core/loot'
 import { recordKill } from '../core/player-state'
 import { rangeeImpact, atteignableDuCiel, HORS_MONDE, type GeoChute } from '../core/chute'
-import { percerPourEchelles } from '../core/vide'
 import { zoneMorte, lerpVertical, LERP_X, LERP_Y_CALME } from '../core/camera-suivi'
 import type { DropEntry, SkillDef } from '../core/types'
 import type { UIScene } from './UIScene'
@@ -459,16 +458,6 @@ export class LevelScene extends Phaser.Scene {
       this.add.rectangle(m.x * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(1, 0).setDepth(-3)
       this.add.rectangle(m.end * TILE, topY, 4, wallH, 0x0c0c12, 0.85).setOrigin(0, 0).setDepth(-3)
     }
-    // Colonnes d'échelle qui TRAVERSENT une corniche : l'échelle court de sa rangée haute (y) vers le bas
-    // sur `h` rangées, donc elle croise la corniche si celle-ci tombe dans cet intervalle.
-    const echellesQuiTraversent = (p: { x: number; y: number; w: number }): number[] =>
-      (this.levelDef.ladders ?? [])
-        // ⚠️ BORNE HAUTE STRICTE : on ne perce PAS la plateforme sur laquelle l'échelle REPOSE. Elle se
-        // trouve à la rangée `l.y + l.h`, tout en bas du montant ; l'inclure creusait un trou juste sous
-        // les pieds de l'échelle — « un trou de terrain sous la première échelle », relevé sur Vallon.
-        // Seules les corniches TRAVERSÉES en chemin doivent s'ouvrir, jamais celle qui la porte.
-        .filter((l) => l.x >= p.x && l.x < p.x + p.w && p.y > l.y && p.y < l.y + l.h)
-        .map((l) => l.x)
 
     // plateformes surélevées : on les traverse en montant et on se pose dessus en retombant (voir
     // landsFromAbove). Rendu en UN TileSprite par plateforme ; collision en UN corps statique par
@@ -501,14 +490,21 @@ export class LevelScene extends Phaser.Scene {
         // VOIR, sinon rien ne dit au joueur qu'on peut franchir la marche, et l'échelle a l'air de buter
         // dans le sol. On perce donc pour de bon — visuel ET collision, d'un seul geste (cf. core/vide.ts,
         // qui refuse de percer quand il resterait un moignon impraticable d'un côté ou de l'autre).
-        const traversee = echellesQuiTraversent(p)
-        for (const seg of percerPourEchelles(p, traversee)) {
-          this.add.tileSprite(seg.x * TILE, p.y * TILE, seg.w * TILE, TILE, platformKey).setOrigin(0, 0).setDepth(-4)
-          // le groupe change la PERMÉABILITÉ, pas l'épaisseur : une terre ancrée entre dans `platforms`
-          // (collision pleine), une terre qui flotte reste one-way. Le trou d'échelle, lui, reste percé
-          // dans les deux cas — c'est le passage vertical, et il doit se voir.
-          this.addStaticBand(groupe, seg.x * TILE, p.y * TILE, seg.w * TILE, TILE, groupe === oneWay)
-        }
+        // ⚠️ ON NE PERCE PLUS LA CORNICHE AU CROISEMENT D'UNE ÉCHELLE — LE TROU FAISAIT TOMBER LE JOUEUR.
+        // Retour du joueur : « on passe à travers le sol quand on est sur de la terre sous une échelle
+        // (même quand l'échelle monte), sans être agrippé ou quoi, juste en marchant ou en sautant là ».
+        // Le perçage ouvrait un vrai trou dans la COLLISION : marcher dessus, c'était tomber. Il avait
+        // été introduit pour que le passage se VOIE — mais traverser était déjà permis autrement, et
+        // bien mieux : agrippé à une échelle, les corniches de terre ne bloquent plus
+        // (`landsFromAbove`). Le montant dessiné par-dessus la corniche dit déjà où l'on passe.
+        //
+        // ⚠️ CONSÉQUENCE : UNE CORNICHE TRAVERSÉE PAR UNE ÉCHELLE NE DOIT JAMAIS ÊTRE `ancree`. La
+        // collision pleine ne connaît pas `landsFromAbove` : elle bloquerait aussi le grimpeur, et
+        // l'échelle ne mènerait plus nulle part. C'est garanti à l'assemblage (cf. level-modules).
+        this.add.tileSprite(p.x * TILE, p.y * TILE, p.w * TILE, TILE, platformKey).setOrigin(0, 0).setDepth(-4)
+        // le groupe change la PERMÉABILITÉ, pas l'épaisseur : une terre ANCRÉE entre dans `platforms`
+        // (collision pleine, on ne la traverse par aucune face), une terre qui FLOTTE reste one-way.
+        this.addStaticBand(groupe, p.x * TILE, p.y * TILE, p.w * TILE, TILE, groupe === oneWay)
       }
     }
     // ponts de planches : plateformes fines, elles aussi traversables par le bas. Rendu en UN
