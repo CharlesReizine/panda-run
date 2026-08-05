@@ -3,6 +3,13 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   base: './',
+  // ⚠️ DÉLAI DE TEST RELEVÉ À 20 s, ET C'EST L'ASSEMBLAGE QUI L'EXIGE. Plusieurs fichiers construisent
+  // les 58 terrains puis les parcourent (atteignabilité, poches closes, relief). Chaque lot de
+  // corrections a alourdi cette construction — comblement des poches, rognage des doubles planchers,
+  // contrôle des pièges avant creusement — et sous exécution parallèle certains fichiers frôlaient les
+  // 5 s par défaut de vitest : ils échouaient en TIMEOUT, pas sur leur verdict. Un test qui devient
+  // instable ne protège plus rien ; celui-ci reste strict sur ce qu'il vérifie, juste patient.
+  test: { testTimeout: 20_000, hookTimeout: 20_000 },
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',

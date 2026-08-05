@@ -11,7 +11,7 @@ qui reste à faire. Il se met à jour à chaque lot livré.
 ## Vérifier et déployer
 
 ```bash
-pnpm verif       # tsc + 1755 tests + build + les six sondes navigateur
+pnpm verif       # tsc + 1761 tests + build + les six sondes navigateur
 npx firebase-tools deploy --only hosting
 ```
 
@@ -50,7 +50,7 @@ rares). Les traiter fait partie du cycle, pas après.
 
 ### ⚠️ Toucher à la génération, c'est un cycle complet
 
-modifier → **regraver (6 à 7 minutes)** → resynchroniser les monstres → 1755 tests → six sondes → déployer.
+modifier → **regraver (6 à 7 minutes)** → resynchroniser les monstres → 1761 tests → six sondes → déployer.
 
 Trois tentatives ont échoué le 3 août faute d'avoir tenu ce cycle jusqu'au bout. Deux règles en découlent :
 
@@ -152,6 +152,12 @@ les marches de rampe plus hautes qu'un saut passent de 1 à 13, sur deux motifs 
 propre altitude (`grotte-scellee`, `echelle-descente-piegee`) — leur rampe d'accroche doit alors lâcher
 quarante rangées en huit tuiles. Dimensionner la rampe sur son dénivelé ne suffit pas : c'est le
 plafond d'altitude du motif qu'il faut retirer. Dette nommée dans `relief-jouable`.
+
+**L'assemblage s'est alourdi lot après lot, et des tests tombaient en TIMEOUT — pas sur leur verdict.**
+Comblement des poches, rognage des doubles planchers, contrôle des pièges avant creusement : chaque
+construction de terrain paie ce coût, et plusieurs fichiers construisent les 58 terrains puis les
+parcourent. Sous exécution parallèle, certains frôlaient les 5 s par défaut de vitest. Le délai est passé
+à 20 s dans `vite.config.ts` : un test instable ne protège plus rien.
 
 **Une remise sur les dégâts se pose sur le DÉGÂT, pas sur l'attaque.** Appliquée à l'attaque, elle
 passerait avant la soustraction de la défense : sur un joueur bien protégé, 10 % d'attaque en moins vaut

@@ -30,6 +30,7 @@ import { zoneMorte, lerpVertical, LERP_X, LERP_Y_CALME } from '../core/camera-su
 import type { DropEntry, SkillDef } from '../core/types'
 import type { UIScene } from './UIScene'
 import { TILE, DEFAULT_HEIGHT_TILES, groundRowFor, GRAVITY, landsOnOneWayPlatform, releveApresEchelle } from '../core/platforming'
+import { segmentsEchelle } from '../core/vide'
 import { breathMaxMs, BREATH_BASE_MS } from '../core/breath'
 import { BIOMES } from '../data/biomes'
 import { bgKeyFor, bgPathFor } from '../data/level-backgrounds'
@@ -1192,7 +1193,20 @@ export class LevelScene extends Phaser.Scene {
       // échelle large ; le tuilage VERTICAL des barreaux (Y) reste au pas naturel. On SAUTE le dessin
       // des échelles qui bordent une cascade (masquées : on grimpe la cascade elle-même).
       if (!bordersCascade(l.x)) {
-        this.add.tileSprite(l.x * TILE - TILE / 4, l.y * TILE, TILE * 1.5, l.h * TILE, 'ladder').setOrigin(0, 0).setDepth(-1).setTileScale(1.5, 1)
+        // ⚠️ LE MONTANT S'INTERROMPT À CHAQUE RANGÉE DE TERRE. Demande du joueur : « l'échelle arrive
+        // collée à une plateforme où y a de la terre, mais passe pas à travers ». Dessiné d'un seul
+        // trait à la profondeur −1, il passait DEVANT les plateformes (−4) et l'ouvrage avait l'air de
+        // traverser la matière. Il la traverse en JEU — agrippé, les corniches ne bloquent plus, et
+        // c'est voulu ; ce qui n'allait pas, c'était de le montrer. On coupe donc le DESSIN, jamais
+        // l'échelle : la zone d'accroche et la hauteur ne bougent pas (cf. core/vide.segmentsEchelle).
+        const rangeesPleines = [
+          ...this.levelDef.platforms.filter((p) => l.x >= p.x && l.x < p.x + p.w).map((p) => p.y),
+          ...(this.levelDef.bridges ?? []).filter((b) => l.x >= b.x && l.x < b.x + b.w).map((b) => b.y),
+        ]
+        for (const seg of segmentsEchelle(l.y, l.h, rangeesPleines)) {
+          this.add.tileSprite(l.x * TILE - TILE / 4, seg.y * TILE, TILE * 1.5, seg.h * TILE, 'ladder')
+            .setOrigin(0, 0).setDepth(-1).setTileScale(1.5, 1)
+        }
       }
       // on descend d'une tuile sous le bas de l'échelle pour pouvoir l'attraper depuis le sol
       // zone d'accroche ÉLARGIE de +50 % : demi-largeur 1,5 tuile (avant : 1 tuile), soit 3 tuiles
