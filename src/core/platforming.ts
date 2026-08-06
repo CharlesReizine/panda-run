@@ -79,6 +79,26 @@ export function landsOnOneWayPlatform(prevBottom: number, velocityY: number, pla
   return velocityY >= 0 && prevBottom <= platformBottom + margin
 }
 
+/**
+ * Une corniche traversable doit-elle être IGNORÉE à cause d'une échelle ?
+ *
+ * ⚠️ C'EST « EN TRAIN DE GRIMPER » QUI COMPTE, PAS « À CÔTÉ D'UNE ÉCHELLE ». La première version
+ * regardait le simple CHEVAUCHEMENT (`onLadder`, vrai dès que le centre du panda entre dans le
+ * rectangle de l'échelle) — donc debout sur une corniche, sous une échelle, sans rien toucher, la
+ * collision one-way disparaissait et le panda TOMBAIT AU TRAVERS. Signalé trois fois par le joueur :
+ * « on passe à travers le sol quand on est sur de la terre sous une échelle, sans être agrippé ou
+ * quoi, juste en marchant », puis « je tombe à travers quand je suis sur un sol avec une échelle
+ * au-dessus, c'est hyper contre-intuitif ».
+ *
+ * Le perçage des corniches sous les échelles avait été supprimé POUR CE SYMPTÔME — à tort : le trou
+ * n'était pas la cause, cette porte l'était. La raison d'être de la traversée reste entière (« une
+ * échelle que je peux pas descendre ») : elle ne vaut que pendant la grimpe, et grimper suppose
+ * d'avoir poussé haut ou bas. Debout, on se tient sur ce qu'on voit.
+ */
+export function traverseCornichesEnGrimpant(climbing: boolean): boolean {
+  return climbing
+}
+
 export interface Plat { x: number; y: number; w: number }
 
 // Peut-on, en sautant depuis une surface à la rangée surfaceRow, atteindre la plateforme b

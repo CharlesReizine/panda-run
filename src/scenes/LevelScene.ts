@@ -29,7 +29,7 @@ import { rangeeImpact, atteignableDuCiel, HORS_MONDE, type GeoChute } from '../c
 import { zoneMorte, lerpVertical, LERP_X, LERP_Y_CALME } from '../core/camera-suivi'
 import type { DropEntry, SkillDef } from '../core/types'
 import type { UIScene } from './UIScene'
-import { TILE, DEFAULT_HEIGHT_TILES, groundRowFor, GRAVITY, landsOnOneWayPlatform, releveApresEchelle } from '../core/platforming'
+import { TILE, DEFAULT_HEIGHT_TILES, groundRowFor, GRAVITY, landsOnOneWayPlatform, releveApresEchelle, traverseCornichesEnGrimpant } from '../core/platforming'
 import { segmentsEchelle } from '../core/vide'
 import { breathMaxMs, BREATH_BASE_MS } from '../core/breath'
 import { BIOMES } from '../data/biomes'
@@ -1717,13 +1717,17 @@ export class LevelScene extends Phaser.Scene {
   // (Ancien seuil = plat.bottom, dessous de la dalle : il acceptait les contacts latéraux dans la
   // bande de 32 px sous le dessus et provoquait le wedge horizontal.)
   private readonly landsFromAbove: Phaser.Types.Physics.Arcade.ArcadePhysicsCallback = (playerObj, platObj) => {
-    // ⚠️ SUR UNE ÉCHELLE, LES MARCHES DE TERRE NE BLOQUENT PLUS. Retour du user, capture à l'appui :
-    // « une échelle que je peux pas descendre — je pense là on peut peut-être laisser passer à travers ».
-    // Une échelle traverse souvent une corniche : en descendant, le panda se posait DESSUS et le voyage
-    // s'arrêtait là, sans rien pour l'expliquer. Tant qu'il est agrippé, il passe donc au travers, dans
-    // les deux sens. C'est aussi la convention de tous les jeux à échelles, et ça ne coûte aucune
-    // sécurité : lâcher l'échelle rétablit la collision immédiatement, donc on retombe normalement.
-    if (this.player.onLadder) return false
+    // ⚠️ EN GRIMPANT, LES MARCHES DE TERRE NE BLOQUENT PLUS — MAIS SEULEMENT EN GRIMPANT.
+    // Retour du user, capture à l'appui : « une échelle que je peux pas descendre — je pense là on peut
+    // peut-être laisser passer à travers ». Une échelle traverse souvent une corniche : en descendant,
+    // le panda se posait DESSUS et le voyage s'arrêtait là, sans rien pour l'expliquer.
+    //
+    // La condition portait sur `onLadder` — vrai dès que le CENTRE du panda entre dans le rectangle de
+    // l'échelle, donc aussi quand il se tient simplement debout dessous. La collision disparaissait sans
+    // qu'il ait rien demandé, et il tombait au travers de son propre sol. `climbing`, lui, n'est vrai
+    // qu'après avoir poussé haut ou bas (cf. Player) : c'est la bonne frontière. La décision vit dans
+    // core/platforming, pure et testée.
+    if (traverseCornichesEnGrimpant(this.player.climbing)) return false
     const pb = (playerObj as Phaser.Physics.Arcade.Sprite).body as Phaser.Physics.Arcade.Body
     const plat = (platObj as Phaser.Physics.Arcade.Sprite).body as Phaser.Physics.Arcade.StaticBody
     const margin = Math.abs(pb.velocity.y) * (this.game.loop.delta / 1000) + 4

@@ -130,7 +130,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // cascade REMONTABLE : dans une colonne de cascade (courant ascendant), on nage sans noyade et un
   // léger courant nous pousse vers le haut → on la « remonte » comme une échelle d'eau.
   inCascade = false
-  private climbing = false
+  /**
+   * Agrippé et EN TRAIN DE GRIMPER (haut ou bas poussé sur une échelle) — à ne pas confondre avec
+   * `onLadder`, qui dit seulement qu'on chevauche le rectangle de l'échelle. La scène s'en sert pour
+   * décider si les corniches de terre laissent passer : les confondre faisait tomber le panda à travers
+   * son propre sol dès qu'il se tenait debout sous une échelle (cf. traverseCornichesEnGrimpant).
+   */
+  climbing = false
   // cycle d'escalade : phase (0/1) alternant deux poses de membres opposés, avancée par la
   // distance verticale réellement parcourue (climbAccum), pas par une horloge → fige à l'arrêt
   private climbPhase = 0
