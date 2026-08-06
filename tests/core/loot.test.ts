@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest'
 import {
   rollDrops, rollChestRareItem, chestRarePool, CHEST_RARE_CHANCE, CHEST_RARE_POOL, MARGE_NIVEAU_COFFRE,
   rollMobLegendary, mobLegendaryPool, MOB_LEGENDARY_CHANCE, MOB_LEGENDARY_SOUS, MOB_LEGENDARY_SUR,
+  butinDecevant, consolationDeCoffre, CONSOLATIONS,
 } from '../../src/core/loot'
 import { minLevelOf } from '../../src/core/item-level'
 import { ITEMS } from '../../src/data/items'
+import { PROPS } from '../../src/data/props'
 import type { DropEntry } from '../../src/core/types'
 
 const drops: DropEntry[] = [
@@ -144,6 +146,100 @@ describe('rollChestRareItem', () => {
       const tire = rollMobLegendary(n, () => 0)
       if (mobLegendaryPool(n).length === 0) expect(tire, `niveau ${n}`).toBeNull()
       else expect(mobLegendaryPool(n), `niveau ${n}`).toContain(tire)
+    }
+  })
+
+  // ── LE COFFRE DÉCEVANT ET SA PETITE HUMILIATION ────────────────────────────────────────────
+  //
+  // « On peut peut-être prévoir une petite anim pour les coffres quand on trouve rien dedans. Un truc
+  // qui fout un peu le seum ? » Ce n'est pas qu'une blague : un coffre qui ne donne presque rien
+  // produisait exactement la même chose qu'un coffre qui bugue — couvercle, onde dorée, puis rien de
+  // notable. Une déception mise en scène est une information ; une déception muette est un doute.
+  //
+  // ⚠️ « RIEN » NE POUVAIT PAS ÊTRE PRIS AU PIED DE LA LETTRE. Aucun coffre du jeu ne peut être vide :
+  // l'or tombe à 100 % partout. Descendre l'or du coffre de bois à 88 % a été essayé et REFUSÉ par
+  // `shop-economy` — le pire tirage à l'arrivée à Prontera tombait à 334 pièces, sous les 350 de l'arme
+  // la moins chère. Le jeu promet qu'on puisse s'armer en arrivant ; un gag ne vaut pas qu'on la reprenne.
+  //
+  // ⚠️ ET LE FAUX POSITIF EST CE QU'IL FAUT CRAINDRE : se moquer d'un joueur qui vient de gagner
+  // quelque chose serait bien pire que le silence. Chaque source de butin est donc testée seule.
+  const bois = PROPS['coffre']!.drops!
+  const rien = { gold: 0, potions: 0, items: [] as string[], materials: [] as string[] }
+
+  it('rien du tout, ou de l\'or au ras de la fourchette : le coffre a déçu', () => {
+    expect(butinDecevant(rien, bois)).toBe(true)
+    expect(butinDecevant({ ...rien, gold: 25 }, bois), '25 sur 25-60').toBe(true)
+    expect(butinDecevant({ ...rien, gold: 33 }, bois), '33 sur 25-60').toBe(true)
+  })
+
+  it('un butin correct ne se fait jamais moquer', () => {
+    expect(butinDecevant({ ...rien, gold: 55 }, bois), 'haut de fourchette').toBe(false)
+    expect(butinDecevant({ ...rien, gold: 25, potions: 1 }, bois), 'potion').toBe(false)
+    expect(butinDecevant({ ...rien, gold: 25, items: ['grelot-porte-bonheur'] }, bois), 'objet').toBe(false)
+    expect(butinDecevant({ ...rien, gold: 25, materials: ['gemme-brute'] }, bois), 'materiau').toBe(false)
+    expect(butinDecevant({ ...rien, gold: 25 }, bois, 'epee-du-jugement'), 'tresor rare').toBe(false)
+  })
+
+  it('« dérisoire » se juge par rapport à CE coffre, pas dans l\'absolu', () => {
+    // 300 pièces sont une misère dans un coffre d'or (240-520) et une fortune dans un coffre de bois
+    expect(butinDecevant({ ...rien, gold: 300 }, PROPS['coffre-or']!.drops!)).toBe(true)
+    expect(butinDecevant({ ...rien, gold: 300 }, bois)).toBe(false)
+  })
+
+  it('la moquerie arrive assez souvent pour exister, assez rarement pour piquer', () => {
+    // tirage déterministe : on balaie l'espace des probabilités au lieu de secouer un rng
+    let decus = 0
+    const N = 400
+    for (let i = 0; i < N; i++) {
+      const u = (i + 0.5) / N
+      if (butinDecevant(rollDrops(bois, () => u), bois)) decus++
+    }
+    const taux = decus / N
+    expect(taux, `taux de coffres décevants : ${Math.round(taux * 100)} %`).toBeGreaterThan(0.03)
+    expect(taux, `taux de coffres décevants : ${Math.round(taux * 100)} %`).toBeLessThan(0.35)
+  })
+
+  // ── LE LOT DE CONSOLATION ──────────────────────────────────────────────────────────────────
+  //
+  // « Quand on trouve un objet tu l'affiches en gros. La même animation me va quand on trouve rien,
+  // mais on peut peut-être display une plume ou une toile d'araignée ou un truc comme ça. »
+  //
+  // ⚠️ AUCUN N'ENTRE DANS L'INVENTAIRE, et c'est ce que ce test protège. Les faire ramasser obligerait
+  // à les définir dans ITEMS, où chaque entrée attend une illustration, un emplacement et un palier de
+  // niveau. Une plaisanterie ne doit pas coûter une ligne au modèle de données.
+  it('les lots de consolation ne sont PAS des objets du jeu', () => {
+    for (const lot of CONSOLATIONS) {
+      expect(ITEMS[lot.key], `${lot.key} est entré dans ITEMS`).toBeUndefined()
+      expect(lot.key.startsWith('lot-'), lot.key).toBe(true)
+    }
+  })
+
+  it('chaque lot a une image et un nom lisible', () => {
+    expect(CONSOLATIONS.length).toBeGreaterThan(1)
+    expect(new Set(CONSOLATIONS.map((l) => l.key)).size).toBe(CONSOLATIONS.length)
+    for (const lot of CONSOLATIONS) {
+      expect(lot.nom.trim().length, lot.key).toBeGreaterThan(0)
+      // il s'affiche sous une icône plein cadre : au-delà, ça déborde
+      expect(lot.nom.length, lot.nom).toBeLessThanOrEqual(28)
+    }
+  })
+
+  it('le tirage reste dans le catalogue, aux deux bouts', () => {
+    expect(CONSOLATIONS).toContain(consolationDeCoffre(() => 0))
+    expect(CONSOLATIONS).toContain(consolationDeCoffre(() => 0.999))
+    expect(CONSOLATIONS).toContain(consolationDeCoffre(() => 1)) // rng dégénéré : jamais undefined
+  })
+
+  // ⚠️ ET CHAQUE LOT DOIT AVOIR SON IMAGE. La révélation affiche `lot.key` en plein cadre : si la
+  // texture n'était pas générée, on présenterait un carré vide en grande pompe — le bug aurait l'air
+  // d'être la blague. Ces images ne viennent pas de `public/art` (ce ne sont pas des objets du jeu),
+  // elles sont dessinées à la main dans PreloadScene, donc rien d'autre ne peut le vérifier.
+  it('chaque lot de consolation a sa texture dessinée dans PreloadScene', async () => {
+    const mod = 'node:fs'
+    const fs = (await import(/* @vite-ignore */ mod)) as { readFileSync: (p: string, e: string) => string }
+    const source = fs.readFileSync('src/scenes/PreloadScene.ts', 'utf8')
+    for (const lot of CONSOLATIONS) {
+      expect(source, `${lot.key} n'est généré nulle part`).toContain(`generateTexture('${lot.key}'`)
     }
   })
 })

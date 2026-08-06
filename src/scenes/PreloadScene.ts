@@ -2538,6 +2538,49 @@ export class PreloadScene extends Phaser.Scene {
     g.clear()
     g.fillStyle(0x7b1fa2).fillRoundedRect(1, 1, 14, 14, 3); g.fillStyle(0xba68c8).fillRoundedRect(2, 2, 12, 12, 2); g.generateTexture('item-drop', 16, 16); g.clear()
 
+    // ─── LES LOTS DE CONSOLATION D'UN COFFRE DÉCEVANT ──────────────────────────────────────────
+    //
+    // Demande du joueur : « quand on trouve un objet tu l'affiches en gros ; la même animation me va
+    // quand on trouve rien, mais on peut peut-être afficher une plume ou une toile d'araignée ».
+    // C'est mieux qu'une animation à part : le joueur connaît DÉJÀ ce plan large, il le lit sans
+    // apprendre quoi que ce soit, et c'est la BANALITÉ de l'objet révélé qui fait toute la blague.
+    //
+    // Dessinés à la main plutôt que chargés : ce ne sont pas des objets du jeu (aucun n'entre dans
+    // l'inventaire), ils n'ont donc rien à faire dans `public/art/item-*.png` où PreloadScene attend une
+    // image par entrée d'ITEMS. Trois traits chacun suffisent — on les voit une seconde, en gris.
+    if (!this.textures.exists('lot-toile')) {
+      g.lineStyle(2, 0xd7d7cc, 0.95)
+      for (let i = 0; i < 8; i++) { // les rayons, depuis le coin haut-gauche
+        const a = (i / 7) * (Math.PI / 2)
+        g.lineBetween(4, 4, 4 + Math.cos(a) * 44, 4 + Math.sin(a) * 44)
+      }
+      for (const r of [14, 24, 34, 44]) { // et les fils tendus entre eux, en festons
+        for (let i = 0; i < 7; i++) {
+          const a1 = (i / 7) * (Math.PI / 2), a2 = ((i + 1) / 7) * (Math.PI / 2)
+          g.lineBetween(4 + Math.cos(a1) * r, 4 + Math.sin(a1) * r, 4 + Math.cos(a2) * r, 4 + Math.sin(a2) * r)
+        }
+      }
+      g.generateTexture('lot-toile', 50, 50); g.clear()
+    }
+    if (!this.textures.exists('lot-plume')) {
+      g.fillStyle(0xe8e6dc).fillEllipse(24, 26, 20, 44) // le duvet
+      g.fillStyle(0xf5f3ea).fillEllipse(22, 24, 12, 36)
+      g.lineStyle(2, 0xbdb9a8, 1).lineBetween(24, 6, 26, 48) // le rachis, légèrement courbé
+      g.lineStyle(1, 0xcfcabb, 0.9)
+      for (let i = 0; i < 9; i++) { // les barbes, de part et d'autre
+        const y = 10 + i * 4
+        g.lineBetween(24 + i * 0.2, y, 16 - i * 0.4, y + 5)
+        g.lineBetween(25 + i * 0.2, y, 33 + i * 0.4, y + 5)
+      }
+      g.generateTexture('lot-plume', 48, 52); g.clear()
+    }
+    if (!this.textures.exists('lot-caillou')) {
+      g.fillStyle(0x6d6d66).fillEllipse(22, 26, 40, 28)
+      g.fillStyle(0x8a8a80).fillEllipse(20, 23, 34, 21)
+      g.fillStyle(0xa3a399).fillEllipse(15, 19, 12, 7) // le petit reflet, pour que ce soit une PIERRE
+      g.generateTexture('lot-caillou', 44, 44); g.clear()
+    }
+
     g.fillStyle(0x33691e).fillEllipse(12, 13, 22, 16)
     g.fillStyle(0x7cb342).fillEllipse(12, 11, 20, 13)
     g.fillStyle(0x9ccc65).fillEllipse(7, 8, 3, 7).fillEllipse(12, 6, 3, 9).fillEllipse(17, 8, 3, 7); g.generateTexture('prop-herbe', 24, 20); g.clear()

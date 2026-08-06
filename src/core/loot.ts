@@ -105,3 +105,65 @@ export function rollDrops(drops: DropEntry[], rng: () => number = Math.random): 
   }
   return result
 }
+
+// ─── UN COFFRE DÉCEVANT MÉRITE SA PETITE HUMILIATION ─────────────────────────────────────────
+//
+// Demande du joueur : « on peut peut-être prévoir une petite anim pour les coffres quand on trouve
+// rien dedans. Un truc qui fout un peu le seum ? »
+//
+// ⚠️ CE N'EST PAS QU'UNE BLAGUE, ÇA RÉPARE UN SILENCE. Un coffre qui ne donne presque rien produisait
+// exactement la même chose qu'un coffre qui bugue : le couvercle s'ouvre, l'onde dorée part, et puis
+// plus rien de notable. Impossible de savoir si le jeu a raté quelque chose ou si on n'a simplement
+// pas eu de chance. Une déception MISE EN SCÈNE est une information ; une déception muette est un doute.
+//
+// ⚠️ « RIEN » NE POUVAIT PAS ÊTRE PRIS AU PIED DE LA LETTRE, ET LA MESURE L'A DIT. Aucun coffre du jeu
+// ne peut être vide : l'or tombe à 100 % sur les trois paliers. Première tentative — descendre l'or du
+// coffre de bois à 88 % — cassée par `shop-economy` : le pire tirage possible tombait à 334 pièces à
+// l'arrivée à Prontera, sous les 350 de l'arme la moins chère. Le jeu PROMET qu'on puisse s'armer en
+// arrivant, et un gag ne vaut pas qu'on la reprenne.
+//
+// Le seuil est donc DÉRISOIRE, pas nul : rien d'autre que de l'or, et de l'or dans le bas de sa
+// fourchette. C'est exactement le moment qu'on voulait mettre en scène — on ouvre, on espère, on
+// récolte vingt-six pièces — et il ne coûte pas une pièce à l'économie.
+const PART_DECEVANTE = 0.25 // fraction basse de la fourchette d'or en dessous de laquelle on se moque
+
+/**
+ * Ce coffre a-t-il déçu ? Rien d'autre que de l'or, et de l'or au ras de sa fourchette.
+ *
+ * On passe la TABLE du coffre et pas seulement le résultat : « dérisoire » n'a de sens que rapporté à
+ * ce qu'il pouvait donner. Vingt-six pièces sont une misère dans un coffre de bois (25 à 60) et une
+ * aberration dans un coffre d'or (240 à 520) — le même nombre, deux verdicts.
+ */
+export function butinDecevant(r: DropResult, drops: DropEntry[], bonus: string | null = null): boolean {
+  if (bonus || r.potions > 0 || r.items.length > 0 || r.materials.length > 0) return false
+  if (r.gold === 0) return true // le cas littéral, s'il devient un jour possible
+  const or = drops.find((d) => d.kind === 'gold')
+  if (!or) return false
+  return r.gold <= or.min + Math.floor((or.max - or.min) * PART_DECEVANTE)
+}
+
+// ─── LES LOTS DE CONSOLATION ─────────────────────────────────────────────────────────────────
+//
+// « Quand on trouve un objet tu l'affiches en gros. La même animation me va quand on trouve rien,
+// mais on peut peut-être afficher une plume ou une toile d'araignée ou un truc comme ça. »
+//
+// C'est mieux qu'une mise en scène à part, et pour une raison qui n'est pas qu'esthétique : le joueur
+// connaît DÉJÀ ce plan large — il l'a vu à chaque équipement ramassé. Le réutiliser ne lui demande
+// rien à apprendre, et c'est la BANALITÉ de ce qu'on lui présente en grand, avec les mêmes égards
+// qu'une épée légendaire, qui fait toute la blague.
+//
+// ⚠️ AUCUN N'ENTRE DANS L'INVENTAIRE. Ce sont des images, pas des objets : les faire ramasser
+// obligerait à les définir dans ITEMS, où chaque entrée attend une illustration, un emplacement et un
+// palier de niveau. Une plaisanterie ne doit pas coûter une ligne au modèle de données.
+export interface LotConsolation { key: string; nom: string }
+
+export const CONSOLATIONS: LotConsolation[] = [
+  { key: 'lot-toile', nom: 'Une toile d\'araignée' },
+  { key: 'lot-plume', nom: 'Une plume' },
+  { key: 'lot-caillou', nom: 'Un caillou' },
+]
+
+/** Le lot de consolation présenté en grand quand un coffre a déçu. */
+export function consolationDeCoffre(rng: () => number = Math.random): LotConsolation {
+  return CONSOLATIONS[Math.floor(rng() * CONSOLATIONS.length)] ?? CONSOLATIONS[0]!
+}

@@ -268,6 +268,7 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 | Build | Ce qui a changé |
 |---|---|
+| R369 | **le coffre qui déçoit le dit** : même plan large que pour un trésor, mais on y présente une toile d'araignée, une plume ou un caillou. « Rien » ne pouvait pas être pris au pied de la lettre — descendre l'or du coffre de bois à 88 % cassait la promesse « on peut s'armer en arrivant à Prontera » (334 pièces pour une arme à 350) ; le critère est donc un butin DÉRISOIRE, sans un centime d'équilibrage touché |
 | R368 | **butin borné par le niveau du lieu** : le tirage rare des coffres balayait uniformément 67 équipements du niveau 1 au 45 — un coffre du premier terrain pouvait lâcher l'épée de niveau 45, inutilisable trente niveaux durant. Fréquence 4 % → 1,5 %, et les monstres lâchent désormais un légendaire DE LEUR NIVEAU au millième · les deux chaînes contournables n'existaient pas (escaliers de descente perchés 24 rangées au-dessus du sol) |
 | R367 | **debout sous une échelle, on tombait à travers son propre sol** — troisième signalement, deux corrections précédentes s'étaient trompées de coupable : le one-way s'annulait sur `onLadder` (simple chevauchement) au lieu de `climbing`. La suppression du perçage des corniches avait été décidée POUR ce symptôme, à tort |
 | R366 | **l'eau n'est pas un mur, on nage** : `silhouetteAt` rendait le FOND d'un bassin — 32 des 66 murs restants n'existaient pas, et six terrains de plaine étaient accusés à tort. La lave, elle, reste un mur. Murs 66 → 36 |

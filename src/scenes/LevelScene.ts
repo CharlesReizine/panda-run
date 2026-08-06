@@ -23,7 +23,7 @@ import { CooldownTracker, energyCostOf } from '../core/skill-executor'
 import { ENERGY_ON_BASIC_HIT } from '../entities/Player'
 import { SKILLS, skillDamageMult, CHARGE_MIN_MULT } from '../data/skills'
 import { hpRegenPerSec } from '../core/stats'
-import { rollDrops, rollChestRareItem, rollMobLegendary } from '../core/loot'
+import { rollDrops, rollChestRareItem, rollMobLegendary, butinDecevant, consolationDeCoffre, type DropResult } from '../core/loot'
 import { recordKill } from '../core/player-state'
 import { rangeeImpact, atteignableDuCiel, HORS_MONDE, type GeoChute } from '../core/chute'
 import { zoneMorte, lerpVertical, LERP_X, LERP_Y_CALME } from '../core/camera-suivi'
@@ -4750,6 +4750,12 @@ export class LevelScene extends Phaser.Scene {
       // resterait inutilisable trente niveaux durant et viderait de son sens tout ce qui y menait.
       const rareItem = rollChestRareItem(this.niveauDuLieu())
       if (rareItem) this.spawnItemDrop(prop.x, prop.y, rareItem)
+      // ⚠️ ON LÂCHE LE BUTIN AVANT DE JUGER : la décision se prend sur ce qui est RÉELLEMENT sorti,
+      // tirage rare compris. Se fier à la table annoncerait un coffre décevant qui ne l'est pas, ou
+      // l'inverse — et la pire des moqueries serait de se moquer d'un gain.
+      const butin = this.spawnDrops(prop.x, prop.y, prop.def.drops)
+      if (butinDecevant(butin, prop.def.drops ?? [], rareItem)) this.coffreVideFx(prop.x, prop.y)
+      return
     }
     this.spawnDrops(prop.x, prop.y, prop.def.drops)
   }
@@ -4823,7 +4829,8 @@ export class LevelScene extends Phaser.Scene {
     this.makeDrop(x, y, illustrated ? `item-${itemId}` : 'item-drop', { itemId }, { size: illustrated ? 26 : undefined })
   }
 
-  spawnDrops(x: number, y: number, drops: DropEntry[]) {
+  /** Lâche le butin et REND ce qui est sorti — l'appelant en a besoin pour savoir si rien n'est tombé. */
+  spawnDrops(x: number, y: number, drops: DropEntry[]): DropResult {
     const result = rollDrops(drops)
     if (result.gold > 0) this.makeDrop(x, y, 'coin', { gold: result.gold }, { float: true, size: 26 })
     for (let i = 0; i < result.potions; i++) this.makeDrop(x, y, 'potion-drop', { potion: 1 }, { size: 26 })
@@ -4837,6 +4844,28 @@ export class LevelScene extends Phaser.Scene {
       if (this.textures.exists(`material-${materialId}`)) this.makeDrop(x, y, `material-${materialId}`, { materialId }, { size: 26 })
       else this.makeDrop(x, y, 'material-drop', { materialId }, { tint: MATERIALS[materialId]!.color, size: 24 })
     }
+    return result
+  }
+
+  /**
+   * LE COFFRE QUI A DÉÇU — le même plan large que pour un trésor, et c'est tout le sel.
+   *
+   * Demande du joueur : « quand on trouve un objet tu l'affiches en gros. La même animation me va quand
+   * on trouve rien, mais on peut peut-être display une plume ou une toile d'araignée ou un truc comme
+   * ça. » On présente donc une toile, une plume ou un caillou avec exactement les mêmes égards qu'une
+   * épée légendaire — halo, éclats, nom en dessous — mais en tier 0 et en gris terne.
+   *
+   * ⚠️ CE N'EST PAS QU'UNE BLAGUE, ÇA RÉPARE UN SILENCE. Un coffre qui ne donnait presque rien
+   * produisait exactement la même chose qu'un coffre qui bugue : le couvercle s'ouvre, l'onde part, et
+   * puis plus rien de notable. Impossible de savoir si le jeu avait raté quelque chose ou si on n'avait
+   * simplement pas eu de chance. Une déception mise en scène est une information ; une déception muette
+   * est un doute.
+   */
+  private coffreVideFx(x: number, y: number) {
+    // l'onde de sol vire au GRIS : la couleur dit déjà tout avant qu'on ait lu quoi que ce soit
+    this.aoeRing(x, y, 34, 0x9e9e9e)
+    const lot = consolationDeCoffre()
+    this.runReveal({ key: lot.key, nom: lot.nom, couleur: 0xb0a99f, tier: 0 })
   }
 
   collectPickup(s: Phaser.Physics.Arcade.Sprite) {
@@ -4895,8 +4924,27 @@ export class LevelScene extends Phaser.Scene {
   }
   private runLootReveal(itemId: string) {
     const def = ITEMS[itemId]!
-    const color = rarityColor(def.rarity)
-    const tier = ({ commun: 0, rare: 1, epique: 2, legendaire: 3 } as const)[def.rarity ?? 'commun'] ?? 0
+    this.runReveal({
+      key: this.textures.exists(`item-${itemId}`) ? `item-${itemId}` : 'item-drop',
+      nom: def.name,
+      couleur: rarityColor(def.rarity),
+      tier: ({ commun: 0, rare: 1, epique: 2, legendaire: 3 } as const)[def.rarity ?? 'commun'] ?? 0,
+    })
+  }
+
+  /**
+   * LE PLAN LARGE — une image en gros au centre, halo, éclats, nom dessous.
+   *
+   * Généralisé depuis la révélation d'équipement pour servir aussi les LOTS DE CONSOLATION d'un coffre
+   * décevant : « quand on trouve un objet tu l'affiches en gros ; la même animation me va quand on
+   * trouve rien, mais on peut peut-être afficher une plume ou une toile d'araignée ». Le joueur connaît
+   * déjà ce cadrage, il n'a rien à apprendre — et c'est la banalité de ce qu'on lui présente avec les
+   * mêmes égards qu'une épée légendaire qui fait toute la blague.
+   *
+   * `tier` pilote le faste (durée, rayons, anneau, flash, son) : 0 = sobre, 3 = légendaire. Un lot de
+   * consolation passe donc par le même chemin, en tier 0 et en gris.
+   */
+  private runReveal({ key: iconKey, nom, couleur: color, tier }: { key: string; nom: string; couleur: number; tier: number }) {
     const ADD = Phaser.BlendModes.ADD
 
     const cx = CX
@@ -4946,7 +4994,6 @@ export class LevelScene extends Phaser.Scene {
     if (tier >= 3) this.flashScreen(color, 0.22, 220)
 
     // ICÔNE en GROS : pop (Back.out) puis pulse doux pendant le maintien
-    const iconKey = this.textures.exists(`item-${itemId}`) ? `item-${itemId}` : 'item-drop'
     const icon = track(this.add.image(cx, cy, iconKey)).setScrollFactor(0).setDepth(62)
     const targetH = 108 + tier * 18
     const baseScale = targetH / Math.max(1, icon.height)
@@ -4964,7 +5011,7 @@ export class LevelScene extends Phaser.Scene {
 
     // NOM de l'objet, couleur = rareté
     const hex = `#${color.toString(16).padStart(6, '0')}`
-    const name = track(this.add.text(cx, cy + targetH * 0.62, def.name, {
+    const name = track(this.add.text(cx, cy + targetH * 0.62, nom, {
       fontSize: `${20 + tier * 2}px`, fontStyle: 'bold', color: hex,
       stroke: '#000000', strokeThickness: 4, align: 'center',
     })).setOrigin(0.5).setScrollFactor(0).setDepth(62).setAlpha(0)
