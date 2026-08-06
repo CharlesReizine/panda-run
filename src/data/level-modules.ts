@@ -3932,14 +3932,19 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
       rockBands.some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h)
       || breakables.some((b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h)
       || platforms.some((p) => x >= p.x && x < p.x + p.w && p.y === y)
-      || hazards.some((h) => x >= h.x && x < h.x + h.w && y >= (h.top ?? 0) && y < (h.top ?? 0) + (h.h ?? 1))
+      // ⚠️ UN DANGER SANS `top` EST POSÉ AU SOL, PAS AU PLAFOND. Le lire comme « rangée 0 » condamnait
+      // toute la colonne depuis le ciel : 91 refus d'escalier sur 94 murs venaient de cette seule ligne,
+      // et les cases prétendument occupées étaient de l'air pur.
+      || hazards.some((h) => {
+        const haut = h.top ?? groundRow - 1
+        return x >= h.x && x < h.x + h.w && y >= haut && y < haut + (h.h ?? 1)
+      })
       || (ladders ?? []).some((l) => l.x === x && y >= l.y && y < l.y + l.h)
 
     for (const mur of marchesInfranchissables(probe())) {
-      // Un saut ne monte que de DEUX rangées : une falaise de huit s'escalade en quatre fois, pas en
-      // deux. On pose donc un ESCALIER de marches de pierre, chacune à portée de la précédente, la plus
-      // haute collée à la face. Quatre-vingt-six des quatre-vingt-quatorze murs mesurés dépassaient la
-      // portée d'une marche unique : c'est l'escalier ou rien.
+      // Un mur est, par définition du validateur, plus haut qu'un saut : une seule marche intermédiaire
+      // ne suffit donc pas toujours. On pose un ESCALIER — autant de marches de pierre qu'il faut de
+      // sauts, chacune à portée de la précédente, la plus haute collée à la face.
       const marches = Math.ceil(mur.hauteur / sauteRangees) - 1
       if (marches < 1) continue
       const largeur = 2 * marches // les colonnes qu'il faut, EN ARRIÈRE de la face
@@ -3965,7 +3970,6 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
       const apres = mesure()
       if (apres.pieges > avant.pieges || apres.orphelines > avant.orphelines
         || apres.empiles > avant.empiles || apres.chaines > avant.chaines) {
-        { const T=(globalThis as any).__T ??= {}; T.rollback=(T.rollback??0)+1; T.rbN=(T.rbN??0)+posees.length }
         for (const m of posees) platforms.splice(platforms.indexOf(m), 1)
       }
     }

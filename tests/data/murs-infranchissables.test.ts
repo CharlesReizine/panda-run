@@ -38,17 +38,19 @@ const nonBoss = Object.values(LEVELS).filter((l) => !l.boss)
 // Comptes relevés le 5 août, terrain par terrain, APRÈS le comblement des puits et la pose des escaliers
 // de falaise. Un terrain qui EMPIRE fait tomber le test avec son nom.
 const SEUILS: Record<string, number> = {
-  'plaine-1': 1, 'plaine-2': 1, 'plaine-3': 2, 'plaine-4': 3, 'plaine-5': 2, 'plaine-6': 0, 'plaine-7': 1,
+  'plaine-1': 0, 'plaine-2': 0, 'plaine-3': 0, 'plaine-4': 2, 'plaine-5': 0, 'plaine-6': 0, 'plaine-7': 0,
 }
 
 describe('murs infranchissables', () => {
   it('le total ne remonte pas', () => {
     const total = nonBoss.reduce((n, l) => n + marchesInfranchissables(l).length, 0)
     // ⚠️ CE PLAFOND EST UN CLIQUET : il descend, il ne remonte jamais. 160 au relevé initial, 94 après le
-    // comblement des puits entre marches de pierre, 66 après la pose d'escaliers contre les falaises.
+    // comblement des puits entre marches de pierre, 66 après la pose d'escaliers contre les falaises,
+    // 36 une fois l'EAU reconnue comme une aide — un bassin entre deux mesas se lisait comme un mur de
+    // huit rangées alors qu'on le traverse à la nage, de plain-pied avec les deux rives.
     // Le baisser à chaque gain est ce qui empêche une passe suivante de reperdre le terrain gagné sans
     // que personne ne le voie — c'est exactement comme ça que les 160 étaient arrivés.
-    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(66)
+    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(36)
   })
 
   it('aucun terrain de plaine n\'empire', () => {
@@ -63,6 +65,47 @@ describe('murs infranchissables', () => {
       }
     }
     expect(pires, `terrains dégradés :\n   ${pires.join('\n   ')}`).toEqual([])
+  })
+
+  // ── L'EAU N'EST PAS UN MUR : ON NAGE ────────────────────────────────────────────
+  //
+  // Le validateur rendait la silhouette du FOND d'un bassin. Un lac creusé entre deux mesas — rives à
+  // la rangée 16, fond à la 23, sol du monde à la 24 — se comptait donc comme un mur de huit rangées,
+  // alors qu'on le traverse à la SURFACE, de plain-pied avec les deux rives. Trente-deux des soixante-six
+  // murs qui restaient étaient ce faux positif-là, et il désignait les mauvais coupables : plaine-1,
+  // plaine-2 et plaine-3 n'avaient en réalité aucun mur.
+  //
+  // La lave, elle, reste un mur : on n'y nage pas, on y meurt. Et la profondeur ne se juge pas ici —
+  // l'apnée a son propre validateur (`overDeepBasins`).
+  const rive = (kind: 'basin' | 'lave') => ({
+    id: 'test', name: 'test', biome: 'plaine', widthTiles: 30, heightTiles: 26,
+    // rive gauche à la rangée 16, plan d'eau au milieu, rive droite à la 16 : de plain-pied
+    platforms: [{ x: 0, y: 16, w: 10 }, { x: 20, y: 16, w: 10 }],
+    rockBands: [{ x: 0, y: 17, w: 10, h: 8 }, { x: 20, y: 17, w: 10, h: 8 }],
+    hazards: [{ kind: 'water' as const, x: 10, w: 10, top: 16, h: 8, water: kind }],
+    spawns: [],
+  })
+
+  it('un lac entre deux rives ne compte pas comme un mur — on le traverse à la nage', () => {
+    expect(marchesInfranchissables(rive('basin') as never)).toEqual([])
+  })
+
+  // Et la contrepartie : au bord de la LAVE, un vrai mur reste un mur. Si la lave comptait comme aide,
+  // elle blanchirait tout ce qui se trouve à trois colonnes d'elle — y compris une face de mesa qui
+  // n'a rien à voir avec elle, et qu'aucune nage ne franchira jamais.
+  const bordDeLave = (kind: 'basin' | 'lave') => ({
+    id: 'test', name: 'test', biome: 'enfer', widthTiles: 30, heightTiles: 26,
+    // sol du monde à la rangée 24 ; mare en x10-13 ; puis 2 colonnes de sol ; puis une mesa de 8 rangées
+    platforms: [{ x: 16, y: 16, w: 12 }],
+    rockBands: [{ x: 16, y: 17, w: 12, h: 8 }],
+    hazards: [{ kind: 'water' as const, x: 10, w: 4, top: 20, h: 4, water: kind }],
+    spawns: [],
+  })
+
+  it("au bord de la lave, la face de mesa reste un mur — la lave n'aide personne", () => {
+    expect(marchesInfranchissables(bordDeLave('lave') as never).length).toBeGreaterThan(0)
+    // la même mare en EAU blanchit la face : on nage jusqu'à la surface, puis on prend pied
+    expect(marchesInfranchissables(bordDeLave('basin') as never)).toEqual([])
   })
 
   it('un mur signalé est bien plus haut qu\'un saut, et se lit', () => {

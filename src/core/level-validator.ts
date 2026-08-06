@@ -1261,7 +1261,13 @@ export function marchesInfranchissables(level: LevelDef): MurProblem[] {
   const aides: number[] = [
     ...(level.ladders ?? []).map((l) => l.x),
     ...(level.trampolines ?? []).map((t) => t.x),
-    ...(level.hazards ?? []).filter((h) => h.kind === 'water' && h.water === 'cascade')
+    // ⚠️ TOUTE EAU EST UNE AIDE, PAS SEULEMENT LA CASCADE — ON NAGE. Un bassin creusé entre deux mesas
+    // se lisait comme un mur de huit rangées : la silhouette rendait le FOND du bassin, alors que le
+    // panda le traverse à la SURFACE, de plain-pied avec les deux rives. Faux positif intégral, et il
+    // pesait lourd — sur plaine-1, plaine-2, plaine-3 et bien d'autres, c'était le mur signalé.
+    // La lave est exclue : on n'y nage pas, on y meurt. Et la question de l'apnée ne se pose pas ici,
+    // elle a son propre validateur (`overDeepBasins`).
+    ...(level.hazards ?? []).filter((h) => h.kind === 'water' && h.water !== 'lave')
       .flatMap((h) => Array.from({ length: h.w }, (_, i) => h.x + i)),
   ]
   const aideProche = (x: number) => aides.some((a) => Math.abs(a - x) <= PORTEE_AIDE)
