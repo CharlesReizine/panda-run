@@ -268,6 +268,10 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 | Build | Ce qui a changé |
 |---|---|
+| R367 | **debout sous une échelle, on tombait à travers son propre sol** — troisième signalement, deux corrections précédentes s'étaient trompées de coupable : le one-way s'annulait sur `onLadder` (simple chevauchement) au lieu de `climbing`. La suppression du perçage des corniches avait été décidée POUR ce symptôme, à tort |
+| R366 | **l'eau n'est pas un mur, on nage** : `silhouetteAt` rendait le FOND d'un bassin — 32 des 66 murs restants n'existaient pas, et six terrains de plaine étaient accusés à tort. La lave, elle, reste un mur. Murs 66 → 36 |
+| R365 | **escaliers de pierre contre les falaises** (murs 94 → 66) · la batterie de repli passe à quatre promesses · `chainesContournables` sait qu'une chaîne débouchant sur une falaise n'est pas un détour |
+| R364 | **les puits entre marches de pierre se comblent** (murs 160 → 94) : chaque marche isolée d'`escalier-pierre` recevait un socle, et le trou d'air entre deux devenait un puits muré. On élargit le socle du bas — retirer le socle fait flotter les coffres, empiler une bande neuve fabrique un sommet nu |
 | R352 | **journal de quêtes** (bandeau permanent et cliquable, notif qui dit où aller) · `grotte-u-brisable` : l'échelle montait DANS son propre pan fragile — piège sans retour · 41 corniches collées au sol du monde retirées |
 | R351 | **`sol-fragile` était injouable** : son échelle de remontée débouchait sous la dalle cassable (qu'on ne peut pas frapper depuis une échelle) · trous redondants nettoyés · le bandeau de quête nomme la ville où rendre la récompense |
 | R350 | **doubles planchers à ZÉRO** : `sol-fragile` posait le palier de son échelle une rangée au-dessus du chemin · une colonne d'échelle est enfin un passage vertical pour `sealedVoids` · coutures entre modules MESURÉES : aucune n'est infranchissable |
