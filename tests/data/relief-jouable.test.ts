@@ -154,7 +154,30 @@ describe('relief jouable', () => {
   //   · carriere-1, quatre chaînes : creuser y fabriquait un piège sans retour, et la passe a REBOUCHÉ.
   //     Le modèle de mouvement ne sait pas parcourir ces chaînes-là, donc le sol du dessous est la
   //     seule route. C'est le garde-fou qui parle, pas un oubli.
-  const TOLERANCE_CHAINES = 2
+  // ⚠️ TOLÉRANCE À ZÉRO — les deux dernières n'existaient pas. Sur desert-1 et desert-8, la « chaîne »
+  // signalée est un escalier de descente en tuiles isolées perché VINGT-QUATRE rangées au-dessus du
+  // sol : on y arrive par le haut, jamais par le bas. Contournable veut dire « on aurait pu marcher en
+  // bas au lieu de grimper » — encore faut-il que grimper soit une option. Le validateur exige
+  // désormais que la marche la plus basse s'atteigne d'un saut depuis le sol.
+  const TOLERANCE_CHAINES = 0
+  // Une chaîne perchée hors d'atteinte du sol n'est pas un détour : les deux itinéraires ne mènent pas
+  // au même endroit, et les comparer n'a pas de sens. Le test tient les deux bouts de la nuance.
+  const chaineA = (hauteur: number) => ({
+    id: 'test', name: 'test', biome: 'desert', widthTiles: 40, heightTiles: 42,
+    platforms: [{ x: 10, y: hauteur, w: 1 }, { x: 12, y: hauteur + 1, w: 1 }, { x: 14, y: hauteur + 2, w: 1 }],
+    spawns: [],
+  })
+
+  it("une chaîne qu'on peut prendre depuis le sol reste signalée", () => {
+    // sol en rangée 40 ; la marche la plus basse est à 37, soit un saut (et pas « collée au sol »,
+    // que `suspendue` écarte déjà : une plateforme à moins de deux rangées du sol n'est pas « en l'air »)
+    expect(chainesContournables(chaineA(35) as never).length).toBe(1)
+  })
+
+  it("une chaîne perchée hors d'atteinte du sol n'est pas un détour", () => {
+    expect(chainesContournables(chaineA(8) as never)).toEqual([])
+  })
+
   it('les enchaînements de sauts ne se contournent pas en marchant dessous', () => {
     const restantes = nonBoss.flatMap((l) => chainesContournables(l).map((c) => `${l.id} x${c.x}+${c.w} (${c.plats} plateformes)`))
     expect(restantes.length, `chaînes contournables :\n   ${restantes.join('\n   ')}`).toBeLessThanOrEqual(TOLERANCE_CHAINES)

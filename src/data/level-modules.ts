@@ -3945,21 +3945,26 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
       // Un mur est, par définition du validateur, plus haut qu'un saut : une seule marche intermédiaire
       // ne suffit donc pas toujours. On pose un ESCALIER — autant de marches de pierre qu'il faut de
       // sauts, chacune à portée de la précédente, la plus haute collée à la face.
+      //
+      // ⚠️ UNE SEULE IMPLANTATION, ET C'EST MESURÉ. Balayer plusieurs reculs a été essayé : sur les
+      // trente-six murs qui résistent, il posait UN escalier de plus et n'en débloquait AUCUN. Ce qui
+      // reste n'est pas une affaire de calage — ce sont des faces de neuf à trente et une rangées en
+      // terrain dense, où un escalier flottant n'a pas sa place. Leur remède est dans le motif qui les
+      // engendre, pas ici, et une passe d'assemblage plus compliquée ne ferait que le masquer.
       const marches = Math.ceil(mur.hauteur / sauteRangees) - 1
       if (marches < 1) continue
-      const largeur = 2 * marches // les colonnes qu'il faut, EN ARRIÈRE de la face
-      const xBase = mur.x - largeur
-      if (xBase < 1 || mur.x > totalWidth) continue
       const candidates: typeof platforms = []
       let libre = true
       for (let k = 1; k <= marches && libre; k++) {
         const y = mur.de - sauteRangees * k
-        if (y <= mur.a) break // on a déjà rejoint le sommet : les marches restantes seraient en l'air
+        if (y <= mur.a) break // on a rejoint le sommet : les marches restantes seraient en l'air
         const x = mur.x - 2 * (marches - k + 1)
-        // la marche ET la rangée au-dessus doivent être libres, sinon on se cogne la tête en montant
-        for (let dx = 0; dx < 2; dx++) if (occupe(x + dx, y) || occupe(x + dx, y - 1)) libre = false
-        // et jamais un QUATRIÈME palier sur une colonne : la règle des trois étages vaut aussi pour nous
-        for (let dx = 0; dx < 2; dx++) if (paliers(x + dx) >= 3) libre = false
+        if (x < 1 || x + 2 > totalWidth) { libre = false; break }
+        for (let dx = 0; dx < 2; dx++) {
+          // la marche ET la rangée au-dessus doivent être libres (sinon on se cogne en montant),
+          // et jamais un QUATRIÈME palier : la règle des trois étages vaut aussi pour nous
+          if (occupe(x + dx, y) || occupe(x + dx, y - 1) || paliers(x + dx) >= 3) libre = false
+        }
         if (libre) candidates.push({ x, y, w: 2, solid: true })
       }
       if (!libre || !candidates.length) continue

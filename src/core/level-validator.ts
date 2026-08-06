@@ -1197,8 +1197,23 @@ export function chainesContournables(level: LevelDef): ChaineContournable[] {
     return false
   }
 
+  // ⚠️ ET UNE CHAÎNE QU'ON NE PEUT PAS PRENDRE DEPUIS LE SOL N'EST PAS UN DÉTOUR NON PLUS.
+  //
+  // « Contournable » veut dire : on aurait pu marcher en bas au lieu de grimper. Encore faut-il que
+  // grimper soit une OPTION. Sur desert-1 et desert-8, la chaîne signalée est un escalier de descente
+  // en tuiles isolées, perché VINGT-QUATRE rangées au-dessus du sol : on y arrive par le haut, jamais
+  // par le bas. Le sol qui court dessous n'est pas un raccourci, c'est du paysage — exactement le même
+  // faux positif que le lac lu comme un mur.
+  //
+  // On exige donc que la marche la plus BASSE de la chaîne s'atteigne d'un saut depuis le sol. Sinon,
+  // les deux itinéraires ne mènent pas au même endroit et les comparer n'a pas de sens.
+  const prenableDepuisLeSol = (bloc: typeof plats): boolean => {
+    const bas = bloc.reduce((m, p) => (p.y > m.y ? p : m))
+    return groundRow - bas.y <= maxJumpTiles()
+  }
+
   const clore = () => {
-    if (chaine.length >= CHAINE_MIN && !adosseeAUneFalaise(chaine)) {
+    if (chaine.length >= CHAINE_MIN && !adosseeAUneFalaise(chaine) && prenableDepuisLeSol(chaine)) {
       const a = chaine[0]!, z = chaine[chaine.length - 1]!
       out.push({ x: a.x, w: z.x + z.w - a.x, plats: chaine.length, row: a.y })
     }

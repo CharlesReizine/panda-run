@@ -23,7 +23,7 @@ import { CooldownTracker, energyCostOf } from '../core/skill-executor'
 import { ENERGY_ON_BASIC_HIT } from '../entities/Player'
 import { SKILLS, skillDamageMult, CHARGE_MIN_MULT } from '../data/skills'
 import { hpRegenPerSec } from '../core/stats'
-import { rollDrops, rollChestRareItem } from '../core/loot'
+import { rollDrops, rollChestRareItem, rollMobLegendary } from '../core/loot'
 import { recordKill } from '../core/player-state'
 import { rangeeImpact, atteignableDuCiel, HORS_MONDE, type GeoChute } from '../core/chute'
 import { zoneMorte, lerpVertical, LERP_X, LERP_Y_CALME } from '../core/camera-suivi'
@@ -4717,7 +4717,24 @@ export class LevelScene extends Phaser.Scene {
     this.tweens.add({ targets: txt, y: txt.y - 30, alpha: 0, delay: 900, duration: 600, onComplete: () => txt.destroy() })
   }
 
-  onEnemyLoot(e: Enemy) { this.spawnDrops(e.x, e.y, e.monster.drops) }
+  onEnemyLoot(e: Enemy) {
+    this.spawnDrops(e.x, e.y, e.monster.drops)
+    // un millième des mises à mort lâche un légendaire DU NIVEAU DE LA BÊTE (cf. core/loot) : la
+    // contrepartie du bornage des coffres — plus étroit, mais mérité, puisqu'il a fallu la tuer.
+    const legendaire = rollMobLegendary(e.monster.level)
+    if (legendaire) this.spawnItemDrop(e.x, e.y, legendaire)
+  }
+
+  /**
+   * Niveau de référence du terrain : celui du monstre le plus fort qui l'habite.
+   *
+   * C'est la mesure de ce qu'on affronte ici, donc de ce qu'on a le droit d'y trouver. Un terrain sans
+   * aucun monstre (arène d'entraînement) renvoie 1 : le plancher, jamais le plafond.
+   */
+  private niveauDuLieu(): number {
+    const niveaux = this.levelDef.spawns.map((s) => MONSTERS[s.monsterId]?.level ?? 0)
+    return Math.max(1, ...niveaux)
+  }
 
   onPropBroken(prop: Prop) {
     // ⚠️ estCoffre ET PAS id === 'coffre' : sinon les coffres de fer et d'or, ajoutés depuis, se
@@ -4728,8 +4745,10 @@ export class LevelScene extends Phaser.Scene {
       const teinteOuverture = { bois: 0xffd54f, fer: 0x40c4ff, or: 0xffe082 }[prop.def.tier ?? 'bois']
       this.aoeRing(prop.x, prop.y, prop.def.tier === 'or' ? 64 : prop.def.tier === 'fer' ? 52 : 40, teinteOuverture)
       this.tweens.add({ targets: open, y: open.y - 8, scale: 1.15, duration: 160, yoyo: true, onComplete: () => open.destroy() })
-      // très rarement, le coffre recèle un trésor épique/légendaire (révélation brillante réutilisée)
-      const rareItem = rollChestRareItem()
+      // très rarement, le coffre recèle un trésor épique/légendaire (révélation brillante réutilisée),
+      // BORNÉ au niveau du lieu : un coffre du premier terrain ne lâche pas l'épée de niveau 45, qui
+      // resterait inutilisable trente niveaux durant et viderait de son sens tout ce qui y menait.
+      const rareItem = rollChestRareItem(this.niveauDuLieu())
       if (rareItem) this.spawnItemDrop(prop.x, prop.y, rareItem)
     }
     this.spawnDrops(prop.x, prop.y, prop.def.drops)
