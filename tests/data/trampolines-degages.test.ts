@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { LEVELS } from '../../src/data/levels'
-import { trampolinesSousPlafond, CLAIR_TRAMPOLINE } from '../../src/core/level-validator'
-import { maxJumpTiles } from '../../src/core/platforming'
+import { trampolinesColles, trampolinesSousPlafond, CLAIR_TRAMPOLINE } from '../../src/core/level-validator'
+import { canReach, canReachByBounce, maxJumpTiles, trampolineTuiles, ECART_MUR_TRAMPOLINE } from '../../src/core/platforming'
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 // UN TRAMPOLINE A LE CIEL AU-DESSUS DE LUI
@@ -52,5 +52,72 @@ describe('trampolines dégagés', () => {
       }
     }
     expect(flottants, `trampolines en l'air :\n   ${flottants.join('\n   ')}`).toEqual([])
+  })
+
+  // ── DÉGAGÉ NE VEUT PAS DIRE UTILE ───────────────────────────────────────────────────────────
+  //
+  // Second retour du joueur, capture à l'appui : « le trampoline est mal placé ». Il l'était, et le
+  // premier correctif s'était arrêté à mi-chemin : glisser l'engin vers la première colonne ayant du
+  // ciel au-dessus l'a sorti du plafond… pour le poser face à RIEN. Sur foret-4, il catapultait vers un
+  // ciel vide, au ras du sol, sans une seule corniche à portée de rebond.
+  //
+  // ⚠️ UN TRAMPOLINE QUI NE MÈNE NULLE PART EST AUSSI TROMPEUR QU'UN TRAMPOLINE QUI COGNE. Les deux
+  // annoncent un ailleurs ; l'un le rend inatteignable, l'autre l'invente. Le critère est donc double :
+  // du ciel au-dessus, ET une plateforme que le rebond atteint alors qu'un saut simple n'y arrive pas.
+  // Sans cette seconde moitié, l'engin ne sert à rien qu'on ne sache déjà faire.
+  it('un trampoline dessert une plateforme hors de portée d\'un saut', () => {
+    const inutiles: string[] = []
+    let total = 0
+    for (const l of Object.values(LEVELS)) {
+      for (const t of l.trampolines ?? []) {
+        total++
+        const sert = l.platforms.some((p) => {
+          if (p.y >= t.y) return false
+          const ecart = Math.max(0, p.x > t.x ? p.x - t.x : t.x - (p.x + p.w - 1))
+          return canReachByBounce(t.y, p, ecart) && !canReach(t.y, p, ecart)
+        })
+        if (!sert) inutiles.push(`${l.id} x${t.x} y${t.y}`)
+      }
+    }
+    // ⚠️ SEUIL, PAS ZÉRO, et la raison est écrite : deux engins (foret-6, jungle-3) n'ont aucune
+    // colonne meilleure sur leur propre surface porteuse. Les déplacer ailleurs voudrait dire les
+    // arracher à leur motif ; les supprimer priverait le terrain d'une mécanique. On les laisse, on les
+    // compte, et on interdit que leur nombre grandisse.
+    expect(inutiles.length, `trampolines qui ne mènent nulle part :\n   ${inutiles.join('\n   ')}`).toBeLessThanOrEqual(2)
+    expect(total - inutiles.length, 'presque tous doivent servir').toBeGreaterThanOrEqual(total - 2)
+  })
+
+  // ── PAS COLLÉ À UN MUR ──────────────────────────────────────────────────────────────────────
+  //
+  // Demande du joueur : « faut pas trop les coller aux murs non plus. Horizontalement je veux au moins
+  // 2 fois la largeur du trampoline d'écart au minimum. Là c'est pas stylé. »
+  //
+  // ⚠️ CE N'EST PAS QU'UNE QUESTION DE GOÛT. On ARRIVE sur un trampoline en courant et on en repart en
+  // montant : collé à une paroi, on s'y écrase dans les deux sens. C'est le même défaut que le tapis
+  // coincé sous un plateau, vu de côté — et les deux se corrigent au même endroit.
+  //
+  // ⚠️ LA CIBLE N'EST PAS ENCORE TENUE PARTOUT, ET LE CHIFFRE EST ÉCRIT PLUTÔT QUE LISSÉ. Le tapis fait
+  // 136 px, soit 5 tuiles : deux largeurs de chaque côté demandent VINGT tuiles de surface dégagée
+  // autour de lui. La moitié des terrains ne les a tout simplement pas — sur une corniche de douze
+  // tuiles, aucune colonne ne satisfait la règle, où qu'on pose l'engin. Le placement optimise la
+  // note (ciel au-dessus, corniche desservie, écart aux murs) et prend la meilleure colonne de toute
+  // la surface porteuse ; ce qui reste est une limite du TERRAIN, pas du placement.
+  //
+  // Deux seuils, donc, et deux rôles : celui d'une largeur est une RÈGLE (elle doit tendre vers zéro),
+  // celui de deux largeurs est un CLIQUET vers la demande (il descend, il ne remonte pas).
+  it('aucun trampoline n\'a moins d\'une largeur de tapis de chaque côté', () => {
+    const colles = Object.values(LEVELS).flatMap((l) =>
+      trampolinesColles(l, trampolineTuiles()).map((t) => `${l.id} x${t.x} — ${t.gauche} à gauche, ${t.droite} à droite`))
+    expect(colles.length, `trampolines collés :\n   ${colles.join('\n   ')}`).toBeLessThanOrEqual(4)
+  })
+
+  it('la cible « deux largeurs » progresse et ne recule pas', () => {
+    const total = Object.values(LEVELS).reduce((s, l) => s + (l.trampolines ?? []).length, 0)
+    const colles = Object.values(LEVELS).reduce((s, l) => s + trampolinesColles(l, ECART_MUR_TRAMPOLINE).length, 0)
+    // 22 au relevé initial, 18 après le classement par note, 14 en élargissant la recherche à toute la
+    // surface porteuse — puis 15, parce qu'interdire les colonnes SURPLOMBANT UN TROU (un tapis posé
+    // sur une corniche au-dessus du vide se lit comme suspendu) reprend une des colonnes gagnées.
+    // Un engin qui ne ment pas sur son appui vaut mieux qu'un engin mieux centré.
+    expect(colles, `${colles}/${total} trampolines sous la cible de deux largeurs`).toBeLessThanOrEqual(15)
   })
 })

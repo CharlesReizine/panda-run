@@ -60,7 +60,9 @@ describe('murs infranchissables', () => {
     // seconde — celle qui ouvre le sol sous les motifs d'échelle et de saut. Deux murs de plus pour un
     // sol troué là où il devait l'être : le compte remonte parce que le terrain a changé de nature,
     // pas parce qu'il s'est dégradé. C'est le genre d'écart qui doit s'écrire, pas se lisser.
-    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(37)
+    // …et 38 depuis que les trampolines se placent à la meilleure colonne de leur surface : en bougeant,
+    // ils cessent d'excuser par simple voisinage (`aideProche`) un mur qui était déjà là.
+    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(38)
   })
 
   it('aucun terrain de plaine n\'empire', () => {

@@ -8,6 +8,8 @@ import { installUiClickSound } from '../ui/click-sound'
 import { renderMonsterCard, textureMonstre } from './monster-card'
 import { INTRO, INTRO_ROW } from './level-intro-layout'
 import { RAYON_INFO, grilleMonstres } from './intro-grille-layout'
+import { CLE_PREMIERS_PAS, PREMIERS_PAS, doitMontrerPremiersPas } from '../core/premiers-pas'
+import { getPlayer } from '../state'
 
 // Écran de présentation d'un NOUVEAU terrain : montré une seule fois par levelId (la première
 // entrée), il présente les monstres du niveau AVANT de lancer le jeu. Reçoit les mêmes données que la
@@ -74,6 +76,58 @@ export class LevelIntroScene extends Phaser.Scene {
     centerCamera(this)
     this.monsters = this.uniqueMonsters(LEVELS[this.intro.levelId])
     this.render()
+    this.peutEtreLesPremiersPas()
+  }
+
+  /**
+   * LA RÈGLE DU JEU, DITE UNE BONNE FOIS.
+   *
+   * Demande du joueur : « au début, explique CLAIREMENT qu'il FAUT tuer un maxxx de monstres pour
+   * gagner l'XP et devenir fort. C'est pas clair pour tous les joueurs. »
+   *
+   * ⚠️ RIEN NE LE DISAIT, ET C'EST LA BOUCLE ENTIÈRE DU JEU. On arrive sur le premier terrain avec une
+   * sortie à droite : tout invite à courir vers elle. Or courir vers la sortie ne fait pas monter d'un
+   * niveau, et le terrain suivant monte en difficulté — on arrive sous-niveau, on meurt, et rien
+   * n'explique pourquoi. C'est le genre d'évidence qu'on ne voit plus quand on a écrit le jeu.
+   *
+   * ⚠️ IL S'AFFICHE PAR-DESSUS, PAS DANS `render()`. Cet écran se reconstruit à chaque navigation entre
+   * fiches de monstres (`removeAll` implicite via destroy) : un panneau posé dedans disparaîtrait au
+   * premier clic sans qu'on comprenne pourquoi.
+   */
+  private peutEtreLesPremiersPas() {
+    let niveau = 1
+    try { niveau = getPlayer().level } catch { /* pas de partie chargée : on suppose un débutant */ }
+    const dejaVu = (() => {
+      try { return localStorage.getItem(CLE_PREMIERS_PAS) === '1' } catch { return false }
+    })()
+    if (!doitMontrerPremiersPas(niveau, dejaVu)) return
+    try { localStorage.setItem(CLE_PREMIERS_PAS, '1') } catch { /* stockage indisponible : tant pis */ }
+
+    const cont = this.add.container(0, 0).setDepth(80)
+    const h = 96 + PREMIERS_PAS.lignes.length * 20
+    cont.add(this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x000000, 0.82)
+      .setInteractive({ useHandCursor: true }).on('pointerdown', () => cont.destroy()))
+    cont.add(this.add.rectangle(480, 270, 760, h, 0x10151f, 0.99).setStrokeStyle(3, 0xffd54f, 0.95))
+    cont.add(this.add.text(480, 270 - h / 2 + 26, PREMIERS_PAS.titre, {
+      fontSize: '24px', color: '#ffd54f', fontStyle: 'bold',
+    }).setOrigin(0.5))
+
+    let y = 270 - h / 2 + 62
+    for (const ligne of PREMIERS_PAS.lignes) {
+      // les lignes qui COMMANDENT sont plus grosses et colorées : on doit pouvoir ne lire qu'elles
+      const consigne = ligne.startsWith('⚔') || ligne.startsWith('💪') || ligne.startsWith('🔁')
+      if (ligne) {
+        cont.add(this.add.text(480, y, ligne, {
+          fontSize: consigne ? '17px' : '14px',
+          color: consigne ? '#ffffff' : '#b0bec5',
+          fontStyle: consigne ? 'bold' : 'normal', align: 'center',
+        }).setOrigin(0.5, 0))
+      }
+      y += 20
+    }
+    cont.add(this.add.text(480, 270 + h / 2 - 22, PREMIERS_PAS.pied, {
+      fontSize: '13px', color: '#80cbc4',
+    }).setOrigin(0.5))
   }
 
   // Monstres UNIQUES du niveau : dérivés des spawns (dédup, ordre préservé) + le boss en dernier.

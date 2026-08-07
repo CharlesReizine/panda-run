@@ -27,6 +27,22 @@ export const SWIM_SPEED = 150
 // noyer (cf. level-validator.maxSwimTiles). Player l'importe au lieu d'en garder une copie — deux
 // valeurs qui dérivent, et le tunnel devient infranchissable sans qu'aucun test ne le voie.
 export const SWIM_RUN_MULT = 0.7
+
+// ─── LARGEUR DU TAPIS DE TRAMPOLINE, ET LA PLACE QU'IL LUI FAUT AUTOUR ────────────────────────
+//
+// 136 px, soit 4,25 tuiles : c'est la largeur d'affichage imposée par LevelScene (« trois fois plus
+// large que le premier jet », sur retour du joueur — un tapis d'une tuile se rate, et un engin qu'on
+// rate passe pour cassé). Déclarée ICI et pas seulement dans la scène parce qu'elle décide aussi du
+// PLACEMENT : un tapis collé à un mur est laid et se joue mal.
+export const TRAMPOLINE_W_PX = 136
+export const trampolineTuiles = (): number => Math.ceil(TRAMPOLINE_W_PX / TILE)
+
+// ⚠️ DEUX LARGEURS DE TAPIS DE CHAQUE CÔTÉ, ET C'EST LA DEMANDE EXACTE DU JOUEUR : « faut pas trop les
+// coller aux murs non plus. Horizontalement je veux au moins 2 fois la largeur du trampoline d'écart
+// au minimum. Là c'est pas stylé. » Ce n'est pas qu'une question de goût : on ARRIVE sur un trampoline
+// en courant, et on en repart en montant. Collé à une paroi, on s'y écrase à l'aller comme au retour,
+// et l'engin devient un piège dont on ne comprend pas la règle.
+export const ECART_MUR_TRAMPOLINE = 2 * trampolineTuiles()
 // Le sol est TOUJOURS au bas du monde : deux rangées pleines (sol + sous-sol) → groundRow = h - 2.
 export function groundRowFor(heightTiles = DEFAULT_HEIGHT_TILES): number {
   return heightTiles - 2

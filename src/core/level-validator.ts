@@ -8,7 +8,7 @@
 // sommet d'une échelle est donc atteignable dès que son pied l'est, ce que le simple
 // `unreachablePlatforms` de platforming.ts (sauts uniquement) ne sait pas modéliser.
 
-import { groundRowFor, canReach, canReachByBounce, maxJumpGapPx, maxJumpTiles, MAX_LADDER_TILES, RUN_SPEED, SWIM_RUN_MULT, SWIM_SPEED, TILE, type Plat } from './platforming'
+import { groundRowFor, canReach, canReachByBounce, ECART_MUR_TRAMPOLINE, maxJumpGapPx, maxJumpTiles, MAX_LADDER_TILES, RUN_SPEED, SWIM_RUN_MULT, SWIM_SPEED, TILE, type Plat } from './platforming'
 import type { LevelDef } from '../data/levels'
 import { estCoffre } from '../data/props'
 
@@ -1368,6 +1368,60 @@ export function pierresFlottantes(level: LevelDef): { x: number; y: number; w: n
     for (let y = r.y; y < r.y + r.h; y++) if (plein(r.x - 1, y) || plein(r.x + r.w, y)) return false
     return true
   }).map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h }))
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// UN OISEAU NE SORT PAS DE TERRE
+//
+// Retour du joueur : « et les oiseaux partent souvent de sous le sol, for some reason ? »
+//
+// ⚠️ LA CONVENTION « SANS y = AU SOL » N'A JAMAIS ÉTÉ PENSÉE POUR CE QUI VOLE. Elle sert aux monstres
+// terrestres et aquatiques : ne pas écrire de rangée, c'est laisser la scène les poser sur la surface
+// (ou sur le fond d'une cuve rognée, cf. `spawnFeetRow`). Appliquée à un corbeau, elle le fait
+// APPARAÎTRE DANS LE SOL, d'où il s'extrait en volant — exactement ce que le joueur décrit.
+//
+// Deux chemins y menaient, et aucun validateur ne regardait : les motifs qui rangent un aérien dans
+// leur liste « au sol » (il n'y reçoit pas d'altitude), et le filet de sécurité des spawns, qui repose
+// AU SOL un monstre dont la corniche a disparu — en lui retirant son `y`, sans se demander s'il vole.
+export function oiseauxAuSol(level: LevelDef, isAerial: (id: string) => boolean): SpawnProblem[] {
+  const groundRow = groundRowFor(level.heightTiles)
+  return level.spawns
+    .filter((s) => isAerial(s.monsterId) && (s.y === undefined || s.y >= groundRow - 1))
+    .map((s) => ({ monsterId: s.monsterId, x: s.x, y: s.y, reason: s.y === undefined ? 'aucune altitude' : 'au ras du sol' }))
+}
+
+export interface TrampolineColle { x: number; y: number; gauche: number; droite: number }
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// UN TRAMPOLINE N'EST PAS COLLÉ À UN MUR
+//
+// Demande du joueur : « faut pas trop les coller aux murs non plus. Horizontalement je veux au moins
+// 2 fois la largeur du trampoline d'écart au minimum. Là c'est pas stylé. »
+//
+// ⚠️ ET CE N'EST PAS QU'UNE QUESTION DE GOÛT. On ARRIVE sur un trampoline en courant, et on en repart
+// en montant : collé à une paroi, on s'y écrase à l'aller comme au retour. L'engin devient un piège
+// dont on ne comprend pas la règle — le même défaut que le tapis coincé sous un plateau, vu de côté.
+//
+// Le mur, ici, c'est ce qui BLOQUE À HAUTEUR D'HOMME : la roche et les marches de pierre pleines, dans
+// la bande de rangées juste au-dessus du tapis. Une corniche de terre traversable n'en est pas un.
+export function trampolinesColles(level: LevelDef, ecartMin = ECART_MUR_TRAMPOLINE): TrampolineColle[] {
+  const HAUTEUR_CORPS = 2 // rangées où le panda a un corps quand il court vers le tapis
+  const out: TrampolineColle[] = []
+  for (const t of level.trampolines ?? []) {
+    const mur = (x: number): boolean => {
+      for (let dy = 0; dy < HAUTEUR_CORPS; dy++) {
+        const y = t.y - dy
+        if ((level.rockBands ?? []).some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h)) return true
+        if (level.platforms.some((p) => p.solid && x >= p.x && x < p.x + p.w && p.y === y)) return true
+      }
+      return false
+    }
+    let gauche = 0, droite = 0
+    while (gauche < ecartMin && t.x - 1 - gauche >= 0 && !mur(t.x - 1 - gauche)) gauche++
+    while (droite < ecartMin && t.x + 1 + droite < level.widthTiles && !mur(t.x + 1 + droite)) droite++
+    if (gauche < ecartMin || droite < ecartMin) out.push({ x: t.x, y: t.y, gauche, droite })
+  }
+  return out
 }
 
 export interface TrampolinePlafond { x: number; y: number; plafond: number; libre: number }

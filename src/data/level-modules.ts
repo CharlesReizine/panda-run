@@ -15,6 +15,7 @@
 // - silhouette COLLINES : on monte puis on redescend ; ≤ 3 paliers empilés partout ; hauteur du
 //   monde = enveloppe des modules (souvent ~22-34 tuiles, pas de tour géante).
 
+import { canReach, canReachByBounce, ECART_MUR_TRAMPOLINE } from '../core/platforming'
 import { chainesContournables, CLAIR_TRAMPOLINE, deadEndSurfaces, marchesInfranchissables, maxSwimTiles, overStackedColumns, sealedVoids, unreachablePlatforms } from '../core/level-validator'
 import { breathMaxMs } from '../core/breath'
 import type { LevelDef } from './levels'
@@ -3701,6 +3702,31 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   spawns.length = 0
   spawns.push(...poses)
 
+  // ─── UN OISEAU NE SORT PAS DE TERRE ──────────────────────────────────────────────────────────
+  //
+  // Retour du joueur : « et les oiseaux partent souvent de sous le sol, for some reason ? »
+  //
+  // ⚠️ LA CONVENTION « SANS y = AU SOL » N'A JAMAIS ÉTÉ PENSÉE POUR CE QUI VOLE. Elle sert aux
+  // terrestres et aux aquatiques : ne pas écrire de rangée, c'est laisser la scène les poser sur la
+  // surface. Appliquée à un corbeau, elle le fait APPARAÎTRE DANS LE SOL, d'où il s'extrait en volant.
+  //
+  // Deux chemins y menaient, et ce sont deux gestes raisonnables pris isolément : des motifs rangent un
+  // aérien dans leur liste « au sol » (il n'y reçoit pas d'altitude), et le filet de sécurité juste
+  // au-dessus repose AU SOL un monstre dont la corniche a disparu — en lui retirant son `y`, sans se
+  // demander s'il vole. Cent vingt spawns sur cent soixante-douze étaient dans ce cas.
+  //
+  // On corrige ICI plutôt que dans chaque motif : la règle « ce qui vole vole » ne dépend d'aucun
+  // décor, et la disséminer, c'est se garantir qu'un motif futur l'oubliera.
+  const ALTITUDE_VOL = 7 // rangées au-dessus de la surface : assez haut pour se lire comme du ciel
+  for (const s of spawns) {
+    if (!MONSTERS[s.monsterId]?.aerial) continue
+    if (s.y !== undefined && s.y < groundRow - 1) continue
+    // on part de la surface locale (une corniche compte) pour ne pas noyer l'oiseau dans un relief
+    let surface = groundRow
+    for (const p of platforms) if (s.x >= p.x && s.x < p.x + p.w) surface = Math.min(surface, p.y)
+    s.y = Math.max(1, surface - ALTITUDE_VOL)
+  }
+
   // ─── AUCUN DÉCOR, AUCUN COFFRE ENCHÂSSÉ DANS LA PIERRE ────────────────────────────────────────
   //
   // Retour du user sur Vallon : « y a un trésor qui est collé à de la pierre et c'est bizarre ».
@@ -4192,54 +4218,77 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     }
     const degage = (x: number, y: number) => { const c = plafondSur(x, y); return c === null || y - c >= clair }
 
-    for (let i = trampolines.length - 1; i >= 0; i--) {
-      const t = trampolines[i]!
-      if (degage(t.x, t.y)) continue
-      // la surface qui le porte : c'est elle qui borne le glissement (un tapis flotte pas)
-      const support = platforms.find((p) => p.y === t.y + 1 && t.x >= p.x && t.x < p.x + p.w)
-      let mieux: number | null = null
-      if (support) {
-        for (let d = 1; d < support.w && mieux === null; d++) {
-          for (const x of [t.x - d, t.x + d]) {
-            if (x < support.x || x >= support.x + support.w) continue
-            if (degage(x, t.y)) { mieux = x; break }
-          }
-        }
-      }
-      if (mieux !== null) t.x = mieux
-      else trampolines.splice(i, 1)
-    }
-  }
+    // ⚠️ DÉGAGÉ NE VEUT PAS DIRE UTILE, et le premier jet s'est arrêté à mi-chemin. Retour du joueur,
+    // capture à l'appui : « le trampoline est mal placé ». Il l'était — sur foret-4, glissé à la
+    // première colonne ayant du ciel au-dessus, c'est-à-dire face à RIEN. Un trampoline qui catapulte
+    // vers le vide est aussi trompeur qu'un trampoline qui cogne : il annonce un ailleurs qui n'existe
+    // pas. On préfère donc, à dégagement égal, une colonne d'où le rebond DESSERT une plateforme —
+    // et une plateforme hors de portée d'un saut simple, sinon l'engin ne sert à rien qu'on ne sache
+    // déjà faire.
+    const dessertQuelqueChose = (x: number, y: number) => platforms.some((p) => {
+      if (p.y >= y) return false
+      const ecart = Math.max(0, p.x > x ? p.x - x : x - (p.x + p.w - 1))
+      return canReachByBounce(y, p, ecart) && !canReach(y, p, ecart)
+    })
 
-  // ─── ON REBOUCHE SOUS UN CUL-DE-SAC : TOMBER DOIT TUER, PAS ENFERMER ─────────────────────────
-  //
-  // Ouvrir le sol sous les motifs de saut fabrique une poignée de CULS-DE-SAC : une corniche qu'on
-  // atteint et d'où l'on ne peut plus repartir, parce que le sol qui servait de porte de sortie a
-  // disparu. Quatre sur l'ensemble du jeu.
-  //
-  // ⚠️ ET C'EST LA SEULE CHOSE QUE CE PROJET REFUSE ABSOLUMENT. « Enfermer vivant » est tenu ici pour
-  // le pire défaut possible — pire qu'un mur, pire qu'une mort injuste : une mort, on la recommence ;
-  // un enfermement, on quitte le jeu. Le trou mortel est demandé (« je veux 0000000 sol en dessous »),
-  // le piège sans issue ne l'est pas, et les deux se ressemblent assez pour qu'on les confonde.
-  //
-  // On rend donc le sol SOUS la surface fautive, et rien d'autre : le reste du module garde son vide.
-  for (let tour = 0; tour < 4; tour++) {
-    const pieges = deadEndSurfaces({ ...geo(), breakables })
-    if (!pieges.length) break
-    let rebouche = false
-    // ⚠️ ON NE REBOUCHE QUE NOS PROPRES TROUS. Première version : tout trou qui chevauchait la surface
-    // fautive, d'où qu'il vienne — y compris ceux que le MOTIF avait posés exprès. Sur enfer-4, ça
-    // rendait du sol là où le motif en avait retiré, et six colonnes passaient à quatre paliers.
-    // Un correctif n'a pas le droit de défaire une intention qu'il ne comprend pas.
-    for (const s of pieges) {
-      for (const t of trousDeVide) {
-        if (t.x < s.x + s.w && t.x + t.w > s.x) {
-          const i = gaps.indexOf(t)
-          if (i >= 0) { gaps.splice(i, 1); rebouche = true }
-        }
+    // ⚠️ ET IL NE DOIT PAS ÊTRE COLLÉ À UN MUR. Troisième retour du joueur sur le même engin : « faut pas
+    // trop les coller aux murs non plus. Horizontalement je veux au moins 2 fois la largeur du
+    // trampoline d'écart au minimum. Là c'est pas stylé. » Ce n'est pas qu'une question de goût : on
+    // ARRIVE sur un trampoline en courant et on en repart en montant — collé à une paroi, on s'y écrase
+    // dans les deux sens.
+    const murA = (x: number, y: number) => {
+      for (let dy = 0; dy < 2; dy++) {
+        const yy = y - dy
+        if (rockBands.some((r) => x >= r.x && x < r.x + r.w && yy >= r.y && yy < r.y + r.h)) return true
+        if (platforms.some((p) => p.solid && x >= p.x && x < p.x + p.w && p.y === yy)) return true
       }
+      return false
     }
-    if (!rebouche) break
+    const ecartMur = (x: number, y: number) => {
+      let g = 0, d = 0
+      while (g < ECART_MUR_TRAMPOLINE && x - 1 - g >= 0 && !murA(x - 1 - g, y)) g++
+      while (d < ECART_MUR_TRAMPOLINE && x + 1 + d < totalWidth && !murA(x + 1 + d, y)) d++
+      return Math.min(g, d)
+    }
+
+    for (const t of trampolines) {
+      // ⚠️ ON NE SE LIMITE PLUS À LA SEULE PLATEFORME PORTEUSE. Beaucoup de surfaces sont faites de
+      // plusieurs plateformes bout à bout, ou d'un dessus de roche : chercher dans la seule dalle sous
+      // le tapis interdisait des colonnes parfaitement valables deux tuiles plus loin, et laissait
+      // dix-huit engins collés à un mur. Ce qui compte, c'est qu'il y ait UNE SURFACE à porter, d'où
+      // qu'elle vienne — et qu'on puisse y aller sans traverser un trou.
+      // ⚠️ JAMAIS AU-DESSUS D'UN TROU, MÊME PORTÉ PAR UNE CORNICHE. Un tapis posé sur une plateforme
+      // qui surplombe le vide se lit comme suspendu dans les airs — et le joueur qui le rate tombe
+      // au lieu de rebondir. La règle existait déjà pour le sol ; elle vaut pour toute la colonne.
+      const auDessusDunTrou = (x: number) => gaps.some((g) => x >= g.x && x < g.x + g.w)
+      const porte = (x: number) => !auDessusDunTrou(x) && (
+        platforms.some((p) => p.y === t.y + 1 && x >= p.x && x < p.x + p.w)
+        || rockBands.some((r) => x >= r.x && x < r.x + r.w && r.y === t.y + 1)
+        || t.y + 1 >= groundRow)
+      let gMin = t.x, gMax = t.x
+      while (gMin - 1 >= 1 && porte(gMin - 1)) gMin--
+      while (gMax + 1 < totalWidth - 1 && porte(gMax + 1)) gMax++
+      // ⚠️ ON NOTE, ON NE FILTRE PLUS. Trois exigences se contredisent souvent (du ciel au-dessus, une
+      // corniche à desservir, de l'air de chaque côté) : les enchaîner en cascade de « si » donnait un
+      // engin qui satisfaisait la première et ratait les deux autres. On classe donc TOUTES les colonnes
+      // de la surface porteuse, et on prend la meilleure — un compromis mesuré vaut mieux qu'une
+      // priorité arbitraire.
+      const note = (x: number) => (auDessusDunTrou(x) ? -1000 : 0) + (degage(x, t.y) ? 100 : 0)
+        + (dessertQuelqueChose(x, t.y) ? 50 : 0)
+        + ecartMur(x, t.y) * 3
+        - Math.abs(x - t.x) // à qualité égale, on bouge le moins possible
+      let meilleur = t.x, meilleureNote = note(t.x)
+      for (let x = gMin; x <= gMax; x++) {
+        const n = note(x)
+        if (n > meilleureNote) { meilleureNote = n; meilleur = x }
+      }
+      t.x = meilleur
+    }
+
+    // ce qui n'a PAS trouvé de ciel au-dessus après ce classement n'a plus rien à sauver : il cogne.
+    for (let i = trampolines.length - 1; i >= 0; i--) {
+      if (!degage(trampolines[i]!.x, trampolines[i]!.y)) trampolines.splice(i, 1)
+    }
   }
 
   // ─── ET ON REPASSE UN COUP DE CREUSEMENT, PARCE QUE LES CHAÎNES NAISSENT APRÈS ───────────────
