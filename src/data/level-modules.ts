@@ -4326,8 +4326,8 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   // sont l'information qui manquait au planificateur — il ne savait chaîner que du montant.
   'echelle-tranquille-inverse': { tier: 1, family: 'filler', entry: 'haut', exit: 'bas', width: [16, 22], below: 'sol', above: 'air', ladder: true },
   'echelle-zigzag-inverse': { tier: 3, family: 'vertical', entry: 'haut', exit: 'bas', width: [24, 32], below: 'vide', above: 'air', ladder: true },
-  'echelles-decalees-inverse': { tier: 3, family: 'vertical', entry: 'haut', exit: 'bas', width: [24, 34], below: 'sol', above: 'air', ladder: true },
-  'escalier-saut-inverse': { tier: 2, family: 'vertical', entry: 'haut', exit: 'bas', width: [20, 30], below: 'sol', above: 'air' },
+  'echelles-decalees-inverse': { tier: 3, family: 'vertical', entry: 'haut', exit: 'bas', width: [24, 34], below: 'vide', above: 'air', ladder: true },
+  'escalier-saut-inverse': { tier: 2, family: 'vertical', entry: 'haut', exit: 'bas', width: [20, 30], below: 'vide', above: 'air' },
   // (pas de `forcedOnly` : hérité de l'original, il ne serait JAMAIS tiré — donc absent du jeu,
   //  ce que `couverture-motifs` refuse. Un motif imposé doit être imposé QUELQUE PART.)
   'trampoline-corniche-inverse': { tier: 2, family: 'vertical', entry: 'haut', exit: 'bas', width: [20, 28], below: 'sol', above: 'air' },
@@ -4336,11 +4336,11 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'echelle-exposee-inverse': { tier: 4, family: 'tension', entry: 'haut', exit: 'bas', width: [18, 26], below: 'sol', above: 'air', ladder: true },
   'escalier-pierre-inverse': { tier: 2, family: 'traverse', entry: 'haut', exit: 'bas', width: [22, 30], below: 'sol', above: 'air' },
   'echelle-trou-echelle-inverse': { tier: 3, family: 'vertical', entry: 'haut', exit: 'bas', width: [24, 30], below: 'vide', above: 'air', ladder: true },
-  'echelles-successives-inverse': { tier: 3, family: 'vertical', entry: 'haut', exit: 'bas', width: [22, 30], below: 'sol', above: 'air', ladder: true },
+  'echelles-successives-inverse': { tier: 3, family: 'vertical', entry: 'haut', exit: 'bas', width: [22, 30], below: 'vide', above: 'air', ladder: true },
   'tour-creuse-inverse': { tier: 3, family: 'vertical', entry: 'haut', exit: 'bas', width: [24, 34], below: 'sol', above: 'air', ladder: true },
-  'passerelles-plein-inverse': { tier: 2, family: 'vertical', entry: 'haut', exit: 'bas', width: [20, 28], below: 'sol', above: 'air' },
-  'echelles-lianes-inverse': { tier: 3, family: 'vertical', entry: 'haut', exit: 'bas', width: [22, 32], below: 'sol', above: 'air', ladder: true },
-  'echelles-zigzag-inverse': { tier: 3, family: 'vertical', entry: 'haut', exit: 'bas', width: [18, 26], below: 'sol', above: 'air', ladder: true },
+  'passerelles-plein-inverse': { tier: 2, family: 'vertical', entry: 'haut', exit: 'bas', width: [20, 28], below: 'vide', above: 'air' },
+  'echelles-lianes-inverse': { tier: 3, family: 'vertical', entry: 'haut', exit: 'bas', width: [22, 32], below: 'vide', above: 'air', ladder: true },
+  'echelles-zigzag-inverse': { tier: 3, family: 'vertical', entry: 'haut', exit: 'bas', width: [18, 26], below: 'vide', above: 'air', ladder: true },
   'grotte-u-brisable': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [24, 32], below: 'roche', above: 'air', chest: true },
   // GROTTE SOUS-MARINE EN U : lac en U noyé sous un toit de roche, coffre au fond (plongée récompensée)
   'grotte-noyee': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [18, 30], below: 'marine', above: 'roche', chest: true, water: true },
@@ -4354,9 +4354,9 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   // CHAÎNES VERTICALES VARIÉES
   'echelle-trou-echelle': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [18, 26], below: 'vide', above: 'air', ladder: true },
   'echelle-zigzag': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [18, 26], below: 'vide', above: 'air', ladder: true },
-  'echelles-decalees': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [18, 28], below: 'sol', above: 'air', ladder: true },
+  'echelles-decalees': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [18, 28], below: 'vide', above: 'air', ladder: true },
   // PASSERELLES FLOTTANTES sur SOL PLEIN (variante « full sol » du miroir)
-  'passerelles-plein': { tier: 2, family: 'vertical', entry: 'bas', exit: 'haut', width: [14, 22], below: 'sol', above: 'air' },
+  'passerelles-plein': { tier: 2, family: 'vertical', entry: 'bas', exit: 'haut', width: [14, 22], below: 'vide', above: 'air' },
   // R168 — ÉCHELLE-DESCENTE PIÉGÉE (on descend, trou mortel, saut sur passerelle coiffée de roche)
   // ⚠️ PLACEMENT CHOISI. Distribué librement par l'ordonnanceur, ce motif atterrit sur des terrains où sa
   // passerelle ne sort pas (cave-1 : 0 pont alors que sa définition en exige un). Il dépend d'une altitude
@@ -4371,16 +4371,16 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'cascade-w': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [16, 26], below: 'vide', above: 'air', chest: true, water: true },
   'cascade-saut-ange': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [18, 28], below: 'marine', above: 'air', chest: true, water: true },
   'cascade-large-pierre': { tier: 4, family: 'risque', entry: 'bas', exit: 'haut', width: [16, 24], below: 'vide', above: 'air', chest: true, water: true },
-  'echelles-lianes': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [16, 26], below: 'sol', above: 'air', ladder: true, forcedOnly: true },
-  'echelles-zigzag': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [12, 20], below: 'sol', above: 'air', ladder: true, forcedOnly: true },
+  'echelles-lianes': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [16, 26], below: 'vide', above: 'air', ladder: true, forcedOnly: true },
+  'echelles-zigzag': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [12, 20], below: 'vide', above: 'air', ladder: true, forcedOnly: true },
   'lacs-cascade-montee': { tier: 3, family: 'risque', entry: 'bas', exit: 'haut', width: [18, 30], below: 'marine', above: 'air', chest: true, water: true, forcedOnly: true },
   'lacs-cascade-descente': { tier: 3, family: 'risque', entry: 'milieu', exit: 'milieu', width: [40, 46], below: 'marine', above: 'air', chest: true, water: true, forcedOnly: true },
   // R171 — LAC → CASCADE → PLATEAU (lac horizontal + cascade remontable vers un plateau haut)
   'lac-cascade-plateau': { tier: 2, family: 'risque', entry: 'bas', exit: 'haut', width: [22, 32], below: 'marine', above: 'air', chest: true, water: true },
   // R171 — ESCALIER À GRANDS PAS (marches espacées, saut franc) — motif VERTICAL/traversée sec
-  'escalier-saut': { tier: 2, family: 'vertical', entry: 'bas', exit: 'haut', width: [14, 24], below: 'sol', above: 'air' },
+  'escalier-saut': { tier: 2, family: 'vertical', entry: 'bas', exit: 'haut', width: [14, 24], below: 'vide', above: 'air' },
   // R171 — ÉCHELLES SUCCESSIVES (échelle puis échelle, court palier) — motif VERTICAL
-  'echelles-successives': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [16, 26], below: 'sol', above: 'air', ladder: true },
+  'echelles-successives': { tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [16, 26], below: 'vide', above: 'air', ladder: true },
 
   // ─── TRAMPOLINES ──────────────────────────────────────────────────────────────────────────────
   // ⚠️ `forcedOnly` SUR LES CINQ, ET C'EST INDISPENSABLE. Sans ce marqueur, le planificateur les tire

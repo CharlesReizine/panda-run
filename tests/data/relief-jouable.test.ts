@@ -129,7 +129,11 @@ describe('relief jouable', () => {
   // du sol), PUIS 136 → 82 EN REMBOURSANT CETTE DETTE. Deux corrections : une rampe ne pose plus de
   // palier à l'altitude 1 — le sol du monde EST déjà cette surface, et l'y doubler ne donne aucun appui
   // de plus — et les cinq derniers motifs qui plantaient leur plancher à 1 ont été relevés.
-  const TOLERANCE_COLLEES = 82
+  // ⚠️ 82 → 83 APRÈS LA REGRAVURE QUI OUVRE LE SOL. Une seule corniche de plus (plaine-5 x66), et la
+  // cause est mécanique : quand le sol du monde disparaît sous un motif, les corniches qui le
+  // bordaient se retrouvent à raser le vide au lieu de raser la terre. Un pour douze motifs ouverts,
+  // c'est le prix, et il s'écrit ici plutôt que de se fondre dans un seuil arrondi.
+  const TOLERANCE_COLLEES = 83
   it('peu de corniches restent collées au sol du monde', () => {
     const collees: string[] = []
     for (const l of nonBoss) {

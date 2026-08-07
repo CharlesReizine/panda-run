@@ -56,8 +56,11 @@ describe('murs infranchissables', () => {
     // que personne ne le voie — c'est exactement comme ça que les 160 étaient arrivés.
     //
     // 160 → 94 → 66 → 36, puis 38 le temps de dégager les trampolines coincés (ils excusaient deux
-    // murs par simple voisinage, la mesure a cessé d'être flattée), et 35 après regravure.
-    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(35)
+    // murs par simple voisinage, la mesure a cessé d'être flattée), 35 après regravure, 37 après la
+    // seconde — celle qui ouvre le sol sous les motifs d'échelle et de saut. Deux murs de plus pour un
+    // sol troué là où il devait l'être : le compte remonte parce que le terrain a changé de nature,
+    // pas parce qu'il s'est dégradé. C'est le genre d'écart qui doit s'écrire, pas se lisser.
+    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(37)
   })
 
   it('aucun terrain de plaine n\'empire', () => {
