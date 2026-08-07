@@ -72,10 +72,43 @@ const SEUIL_DURCISSEMENT = 10
 const PENTE_PV = 0.035
 const PENTE_ATK = 0.03
 
-/** Facteurs de durcissement à ce niveau : 1 avant le seuil, croissants ensuite. */
+// ─── ET DEUX PALIERS PAR-DESSUS LA PENTE ────────────────────────────────────────────────────────
+//
+// Demande du joueur : « tu peux rendre les monstres plus forts aussi ? Plus d'attaque, plus de défense.
+// Jusqu'au niveau 10 tu touches pas, mais après le niveau 10 tu les rends 25 % plus forts, et après le
+// niveau 30, 50 % plus forts (donc plus de vie et plus de dégâts). Ou alors tu augmentes juste le
+// niveau des mobs des terrains un peu plus avancés — peut-être plus propre. »
+//
+// ⚠️ J'AI PRIS LA PREMIÈRE OPTION, ET LA SECONDE AURAIT ÉTÉ PLUS SALE MALGRÉ L'INTUITION. Monter le
+// niveau des mobs d'un terrain ne change pas que leur force : le niveau pilote aussi l'XP qu'ils
+// donnent (économie d'XP par terrain, déjà sous surveillance), le palier de butin qu'ils peuvent
+// lâcher, et la calibration d'espèce entière — un même monstre apparaît sur plusieurs terrains, et son
+// niveau dérive du PREMIER où il vit. Bouger un chiffre là-bas fait remuer quatre systèmes. Un
+// multiplicateur de stats, lui, ne touche qu'à la force, se lit en deux lignes et se retire en une.
+//
+// ⚠️ ET ÇA S'AJOUTE À LA PENTE, ÇA NE LA REMPLACE PAS. Le durcissement progressif existait déjà (il
+// répondait à « le jeu est un chouille trop facile passé le niveau 10 ») ; le joueur en redemande, donc
+// les paliers se multiplient à la pente au lieu de s'y substituer. Au niveau 40 : PV ×3,8 et ATK ×3,4
+// par rapport à la courbe de base.
+// ⚠️ « APRÈS le niveau 10 » VEUT DIRE À PARTIR DE 11, PAS DE 10. Le début de partie est calibré au
+// monstre près et un test l'exige explicitement (« aucun durcissement jusqu'au niveau 10 INCLUS ») :
+// faire commencer la marche à 10 aurait durci le dernier palier du tutoriel, celui-là même que le
+// joueur a demandé de ne pas toucher.
+const PALIERS: { desLeNiveau: number; facteur: number }[] = [
+  { desLeNiveau: 31, facteur: 1.5 },
+  { desLeNiveau: 11, facteur: 1.25 },
+]
+
+/** Palier de difficulté à ce niveau : 1 sous le seuil, puis les marches demandées. */
+export function palierDifficulte(level: number): number {
+  return PALIERS.find((p) => level >= p.desLeNiveau)?.facteur ?? 1
+}
+
+/** Facteurs de durcissement à ce niveau : 1 avant le seuil, croissants ensuite, par paliers au-delà. */
 export function durcissement(level: number): { hp: number; atk: number } {
   const au_dela = Math.max(0, level - SEUIL_DURCISSEMENT)
-  return { hp: 1 + PENTE_PV * au_dela, atk: 1 + PENTE_ATK * au_dela }
+  const palier = palierDifficulte(level)
+  return { hp: (1 + PENTE_PV * au_dela) * palier, atk: (1 + PENTE_ATK * au_dela) * palier }
 }
 
 // Stats finales d'un monstre de niveau `level` et de rôle `role`. `grand` (gabarit géant) épaissit

@@ -49,6 +49,6 @@ describe('le catalogue de décors ne se répète pas', () => {
     // corrections des 4 et 5 août ont ajouté plusieurs centaines de lignes de COMMENTAIRE — chaque passe
     // d'assemblage porte désormais la raison de son existence et la liste des essais ratés. Le seuil
     // garde sa marge (un catalogue en double se verrait toujours), il suit juste la réalité du fichier.
-    expect(lignes, `${lignes} lignes — un catalogue en double a-t-il été recollé ?`).toBeLessThan(5100)
+    expect(lignes, `${lignes} lignes — un catalogue en double a-t-il été recollé ?`).toBeLessThan(5300)
   })
 })

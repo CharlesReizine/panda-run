@@ -30,8 +30,13 @@ import type { LevelDef } from '../../src/data/levels'
 const INVENTAIRE: Record<string, string> = {
   // Ces deux-là ne s'atteignent qu'au REBOND de trampoline, que `computeReach` ne simule pas (c'est
   // `strictReach` qui modélise le rebond). Le défaut est dans le modèle de mesure, pas dans le motif.
-  'trampoline-vide': 'atteignable au rebond, non simulé par computeReach',
-  'trampoline-echelle': 'atteignable au rebond, non simulé par computeReach',
+  // ⚠️ MÊME CAUSE, ET ELLE M'A COÛTÉ CINQ TENTATIVES AVANT QUE JE RELISE CETTE LISTE. Les deux motifs de
+  // mur sont franchissables au REBOND et uniquement au rebond — c'est leur raison d'être. J'ai cru à un
+  // défaut de construction et j'ai essayé quatre hauteurs de mur, trois positions de tapis, le calage du
+  // dessus de roche, puis le fond de vide : le modèle de CE test ne simule pas le rebond, point. Le
+  // modèle qui le simule (`strictReach`, batterie ci-dessous) les déclare sains.
+  'trampoline-mur': 'atteignable au rebond, non simulé par computeReach',
+  'trampoline-mur-trou': 'atteignable au rebond, non simulé par computeReach',
   // (les deux `cascade-deux-passages` ont été corrigés : leur corniche de sortie était fixée au bord du
   // module et s'éloignait du tunnel à mesure qu'on l'élargissait — 6 tuiles de vide à la même altitude.)
 }

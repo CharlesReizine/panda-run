@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { statsForLevel, statPower, hpBase, atkBase, defBase, type MobRole } from '../../src/core/mob-stats'
+import { statsForLevel, statPower, hpBase, atkBase, defBase, type MobRole , palierDifficulte, durcissement } from '../../src/core/mob-stats'
 
 const ROLES: MobRole[] = ['normal', 'costaud', 'tank', 'frele', 'distant', 'rapide', 'volant']
 
@@ -91,5 +91,53 @@ describe('statsForLevel', () => {
         expect(elite.def / normal.def, `L${L} ${role} DÉF élite/normal`).toBeLessThanOrEqual(1.4)
       }
     }
+  })
+})
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// DEUX PALIERS DE DIFFICULTÉ PAR-DESSUS LA PENTE
+//
+// Demande du joueur : « jusqu'au niveau 10 tu touches pas, mais après le niveau 10 tu les rends 25 %
+// plus forts, et après le niveau 30, 50 % plus forts (donc plus de vie et plus de dégâts). Ou alors tu
+// augmentes juste le niveau des mobs des terrains un peu plus avancés — peut-être plus propre. »
+//
+// ⚠️ LA PREMIÈRE OPTION A ÉTÉ RETENUE, ET LA SECONDE AURAIT ÉTÉ PLUS SALE MALGRÉ L'INTUITION. Monter le
+// niveau des mobs d'un terrain ne change pas que leur force : le niveau pilote aussi l'XP qu'ils
+// donnent, le palier de butin qu'ils peuvent lâcher, et la calibration de l'espèce entière — un même
+// monstre vit sur plusieurs terrains, et son niveau dérive du PREMIER. Bouger un chiffre là-bas fait
+// remuer quatre systèmes ; un multiplicateur de stats ne touche qu'à la force.
+describe('paliers de difficulté', () => {
+  // ⚠️ « APRÈS le niveau 10 » = À PARTIR DE 11. Le début de partie est calibré au monstre près, et le
+  // niveau 10 en fait encore partie : la marche commence juste après.
+  it('jusqu\'au niveau 10 inclus, rien ne change', () => {
+    for (const n of [1, 5, 9, 10]) expect(palierDifficulte(n), `niveau ${n}`).toBe(1)
+  })
+
+  it('à partir de 11 : +25 %, à partir de 31 : +50 %', () => {
+    for (const n of [11, 15, 30]) expect(palierDifficulte(n), `niveau ${n}`).toBe(1.25)
+    for (const n of [31, 40, 57]) expect(palierDifficulte(n), `niveau ${n}`).toBe(1.5)
+  })
+
+  it('les paliers s\'AJOUTENT à la pente, ils ne la remplacent pas', () => {
+    // la pente existait déjà : à 20, elle vaut ~1,35 en PV — le palier la multiplie, il ne l'écrase pas
+    expect(durcissement(20).hp).toBeGreaterThan(1.25 * 1.3)
+    expect(durcissement(9).hp).toBeLessThan(1.0001) // et sous le seuil, toujours rien
+  })
+
+  it('un monstre ne devient jamais plus faible en montant de niveau', () => {
+    let precedent = 0
+    for (let n = 1; n <= 57; n++) {
+      const s = statsForLevel(n, 'normal')
+      const p = statPower(s.hp, s.atk, s.def)
+      expect(p, `niveau ${n}`).toBeGreaterThan(precedent)
+      precedent = p
+    }
+  })
+
+  it('le saut de palier se voit, sans être brutal', () => {
+    const avant = statsForLevel(30, 'normal'), apres = statsForLevel(31, 'normal')
+    const rapport = statPower(apres.hp, apres.atk, apres.def) / statPower(avant.hp, avant.atk, avant.def)
+    expect(rapport, 'la marche doit se sentir').toBeGreaterThan(1.1)
+    expect(rapport, 'mais pas doubler d\'un niveau à l\'autre').toBeLessThan(1.5)
   })
 })

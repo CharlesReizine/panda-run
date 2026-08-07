@@ -72,7 +72,9 @@ export interface LevelDef {
   // Canal DISTINCT des plateformes : un trampoline n'est pas une surface où l'on se pose, c'est un
   // déclencheur — le mélanger aux plateformes obligerait chaque calcul d'atteignabilité à distinguer
   // les deux au cas par cas.
-  trampolines?: { x: number; y: number }[]
+  /** `fixe` : posé exprès par un motif où le rebond est la SEULE solution — la passe de placement
+   *  esthétique ne doit pas le déplacer, sa distance à l'obstacle est calculée. */
+  trampolines?: { x: number; y: number; fixe?: boolean }[]
   // trous MORTELS dans le sol : à ces emplacements (x en tuiles, largeur w en tuiles) on ne
   // dessine PAS les rangées de sol pleines (groundRow/+1) → c'est le vide. Tomber dedans = mort.
   // Chaque trou doit rester FRANCHISSABLE au saut simple (w ≤ distance de saut confortable,
@@ -418,25 +420,27 @@ const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
   // mais chacun sort sur DEUX terrains — un motif qui n'apparaît qu'une fois est du contenu perdu.
   // ⚠️ Deux et pas trois : chaque motif imposé consomme un slot central, et à trois la couverture d'autres
   // familles s'effondrait (passerelles, motifs verticaux, lac→cascade→plateau). Le budget reste fini.
-  'plaine-3': ['trampoline-plat'],           // apprentissage, sans danger
-  'desert-2': ['trampoline-plat'],
+  'plaine-3': ['trampoline-plat'],           // rang 2 — l'atelier : on découvre l'engin sans rien risquer           // le seul « atelier » conservé : on y apprend l'objet sans risque
+  'desert-2': ['trampoline-mur'],            // rang 16 — le mur : monter, sans trou dessous
   // ⚠️ 'trampoline-cascade' N'EST PAS POSÉ. Sur ses deux terrains d'essai (foret-6, desert-9), son rideau et
   // le plafond de roche voisin se combinent en un mur : le validateur d'atteignabilité stricte y trouve des
   // plateformes murées. Le motif est écrit et jouable en isolation ; il attend une reprise de son chaînage.
-  'plaine-6': ['trampoline-corniche'],
-  'jungle-3': ['trampoline-cascade'],
-  'plage-3': ['trampoline-echelle'],
+  // ⚠️ plaine-6 (rang 5) N'A PLUS DE TRAMPOLINE. « Mets les gravures dures pas au début du jeu, au début
+  // faut commencer un peu en douceur. » Un saut mortel au cinquième terrain arrive avant que le joueur
+  // ait seulement compris à quoi sert l'objet — l'atelier de plaine-3 est encore tout frais.
+  'jungle-3': ['trampoline-mur-trou'],       // rang 28 — le même mur, mais avec le trou mortel au pied
+  'plage-3': ['trampoline-corniche'],        // rang 43
   'enfer-7': ['echelles-zigzag'],
   // ⚠️ 'echelle-exposee' A ÉTÉ ÉVINCÉ par les secondes occurrences : chaque motif imposé prend un slot de
   // tension, et cette famille n'en a que quelques-uns sur tout le jeu. On l'épingle donc à son tour — c'est
   // la limite du budget, pas un défaut de l'ordonnanceur.
   'enfer-1': ['echelle-exposee'],
   'carriere-1': ['echelle-descente-piegee'],
-  'foret-6': ['trampoline-cascade'],
-  'montagne-1': ['trampoline-echelle'],
-  'plage-2': ['trampoline-corniche'],
-  'desert-5': ['trampoline-vide'],
-  'enfer-3': ['trampoline-vide'],
+  'foret-6': ['trampoline-plat'],            // rang 12 — un second atelier, avant les vrais obstacles
+  'montagne-1': ['trampoline-mur'],          // rang 33
+  'plage-2': ['trampoline-mur-trou'],        // rang 42
+  'desert-5': ['trampoline-corniche'],       // rang 19
+  'enfer-3': ['trampoline-mur-trou'],        // rang 52
   'jungle-1': ['colonnes-perilleuses'],      // mid : colonnes étroites au-dessus du vide, chute = mort
   'enfer-4': ['colonnes-perilleuses'],       // endgame : le même, plus long
   // ⚠️ 'trampoline-echelle' N'EST PAS PLACÉ. Son échelle SUSPENDUE au-dessus du vide reste injoignable pour

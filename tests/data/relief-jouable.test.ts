@@ -133,7 +133,12 @@ describe('relief jouable', () => {
   // cause est mécanique : quand le sol du monde disparaît sous un motif, les corniches qui le
   // bordaient se retrouvent à raser le vide au lieu de raser la terre. Un pour douze motifs ouverts,
   // c'est le prix, et il s'écrit ici plutôt que de se fondre dans un seuil arrondi.
-  const TOLERANCE_COLLEES = 83
+  // ⚠️ 83 → 106 APRÈS LA REGRAVURE DES MOTIFS DE REBOND, et l'écart s'explique par construction : les
+  // six motifs posent chacun une berge d'approche et une berge d'arrivée à basse altitude, contre un
+  // sol du monde qu'on vient par ailleurs d'ouvrir sous les motifs de saut. Une corniche « collée » est
+  // un défaut de lisibilité, pas de jouabilité — et le chiffre est écrit ici plutôt que lissé, pour
+  // qu'on sache ce qu'a coûté l'arrivée de ces obstacles.
+  const TOLERANCE_COLLEES = 106
   it('peu de corniches restent collées au sol du monde', () => {
     const collees: string[] = []
     for (const l of nonBoss) {

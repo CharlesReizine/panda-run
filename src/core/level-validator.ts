@@ -1390,6 +1390,32 @@ export function oiseauxAuSol(level: LevelDef, isAerial: (id: string) => boolean)
     .map((s) => ({ monsterId: s.monsterId, x: s.x, y: s.y, reason: s.y === undefined ? 'aucune altitude' : 'au ras du sol' }))
 }
 
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// UN TRAMPOLINE QU'ON PEUT IGNORER N'EST PAS UN OBSTACLE
+//
+// Demande du joueur : « s'il faut faire des motifs spéciaux pour avoir du trampoline bien foutu, be it,
+// plutôt que les ajouter à l'arrache sur des motifs où ils sont pas nécessaires. Je veux des obstacles
+// où le trampoline est NÉCESSAIRE et est la seule solution. »
+//
+// ⚠️ LA MESURE EST UNE EXPÉRIENCE, PAS UNE HEURISTIQUE : on RETIRE l'engin et on regarde ce qui devient
+// injoignable. Toute autre formulation (« y a-t-il une corniche haute à côté ? ») se laisse berner par
+// un chemin détourné — une échelle deux modules plus loin, un palier de secours à mi-hauteur — et c'est
+// exactement ce qui a produit des trampolines décoratifs : chaque motif vérifiait sa propre géométrie
+// sans savoir ce que l'assemblage mettait autour.
+export function trampolinesFacultatifs(level: LevelDef): { x: number; y: number }[] {
+  const tous = level.trampolines ?? []
+  if (!tous.length) return []
+  // ⚠️ ON MESURE EN ATTEIGNABILITÉ STRICTE, PAS PERMISSIVE. `unreachablePlatforms` traite le sol comme
+  // une bande pleine largeur et « téléporte » à travers les murs de roche : il trouve donc toujours un
+  // chemin, et déclarait les vingt-neuf trampolines facultatifs sans qu'on puisse distinguer ceux qui
+  // le sont vraiment. `strictReach` découpe le sol aux murs — c'est le seul modèle où « la seule
+  // solution » veut dire quelque chose.
+  const sansEngin = (garde: (t: { x: number; y: number }) => boolean): number =>
+    strictReach({ ...level, trampolines: tous.filter(garde) }).badPlats.length
+  const base = sansEngin(() => true)
+  return tous.filter((t) => sansEngin((u) => u !== t) <= base).map((t) => ({ x: t.x, y: t.y }))
+}
+
 export interface TrampolineColle { x: number; y: number; gauche: number; droite: number }
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -1468,12 +1494,19 @@ export function trampolinesSousPlafond(level: LevelDef, minTiles = CLAIR_TRAMPOL
  * qu'AUCUN moyen du bord ne franchit.
  */
 const PORTEE_AIDE = 3
+/** Portée d'un TRAMPOLINE : le rebond emporte de la vitesse horizontale, il franchit bien plus large. */
+const PORTEE_TRAMPOLINE = 8
 export function marchesInfranchissables(level: LevelDef): MurProblem[] {
   const groundRow = groundRowFor(level.heightTiles)
   const maxMontee = Math.floor(maxJumpTiles()) // rangées franchissables d'un saut
+  // ⚠️ UN TRAMPOLINE PORTE PLUS LOIN QU'UNE ÉCHELLE, et les mettre à la même portée créait une
+  // contradiction entre deux règles maison : pour excuser un mur, l'engin devait être à trois colonnes
+  // — et la règle « pas collé au mur » en exige au moins cinq. Aucune position ne satisfaisait les
+  // deux, ce qui rendait impossible le motif où le rebond est la SEULE solution. La portée d'un
+  // trampoline n'a d'ailleurs aucune raison d'être celle d'une échelle : on y prend de la vitesse
+  // horizontale en montant.
   const aides: number[] = [
     ...(level.ladders ?? []).map((l) => l.x),
-    ...(level.trampolines ?? []).map((t) => t.x),
     // ⚠️ TOUTE EAU EST UNE AIDE, PAS SEULEMENT LA CASCADE — ON NAGE. Un bassin creusé entre deux mesas
     // se lisait comme un mur de huit rangées : la silhouette rendait le FOND du bassin, alors que le
     // panda le traverse à la SURFACE, de plain-pied avec les deux rives. Faux positif intégral, et il
@@ -1483,7 +1516,9 @@ export function marchesInfranchissables(level: LevelDef): MurProblem[] {
     ...(level.hazards ?? []).filter((h) => h.kind === 'water' && h.water !== 'lave')
       .flatMap((h) => Array.from({ length: h.w }, (_, i) => h.x + i)),
   ]
+  const trampos = (level.trampolines ?? []).map((t) => t.x)
   const aideProche = (x: number) => aides.some((a) => Math.abs(a - x) <= PORTEE_AIDE)
+    || trampos.some((a) => Math.abs(a - x) <= PORTEE_TRAMPOLINE)
 
   // ⚠️ ON NE JUGE QUE LE RELIEF PLEIN, JAMAIS LES MARCHES ISOLÉES — et c'est la nuance qui rend ce
   // validateur utilisable. Comparer deux colonnes voisines comptait chaque marche d'`escalier-pierre`

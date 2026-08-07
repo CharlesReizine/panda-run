@@ -85,9 +85,8 @@ export type ModuleKind =
   // « ça fait genre faire un saut 3 fois plus haut et ça permet aussi d'aller plus sur le côté »
   | 'trampoline-plat'        // 1) sur du plat : il ne sert à rien, on découvre l'objet sans risque
   | 'trampoline-corniche'    // 2) permet d'atteindre une corniche haute
-  | 'trampoline-vide'        // 3) plateforme haute, et EN DESSOUS c'est le vide
-  | 'trampoline-echelle'     // 4) atteint une échelle en T suspendue, vide en dessous
-  | 'trampoline-cascade'     // 5) dépasse un vide et atteint une cascade
+  // les seuls où le rebond est OBLIGATOIRE : aucune surface entre le départ et l'arrivée
+  | 'trampoline-mur' | 'trampoline-mur-trou'        // 3) plateforme haute, et EN DESSOUS c'est le vide     // 4) atteint une échelle en T suspendue, vide en dessous     // 5) dépasse un vide et atteint une cascade
   // ─── MOTIFS EAU / GROTTE DEMANDÉS (variété) ───────────────────────────────────────────────────
   // « Je trouve que c'est un peu répétitif là. »
   | 'cascade-plus-haute'     // 1) cascade qui DÉPASSE l'entrée de la grotte
@@ -284,7 +283,7 @@ interface Piece {
   spikes: { x: number; w: number; alt?: number }[]
   bridges: { x: number; alt: number; w: number }[]
   // TRAMPOLINES : tapis posé à l'altitude `alt`. Rebond ×3 en hauteur + contrôle latéral accru.
-  trampolines: { x: number; alt: number }[]
+  trampolines: { x: number; alt: number; fixe?: boolean }[]
   // AQUEDUCS : tablier MARCHABLE (une plateforme solide posée en même temps) + arches dessinées dessous.
   arches: { x: number; alt: number; w: number; h: number; fill: 'eau' | 'vide' }[]
   // cuves d'eau : marine (noyade), cascade (remontable) ou lave (mortelle, enfer). bankAlt = rangée des
@@ -842,97 +841,86 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // de roche : à l'écran, une bande d'herbe noyée dans la pierre (« y a de la terre qui se superpose
       // à de la pierre, c'est nul »). On le pose donc AVANT la corniche, où l'on retombe vraiment quand
       // le rebond est trop court.
+      // ⚠️ LE PALIER DE SECOURS RESTE, ET SA SUPPRESSION A ÉTÉ ESSAYÉE PUIS ANNULÉE. Il rend bien le
+      // trampoline contournable (+4 est à portée d'un saut, et de là la corniche à +8 en est à un
+      // second) — mais le retirer fait passer l'atteignabilité STRICTE de 0 à 207 plateformes murées :
+      // il porte le raccord avec les modules voisins, pas seulement ce motif-ci. Rendre le trampoline
+      // obligatoire ne se fera donc pas en retirant des surfaces à un motif existant ; il y faut un
+      // motif conçu pour ça, dont l'obstacle est fermé par construction.
       p.platforms.push({ x: Math.max(0, Math.floor(w * 0.5) - 5), alt: alt + 4, w: 4 })
       placeBirds(haut + 3)
       p.exitAlt = haut
       break
     }
-    case 'trampoline-vide': {
-      // 3) « Trampoline qui permet d'atteindre une plateforme haute et en dessous c'est le vide. »
-      // Le trampoline reste sur une berge SOLIDE — un trampoline suspendu au-dessus du vide serait
-      // injouable, on ne pourrait pas y revenir après une chute.
-      const alt = Math.max(entryAlt, 3)
-      const haut = alt + 8
-      const bw = bank
-      p.platforms.push({ x: 0, alt, w: bw + 4 })
-      p.trampolines.push({ x: bw + 1, alt: alt + 1 })
-      for (let gx = bw + 4; gx < w - bw; gx += 3) p.gaps.push({ x: gx, w: Math.min(3, w - bw - gx) })
-      // ⚠️ UNE SEULE PLATEFORME, PAS DEUX. La plateforme haute et la corniche de sortie étaient à la MÊME
-      // altitude, et le plancher `max(5, …)` de la première la faisait mordre sur la seconde d'une tuile
-      // dès la largeur minimale — c'était la dernière superposition du jeu (vue sur plage-3). Deux
-      // surfaces contiguës de même altitude n'ont aucune raison d'être deux objets.
-      p.platforms.push({ x: bw + 6, alt: haut, w: w - (bw + 6) })
+    // ─── LES MOTIFS OÙ LE REBOND EST LA SEULE SOLUTION ───────────────────────────────────────
+    //
+    // Demande du joueur, après qu'on ait mesuré que les vingt-neuf trampolines du jeu étaient tous
+    // contournables : « mur très haut, saut très large avec vide en dessous, saut très large avec
+    // flotte en dessous, saut très large avec flammes en dessous, et saut très large avec flammes dans
+    // un trou dont on peut pas sortir. »
+    //
+    // ⚠️ LE MUR TRÈS HAUT MANQUE À L'APPEL, ET C'EST ASSUMÉ PLUTÔT QUE MASQUÉ. Écrit, il échouait au
+    // test « chaque motif se tient debout seul » à TOUTES les largeurs : une surface restait
+    // injoignable, et ni la hauteur du mur (12 → 9 → 8 → 6), ni la distance du tapis, ni le calage du
+    // dessus de roche ne l'ont réglé. Continuer à deviner aurait fini par produire un motif accordé au
+    // validateur plutôt qu'au jeu. Les quatre traversées, elles, passent — et elles couvrent quatre des
+    // cinq demandes.
+    //
+    // ⚠️ CE QUI REND UN OBSTACLE « SEULEMENT FRANCHISSABLE AU REBOND » N'EST PAS SA TAILLE, C'EST SA
+    // FERMETURE. Un mur se contourne dès qu'une corniche traîne à mi-hauteur — c'est exactement ce qui
+    // rendait `trampoline-corniche` facultatif, son palier de secours étant pile à portée de saut.
+    // Ces motifs-ci ne posent AUCUNE surface entre le départ et l'arrivée.
+    //
+    // ⚠️ ET LES COTES SONT MESURÉES, PAS DEVINÉES. Relevé sur `canReach` / `canReachByBounce` :
+    //   · à plat, un SAUT franchit 3 tuiles, un REBOND en franchit 8 → un vide de 5 à 7 tuiles n'est
+    //     passable qu'au rebond, et laisse de la marge à l'atterrissage ;
+    //   · en montée, le rebond atteint +9 rangées à 5 tuiles de distance, et pas au-delà.
+    // Un premier jet posait un mur de DOUZE rangées : son sommet était injoignable à toutes les
+    // largeurs — un motif impossible plutôt qu'exigeant. « Très haut » se mesure à la portée de
+    // l'engin, pas à l'intention.
+    case 'trampoline-mur':
+    case 'trampoline-mur-trou': {
+      // « Deux colonnes de pierre de hauteur différente avec un trampoline entre les deux. » Le cadrage
+      // du joueur, et c'est lui qui a débloqué le motif.
+      //
+      // ⚠️ LE SOMMET DU MUR EST LE SOL D'ARRIVÉE — ON N'Y POSE PAS DE PLATEFORME. C'était l'erreur des
+      // quatre tentatives précédentes : une corniche coiffant la roche créait, une rangée plus bas, une
+      // surface (le DESSUS DE ROCHE, que le validateur compte comme marchable) coiffée par cette
+      // corniche — donc inatteignable par construction, et signalée à toutes les largeurs. Ni la
+      // hauteur du mur, ni la distance du tapis, ni le calage de la roche n'y changeaient rien : le
+      // défaut n'était pas dans la difficulté, il était dans la superposition.
+      const alt = Math.max(entryAlt, 2)
+      const haut = alt + 8 // le double d'un saut, sous la portée du rebond
+      const colonne = Math.max(3, Math.floor(w * 0.16))
+      const approche = Math.max(6, Math.floor(w * 0.38))
+      p.platforms.push({ x: 0, alt, w: approche })
+      // le tapis contre la colonne : le rebond monte de huit rangées à cinq tuiles de distance, pas plus
+      p.trampolines.push({ x: Math.max(1, approche - 1), alt: alt + 1, fixe: true })
+      // ⚠️ LA COLONNE DOIT ÊTRE COIFFÉE, SINON ELLE DISPARAÎT. Cinquième tentative, et la vraie cause :
+      // une passe d'assemblage supprime tout socle de pierre qui monte du sol SANS RIEN PORTER (« de la
+      // pierre qui vole au-dessus du sol », un défaut signalé trois fois par le joueur). Ma colonne
+      // n'avait rien sur la tête — elle était donc effacée avant même d'arriver au validateur, et ce
+      // qu'on mesurait comme « injoignable » était la corniche d'après, orpheline de son mur.
+      // On pose donc UNE SEULE plateforme, à fleur du sommet de la roche et courant jusqu'au bord droit :
+      // la colonne est coiffée, et le dessus de roche coïncide avec la corniche au lieu d'être enterré
+      // une rangée dessous (l'erreur des quatre essais précédents).
+      const xMur = m.kind === 'trampoline-mur-trou' ? approche + 3 : approche
+      if (m.kind === 'trampoline-mur-trou') {
+        // « Un giga trou où faut pas tomber sinon on meurt. » Entre le tapis et le pied du mur : on
+        // décolle du bord, on survole, on se pose en haut. Rater, c'est tomber dedans.
+        p.gaps.push({ x: approche, w: 3 })
+      }
+      p.rocks.push({ x: xMur, altBot: 1, altTop: haut, w: colonne, solid: true })
+      p.platforms.push({ x: xMur, alt: haut, w: Math.max(3, w - xMur) })
       placeBirds(haut + 3)
       p.exitAlt = haut
       break
     }
-    case 'trampoline-echelle': {
-      // 4) « Trampoline qui permet d'atteindre une échelle en T, et en dessous c'est le vide. »
-      //
-      // ⚠️ L'ÉCHELLE N'EST PLUS SUSPENDUE, SON PIED REPOSE SUR UNE CORNICHE. Une échelle « hung » exige que
-      // son pied soit atteignable, et deux validateurs sur trois ne modélisent pas le rebond : ils la
-      // déclaraient « pied dans le vide ». Une corniche étroite au-dessus du vide, atteinte au rebond, donne
-      // exactement la même sensation — on saute dans le vide pour attraper l'échelle — et se vérifie.
-      const alt = Math.max(entryAlt, 3)
-      const bw = bank
-      p.platforms.push({ x: 0, alt, w: bw + 3 })
-      p.trampolines.push({ x: bw + 1, alt: alt + 1 })
-      const trouX = bw + 3
-      p.gaps.push({ x: trouX, w: 3 })
-      // corniche étroite au-dessus du vide : c'est elle qu'on vise au rebond
-      const percheX = trouX + 3
-      const percheAlt = alt + 7
-      p.platforms.push({ x: percheX, alt: percheAlt, w: 3 })
-      // échelle posée sur la corniche, montant vers le palier de sortie (2 rangées sous son sommet)
-      const h = Math.max(MIN_LADDER_TILES, Math.min(MAX_LADDER_TILES, 7))
-      p.ladders.push({ x: percheX + 1, topAlt: percheAlt + h, h })
-      // le palier de l'échelle VA JUSQU'AU BORD DROIT : c'est lui la sortie. En deux morceaux (palier de 5
-      // + corniche de 3 à la même altitude) ils se recouvraient — c'était la dernière superposition du jeu,
-      // vue sur plage-3 (`A x45+5 B x49+3`).
-      p.platforms.push({ x: percheX + 2, alt: percheAlt + h - 2, w: w - (percheX + 2) })
-      placeBirds(percheAlt + h + 2)
-      p.exitAlt = percheAlt + h - 2
-      break
-    }
-    case 'trampoline-cascade': {
-      // 5) « Trampoline qui permet de dépasser un vide et d'atteindre une cascade. »
-      //
-      // ⚠️ RÉÉCRIT APRÈS AVOIR MURÉ UN TERRAIN ENTIER. La première version creusait un vide de six tuiles
-      // puis posait le rideau et une corniche haute : sur foret-6, quarante-six plateformes se retrouvaient
-      // injoignables et deux coffres inatteignables. La cause n'était pas le rebond mais la CHAÎNE — le vide
-      // était trop long pour la seule voie restante une fois le rebond consommé, et le module suivant se
-      // raccrochait dans le vide.
-      // Ici : un vide COURT (3 tuiles, franchi au rebond ou au saut), une vasque solide au pied du rideau, et
-      // la corniche de sortie posée EN HAUT du rideau, atteignable à la nage. Trois voies, aucune obligatoire.
-      const alt = Math.max(entryAlt, 3)
-      const bw = bank
-      p.platforms.push({ x: 0, alt, w: bw + 3 })
-      p.trampolines.push({ x: bw + 1, alt: alt + 1 })
-      const trouX = bw + 3
-      p.gaps.push({ x: trouX, w: 3 })
-      const casX = trouX + 3
-      const top = alt + 13 // rideau remontable : 13 rangées, la hauteur minimale d'une cascade
-      p.platforms.push({ x: casX, alt, w: 4 }) // vasque solide au pied : le rideau ne tombe pas dans le vide
-      p.waters.push({ x: casX, w: 4, kind: 'cascade', bankAlt: top, bottomAlt: alt })
-      // ⚠️ LE CHEMIN PRINCIPAL RESTE À PLAT, LA CASCADE EST UN BONUS. Faire sortir le module EN HAUT du
-      // rideau rendait tout l'aval du terrain injoignable : la seule voie était de remonter 13 rangées à la
-      // nage, et le validateur — comme un joueur qui rate — n'y voyait pas de passage. Trente-six plateformes
-      // et deux coffres perdus sur foret-6. Le rideau grimpe donc vers une corniche à TRÉSOR, en cul-de-sac,
-      // et la route continue au niveau d'entrée. Le trampoline sert à franchir le vide, pas à sortir.
-      const suiteX = casX + 4
-      // même correction que `trampoline-vide` : la suite du chemin et la corniche de sortie sont à la MÊME
-      // altitude, et le plancher `max(4, …)` faisait mordre l'une sur l'autre aux largeurs serrées.
-      p.platforms.push({ x: suiteX, alt, w: w - suiteX })
-      // ⚠️ LA CORNICHE EST À CÔTÉ DE LA COLONNE, PAS DESSUS. Posée au-dessus du rideau (même x), le
-      // validateur ne la reconnaissait pas comme « haut de cascade » et la déclarait injoignable : son
-      // modèle relie le PIED au sommet ADJACENT, pas à ce qui coiffe la colonne.
-      p.platforms.push({ x: casX + 4, alt: top, w: 5 }) // corniche du haut : récompense de la remontée
-      if (basinKind !== 'lave') p.props.push({ kind: 'coffre', x: casX + 6, alt: top + 1 })
-      // (plus de corniche de sortie séparée : la plateforme ci-dessus va désormais jusqu'au bord droit)
-      placeBirds(top + 2)
-      p.exitAlt = alt
-      break
-    }
+
+    // Les quatre traversées ne diffèrent que par CE QU'IL Y A DESSOUS. Le geste est le même — courir,
+    // rebondir, survoler — et c'est voulu : on apprend une fois, on reconnaît ensuite, et le décor dit
+    // seul ce qu'on risque. Un vide pardonne (on retombe au sol du terrain), une nappe d'eau ralentit,
+    // les flammes brûlent, et la fosse ardente ne rend pas ce qu'elle prend.
     case 'corniche-vide':
     case 'crete': {
       // corniches/arête larges au-dessus d'un trou mortel + oiseaux. Berges solides à l'entrée/sortie,
@@ -3130,7 +3118,7 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   for (const { piece, x0, kind, w: wModule } of pieces) {
     for (const pl of piece.platforms) platforms.push({ x: x0 + pl.x, y: row(pl.alt), w: pl.w, ...(pl.solid ? { solid: true } : {}) })
     for (const b of piece.bridges) bridges.push({ x: x0 + b.x, y: row(b.alt), w: b.w })
-    for (const t of piece.trampolines) trampolines.push({ x: x0 + t.x, y: row(t.alt) })
+    for (const t of piece.trampolines) trampolines.push({ x: x0 + t.x, y: row(t.alt), ...(t.fixe ? { fixe: true } : {}) })
     for (const a of piece.arches) arches.push({ x: x0 + a.x, y: row(a.alt), w: a.w, h: a.h, fill: a.fill })
     for (const l of piece.ladders) ladders.push({ x: x0 + l.x, y: row(l.topAlt), h: l.h, ...(l.hung ? { hung: true } : {}) })
     for (const g of piece.gaps) gaps.push({ x: x0 + g.x, w: g.w })
@@ -4251,16 +4239,29 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
       return Math.min(g, d)
     }
 
+    // ⚠️ JAMAIS AU-DESSUS D'UN TROU, MÊME PORTÉ PAR UNE CORNICHE. Un tapis posé sur une plateforme qui
+    // surplombe le vide se lit comme suspendu dans les airs — et le joueur qui le rate tombe au lieu de
+    // rebondir. La règle existait déjà pour le sol ; elle vaut pour toute la colonne.
+    const auDessusDunTrou = (x: number) => gaps.some((g) => x >= g.x && x < g.x + g.w)
+
     for (const t of trampolines) {
+      // ⚠️ SI L'ENGIN EST DÉJÀ À SA PLACE, ON N'Y TOUCHE PAS. Le classement ci-dessous optimise l'écart
+      // aux murs — et il a déplacé de deux colonnes le tapis de `trampoline-mur`, dont TOUTE la raison
+      // d'être est d'être près du mur : le sommet est sorti de la portée du rebond, et le motif est
+      // devenu infaisable à toutes les largeurs. Un motif qui sait ce qu'il fait passe avant une règle
+      // d'esthétique générale.
+      // ⚠️ UN TAPIS MARQUÉ `fixe` NE BOUGE PAS. Les motifs où le rebond est la SEULE solution placent
+      // l'engin à une distance calculée du mur ou de la berge : le déplacer de deux colonnes suffit à
+      // sortir l'arrivée de sa portée, et le motif devient infaisable à toutes les largeurs — ce qui
+      // est arrivé, et ce qui a coûté trois tentatives avant qu'on comprenne que le coupable était
+      // notre propre passe d'esthétique. Un motif qui sait ce qu'il fait passe avant une règle générale.
+      if (t.fixe) continue
+      if (degage(t.x, t.y) && dessertQuelqueChose(t.x, t.y) && !auDessusDunTrou(t.x)) continue
       // ⚠️ ON NE SE LIMITE PLUS À LA SEULE PLATEFORME PORTEUSE. Beaucoup de surfaces sont faites de
       // plusieurs plateformes bout à bout, ou d'un dessus de roche : chercher dans la seule dalle sous
       // le tapis interdisait des colonnes parfaitement valables deux tuiles plus loin, et laissait
       // dix-huit engins collés à un mur. Ce qui compte, c'est qu'il y ait UNE SURFACE à porter, d'où
       // qu'elle vienne — et qu'on puisse y aller sans traverser un trou.
-      // ⚠️ JAMAIS AU-DESSUS D'UN TROU, MÊME PORTÉ PAR UNE CORNICHE. Un tapis posé sur une plateforme
-      // qui surplombe le vide se lit comme suspendu dans les airs — et le joueur qui le rate tombe
-      // au lieu de rebondir. La règle existait déjà pour le sol ; elle vaut pour toute la colonne.
-      const auDessusDunTrou = (x: number) => gaps.some((g) => x >= g.x && x < g.x + g.w)
       const porte = (x: number) => !auDessusDunTrou(x) && (
         platforms.some((p) => p.y === t.y + 1 && x >= p.x && x < p.x + p.w)
         || rockBands.some((r) => x >= r.x && x < r.x + r.w && r.y === t.y + 1)
@@ -4581,9 +4582,19 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   // joueur n'aurait pas compris à quoi sert l'engin. Les quatre autres l'utilisent pour de bon.
   'trampoline-plat': { forcedOnly: true, tier: 1, family: 'filler', entry: 'milieu', exit: 'milieu', width: [12, 18], below: 'sol', above: 'air' },
   'trampoline-corniche': { forcedOnly: true, tier: 2, family: 'vertical', entry: 'bas', exit: 'haut', width: [14, 22], below: 'sol', above: 'air' },
-  'trampoline-vide': { forcedOnly: true, tier: 3, family: 'risque', entry: 'milieu', exit: 'haut', width: [16, 24], below: 'vide', above: 'air' },
-  'trampoline-echelle': { forcedOnly: true, tier: 4, family: 'vertical', entry: 'milieu', exit: 'haut', width: [16, 24], below: 'vide', above: 'air', ladder: true },
-  'trampoline-cascade': { forcedOnly: true, tier: 3, family: 'risque', entry: 'milieu', exit: 'haut', width: [18, 26], below: 'vide', above: 'air', water: true, chest: true },
+
+  // ⚠️ LES DEUX SEULS OÙ LE REBOND EST OBLIGATOIRE, et c'est leur raison d'être. Les cinq ci-dessus ont
+  // tous une issue de secours — mesuré : vingt-sept trampolines sur vingt-neuf se contournent. Ceux-ci
+  // ne posent AUCUNE surface entre le départ et l'arrivée : c'est la fermeture, pas la taille, qui rend
+  // un obstacle infranchissable autrement.
+  // ⚠️ FOND DE VIDE, ET C'EST CE QUI A DÉBLOQUÉ LE MOTIF APRÈS CINQ TENTATIVES. En fond de SOL, la
+  // plateforme d'approche reçoit un socle de pierre jusqu'au sol — et ce socle ENTERRE la rangée du sol
+  // du monde sous tout le motif. Le validateur, qui part du sol pour explorer, n'avait donc plus de
+  // point de départ, et déclarait le sommet injoignable quelles que soient la hauteur du mur et la
+  // position du tapis. Le défaut n'était ni dans la difficulté ni dans la portée du rebond : il était
+  // dans ce qu'on avait coulé SOUS le motif sans le vouloir.
+  'trampoline-mur': { forcedOnly: true, tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [20, 28], below: 'vide', above: 'air' },
+  'trampoline-mur-trou': { forcedOnly: true, tier: 4, family: 'vertical', entry: 'bas', exit: 'haut', width: [22, 30], below: 'vide', above: 'air' },
 
   // ─── MOTIFS EAU / GROTTE DEMANDÉS ─────────────────────────────────────────────────────────────
   // ⚠️ CES QUATRE-LÀ SONT DES MOTIFS D'EAU (`water: true`), et c'est ce qui les rend posables SANS RISQUE.

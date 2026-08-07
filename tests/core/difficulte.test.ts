@@ -45,12 +45,16 @@ describe('ça durcit continûment ensuite', () => {
     expect(durcissement(57).hp).toBeGreaterThan(durcissement(57).atk)
   })
 
-  it('reste borné : au niveau le plus haut du jeu, on double sans exploser', () => {
+  // ⚠️ LES BORNES ONT MONTÉ, SUR DEMANDE EXPLICITE. « Après le niveau 10 tu les rends 25 % plus forts, et
+  // après le niveau 30, 50 % plus forts. » Ces paliers se MULTIPLIENT à la pente qui existait déjà (elle
+  // répondait à un premier « le jeu est un chouille trop facile ») : au niveau le plus haut du jeu, les
+  // PV font donc ×4 la courbe de base au lieu de ×2,6. Le plafond suit la demande, il ne la corrige pas.
+  it('reste borné : au niveau le plus haut du jeu, on quadruple sans exploser', () => {
     const d = durcissement(57)
-    expect(d.hp).toBeGreaterThan(2)
-    expect(d.hp).toBeLessThan(3.5)
-    expect(d.atk).toBeGreaterThan(1.8)
-    expect(d.atk).toBeLessThan(3)
+    expect(d.hp).toBeGreaterThan(3)
+    expect(d.hp).toBeLessThan(4.5)
+    expect(d.atk).toBeGreaterThan(2.5)
+    expect(d.atk).toBeLessThan(4)
   })
 
   it('la DÉF n\'est PAS durcie : les dégâts sont soustractifs', () => {

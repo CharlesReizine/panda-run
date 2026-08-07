@@ -19,7 +19,12 @@ const terrainsAvec = (k: ModuleKind) =>
   Object.entries(LEVEL_MODULE_KINDS).filter(([, ks]) => ks.includes(k)).map(([id]) => id)
 
 describe('les motifs posés sont réellement générés', () => {
-  const poses: ModuleKind[] = ['cascade-plus-haute', 'boyau-tresor-retour', 'trampoline-plat', 'trampoline-vide', 'trampoline-corniche']
+  // ⚠️ `trampoline-vide` A ÉTÉ RETIRÉ DU CATALOGUE, comme `trampoline-echelle` et `trampoline-cascade`.
+  // Demande du joueur : « retire tous tes autres trampolines useless. » La mesure lui donnait raison —
+  // les vingt-neuf trampolines du jeu se contournaient tous (on retire l'engin, rien ne devient
+  // injoignable), y compris ces trois-là dont c'était pourtant l'unique raison d'être.
+  const poses: ModuleKind[] = ['cascade-plus-haute', 'boyau-tresor-retour', 'trampoline-plat',
+    'trampoline-mur', 'trampoline-corniche']
 
   it.each(poses)('%s apparaît dans au moins un terrain', (k) => {
     expect(terrainsAvec(k).length, `${k} n'est généré nulle part`).toBeGreaterThan(0)
@@ -47,13 +52,16 @@ describe('les motifs longtemps retenus sont enfin posés', () => {
     expect(terrainsAvec(k).length, `${k} n'est généré nulle part`).toBeGreaterThan(0)
   })
 
-  it('« trampoline-echelle » est posé lui aussi : plus aucun motif écarté', () => {
-    // Écarté un temps (« oublie pour le moment »), puis réclamé (« je veux retrouver TOUS les motifs »).
-    // Il a fallu poser son échelle sur une corniche au lieu de la suspendre : deux validateurs sur trois ne
-    // modélisent pas le rebond et la déclaraient « pied dans le vide ». La sensation est la même — on saute
-    // dans le vide pour attraper l'échelle — mais elle se vérifie.
-    expect(CATALOG['trampoline-echelle'], 'le motif a disparu du catalogue').toBeDefined()
-    expect(terrainsAvec('trampoline-echelle').length).toBeGreaterThan(0)
+  // ⚠️ CE BLOC TESTAIT « trampoline-echelle », RETIRÉ DEPUIS. Il avait été réclamé (« je veux retrouver
+  // TOUS les motifs »), puis condamné par une mesure : en retirant son trampoline, rien ne devenait
+  // injoignable — l'engin y était décoratif, comme dans les vingt-huit autres cas. Le joueur a tranché :
+  // « retire tous tes autres trampolines useless ». Ce qui le remplace est un motif où le rebond est la
+  // SEULE solution : un mur de pierre de huit rangées, sans la moindre prise entre le sol et le sommet.
+  it('« trampoline-mur » est posé : le rebond y est la seule solution', () => {
+    expect(CATALOG['trampoline-mur'], 'le motif a disparu du catalogue').toBeDefined()
+    expect(CATALOG['trampoline-mur-trou'], 'sa variante à trou a disparu').toBeDefined()
+    expect(terrainsAvec('trampoline-mur').length + terrainsAvec('trampoline-mur-trou').length)
+      .toBeGreaterThan(0)
   })
 })
 
