@@ -268,6 +268,7 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 | Build | Ce qui a changé |
 |---|---|
+| R375 | **le sol du monde s'ouvre VRAIMENT sous les motifs de saut** (9 % → 19 % de vide) : `fillBelow: 'vide'` ne retirait que les SOCLES, le sol restait plein dessous — « fond de vide » ne voulait dire que « ses corniches flottent ». On ouvre colonne par colonne, seulement là où une route existe au-dessus, jamais sous un trampoline ni sur un trou déjà creusé, et on rend le sol d'un terrain entier plutôt que d'y laisser un cul-de-sac |
 | R374 | **plus une seule chaîne contournable** : la passe de creusement mesurait TÔT et n'agissait qu'une fois, sur une géométrie qui continue de bouger derrière — la chaîne qui subsistait était fabriquée après elle. Un second creusement tourne en fin d'assemblage, quand plus rien ne bouge |
 | R373 | **un « i » par quête, qui dit OÙ chercher** : terrains où vit le monstre visé (nommés comme sur la carte, pas par leur id), ou sources d'un matériau classées par TAUX de butin et non par proximité. L'information existait dans les données depuis toujours et n'était nulle part dans le jeu |
 | R372 | **le sol s'ouvre sous les passages d'échelle et les sauts de plateau** : douze motifs de la famille « vertical » demandaient un enchaînement de sauts en le posant sur du SOL PLEIN — rater ne coûtait rien, on retombait sur la terre ferme. Le motif promettait le vide, il ne le tenait pas. REGRAVURE + resynchro |

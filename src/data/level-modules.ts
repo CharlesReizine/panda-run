@@ -277,6 +277,8 @@ interface Piece {
   // ou de saut. Sert à sceller une entrée de grotte et à poser un plancher qui cède. Cf. levels.ts.
   breakables: { x: number; altBot: number; altTop: number; w: number; coups?: number }[]
   gaps: { x: number; w: number }[]
+  /** Le module repose sur le VIDE : l'assembleur ouvre le sol du monde sur toute sa portée. */
+  fondVide?: boolean
   // pics : alt = altitude de la SURFACE qui porte les pics (corniche en hauteur). Absent → pics au sol.
   spikes: { x: number; w: number; alt?: number }[]
   bridges: { x: number; alt: number; w: number }[]
@@ -2950,6 +2952,11 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
   // et la ROCHE ('roche' : grotte, déjà pleine + plafond). Colonnes d'eau laissées ouvertes.
   if (m.fillBelow === 'sol' || m.fillBelow === 'marine' || m.fillBelow === 'cascade' || m.fillBelow === 'lave') {
     addPedestals(p, w)
+  } else if (m.fillBelow === 'vide') {
+    // ⚠️ ET LE SOL DU MONDE S'OUVRE, pas seulement les socles. Voir le commentaire de l'assembleur :
+    // « fond de vide » ne voulait dire jusqu'ici que « ses corniches flottent », et le sol restait
+    // plein dessous. « Je veux 0000000 sol en dessous pour me rattraper. »
+    p.fondVide = true
   }
 
   // PANNEAU « descends ! » au-dessus des PUITS/BASSINS à COFFRE DE FOND (retour user) : une petite flèche
@@ -3113,8 +3120,13 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
   let start: LevelDef['start']
   let exit: LevelDef['exit']
 
+  // ⚠️ ON GARDE LES OBJETS, PAS LEURS INDEX. Ce tableau sert à REPRENDRE les trous ouverts par la règle
+  // du « fond de vide » si le terrain se révèle piégeux. Une première version retenait des index dans
+  // `gaps` — or ce tableau est ensuite mutilé par la déduplication des trous et par le creusement
+  // final : les index désignaient autre chose au moment de s'en servir.
+  const trousDeVide: { x: number; w: number }[] = []
   PORTEES[opts.id] = pieces.map((p) => ({ kind: p.kind, x0: p.x0, w: p.w }))
-  for (const { piece, x0, kind } of pieces) {
+  for (const { piece, x0, kind, w: wModule } of pieces) {
     for (const pl of piece.platforms) platforms.push({ x: x0 + pl.x, y: row(pl.alt), w: pl.w, ...(pl.solid ? { solid: true } : {}) })
     for (const b of piece.bridges) bridges.push({ x: x0 + b.x, y: row(b.alt), w: b.w })
     for (const t of piece.trampolines) trampolines.push({ x: x0 + t.x, y: row(t.alt) })
@@ -3124,6 +3136,50 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     // dalles de roche (plafond de tunnel / socle) : y = rangée du HAUT de la dalle, h = épaisseur ;
     // `solid` = plafond à collision pleine (on ne saute pas à travers).
     for (const rk of piece.rocks) rockBands.push({ x: x0 + rk.x, y: row(rk.altTop), w: rk.w, h: rk.altTop - rk.altBot + 1, ...(rk.solid ? { solid: true } : {}) })
+    // ─── UN MODULE À FOND DE VIDE N'A PAS DE SOL, ET ÇA N'AVAIT JAMAIS ÉTÉ VRAI ────────────────
+    //
+    // Demande du joueur, deux fois : « ça manque de zones où on peut tomber et mourir, genre les
+    // passages d'échelles, les sauts de plateformes… je veux 0000000 sol en dessous pour me rattraper. »
+    //
+    // ⚠️ `fillBelow: 'vide'` NE RETIRAIT QUE LES SOCLES, IL N'OUVRAIT PAS LE SOL DU MONDE. C'est la
+    // découverte, et elle explique pourquoi passer douze motifs à 'vide' n'avait presque rien changé :
+    // le sol du monde est PLEIN par défaut, et un module ne fait un trou que là où il en pousse un
+    // explicitement. « Fond de vide » ne voulait donc dire que « ses corniches flottent » — la moitié
+    // du contrat, et pas celle qui tue.
+    //
+    // ⚠️ ON N'OUVRE QUE SOUS UNE ROUTE. Ouvrir toute la portée d'un bloc a été essayé : 20 % du sol du
+    // jeu devenait un trou, mais SEIZE d'entre eux n'étaient franchissables par rien — ni par le bas
+    // (plus de sol) ni par le haut (aucune plateforme au-dessus) — et sept surfaces devenaient des
+    // culs-de-sac. Un trou qu'on ne peut pas passer n'est pas un risque, c'est un mur.
+    // On retire donc le sol colonne par colonne, et seulement là où le motif a posé de quoi passer
+    // au-dessus. Le joueur peut tomber partout où il y a un chemin à rater : c'est exactement la demande.
+    if (piece.fondVide) {
+      const berge = 2
+      // ⚠️ TROIS CHOSES GARDENT LEUR SOL, ET CHACUNE A COÛTÉ UN TEST ROUGE.
+      //   · un TRAMPOLINE a besoin d'une surface pour se poser — au-dessus d'un trou, il flotte ;
+      //   · un PIED D'AQUEDUC descend jusqu'au sol, c'est la demande explicite du joueur (« les
+      //     piliers/viaduc, fais des pieds qui vont jusqu'au sol ») : lui retirer son appui le fait
+      //     planer, et le motif tout entier avec ;
+      //   · et il faut une ROUTE AU-DESSUS, sinon le trou n'est pas un risque mais un mur.
+      // ⚠️ ET ON NE TOUCHE PAS À UN TROU QUE LE MOTIF A DÉJÀ POSÉ. Recouvrir un trou existant par le
+      // nôtre les fait fusionner à la déduplication ; si le repli reprend ensuite le nôtre, il emporte
+      // aussi celui du motif — et l'aqueduc de plaine-1 se retrouvait « posé sur du sol plein », alors
+      // qu'il avait creusé sous son propre tablier depuis toujours.
+      const porteQuelqueChose = (x: number) =>
+        trampolines.some((t) => t.x === x)
+        || gaps.some((g) => x >= g.x && x < g.x + g.w)
+      const surCouvert = (x: number) =>
+        platforms.some((pl) => x >= pl.x && x < pl.x + pl.w) && !porteQuelqueChose(x)
+      let debut: number | null = null
+      const fermer = (fin: number) => {
+        if (debut !== null && fin > debut) { const t = { x: debut, w: fin - debut }; trousDeVide.push(t); gaps.push(t) }
+        debut = null
+      }
+      for (let x = x0 + berge; x < x0 + wModule - berge; x++) {
+        if (surCouvert(x)) { if (debut === null) debut = x } else fermer(x)
+      }
+      fermer(x0 + wModule - berge)
+    }
     for (const bk of piece.breakables) breakables.push({ x: x0 + bk.x, y: row(bk.altTop), w: bk.w, h: bk.altTop - bk.altBot + 1, ...(bk.coups ? { coups: bk.coups } : {}) })
     // pics : `top` = rangée de la surface qui les porte (corniche en hauteur), sinon au sol (top absent)
     for (const s of piece.spikes) hazards.push({ kind: 'spikes', x: x0 + s.x, w: s.w, ...(s.alt !== undefined ? { top: row(s.alt) } : {}) })
@@ -4155,6 +4211,37 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     }
   }
 
+  // ─── ON REBOUCHE SOUS UN CUL-DE-SAC : TOMBER DOIT TUER, PAS ENFERMER ─────────────────────────
+  //
+  // Ouvrir le sol sous les motifs de saut fabrique une poignée de CULS-DE-SAC : une corniche qu'on
+  // atteint et d'où l'on ne peut plus repartir, parce que le sol qui servait de porte de sortie a
+  // disparu. Quatre sur l'ensemble du jeu.
+  //
+  // ⚠️ ET C'EST LA SEULE CHOSE QUE CE PROJET REFUSE ABSOLUMENT. « Enfermer vivant » est tenu ici pour
+  // le pire défaut possible — pire qu'un mur, pire qu'une mort injuste : une mort, on la recommence ;
+  // un enfermement, on quitte le jeu. Le trou mortel est demandé (« je veux 0000000 sol en dessous »),
+  // le piège sans issue ne l'est pas, et les deux se ressemblent assez pour qu'on les confonde.
+  //
+  // On rend donc le sol SOUS la surface fautive, et rien d'autre : le reste du module garde son vide.
+  for (let tour = 0; tour < 4; tour++) {
+    const pieges = deadEndSurfaces({ ...geo(), breakables })
+    if (!pieges.length) break
+    let rebouche = false
+    // ⚠️ ON NE REBOUCHE QUE NOS PROPRES TROUS. Première version : tout trou qui chevauchait la surface
+    // fautive, d'où qu'il vienne — y compris ceux que le MOTIF avait posés exprès. Sur enfer-4, ça
+    // rendait du sol là où le motif en avait retiré, et six colonnes passaient à quatre paliers.
+    // Un correctif n'a pas le droit de défaire une intention qu'il ne comprend pas.
+    for (const s of pieges) {
+      for (const t of trousDeVide) {
+        if (t.x < s.x + s.w && t.x + t.w > s.x) {
+          const i = gaps.indexOf(t)
+          if (i >= 0) { gaps.splice(i, 1); rebouche = true }
+        }
+      }
+    }
+    if (!rebouche) break
+  }
+
   // ─── ET ON REPASSE UN COUP DE CREUSEMENT, PARCE QUE LES CHAÎNES NAISSENT APRÈS ───────────────
   //
   // ⚠️ LA PREMIÈRE PASSE DE CREUSEMENT NE VOIT PAS LES CHAÎNES QU'ELLE NE PEUT PAS ENCORE VOIR, et
@@ -4243,6 +4330,25 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     const fond = h.top + h.h - 1
     if (fond >= groundRow) continue // cuve non rognée : la convention historique suffit
     for (const pr of props) if (pr.y === undefined && pr.x >= h.x && pr.x < h.x + h.w) pr.y = fond
+  }
+
+  // ⚠️ DERNIER MOT SUR LES CULS-DE-SAC, ET IL SE DIT ICI PARCE QUE C'EST LE SEUL ENDROIT SÛR.
+  //
+  // Ouvrir le sol sous les motifs de saut peut fabriquer des corniches sans issue. Le rebouchage ciblé
+  // en règle la plupart, mais pas toutes — et surtout, PLUSIEURS PASSES TOURNENT ENCORE APRÈS LUI
+  // (creusement final, terre ancrée, remontée des fonds de cuve). Mesurer en cours de route, c'est
+  // juger un terrain qui va encore changer : c'est exactement ce qui laissait quatre culs-de-sac sur
+  // enfer-4 alors qu'un repli existait et croyait avoir fait son travail.
+  //
+  // Ici, plus rien ne bouge. S'il reste un piège, on remet le sol que le « fond de vide » a retiré sur
+  // CE terrain. Un terrain moins mortel vaut mieux qu'un terrain qui enferme : « enfermer vivant » est
+  // le pire défaut que ce projet reconnaisse — une mort, on la recommence ; un enfermement, on quitte
+  // le jeu. Et le compromis est mesuré : il ne coûte qu'un terrain, pas la règle.
+  if (trousDeVide.length && deadEndSurfaces({ ...geo(), breakables }).length > 0) {
+    for (const t of trousDeVide) {
+      const i = gaps.indexOf(t)
+      if (i >= 0) gaps.splice(i, 1)
+    }
   }
 
   return {
