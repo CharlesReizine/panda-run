@@ -113,14 +113,16 @@ describe('paliers de difficulté', () => {
     for (const n of [1, 5, 9, 10]) expect(palierDifficulte(n), `niveau ${n}`).toBe(1)
   })
 
-  it('à partir de 11 : +25 %, à partir de 31 : +50 %', () => {
-    for (const n of [11, 15, 30]) expect(palierDifficulte(n), `niveau ${n}`).toBe(1.25)
-    for (const n of [31, 40, 57]) expect(palierDifficulte(n), `niveau ${n}`).toBe(1.5)
+  it('à partir de 11 : la marche, et elle ne redescend jamais', () => {
+    // ⚠️ UNE SEULE MARCHE, PAS DEUX. Deux paliers décroissants (3,0 puis 2,4) atteignaient bien la cible
+    // des cinq coups, mais rendaient un mob de niveau 31 PLUS FAIBLE qu'un de niveau 30. L'aplatissement
+    // passe désormais par un RALENTISSEMENT de la pente au-delà de 30, jamais par une marche qui descend.
+    for (const n of [11, 15, 30, 31, 40, 57]) expect(palierDifficulte(n), `niveau ${n}`).toBe(3.0)
   })
 
   it('les paliers s\'AJOUTENT à la pente, ils ne la remplacent pas', () => {
     // la pente existait déjà : à 20, elle vaut ~1,35 en PV — le palier la multiplie, il ne l'écrase pas
-    expect(durcissement(20).hp).toBeGreaterThan(1.25 * 1.3)
+    expect(durcissement(20).hp).toBeGreaterThan(3.0 * 1.3)
     expect(durcissement(9).hp).toBeLessThan(1.0001) // et sous le seuil, toujours rien
   })
 
@@ -135,9 +137,9 @@ describe('paliers de difficulté', () => {
   })
 
   it('le saut de palier se voit, sans être brutal', () => {
-    const avant = statsForLevel(30, 'normal'), apres = statsForLevel(31, 'normal')
+    const avant = statsForLevel(10, 'normal'), apres = statsForLevel(11, 'normal')
     const rapport = statPower(apres.hp, apres.atk, apres.def) / statPower(avant.hp, avant.atk, avant.def)
-    expect(rapport, 'la marche doit se sentir').toBeGreaterThan(1.1)
-    expect(rapport, 'mais pas doubler d\'un niveau à l\'autre').toBeLessThan(1.5)
+    expect(rapport, 'la marche doit se sentir').toBeGreaterThan(1.5)
+    expect(rapport, 'mais pas quintupler d\'un niveau à l\'autre').toBeLessThan(4)
   })
 })

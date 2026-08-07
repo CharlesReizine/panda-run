@@ -49,12 +49,16 @@ describe('ça durcit continûment ensuite', () => {
   // après le niveau 30, 50 % plus forts. » Ces paliers se MULTIPLIENT à la pente qui existait déjà (elle
   // répondait à un premier « le jeu est un chouille trop facile ») : au niveau le plus haut du jeu, les
   // PV font donc ×4 la courbe de base au lieu de ×2,6. Le plafond suit la demande, il ne la corrige pas.
-  it('reste borné : au niveau le plus haut du jeu, on quadruple sans exploser', () => {
+  // ⚠️ LES BORNES SUIVENT LA RÈGLE DES CINQ COUPS, elles ne la contraignent pas. « Un mob de ton niveau
+  // te tue en 5 coups quand tu as pas de stuff » : c'est cette cible qui fixe les paliers, et le plafond
+  // ne fait que constater où elle mène. Mesuré nu au niveau 50 : 4 coups. Le voisin de gauche (niveau 10)
+  // en tient 30 — le début reste un tutoriel.
+  it('reste borné : au niveau le plus haut du jeu, on ne dépasse pas le sextuple', () => {
     const d = durcissement(57)
-    expect(d.hp).toBeGreaterThan(3)
-    expect(d.hp).toBeLessThan(4.5)
-    expect(d.atk).toBeGreaterThan(2.5)
-    expect(d.atk).toBeLessThan(4)
+    expect(d.hp).toBeGreaterThan(4)
+    expect(d.hp).toBeLessThan(7)
+    expect(d.atk).toBeGreaterThan(3.5)
+    expect(d.atk).toBeLessThan(6)
   })
 
   it('la DÉF n\'est PAS durcie : les dégâts sont soustractifs', () => {

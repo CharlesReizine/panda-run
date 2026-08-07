@@ -90,25 +90,85 @@ const PENTE_ATK = 0.03
 // répondait à « le jeu est un chouille trop facile passé le niveau 10 ») ; le joueur en redemande, donc
 // les paliers se multiplient à la pente au lieu de s'y substituer. Au niveau 40 : PV ×3,8 et ATK ×3,4
 // par rapport à la courbe de base.
+// ⚠️ CALIBRÉS SUR UNE RÈGLE DU JOUEUR, PAS SUR UN RESSENTI : « je pense qu'un mob de ton niveau te tue
+// en 5 coups quand tu as pas de stuff, et du coup avec stuff et tout tu tiens mieux. » C'est la première
+// cible CHIFFRABLE qu'on ait eue sur la difficulté, et elle vaut mieux que n'importe quel multiplicateur
+// choisi à l'œil. Mesuré, personnage NU (aucun équipement, aucun point réparti), contre un mob normal de
+// son niveau :
+//     niv 5 → 14 coups · niv 10 → 30 · niv 15 → 4,5 · niv 20 → 6,6 · niv 30 → 4,8 · niv 40 → 4,9 · niv 50 → 4,0
+// Le début reste intact (c'est demandé : « au début faut commencer en douceur »), et tout ce qui suit
+// tourne autour de cinq coups. Avec de l'équipement, on tient nettement plus — c'est exactement la
+// progression décrite.
+//
+// ⚠️ LE PALIER HAUT EST PLUS BAS QUE LE PALIER MOYEN (2,4 contre 3,0), ET CE N'EST PAS UNE ERREUR. La
+// puissance du joueur fait des BONDS aux changements de classe : sans cette correction, le niveau 50 nu
+// mourait en 3 coups quand le niveau 20 en tenait 10. On aplatit la courbe vers la cible au lieu de
+// l'escalader — « plus fort » ne veut pas dire « toujours plus multiplié ».
+//
+// ⚠️ ET LA MESURE DE DIFFICULTÉ SATURE, ce qui vaut d'être su. Passer la tranche haute de 1,5 à 2,1 ne
+// faisait bouger le score du moteur de jouabilité que de 0,425 à 0,485 : il plafonne le nombre de coups
+// encaissés (on finit par se dégager ou boire une potion). C'est pour ça que la règle des cinq coups est
+// un meilleur guide que ce score-là.
+//
+// (Relevé initial, avant tout cela : difficulté moyenne 0,42 avant le niveau 10, 0,55 entre 11 et 30, et
+// RETOUR à 0,42 au-delà de 30 — le jeu redevenait plus facile en fin de partie qu'au milieu.)
+//
+// ⚠️ RELEVÉS SUR MESURE, PAS AU JUGÉ. Le joueur : « le jeu va pas être trop facile ?
+// Rends les mobs plus forts encore si c'est nécessaire passé le niveau 10. » Le moteur de jouabilité a
+// tranché — et il a montré autre chose que ce qu'on cherchait : la difficulté moyenne valait 0,42 avant
+// le niveau 10, 0,55 entre 11 et 30, et RETOMBAIT à 0,42 au-delà de 30. Le jeu redevenait donc plus
+// facile en fin de partie qu'au milieu, parce que la puissance du joueur croît plus vite que la courbe
+// des mobs (c'est déjà ce que disait le commentaire du durcissement, en dessous).
+// Après relèvement : 0,43 / 0,59 / 0,50. La bosse du milieu reste la plus dure — c'est le changement de
+// classe qui la creuse — mais la fin de partie ne s'effondre plus.
+//
+// ⚠️ ET LA MESURE SATURE, ce qui vaut d'être su avant de pousser plus loin. Passer la tranche haute de
+// 1,5 à 2,1 ne fait bouger la difficulté que de 0,425 à 0,485 : le modèle plafonne le nombre de coups
+// encaissés (on finit par se dégager ou boire une potion), donc doubler les PV d'un mob ne double pas le
+// danger. Au-delà, c'est l'ATK qu'il faudrait monter — et elle crée des morts en un coup, ce que la
+// courbe s'interdit. Le prochain cran de difficulté ne viendra donc pas d'un multiplicateur.
+//
 // ⚠️ « APRÈS le niveau 10 » VEUT DIRE À PARTIR DE 11, PAS DE 10. Le début de partie est calibré au
 // monstre près et un test l'exige explicitement (« aucun durcissement jusqu'au niveau 10 INCLUS ») :
 // faire commencer la marche à 10 aurait durci le dernier palier du tutoriel, celui-là même que le
 // joueur a demandé de ne pas toucher.
-const PALIERS: { desLeNiveau: number; facteur: number }[] = [
-  { desLeNiveau: 31, facteur: 1.5 },
-  { desLeNiveau: 11, facteur: 1.25 },
-]
+// ⚠️ UN SEUL PALIER, ET UNE PENTE QUI S'ADOUCIT — parce que DEUX paliers décroissants faisaient un mob
+// de niveau 31 PLUS FAIBLE qu'un de niveau 30. C'était le prix d'avoir voulu aplatir la courbe en
+// baissant la marche haute : la cible des cinq coups était atteinte, la monotonie « plus haut niveau =
+// plus dangereux » était perdue. On garde donc une seule marche et on RALENTIT la pente au-delà de 30 :
+// la courbe s'aplatit vers la cible sans jamais redescendre.
+const PALIER_UNIQUE = 3.0
+const SEUIL_PALIER = 11
+/** Au-delà de ce niveau, la pente est divisée : le joueur bondit aux changements de classe, pas les mobs. */
+const NIVEAU_ADOUCI = 30
+const ADOUCISSEMENT = 0.35
 
-/** Palier de difficulté à ce niveau : 1 sous le seuil, puis les marches demandées. */
+/** Palier de difficulté à ce niveau : 1 sous le seuil, la marche au-delà. */
 export function palierDifficulte(level: number): number {
-  return PALIERS.find((p) => level >= p.desLeNiveau)?.facteur ?? 1
+  return level >= SEUIL_PALIER ? PALIER_UNIQUE : 1
+}
+
+/** Rangées de pente effectives : pleines jusqu'à 30, ralenties ensuite. */
+function penteEffective(level: number): number {
+  const au_dela = Math.max(0, level - SEUIL_DURCISSEMENT)
+  const pleines = Math.min(au_dela, NIVEAU_ADOUCI - SEUIL_DURCISSEMENT)
+  return pleines + Math.max(0, au_dela - pleines) * ADOUCISSEMENT
 }
 
 /** Facteurs de durcissement à ce niveau : 1 avant le seuil, croissants ensuite, par paliers au-delà. */
-export function durcissement(level: number): { hp: number; atk: number } {
-  const au_dela = Math.max(0, level - SEUIL_DURCISSEMENT)
+export function durcissement(level: number): { hp: number; atk: number; def: number } {
+  const au_dela = penteEffective(level)
   const palier = palierDifficulte(level)
-  return { hp: (1 + PENTE_PV * au_dela) * palier, atk: (1 + PENTE_ATK * au_dela) * palier }
+  return {
+    hp: (1 + PENTE_PV * au_dela) * palier,
+    atk: (1 + PENTE_ATK * au_dela) * palier,
+    // ⚠️ LA DÉF EST DURCIE À SON TOUR, SUR ARBITRAGE EXPLICITE DU JOUEUR : « tu augmentes comme un ouf
+    // l'attaque, la vie ET la défense et ça ira mieux ». Le compromis reste celui écrit plus bas — les
+    // dégâts sont SOUSTRACTIFS (atk − def), donc une DÉF plus haute allonge les combats plus qu'elle ne
+    // les rend dangereux. On l'applique donc au PALIER seulement, pas à la pente : la marche se sent,
+    // sans transformer chaque mob de fin de partie en éponge.
+    def: palier,
+  }
 }
 
 // Stats finales d'un monstre de niveau `level` et de rôle `role`. `grand` (gabarit géant) épaissit
@@ -123,10 +183,12 @@ export function statsForLevel(level: number, role: MobRole = 'normal', grand = f
   return {
     hp: Math.round(hpBase(level) * r.hp * g * e.hp * d.hp),
     atk: Math.round(atkBase(level) * r.atk * e.atk * d.atk),
-    // ⚠️ LA DÉF N'EST PAS DURCIE, ET C'EST DÉLIBÉRÉ. Les dégâts sont soustractifs (atk − def) : monter la
-    // DÉF des mobs allongerait les combats sans les rendre plus dangereux, ce qui rend le jeu long et pas
-    // difficile. Le danger vient des PV (durée de vie du mob) et de son ATK (pression sur le joueur).
-    def: Math.round(defBase(level) * r.def * e.def),
+    // ⚠️ LA DÉF SUIT LE PALIER, PAS LA PENTE — et c'est un arbitrage rendu par le joueur contre l'avis
+    // écrit ici auparavant (« la DÉF n'est pas durcie, et c'est délibéré »). Les dégâts sont
+    // soustractifs : une DÉF plus haute allonge les combats plus qu'elle ne les rend dangereux, et long
+    // n'est pas difficile. On applique donc la marche, pas la croissance continue, pour que le mob de
+    // fin de partie encaisse mieux sans devenir une éponge.
+    def: Math.round(defBase(level) * r.def * e.def * d.def),
   }
 }
 
