@@ -25,8 +25,12 @@ const RANG = new Map(WORLD_NODES.filter((n) => n.levelId).map((n, i) => [n.level
 const PLUS_TOT_QUE: Record<string, number> = {
   'trampoline-plat': 0,            // l'atelier : il ENSEIGNE, il peut arriver tôt
   'trampoline-corniche': 10,
+  'trampoline-saut-vide': 10,
   'trampoline-mur': 15,
+  'trampoline-saut-eau': 15,
   'trampoline-mur-trou': 25,
+  'trampoline-saut-flammes': 30,
+  'trampoline-fosse-ardente': 40,
 }
 
 describe('rampe de difficulté', () => {
@@ -57,7 +61,8 @@ describe('rampe de difficulté', () => {
       .filter(([, modules]) => modules.some((m) => m.kind === kind))
       .map(([id]) => RANG.get(id) ?? 999)
     const atelier = Math.min(...rangDe('trampoline-plat'), 999)
-    const premierObstacle = Math.min(...['trampoline-mur', 'trampoline-mur-trou'].flatMap(rangDe), 999)
+    const premierObstacle = Math.min(...['trampoline-mur', 'trampoline-mur-trou', 'trampoline-saut-vide',
+      'trampoline-saut-eau', 'trampoline-saut-flammes', 'trampoline-fosse-ardente'].flatMap(rangDe), 999)
     expect(atelier, 'aucun atelier de trampoline sur la carte').toBeLessThan(900)
     expect(atelier, "l'atelier doit précéder l'obstacle").toBeLessThan(premierObstacle)
     // et de plusieurs terrains, pas d'un seul : on apprend, on joue, puis on est mis à l'épreuve

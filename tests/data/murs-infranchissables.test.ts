@@ -42,7 +42,7 @@ const nonBoss = Object.values(LEVELS).filter((l) => !l.boss)
 // géométrie, et un terrain n'est pas le même qu'avant. Le total, lui, ne remonte pas (38 → 35) : c'est
 // lui qui fait foi, ces seuils-ci ne servent qu'à nommer le coupable quand il empire.
 const SEUILS: Record<string, number> = {
-  'plaine-1': 0, 'plaine-2': 0, 'plaine-3': 0, 'plaine-4': 0, 'plaine-5': 2, 'plaine-6': 0, 'plaine-7': 0,
+  'plaine-1': 0, 'plaine-2': 0, 'plaine-3': 0, 'plaine-4': 0, 'plaine-5': 0, 'plaine-6': 0, 'plaine-7': 2,
 }
 
 describe('murs infranchissables', () => {
@@ -60,9 +60,15 @@ describe('murs infranchissables', () => {
     // seconde — celle qui ouvre le sol sous les motifs d'échelle et de saut. Deux murs de plus pour un
     // sol troué là où il devait l'être : le compte remonte parce que le terrain a changé de nature,
     // pas parce qu'il s'est dégradé. C'est le genre d'écart qui doit s'écrire, pas se lisser.
-    // …et 38 depuis que les trampolines se placent à la meilleure colonne de leur surface : en bougeant,
-    // ils cessent d'excuser par simple voisinage (`aideProche`) un mur qui était déjà là.
-    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(38)
+    // …38 depuis que les trampolines se placent à la meilleure colonne de leur surface (en bougeant, ils
+    // cessent d'excuser par voisinage un mur déjà là), et 45 depuis l'arrivée des six motifs de rebond.
+    //
+    // ⚠️ CES SEPT-LÀ SONT DES MURS PAR CONSTRUCTION, ET C'EST LEUR RAISON D'ÊTRE. `trampoline-mur` pose
+    // une colonne de pierre de huit rangées sans la moindre prise : c'est EXACTEMENT ce que ce validateur
+    // cherche, et il a raison de la voir. La différence est qu'un trampoline est posé au pied, à portée
+    // de rebond — ce que la mesure ne sait pas distinguer d'un mur subi. Le chiffre monte donc parce que
+    // le jeu contient enfin des obstacles voulus, pas parce qu'il s'est dégradé.
+    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(45)
   })
 
   it('aucun terrain de plaine n\'empire', () => {

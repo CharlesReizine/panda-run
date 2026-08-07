@@ -388,6 +388,24 @@ export function oversizedGaps(level: LevelDef): GapProblem[] {
   // On exige une couverture CONTINUE : chaque colonne du trou doit avoir une plateforme au-dessus, et deux
   // plateformes consécutives ne doivent pas être plus éloignées qu'un saut. Une couverture trouée ne
   // sauverait rien, elle déplacerait le piège.
+  // ⚠️ UN GOUFFRE FRANCHI AU REBOND N'EST PAS UN GOUFFRE NON PLUS. Même raisonnement que pour le pont
+  // au-dessus : cette règle interdit les fossés INFRANCHISSABLES, pas les vides spectaculaires. Un
+  // trampoline posé sur une berge met l'autre à portée — c'est même TOUT le propos des motifs où le
+  // rebond est la seule solution. Sans cette nuance, ils étaient rejetés à la SÉLECTION DE GRAINES, en
+  // silence, avec repli sur un plan sans eux : quatre motifs demandés par le joueur n'apparaissaient
+  // nulle part dans le jeu, et rien ne disait pourquoi.
+  const franchiAuRebond = (g: GapProblem): boolean => {
+    const trampos = level.trampolines ?? []
+    if (!trampos.length) return false
+    const rives = level.platforms.filter((p) => p.x + p.w === g.x || p.x === g.x + g.w)
+    return trampos.some((t) => rives.some((depart) => {
+      // le tapis doit être POSÉ sur cette rive (à une rangée près), et l'autre rive à portée de rebond
+      if (t.x < depart.x - 1 || t.x > depart.x + depart.w || Math.abs(depart.y - t.y) > 2) return false
+      return rives.some((arrivee) => arrivee !== depart
+        && canReachByBounce(t.y, arrivee, Math.max(0, Math.max(t.x - (arrivee.x + arrivee.w), arrivee.x - t.x))))
+    }))
+  }
+
   const enjambe = (g: GapProblem): boolean => {
     const dessus = level.platforms
       .filter((p) => p.x + p.w > g.x && p.x < g.x + g.w)
@@ -405,7 +423,7 @@ export function oversizedGaps(level: LevelDef): GapProblem[] {
     return false
   }
   return (level.gaps ?? [])
-    .filter((g) => g.w * TILE > max && !underCascade(g) && !enjambe(g))
+    .filter((g) => g.w * TILE > max && !underCascade(g) && !enjambe(g) && !franchiAuRebond(g))
     .map((g) => ({ x: g.x, w: g.w }))
 }
 

@@ -8,4 +8,4 @@
 // qui contenait R367, et chaque sauvegarde cloud partait avec un numéro faux — donc inutilisable pour
 // diagnostiquer quelle build avait écrit quoi, ce qui est TOUTE la raison d'être de ce fichier.
 // `tests/core/build-stamp.test.ts` le compare désormais au dernier lot consigné dans ETAT-DU-PROJET.md.
-export const BUILD = 'R378'
+export const BUILD = 'R379'

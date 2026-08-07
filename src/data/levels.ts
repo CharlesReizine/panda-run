@@ -429,18 +429,18 @@ const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
   // faut commencer un peu en douceur. » Un saut mortel au cinquième terrain arrive avant que le joueur
   // ait seulement compris à quoi sert l'objet — l'atelier de plaine-3 est encore tout frais.
   'jungle-3': ['trampoline-mur-trou'],       // rang 28 — le même mur, mais avec le trou mortel au pied
-  'plage-3': ['trampoline-corniche'],        // rang 43
+  'plage-3': ['trampoline-fosse-ardente'],   // rang 43 — la fosse de lave : rater, c'est mourir
   'enfer-7': ['echelles-zigzag'],
   // ⚠️ 'echelle-exposee' A ÉTÉ ÉVINCÉ par les secondes occurrences : chaque motif imposé prend un slot de
   // tension, et cette famille n'en a que quelques-uns sur tout le jeu. On l'épingle donc à son tour — c'est
   // la limite du budget, pas un défaut de l'ordonnanceur.
   'enfer-1': ['echelle-exposee'],
   'carriere-1': ['echelle-descente-piegee'],
-  'foret-6': ['trampoline-plat'],            // rang 12 — un second atelier, avant les vrais obstacles
-  'montagne-1': ['trampoline-mur'],          // rang 33
-  'plage-2': ['trampoline-mur-trou'],        // rang 42
-  'desert-5': ['trampoline-corniche'],       // rang 19
-  'enfer-3': ['trampoline-mur-trou'],        // rang 52
+  'foret-6': ['trampoline-saut-vide'],       // rang 12 — le premier vrai obstacle, et le plus clément : on retombe au sol
+  'montagne-1': ['trampoline-saut-flammes'], // rang 33 — ça brûle, mais le sol reste dessous
+  'plage-2': ['trampoline-saut-flammes'],    // rang 42
+  'desert-5': ['trampoline-saut-eau'],       // rang 19 — l'eau amortit : on survit à l'erreur
+  'enfer-3': ['trampoline-fosse-ardente'],   // rang 52
   'jungle-1': ['colonnes-perilleuses'],      // mid : colonnes étroites au-dessus du vide, chute = mort
   'enfer-4': ['colonnes-perilleuses'],       // endgame : le même, plus long
   // ⚠️ 'trampoline-echelle' N'EST PAS PLACÉ. Son échelle SUSPENDUE au-dessus du vide reste injoignable pour

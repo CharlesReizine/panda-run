@@ -222,7 +222,10 @@ describe('relief jouable', () => {
   // ⚠️ RELEVÉ DE 2 À 3 APRÈS REGRAVURE. Les plans sont re-choisis sous la nouvelle géométrie : trois
   // paires subsistent (plaine-5, desert-4, desert-7), toutes du même type que les précédentes — une
   // corniche qui PORTE quelque chose, que la passe de rognage refuse de raccourcir, et elle a raison.
-  const TOLERANCE_DOUBLES = 3
+  // 5 après l'arrivée des motifs de rebond : leurs deux berges, posées à la même altitude de part et
+  // d'autre du vide, jouxtent parfois une corniche voisine d'une ou deux rangées. Toutes portent quelque
+  // chose (la passe de rognage refuse de raccourcir une corniche sous ce qui s'y appuie).
+  const TOLERANCE_DOUBLES = 5
   it('deux corniches ne se recouvrent pas à moins d\'un saut l\'une de l\'autre', () => {
     const paires: string[] = []
     for (const l of nonBoss) {

@@ -86,7 +86,8 @@ export type ModuleKind =
   | 'trampoline-plat'        // 1) sur du plat : il ne sert à rien, on découvre l'objet sans risque
   | 'trampoline-corniche'    // 2) permet d'atteindre une corniche haute
   // les seuls où le rebond est OBLIGATOIRE : aucune surface entre le départ et l'arrivée
-  | 'trampoline-mur' | 'trampoline-mur-trou'        // 3) plateforme haute, et EN DESSOUS c'est le vide     // 4) atteint une échelle en T suspendue, vide en dessous     // 5) dépasse un vide et atteint une cascade
+  | 'trampoline-mur' | 'trampoline-mur-trou'
+  | 'trampoline-saut-vide' | 'trampoline-saut-eau' | 'trampoline-saut-flammes' | 'trampoline-fosse-ardente'        // 3) plateforme haute, et EN DESSOUS c'est le vide     // 4) atteint une échelle en T suspendue, vide en dessous     // 5) dépasse un vide et atteint une cascade
   // ─── MOTIFS EAU / GROTTE DEMANDÉS (variété) ───────────────────────────────────────────────────
   // « Je trouve que c'est un peu répétitif là. »
   | 'cascade-plus-haute'     // 1) cascade qui DÉPASSE l'entrée de la grotte
@@ -878,6 +879,56 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     // Un premier jet posait un mur de DOUZE rangées : son sommet était injoignable à toutes les
     // largeurs — un motif impossible plutôt qu'exigeant. « Très haut » se mesure à la portée de
     // l'engin, pas à l'intention.
+    // Les quatre traversées ne diffèrent que par CE QU'IL Y A DESSOUS. Le geste est le même — courir,
+    // rebondir, survoler — et c'est voulu : on apprend une fois, on reconnaît ensuite, et le décor dit
+    // seul ce qu'on risque. Un vide pardonne (on retombe au sol), une nappe d'eau ralentit, les flammes
+    // brûlent, et la fosse de lave ne rend pas ce qu'elle prend.
+    //
+    // ⚠️ COTES MESURÉES, PAS DEVINÉES : à plat, un SAUT franchit 3 tuiles, un REBOND en franchit 8. La
+    // traversée fait 6, et le tapis est à UNE tuile du bord — à trois, la berge d'en face était à neuf
+    // colonnes et le motif se signalait « piège sans retour », ce qu'il était vraiment.
+    case 'trampoline-saut-vide':
+    case 'trampoline-saut-eau':
+    case 'trampoline-saut-flammes':
+    case 'trampoline-fosse-ardente': {
+      const alt = Math.max(entryAlt, 3)
+      const large = 6
+      const berge = Math.max(7, Math.floor((w - large) / 2))
+      p.platforms.push({ x: 0, alt, w: berge })
+      p.trampolines.push({ x: Math.max(1, berge - 1), alt: alt + 1, fixe: true })
+      const xFin = Math.min(w - 3, berge + large)
+      p.gaps.push({ x: berge, w: xFin - berge })
+
+      if (m.kind === 'trampoline-saut-eau') {
+        p.waters.push({ x: berge, w: xFin - berge, kind: 'marine', bankAlt: alt })
+      } else if (m.kind === 'trampoline-saut-flammes') {
+        // ⚠️ UNE SEULE NAPPE, PAS SIX POINTES CÔTE À CÔTE. Posées une par colonne, elles se lisaient
+        // comme des flammes « à écart nul » et un validateur dédié les refusait — il traque les pointes
+        // trop rapprochées, qui ne laissent aucun pas où se poser. Ici il n'y a rien où se poser par
+        // construction : c'est une traversée. Une nappe continue dit la même chose sans mentir.
+        p.spikes.push({ x: berge, w: xFin - berge, alt })
+      } else if (m.kind === 'trampoline-fosse-ardente') {
+        // ⚠️ « FLAMMES DANS UN TROU DONT ON PEUT PAS SORTIR » — demandé mot pour mot, et c'est le seul
+        // endroit du jeu où l'on assume un piège sans issue. Il n'en est un que parce qu'il TUE : de la
+        // LAVE, pas de l'eau. Une fosse dont on ne sort pas et où l'on SURVIT serait exactement le
+        // défaut que ce projet refuse depuis toujours — une mort, on la recommence ; un enfermement, on
+        // quitte le jeu.
+        p.waters.push({ x: berge, w: xFin - berge, kind: 'lave', bankAlt: alt })
+      }
+
+      const bergeD = Math.max(3, w - xFin)
+      p.platforms.push({ x: xFin, alt, w: bergeD })
+      // ⚠️ UN TAPIS SUR CHAQUE BERGE. Sans celui du retour, la berge d'arrivée est un PIÈGE SANS RETOUR :
+      // on traverse, et plus rien ne ramène. C'est aussi la bonne lecture de jeu — un obstacle se
+      // franchit dans les deux sens, sinon ce n'est pas un obstacle, c'est une porte.
+      if (bergeD >= 3) p.trampolines.push({ x: Math.min(w - 2, xFin + 1), alt: alt + 1, fixe: true })
+      // ⚠️ AUCUN MONSTRE POSÉ ICI. Un premier jet en plaçait un sur chaque berge : le peuplement
+      // automatique de l'assembleur choisit mieux, il connaît les espèces AUTORISÉES sur ce terrain.
+      placeBirds(alt + 6)
+      p.exitAlt = alt
+      break
+    }
+
     case 'trampoline-mur':
     case 'trampoline-mur-trou': {
       // « Deux colonnes de pierre de hauteur différente avec un trampoline entre les deux. » Le cadrage
@@ -4213,8 +4264,16 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     // pas. On préfère donc, à dégagement égal, une colonne d'où le rebond DESSERT une plateforme —
     // et une plateforme hors de portée d'un saut simple, sinon l'engin ne sert à rien qu'on ne sache
     // déjà faire.
+    // ⚠️ « PLUS HAUT » N'EST PAS LE SEUL SERVICE RENDU. Le premier critère exigeait une plateforme
+    // au-dessus du tapis — il déclarait donc inutiles les onze trampolines des motifs de TRAVERSÉE, dont
+    // les deux berges sont à la MÊME altitude : leur service est horizontal, on survole six tuiles de
+    // vide qu'un saut (trois) ne franchit pas. Ce qui compte est « le rebond y va, le saut n'y va pas »,
+    // pas la direction.
     const dessertQuelqueChose = (x: number, y: number) => platforms.some((p) => {
-      if (p.y >= y) return false
+      // ⚠️ `y + 1` ET PAS `y` : le tapis repose SUR une plateforme, sa rangée est donc une de moins que
+      // celle de sa propre surface. Comparer à `y` excluait la berge d'en face d'une traversée à plat —
+      // exactement les onze trampolines qu'on cherchait à valider.
+      if (p.y > y + 1) return false // franchement sous le tapis : on y tombe, on n'y rebondit pas
       const ecart = Math.max(0, p.x > x ? p.x - x : x - (p.x + p.w - 1))
       return canReachByBounce(y, p, ecart) && !canReach(y, p, ecart)
     })
@@ -4594,6 +4653,10 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   // position du tapis. Le défaut n'était ni dans la difficulté ni dans la portée du rebond : il était
   // dans ce qu'on avait coulé SOUS le motif sans le vouloir.
   'trampoline-mur': { forcedOnly: true, tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [20, 28], below: 'vide', above: 'air' },
+  'trampoline-saut-vide': { forcedOnly: true, tier: 3, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [22, 30], below: 'sol', above: 'air' },
+  'trampoline-saut-eau': { forcedOnly: true, tier: 3, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [22, 30], below: 'sol', above: 'air', water: true },
+  'trampoline-saut-flammes': { forcedOnly: true, tier: 4, family: 'tension', entry: 'milieu', exit: 'milieu', width: [22, 30], below: 'sol', above: 'air' },
+  'trampoline-fosse-ardente': { forcedOnly: true, tier: 5, family: 'tension', entry: 'milieu', exit: 'milieu', width: [24, 32], below: 'sol', above: 'air' },
   'trampoline-mur-trou': { forcedOnly: true, tier: 4, family: 'vertical', entry: 'bas', exit: 'haut', width: [22, 30], below: 'vide', above: 'air' },
 
   // ─── MOTIFS EAU / GROTTE DEMANDÉS ─────────────────────────────────────────────────────────────

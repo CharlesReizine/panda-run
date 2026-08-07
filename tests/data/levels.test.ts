@@ -217,7 +217,11 @@ describe('début accessible + déclustering', () => {
     expect(l.spawns.length).toBeGreaterThan(0)
     for (const s of l.spawns) {
       const m = MONSTERS[s.monsterId]!
-      expect(['gloopy', 'fabre'], `${s.monsterId} interdit en plaine-1`).toContain(s.monsterId)
+      // ⚠️ LES VARIANTES MINI SONT ADMISES, SUR ARBITRAGE DU JOUEUR : « mets-moi des gloopy-mini si tu
+      // veux, je m'en fous ». Elles sont plus FAIBLES que leur base — un gloopy-mini sur le terrain
+      // d'école ne contredit pas l'esprit de la règle, qui est « rien qui puisse tuer un débutant ».
+      // Ce qui reste interdit n'a pas bougé : les aériens, les chargeurs, tout ce qui n'est pas de contact.
+      expect(['gloopy', 'fabre', 'gloopy-mini'], `${s.monsterId} interdit en plaine-1`).toContain(s.monsterId)
       expect(m.behavior, `${s.monsterId} doit être de contact`).toBe('contact')
       expect(!!m.aerial, `${s.monsterId} ne doit pas être aérien`).toBe(false)
     }

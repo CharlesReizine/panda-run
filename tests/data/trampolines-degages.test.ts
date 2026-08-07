@@ -72,7 +72,7 @@ describe('trampolines dégagés', () => {
       for (const t of l.trampolines ?? []) {
         total++
         const sert = l.platforms.some((p) => {
-          if (p.y >= t.y) return false
+          if (p.y > t.y + 1) return false // franchement sous le tapis : on y tombe, on n'y rebondit pas
           const ecart = Math.max(0, p.x > t.x ? p.x - t.x : t.x - (p.x + p.w - 1))
           return canReachByBounce(t.y, p, ecart) && !canReach(t.y, p, ecart)
         })
