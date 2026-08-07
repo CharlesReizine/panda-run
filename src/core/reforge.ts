@@ -3,9 +3,9 @@ import type { ItemDef, StatBlock } from './types'
 import { ITEMS } from '../data/items'
 import { sellPrice } from '../data/shops'
 
-// Réforge : améliore une pièce d'équipement d'un cran. Chaque niveau majore le bonus de base
-// de l'objet de +20 % (voir upgradedBonus, appliqué dans computeStats). Coût croissant en or +
-// matériaux communs. Vente : revend un objet de l'inventaire contre de l'or selon sa rareté.
+// Bonus d'amélioration et vente. Chaque niveau majore le bonus de base de l'objet de +20 %
+// (voir upgradedBonus, appliqué dans computeStats). Vente : revend un objet de l'inventaire contre
+// de l'or selon sa rareté.
 
 export const MAX_REFORGE_LEVEL = 10
 
@@ -23,42 +23,16 @@ export function upgradedBonus(baseBonus: Bonus, level: number): Bonus {
   return out
 }
 
-// Coût pour passer du niveau courant au niveau suivant : or + matériaux communs, en hausse.
-export function reforgeCost(level: number): { gold: number; materials: Record<string, number> } {
-  return {
-    gold: 60 + 40 * level,
-    materials: {
-      'minerai-fer': 2 + level,
-      'herbe-tendre': 1 + Math.floor(level / 2),
-    },
-  }
-}
-
-// Vrai si l'objet peut être réforgé : pas au niveau max ET assez d'or + matériaux.
-export function canReforge(p: PlayerState, itemId: string): boolean {
-  const level = p.upgrades[itemId] ?? 0
-  if (level >= MAX_REFORGE_LEVEL) return false
-  const cost = reforgeCost(level)
-  if (p.gold < cost.gold) return false
-  for (const [matId, qty] of Object.entries(cost.materials)) {
-    if ((p.materials[matId] ?? 0) < qty) return false
-  }
-  return true
-}
-
-// Réforge l'objet : débite or + matériaux et incrémente son niveau. Ne mute rien et renvoie
-// false si impossible (niveau max ou ressources insuffisantes).
-export function doReforge(p: PlayerState, itemId: string): boolean {
-  if (!canReforge(p, itemId)) return false
-  const level = p.upgrades[itemId] ?? 0
-  const cost = reforgeCost(level)
-  p.gold -= cost.gold
-  for (const [matId, qty] of Object.entries(cost.materials)) {
-    p.materials[matId] = (p.materials[matId] ?? 0) - qty
-  }
-  p.upgrades[itemId] = level + 1
-  return true
-}
+// ⚠️ LA RÉFORGE A ÉTÉ SUPPRIMÉE — il n'en reste que le CALCUL DU BONUS et la vente.
+//
+// Demande du joueur : « la forge faut reprendre, je veux plus de "reforger", tu dégages. » Ses trois
+// fonctions (`reforgeCost`, `canReforge`, `doReforge`) sont parties avec l'onglet : améliorer se décide
+// désormais dans core/amelioration, avec un coût lié à la pureté et un risque de casse au-delà de +3.
+//
+// Ce qui survit ici, et pourquoi : `upgradedBonus` traduit un NIVEAU en statistiques, et cette
+// traduction ne dépend pas de la façon dont le niveau a été gagné — `computeStats` l'appelle à chaque
+// calcul de fiche. Le champ `upgrades` du joueur, lui, n'a pas changé de sens : les parties déjà
+// réforgées gardent exactement les bonus qu'elles avaient.
 
 // Valeur de revente d'un objet : 50 % de son prix d'achat (cf. data/shops sellPrice — prix boutique
 // s'il est vendu en ville, sinon repli sur le barème par rareté).

@@ -5,7 +5,7 @@ import { MONSTERS } from '../../src/data/monsters'
 import { LEVELS } from '../../src/data/levels'
 import { ITEMS } from '../../src/data/items'
 import { expectedLevel } from '../../src/core/playability-sim'
-import { reforgeCost, MAX_REFORGE_LEVEL } from '../../src/core/reforge'
+import { coutAmelioration, NIVEAU_MAX, NIVEAU_SUR } from '../../src/core/amelioration'
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 // ATTEIGNABILITÉ DU CRAFT — « jamais trouvé de minerai donc pas clair comment je fais des objets »
@@ -124,7 +124,11 @@ describe('hiérarchie des matières', () => {
     // qui encombre l'inventaire et brouille la lecture du craft.
     const consumed = new Set<string>([
       ...RECIPES.flatMap((r) => Object.keys(r.materials)),
-      ...Array.from({ length: MAX_REFORGE_LEVEL }, (_, lv) => Object.keys(reforgeCost(lv).materials)).flat(),
+      // ⚠️ LA SOURCE A CHANGÉ DE NOM MAIS PAS DE RÔLE : la réforge a été remplacée par l'amélioration
+      // (core/amelioration), qui consomme elle aussi des matériaux. Oublier de la citer ici ferait
+      // passer le minerai et la gemme pour des matières MORTES et casserait ce test à côté du sujet.
+      ...Array.from({ length: NIVEAU_MAX }, (_, lv) =>
+        Object.entries(coutAmelioration(lv, 1).materials).filter(([, n]) => n > 0).map(([m]) => m)).flat(),
     ])
     for (const m of Object.values(MATERIALS)) {
       expect(FIRST_SOURCE[m.id], `${m.id} n'est droppé par aucun monstre placé`).toBeDefined()
@@ -158,17 +162,30 @@ describe('hiérarchie des matières', () => {
   })
 })
 
-describe('réforge', () => {
-  it('la réforge ne coûte que des matières COMMUNES, et elles sont atteignables', () => {
-    // reforgeCost (core/reforge, hors périmètre de ce chantier) réclame du minerai de fer dès son
-    // niveau 0 : si le fer redevenait un trophée introuvable, la réforge redeviendrait décorative sans
-    // qu'aucun test ne bronche. Ce garde-fou verrouille le couplage.
-    for (let lv = 0; lv < MAX_REFORGE_LEVEL; lv++) {
-      for (const matId of Object.keys(reforgeCost(lv).materials)) {
-        expect(MATERIALS[matId], `${matId} (réforge Nv${lv}) doit être déclaré`).toBeDefined()
-        expect(MATERIALS[matId]!.rarity, `${matId} (réforge Nv${lv})`).toBe('commune')
-        expect(FIRST_SOURCE[matId], `${matId} (réforge Nv${lv}) doit tomber quelque part`).toBeDefined()
-        expect(FIRST_SOURCE[matId]!.chance, `${matId} (réforge Nv${lv}) doit être farmable`).toBeGreaterThanOrEqual(0.25)
+describe('amélioration', () => {
+  // ⚠️ LA RÈGLE SE DÉDOUBLE, PARCE QUE LES DEUX MOITIÉS DU MÉCANISME N'ONT PAS LE MÊME PUBLIC.
+  // Monter à +3 est le chemin NORMAL : tout le monde doit pouvoir le faire, donc matières communes et
+  // franchement farmables. Pousser au-delà est un PARI qu'on choisit de prendre : y demander une
+  // matière rare est cohérent — ce qu'on risque doit avoir coûté quelque chose. Elle reste soumise au
+  // seuil de farmabilité : rare ne veut pas dire introuvable, sinon l'onglet redevient décoratif.
+  it('monter jusqu\'au palier sûr ne coûte que des matières COMMUNES et farmables', () => {
+    for (let lv = 0; lv < NIVEAU_SUR; lv++) {
+      for (const [matId, qte] of Object.entries(coutAmelioration(lv, 1).materials)) {
+        if (qte <= 0) continue
+        expect(MATERIALS[matId], `${matId} (+${lv + 1}) doit être déclaré`).toBeDefined()
+        expect(MATERIALS[matId]!.rarity, `${matId} (+${lv + 1}) est sur le chemin normal`).toBe('commune')
+        expect(FIRST_SOURCE[matId]!.chance, `${matId} (+${lv + 1}) doit être farmable`).toBeGreaterThanOrEqual(0.25)
+      }
+    }
+  })
+
+  it('au-delà, les matières restent déclarées et farmables', () => {
+    for (let lv = NIVEAU_SUR; lv < NIVEAU_MAX; lv++) {
+      for (const [matId, qte] of Object.entries(coutAmelioration(lv, 1).materials)) {
+        if (qte <= 0) continue
+        expect(MATERIALS[matId], `${matId} (+${lv + 1}) doit être déclaré`).toBeDefined()
+        expect(FIRST_SOURCE[matId], `${matId} (+${lv + 1}) doit tomber quelque part`).toBeDefined()
+        expect(FIRST_SOURCE[matId]!.chance, `${matId} (+${lv + 1}) doit rester farmable`).toBeGreaterThanOrEqual(0.1)
       }
     }
   })

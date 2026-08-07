@@ -23,6 +23,12 @@ export const INTRO_ROW = {
   prev: { x: 120, w: 130 },
   counter: { x: 268, w: 150 },
   next: { x: 416, w: 130 },
+  // ⚠️ IL MANQUAIT LA SORTIE. « Quand on arrive sur une map tu proposes Continuer mais pas Retour à la
+  // carte. » Cet écran était un couloir à sens unique : une fois arrivé, la seule issue était de lancer
+  // le terrain — ou de mettre en pause une fois dedans pour en ressortir. Voir le bestiaire d'un
+  // terrain qu'on n'a pas envie de faire est une raison suffisante d'y venir, et repartir doit coûter
+  // un geste, pas une partie.
+  retour: { x: 534, w: 100 },
   start: { x: 720, w: 260 },
 }
 

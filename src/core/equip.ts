@@ -6,7 +6,15 @@ import { minLevelOf } from './item-level'
 // les épéistes (sabreur/chevalier) les lames, les archers (archer/chasseur) les arcs, les mages
 // (mage/sorcier) les bâtons. Le novice garde son arme de base (aucun objet weapon équipable).
 export const CLASS_WEAPON_TYPES: Record<ClassId, WeaponType[]> = {
-  novice: [],
+  // ⚠️ LE NOVICE PORTE LE BÂTON, ET C'ÉTAIT UN VIDE, PAS UN CHOIX. Sa liste était VIDE : aucune arme
+  // équipable avant le premier changement de classe. « Il faut que le bâton devienne une arme de
+  // novice, sinon y en a pas et c'est booooring. » Il avait raison sur les deux plans — on jouait les
+  // premiers niveaux à mains nues, et surtout tout ce qui tombait de butin était refusé, ce qui
+  // transforme la découverte du jeu en série de messages de blocage.
+  // Le bâton et pas l'épée : c'est l'arme la plus faible des trois familles, celle qu'on abandonne
+  // sans regret en se spécialisant — et un novice qui garde son bâton en devenant épéiste perd son
+  // arme, ce qui rend le choix de classe lisible.
+  novice: ['staff'],
   swordsman: ['sword'],
   chevalier: ['sword'],
   archer: ['bow'],
@@ -19,11 +27,12 @@ export const CLASS_WEAPON_TYPES: Record<ClassId, WeaponType[]> = {
 export const WEAPON_WEARERS_LABEL: Record<WeaponType, string> = {
   sword: 'épéistes',
   bow: 'archers',
-  staff: 'mages',
+  staff: 'mages et novices',
 }
 
 // Famille d'arme AFFICHÉE : celle de l'objet équipé s'il y en a un, sinon la famille par défaut de
-// la classe (arme de base). Le novice n'a pas de famille par défaut (aucune arme).
+// la classe (arme de base). Le novice n'a toujours PAS d'arme de base : il PEUT porter un bâton, il
+// n'en a pas d'office. La différence compte — trouver son premier bâton reste un moment.
 const CLASS_DEFAULT_WEAPON: Record<ClassId, WeaponType | null> = {
   novice: null,
   swordsman: 'sword',

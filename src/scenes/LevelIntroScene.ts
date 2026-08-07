@@ -106,6 +106,7 @@ export class LevelIntroScene extends Phaser.Scene {
       this.rowBtn(INTRO_ROW.prev.x, '◀ Retour', 0x37474f, () => { this.fiche = null; this.render() })
     }
 
+    this.retourCarte()
     this.startButton()
   }
 
@@ -159,6 +160,20 @@ export class LevelIntroScene extends Phaser.Scene {
     return this.add.text(x, INTRO.navY, label, {
       fontSize: '16px', color: '#ffffff', backgroundColor: `#${bg.toString(16).padStart(6, '0')}`, padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', onTap)
+  }
+
+  /**
+   * Bouton « ← Carte » : on repart sans lancer le terrain.
+   *
+   * ⚠️ ON NE MARQUE PAS LE NIVEAU COMME VU. `markLevelSeen` appartient à « Commencer ! » : cet écran
+   * s'affiche une fois, à la découverte, et repartir sans jouer ne doit pas consommer cette
+   * découverte — sinon on ne reverrait jamais le bestiaire du terrain qu'on a justement voulu regarder.
+   */
+  private retourCarte() {
+    this.rowBtn(INTRO_ROW.retour.x, '← Carte', 0x455a64, () => {
+      audio.playSfx('ui-tap')
+      this.scene.start('WorldMap')
+    })
   }
 
   // Bouton « Commencer ! » : marque le niveau comme vu puis lance la partie avec les mêmes data.

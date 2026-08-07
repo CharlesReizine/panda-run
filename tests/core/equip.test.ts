@@ -30,10 +30,24 @@ describe('restriction arme ↔ classe', () => {
     }
   })
 
-  it('le novice ne peut équiper aucune arme (arme de base seulement)', () => {
+  // ⚠️ LE NOVICE PORTE LE BÂTON — sa liste d'armes était VIDE, et c'était un vide, pas un choix.
+  // « Il faut que le bâton devienne une arme de novice, sinon y en a pas et c'est booooring. » Il avait
+  // raison sur les deux plans : on jouait les premiers niveaux à mains nues, et surtout TOUT le butin
+  // d'arme était refusé — la découverte du jeu devenait une série de messages de blocage.
+  //
+  // Le bâton et pas l'épée : c'est l'arme la plus faible des trois familles, celle qu'on abandonne sans
+  // regret en se spécialisant. Un novice qui garde son bâton en devenant épéiste PERD son arme, ce qui
+  // rend le choix de classe lisible plutôt que gratuit.
+  it('le novice porte le bâton, et lui seul', () => {
+    expect(canEquipItem('novice', 'baton-feuillu')).toBe(true)
+    expect(canEquipItem('novice', 'baton-de-novice')).toBe(true)
     expect(canEquipItem('novice', 'epee-bambou')).toBe(false)
     expect(canEquipItem('novice', 'arc-souple')).toBe(false)
-    expect(canEquipItem('novice', 'baton-feuillu')).toBe(false)
+  })
+
+  it("le novice n'a toujours pas d'arme de BASE — il peut en porter une, il n'en a pas d'office", () => {
+    expect(displayedWeaponType('novice', null)).toBeNull()
+    expect(displayedWeaponType('novice', 'baton-feuillu')).toBe('staff')
   })
 
   it('les objets non-weapon ne sont jamais restreints', () => {
@@ -47,7 +61,7 @@ describe('restriction arme ↔ classe', () => {
   it('le message de blocage cible la bonne famille, null si autorisé', () => {
     expect(equipRestrictionMessage('mage', 'katana-eclair')).toBe('Arme réservée aux épéistes.')
     expect(equipRestrictionMessage('swordsman', 'arc-souple')).toBe('Arme réservée aux archers.')
-    expect(equipRestrictionMessage('archer', 'baton-cristal')).toBe('Arme réservée aux mages.')
+    expect(equipRestrictionMessage('archer', 'baton-cristal')).toBe('Arme réservée aux mages et novices.')
     expect(equipRestrictionMessage('mage', 'baton-cristal')).toBeNull()
     expect(equipRestrictionMessage('swordsman', 'sakkat')).toBeNull()
   })

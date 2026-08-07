@@ -45,9 +45,6 @@ export class UIScene extends Phaser.Scene {
   private buffParts: (Phaser.GameObjects.Rectangle | Phaser.GameObjects.Text)[] = []
   private buffBar!: Phaser.GameObjects.Rectangle
   private buffUntil = 0
-  private perfText!: Phaser.GameObjects.Text
-  private perfFrames = 0
-  private perfDepuis = 0
   private buffDuration = 0
   // badge « points à dépenser » : pastille dorée pulsante collée au panneau de vie
   private spBadge!: Phaser.GameObjects.Container
@@ -90,8 +87,6 @@ export class UIScene extends Phaser.Scene {
     this.buffParts = []
     this.buffUntil = 0
     this.buffDuration = 0
-    this.perfFrames = 0
-    this.perfDepuis = 0
 
     this.input.addPointer(3)
     // ZONE DU JOYSTICK = TOUT LE QUART BAS-GAUCHE (« la zone à gauche où on contrôle les mouvements du
@@ -121,11 +116,6 @@ export class UIScene extends Phaser.Scene {
     // Discret (gris, 10 px, coin haut-gauche sous le panneau) et quasi gratuit : un compteur incrémenté
     // par frame, rafraîchi une fois par seconde. Il affiche les images/s et ce qui pourrait expliquer
     // une chute — nombre d'objets affichés et de corps physiques dans le terrain.
-    // ⚠️ EN BAS À GAUCHE, pas sous le panneau de vie : à 82 px il passait derrière le bouton
-    // « Compétences » (constaté sur capture). Le coin bas-gauche est occupé par le joystick, mais celui-ci
-    // est invisible tant qu'on n'y pose pas le pouce — la ligne reste lisible sur une capture.
-    this.perfText = this.add.text(L(10), VIEW_H - 13, '', { fontSize: '10px', color: '#8fa3b0' })
-      .setOrigin(0, 0).setDepth(60)
 
     this.add.rectangle(L(8), 2, BAR_W + 16, 78, 0x0d1b2a, 0.6).setOrigin(0).setStrokeStyle(1, 0xffffff, 0.25)
     this.levelText = this.add.text(L(16), 6, '', { fontSize: '15px', color: '#ffffff', fontStyle: 'bold' })
@@ -597,26 +587,13 @@ export class UIScene extends Phaser.Scene {
   }
 
   update(time: number) {
-    // témoin de perf : une addition par frame, un formatage par seconde
-    this.perfFrames++
-    if (time - this.perfDepuis >= 1000) {
-      const ips = Math.round((this.perfFrames * 1000) / (time - this.perfDepuis))
-      // ⚠️ ON PREND LA SCÈNE DE JEU ACTIVE, PAS 'Level' EN DUR — ET ON VÉRIFIE QUE SON MONDE EXISTE.
-      // `scene.get('Level')` renvoie TOUJOURS l'instance, même quand elle n'a jamais démarré : son
-      // `physics.world` vaut alors null. C'est ce qui plantait l'écran d'ENTRAÎNEMENT, qui tourne dans
-      // sa propre scène ('Training') et laisse 'Level' à l'arrêt — « Cannot read properties of null
-      // (reading 'bodies') », à chaque frame, écran noir. Le témoin de performance n'a aucune raison de
-      // pouvoir tuer une scène : il lit ce qui existe, ou il n'affiche rien.
-      const jeu = this.scene.manager.getScenes(true)
-        .find((sc) => sc.scene.key === 'Level' || sc.scene.key === 'Training') as LevelScene | undefined
-      const monde = jeu?.physics?.world ?? null
-      const objets = jeu?.children?.list.length ?? 0
-      const corps = monde ? monde.bodies.size + monde.staticBodies.size : 0
-      this.perfText.setText(`${ips} ips · ${objets} obj · ${corps} corps`)
-      this.perfText.setColor(ips >= 45 ? '#8fa3b0' : ips >= 25 ? '#ffb74d' : '#ef5350')
-      this.perfFrames = 0
-      this.perfDepuis = time
-    }
+    // ⚠️ LE TÉMOIN DE PERFORMANCE A ÉTÉ RETIRÉ — c'était un INSTRUMENT D'ENQUÊTE, pas une
+    // fonctionnalité. Il affichait « 58 ips · 412 obj · 260 corps » en bas à gauche pour traquer un
+    // ralentissement signalé sur téléphone ; l'enquête a conclu (aucune fuite : tas, textures,
+    // listeners et objets restent plats sur 14 terrains enchaînés). Le joueur : « on display encore
+    // des chiffres sur le nombre d'objets à l'écran et tout en bas à gauche, à retirer ». Un
+    // instrument qu'on oublie d'enlever finit par passer pour un défaut d'interface.
+    // Si le ralentissement revient : `git log -S perfText` rend la sonde complète en une commande.
 
     // l'énergie change en continu (régén) : on la lit directement sur le Player plutôt
     // que via un événement par frame

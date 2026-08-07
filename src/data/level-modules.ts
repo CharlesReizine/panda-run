@@ -15,7 +15,7 @@
 // - silhouette COLLINES : on monte puis on redescend ; ≤ 3 paliers empilés partout ; hauteur du
 //   monde = enveloppe des modules (souvent ~22-34 tuiles, pas de tour géante).
 
-import { chainesContournables, deadEndSurfaces, marchesInfranchissables, overStackedColumns, sealedVoids, unreachablePlatforms } from '../core/level-validator'
+import { chainesContournables, CLAIR_TRAMPOLINE, deadEndSurfaces, marchesInfranchissables, overStackedColumns, sealedVoids, unreachablePlatforms } from '../core/level-validator'
 import type { LevelDef } from './levels'
 import { MIN_LADDER_TILES, MAX_LADDER_TILES, maxJumpTiles, maxJumpGapPx, TILE } from '../core/platforming'
 import { comblements } from '../core/roche'
@@ -3977,6 +3977,53 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
         || apres.empiles > avant.empiles || apres.chaines > avant.chaines) {
         for (const m of posees) platforms.splice(platforms.indexOf(m), 1)
       }
+    }
+  }
+
+  // ─── UN TRAMPOLINE COINCÉ SOUS UN PLATEAU NE SERT À RIEN ─────────────────────────────────────
+  //
+  // Retour du joueur : « il y a des trampolines qui sont mis juste en dessous d'un plateau, donc on peut
+  // juste pas sauter dessus. Faut peut-être rajouter un test de hauteur minimale entre trampoline et
+  // plateau juste au-dessus qui fait 2 sauts genre. »
+  //
+  // ⚠️ ET C'EST PIRE QU'INUTILE, C'EST TROMPEUR. Un trampoline annonce « d'ici, on monte » : le joueur
+  // insiste, croit avoir raté son timing, et finit par croire que l'engin est cassé. Vingt-cinq cas
+  // mesurés, tous à trois tuiles de dégagement — de quoi cogner, pas de quoi décoller.
+  //
+  // ⚠️ ON DÉCALE, ON NE SUPPRIME PAS. Aucun motif ne pose ses trampolines sous un plafond : ils
+  // arrivent sous les corniches des modules VOISINS, ou sous les résidus laissés par les passes de
+  // rognage. Le tapis est donc au bon endroit du point de vue de son motif, et le retirer amputerait un
+  // chemin que `canReachByBounce` a peut-être déjà validé. On le fait glisser sur SA propre surface
+  // porteuse, à la colonne dégagée la plus proche — et on ne le retire que si sa surface entière est
+  // couverte, auquel cas il n'y avait rien à sauver.
+  {
+    const clair = Math.floor(CLAIR_TRAMPOLINE)
+    const plafondSur = (x: number, sous: number): number | null => {
+      let best: number | null = null
+      const garde = (row: number) => { if (row < sous && (best === null || row > best)) best = row }
+      for (const p of platforms) if (x >= p.x && x < p.x + p.w) garde(p.y)
+      for (const b of bridges) if (x >= b.x && x < b.x + b.w) garde(b.y)
+      for (const r of rockBands) if (x >= r.x && x < r.x + r.w) garde(r.y + r.h - 1)
+      return best
+    }
+    const degage = (x: number, y: number) => { const c = plafondSur(x, y); return c === null || y - c >= clair }
+
+    for (let i = trampolines.length - 1; i >= 0; i--) {
+      const t = trampolines[i]!
+      if (degage(t.x, t.y)) continue
+      // la surface qui le porte : c'est elle qui borne le glissement (un tapis flotte pas)
+      const support = platforms.find((p) => p.y === t.y + 1 && t.x >= p.x && t.x < p.x + p.w)
+      let mieux: number | null = null
+      if (support) {
+        for (let d = 1; d < support.w && mieux === null; d++) {
+          for (const x of [t.x - d, t.x + d]) {
+            if (x < support.x || x >= support.x + support.w) continue
+            if (degage(x, t.y)) { mieux = x; break }
+          }
+        }
+      }
+      if (mieux !== null) t.x = mieux
+      else trampolines.splice(i, 1)
     }
   }
 

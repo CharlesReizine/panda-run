@@ -125,7 +125,12 @@ export function rollDrops(drops: DropEntry[], rng: () => number = Math.random): 
 // Le seuil est donc DÉRISOIRE, pas nul : rien d'autre que de l'or, et de l'or dans le bas de sa
 // fourchette. C'est exactement le moment qu'on voulait mettre en scène — on ouvre, on espère, on
 // récolte vingt-six pièces — et il ne coûte pas une pièce à l'économie.
-const PART_DECEVANTE = 0.25 // fraction basse de la fourchette d'or en dessous de laquelle on se moque
+// ⚠️ RELEVÉ DE 0,25 À 0,5 SUR RETOUR DE JEU : « j'ai des coffres où quand je les ouvre ça fait pas
+// d'anim même si y a rien ». Au quart, la moquerie ne tombait que sur un coffre de bois sur sept — le
+// joueur en ouvrait cinq de suite sans jamais la voir, et une mise en scène qu'on ne rencontre pas
+// n'existe pas. À la moitié, c'est environ un sur trois : assez pour faire partie du jeu, assez rare
+// pour piquer encore.
+const PART_DECEVANTE = 0.5
 
 /**
  * Ce coffre a-t-il déçu ? Rien d'autre que de l'or, et de l'or au ras de sa fourchette.
@@ -157,10 +162,17 @@ export function butinDecevant(r: DropResult, drops: DropEntry[], bonus: string |
 // palier de niveau. Une plaisanterie ne doit pas coûter une ligne au modèle de données.
 export interface LotConsolation { key: string; nom: string }
 
+// ⚠️ LE NOM AFFICHÉ EST TOUJOURS « COFFRE VIDE », JAMAIS CELUI DE L'IMAGE. Demande explicite du
+// joueur : « écris pas "plume, toile d'araignée…", si c'est vide tu écris "Coffre vide" et tu gardes
+// les images ». Il a raison, et la raison est plus fine que le goût : nommer la plume la présentait
+// comme un LOT — on cherchait à quoi elle servait, on la guettait dans l'inventaire où elle n'entre
+// jamais. L'image fait la blague, le mot doit faire le constat.
+export const NOM_COFFRE_VIDE = 'Coffre vide'
+
 export const CONSOLATIONS: LotConsolation[] = [
-  { key: 'lot-toile', nom: 'Une toile d\'araignée' },
-  { key: 'lot-plume', nom: 'Une plume' },
-  { key: 'lot-caillou', nom: 'Un caillou' },
+  { key: 'lot-toile', nom: NOM_COFFRE_VIDE },
+  { key: 'lot-plume', nom: NOM_COFFRE_VIDE },
+  { key: 'lot-caillou', nom: NOM_COFFRE_VIDE },
 ]
 
 /** Le lot de consolation présenté en grand quand un coffre a déçu. */

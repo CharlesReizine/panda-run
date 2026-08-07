@@ -1262,6 +1262,42 @@ function silhouetteAt(level: LevelDef, x: number, groundRow: number): number | n
   return best
 }
 
+export interface TrampolinePlafond { x: number; y: number; plafond: number; libre: number }
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// UN TRAMPOLINE COINCÉ SOUS UN PLATEAU NE SERT À RIEN
+//
+// Retour du joueur : « il y a des trampolines qui sont mis juste en dessous d'un plateau, donc on peut
+// juste pas sauter dessus. Faut peut-être rajouter un test de hauteur minimale entre trampoline et
+// plateau juste au-dessus qui fait 2 sauts genre. »
+//
+// ⚠️ ET C'EST PIRE QU'INUTILE, C'EST TROMPEUR. Un trampoline annonce « d'ici, on monte » — c'est tout
+// son propos, et le motif qui le pose a bâti son chemin autour. Sous un plateau, il ne fait que cogner :
+// le joueur insiste, croit avoir raté son timing, et finit par croire que l'engin est cassé.
+//
+// Le seuil est DEUX HAUTEURS DE SAUT, comme demandé, et ce n'est pas arbitraire : le premier rebond
+// vaut exactement un saut normal (cf. BOUNCE_SPEED). En exiger deux, c'est garantir qu'on décolle
+// vraiment — qu'il reste de la course au-dessus une fois qu'on a fait ce qu'un saut ordinaire faisait
+// déjà. En dessous, l'engin ne sert à rien qu'un saut ne ferait pas.
+export const CLAIR_TRAMPOLINE = 2 * maxJumpTiles()
+
+/** Trampolines dont le plafond est trop bas pour qu'ils servent à quoi que ce soit. */
+export function trampolinesSousPlafond(level: LevelDef, minTiles = CLAIR_TRAMPOLINE): TrampolinePlafond[] {
+  const out: TrampolinePlafond[] = []
+  for (const t of level.trampolines ?? []) {
+    // le plus bas des obstacles au-dessus du tapis, sur sa colonne : plateforme, dalle de roche ou pont
+    let plafond: number | null = null
+    const garde = (row: number) => { if (row < t.y && (plafond === null || row > plafond)) plafond = row }
+    for (const p of level.platforms) if (t.x >= p.x && t.x < p.x + p.w) garde(p.y)
+    for (const b of level.bridges ?? []) if (t.x >= b.x && t.x < b.x + b.w) garde(b.y)
+    for (const r of level.rockBands ?? []) if (t.x >= r.x && t.x < r.x + r.w) garde(r.y + r.h - 1)
+    if (plafond === null) continue // ciel ouvert : rien ne gêne
+    const libre = t.y - plafond
+    if (libre < minTiles) out.push({ x: t.x, y: t.y, plafond, libre })
+  }
+  return out
+}
+
 /**
  * Marches MONTANTES infranchissables sur la silhouette marchable, de gauche à droite.
  *

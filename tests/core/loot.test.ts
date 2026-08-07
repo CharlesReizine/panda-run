@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   rollDrops, rollChestRareItem, chestRarePool, CHEST_RARE_CHANCE, CHEST_RARE_POOL, MARGE_NIVEAU_COFFRE,
   rollMobLegendary, mobLegendaryPool, MOB_LEGENDARY_CHANCE, MOB_LEGENDARY_SOUS, MOB_LEGENDARY_SUR,
-  butinDecevant, consolationDeCoffre, CONSOLATIONS,
+  butinDecevant, consolationDeCoffre, CONSOLATIONS, NOM_COFFRE_VIDE,
 } from '../../src/core/loot'
 import { minLevelOf } from '../../src/core/item-level'
 import { ITEMS } from '../../src/data/items'
@@ -169,7 +169,7 @@ describe('rollChestRareItem', () => {
   it('rien du tout, ou de l\'or au ras de la fourchette : le coffre a déçu', () => {
     expect(butinDecevant(rien, bois)).toBe(true)
     expect(butinDecevant({ ...rien, gold: 25 }, bois), '25 sur 25-60').toBe(true)
-    expect(butinDecevant({ ...rien, gold: 33 }, bois), '33 sur 25-60').toBe(true)
+    expect(butinDecevant({ ...rien, gold: 42 }, bois), '42 sur 25-60').toBe(true)
   })
 
   it('un butin correct ne se fait jamais moquer', () => {
@@ -184,6 +184,7 @@ describe('rollChestRareItem', () => {
     // 300 pièces sont une misère dans un coffre d'or (240-520) et une fortune dans un coffre de bois
     expect(butinDecevant({ ...rien, gold: 300 }, PROPS['coffre-or']!.drops!)).toBe(true)
     expect(butinDecevant({ ...rien, gold: 300 }, bois)).toBe(false)
+    expect(butinDecevant({ ...rien, gold: 60 }, bois), 'plafond du coffre de bois').toBe(false)
   })
 
   it('la moquerie arrive assez souvent pour exister, assez rarement pour piquer', () => {
@@ -195,8 +196,11 @@ describe('rollChestRareItem', () => {
       if (butinDecevant(rollDrops(bois, () => u), bois)) decus++
     }
     const taux = decus / N
-    expect(taux, `taux de coffres décevants : ${Math.round(taux * 100)} %`).toBeGreaterThan(0.03)
-    expect(taux, `taux de coffres décevants : ${Math.round(taux * 100)} %`).toBeLessThan(0.35)
+    // ⚠️ LA BORNE BASSE A ÉTÉ RELEVÉE SUR RETOUR DE JEU : « j'ai des coffres où quand je les ouvre ça
+    // fait pas d'anim même si y a rien ». À un coffre de bois sur sept, on en ouvrait cinq de suite
+    // sans jamais la voir — une mise en scène qu'on ne rencontre pas n'existe pas.
+    expect(taux, `taux de coffres décevants : ${Math.round(taux * 100)} %`).toBeGreaterThan(0.25)
+    expect(taux, `taux de coffres décevants : ${Math.round(taux * 100)} %`).toBeLessThan(0.45)
   })
 
   // ── LE LOT DE CONSOLATION ──────────────────────────────────────────────────────────────────
@@ -214,11 +218,15 @@ describe('rollChestRareItem', () => {
     }
   })
 
-  it('chaque lot a une image et un nom lisible', () => {
+  // ⚠️ L'IMAGE VARIE, LE MOT NON. Demande explicite : « écris pas "plume, toile d'araignée…", si c'est
+  // vide tu écris "Coffre vide" et tu gardes les images ». Nommer la plume la présentait comme un LOT —
+  // on cherchait à quoi elle servait, on la guettait dans un inventaire où elle n'entre jamais. L'image
+  // fait la blague, le mot fait le constat.
+  it('tous les lots s\'annoncent « Coffre vide », quelle que soit l\'image', () => {
     expect(CONSOLATIONS.length).toBeGreaterThan(1)
-    expect(new Set(CONSOLATIONS.map((l) => l.key)).size).toBe(CONSOLATIONS.length)
+    expect(new Set(CONSOLATIONS.map((l) => l.key)).size, 'les images, elles, doivent différer').toBe(CONSOLATIONS.length)
     for (const lot of CONSOLATIONS) {
-      expect(lot.nom.trim().length, lot.key).toBeGreaterThan(0)
+      expect(lot.nom, lot.key).toBe(NOM_COFFRE_VIDE)
       // il s'affiche sous une icône plein cadre : au-delà, ça déborde
       expect(lot.nom.length, lot.nom).toBeLessThanOrEqual(28)
     }

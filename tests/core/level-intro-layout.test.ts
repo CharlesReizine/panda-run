@@ -43,7 +43,12 @@ describe('le chrome laisse la fiche tranquille', () => {
     expect(introChromeClears()).toBe(true)
   })
 
-  it('les quatre éléments de la rangée du bas ne se recouvrent PAS', () => {
+  // ⚠️ « QUATRE » EST DEVENU CINQ, et le test n'a pas eu à changer : il boucle sur INTRO_ROW. C'est
+  // exactement ce qu'on lui demandait — l'ajout du bouton « ← Carte » (le joueur : « quand on arrive
+  // sur une map tu proposes Continuer mais pas Retour à la carte ») a été refusé au premier essai,
+  // trois pixels de recouvrement avec « Commencer ! ». Un test qui compte les éléments au lieu de les
+  // parcourir aurait laissé passer le chevauchement.
+  it('les éléments de la rangée du bas ne se recouvrent PAS', () => {
     const spans = introRowSpans().sort((a, b) => a.l - b.l)
     for (let i = 1; i < spans.length; i++) {
       const prev = spans[i - 1]!, cur = spans[i]!

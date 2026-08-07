@@ -3,7 +3,11 @@ import { getPlayer } from '../state'
 import { save } from '../core/save'
 import { buyPotion, buyItem } from '../core/shop'
 import { canCraft, doCraft } from '../core/craft'
-import { canReforge, doReforge, reforgeCost, upgradedBonus, sellItem, sellValue, MAX_REFORGE_LEVEL } from '../core/reforge'
+import { upgradedBonus, sellItem, sellValue } from '../core/reforge'
+import {
+  NIVEAU_SUR, NIVEAU_MAX, risqueDeCasse, pureteDe, coutLisible, blocageAmelioration, niveauDe,
+  tenterAmelioration,
+} from '../core/amelioration'
 import { acceptQuest, refreshQuestProgress, claimQuest, currentChainQuest, questXpReward } from '../core/quests'
 import { POTION_PRICE, getTownStock, QUEST_CHAIN, type QuestDef, type ShopItemDef } from '../data/shops'
 import { WORLD_NODES } from '../data/worldmap'
@@ -383,12 +387,12 @@ export class TownScene extends Phaser.Scene {
     // la largeur LOGIQUE et non par CX : sur un écran large, la moitié gauche doit rester la moitié.
     this.joystick = new TopDownJoystick(this, new Phaser.Geom.Rectangle(0, 80, VIEW_W / 2, 460))
 
-    // grille de repérage (aide au placement : le user dicte « boutique en C3 ») + bouton pour la basculer
+    // ⚠️ LA GRILLE DE REPÉRAGE N'A PLUS DE BOUTON — C'ÉTAIT UN OUTIL D'ATELIER RESTÉ EN VITRINE.
+    // Elle servait à se dire « boutique en C3 » pendant qu'on plaçait les PNJ ; une fois la ville
+    // placée, son bouton ne parlait plus qu'à nous. « Retire "Grille" des icônes de la ville. »
+    // Le tracé reste construit (`buildPlacementGrid`) et INVISIBLE : le jour où il faut redéplacer
+    // une échoppe, une ligne suffit à le rallumer, alors que le supprimer imposerait de le réécrire.
     this.buildPlacementGrid(cfg)
-    const gridBtn = this.add.text(20, 22, '⊞ Grille', {
-      fontSize: '16px', color: '#ffffff', backgroundColor: '#00000088', padding: { x: 8, y: 5 },
-    }).setOrigin(0, 0.5).setScrollFactor(0).setDepth(36).setInteractive({ useHandCursor: true })
-    gridBtn.on('pointerdown', () => { this.grid?.setVisible(!this.grid.visible) })
 
     this.events.once('shutdown', () => {
       this.panel?.destroy()
@@ -1016,12 +1020,12 @@ export class TownScene extends Phaser.Scene {
   // pièce) et Vendre (revendre un objet de l'inventaire). openForge() ouvre l'onglet craft.
   private openForge() { this.openForgePanel('craft') }
 
-  private openForgePanel(tab: 'craft' | 'reforge' | 'sell', page = 0) {
+  private openForgePanel(tab: 'craft' | 'ameliorer' | 'sell', page = 0) {
     this.closePanel()
     const c = this.add.container(0, 0).setDepth(50).setScrollFactor(0)
     this.panel = c
     if (tab === 'craft') this.renderCraft(c, page)
-    else if (tab === 'reforge') this.renderReforge(c, page)
+    else if (tab === 'ameliorer') this.renderAmeliorer(c, page)
     else this.renderSell(c, page)
   }
 
@@ -1048,10 +1052,10 @@ export class TownScene extends Phaser.Scene {
   }
 
   // onglets de la forge, sous le titre : Forger / Réforger / Vendre
-  private drawForgeTabs(c: Phaser.GameObjects.Container, top: number, active: 'craft' | 'reforge' | 'sell') {
+  private drawForgeTabs(c: Phaser.GameObjects.Container, top: number, active: 'craft' | 'ameliorer' | 'sell') {
     this.drawTabBar(c, top, [
       { label: 'Forger', active: active === 'craft', onSelect: () => this.openForgePanel('craft') },
-      { label: 'Réforger', active: active === 'reforge', onSelect: () => this.openForgePanel('reforge') },
+      { label: 'Améliorer', active: active === 'ameliorer', onSelect: () => this.openForgePanel('ameliorer') },
       { label: 'Vendre', active: active === 'sell', onSelect: () => this.openForgePanel('sell') },
     ])
   }
@@ -1178,21 +1182,30 @@ export class TownScene extends Phaser.Scene {
   }
 
   // pièces réforçables : itemIds uniques de l'équipement porté + de l'inventaire
-  private reforgeableIds(): string[] {
+  private ameliorablesIds(): string[] {
     const p = getPlayer()
     const ids = [...Object.values(p.equipment), ...p.inventory].filter((id): id is string => !!id && !!ITEMS[id])
     return [...new Set(ids)]
   }
 
-  // Réforger : améliore une pièce d'un cran (+20 % de bonus / niveau, cap au niveau max). Une
-  // ligne par pièce avec son niveau, l'effet actuel → suivant, le coût (or + matériaux) et un
-  // bouton actif si canReforge. renderReforge() reconstruit tout après une réforge.
-  private renderReforge(c: Phaser.GameObjects.Container, page = 0, msg?: string, ok?: boolean) {
+  /**
+   * AMÉLIORER — sûr jusqu'à +3, puis ça casse.
+   *
+   * Demande du joueur : « la forge faut reprendre, je veux plus de "reforger", tu dégages. Par contre
+   * chaud d'un onglet "Améliorer" qui permet d'améliorer sans risque de casse jusqu'à +3 (et ça coûte
+   * un peu cher). Et le coût dépend de la pureté de l'objet. Et après ça casse. »
+   *
+   * ⚠️ L'AVERTISSEMENT EST LA MOITIÉ DE LA MÉCANIQUE, PAS UNE DÉCORATION. Un pari qu'on ne comprend
+   * qu'après avoir perdu son épée n'est pas un pari, c'est un piège. Au-delà du palier sûr, le bouton
+   * change de couleur, annonce le pourcentage exact, et un bandeau rouge le dit en toutes lettres.
+   * Toute la logique (barème, coûts, tirage) vit dans core/amelioration, pure et testée.
+   */
+  private renderAmeliorer(c: Phaser.GameObjects.Container, page = 0, msg?: string, ok?: boolean) {
     c.removeAll(true)
     const w = 860
-    const rowH = 46
-    const headerH = 140, footerH = 90
-    const allIds = this.reforgeableIds()
+    const rowH = 52
+    const headerH = 168, footerH = 90
+    const allIds = this.ameliorablesIds()
     const rowsPerPage = Math.max(1, Math.floor((500 - headerH - footerH) / rowH))
     const pageCount = Math.max(1, Math.ceil(Math.max(allIds.length, 1) / rowsPerPage))
     page = Phaser.Math.Clamp(page, 0, pageCount - 1)
@@ -1202,22 +1215,29 @@ export class TownScene extends Phaser.Scene {
     const top = this.drawPanelFrame(c, w, h, 'Forge')
     const p = getPlayer()
     this.drawGoldBadge(c, CX + w / 2 - 45, top + 30, p.gold)
-    this.drawForgeTabs(c, top, 'reforge')
+    this.drawForgeTabs(c, top, 'ameliorer')
 
     const owned = Object.entries(p.materials).filter(([, q]) => q > 0)
-    const recap = owned.length
+    c.add(this.add.text(CX, top + 106, owned.length
       ? owned.map(([id, q]) => `${this.shortMat(id)} x${q}`).join('   ·   ')
-      : 'Aucun matériau collecté — va combattre pour en récolter !'
-    c.add(this.add.text(CX, top + 108, recap, {
+      : 'Aucun matériau collecté — va combattre pour en récolter !', {
       fontSize: '12px', color: '#cfd8dc', align: 'center', wordWrap: { width: w - 48 },
     }).setOrigin(0.5))
 
-    const render = (m?: string, o?: boolean) => this.renderReforge(c, page, m, o)
+    // ── LE BANDEAU ROUGE ────────────────────────────────────────────────────────────────────
+    // Il est là EN PERMANENCE, pas seulement quand on survole une pièce risquée : la règle doit être
+    // connue avant d'être rencontrée. C'est la différence entre un pari et une mauvaise surprise.
+    c.add(this.add.rectangle(CX, top + 138, w - 32, 30, 0x4a1010, 0.95).setStrokeStyle(2, 0xff5252, 0.9))
+    c.add(this.add.text(CX, top + 138,
+      `⚠  SANS RISQUE JUSQU'À +${NIVEAU_SUR}.  AU-DELÀ, UN ÉCHEC DÉTRUIT L'OBJET  (+4 : 20 %  ·  +5 : 25 %  ·  +6 : 28 %  ·  +7 : 29 %  ·  +8 et plus : 30 %)`,
+      { fontSize: '11px', color: '#ff8a80', fontStyle: 'bold' }).setOrigin(0.5))
+
+    const render = (m?: string, o?: boolean) => this.renderAmeliorer(c, page, m, o)
     const rowsTop = top + headerH
     const rowLeft = CX - w / 2 + 16
 
     if (allIds.length === 0) {
-      c.add(this.add.text(CX, rowsTop + rowH / 2, 'Aucune pièce à réforger.', {
+      c.add(this.add.text(CX, rowsTop + rowH / 2, 'Aucune pièce à améliorer.', {
         fontSize: '14px', color: '#90a4ae',
       }).setOrigin(0.5))
     }
@@ -1225,13 +1245,14 @@ export class TownScene extends Phaser.Scene {
     ids.forEach((id, i) => {
       const y = rowsTop + i * rowH + rowH / 2
       const item = ITEMS[id]!
-      const level = p.upgrades[id] ?? 0
-      const atMax = level >= MAX_REFORGE_LEVEL
-      const canDo = canReforge(p, id)
+      const niveau = niveauDe(p, id)
+      const auMax = niveau >= NIVEAU_MAX
+      const risque = risqueDeCasse(niveau + 1)
+      const blocage = blocageAmelioration(p, id)
+      const possible = blocage === null
 
       if (i > 0) c.add(this.add.rectangle(CX, y - rowH / 2, w - 40, 1, 0xffffff, 0.08))
 
-      // icône
       const icon = this.iconFor(id)
       if ('texture' in icon) c.add(this.add.image(rowLeft + 18, y, icon.texture).setDisplaySize(28, 28))
       else {
@@ -1239,64 +1260,130 @@ export class TownScene extends Phaser.Scene {
         c.add(this.add.text(rowLeft + 18, y, icon.glyph, { fontSize: '9px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5))
       }
 
-      // nom + niveau, puis effet actuel → suivant
-      const nameTxt = level > 0 ? `${item.name} +${level}` : item.name
-      c.add(this.add.text(rowLeft + 42, y - 10, `${nameTxt}  (Nv ${level}/${MAX_REFORGE_LEVEL})`, {
+      c.add(this.add.text(rowLeft + 42, y - 12, niveau > 0 ? `${item.name} +${niveau}` : item.name, {
         fontSize: '13px', color: '#ffffff', fontStyle: 'bold',
       }).setOrigin(0, 0.5))
-      const cur = upgradedBonus(item.bonus, level)
-      const bonusStr = atMax
+      const cur = upgradedBonus(item.bonus, niveau)
+      const bonusStr = auMax
         ? Object.entries(cur).map(([k, v]) => `${k} +${v}`).join(' / ')
         : (() => {
-            const next = upgradedBonus(item.bonus, level + 1)
+            const next = upgradedBonus(item.bonus, niveau + 1)
             return Object.keys(item.bonus).map((k) => `${k} +${cur[k as keyof typeof cur]}→+${next[k as keyof typeof next]}`).join(' / ')
           })()
-      c.add(this.add.text(rowLeft + 42, y + 9, bonusStr, { fontSize: '10px', color: '#90a4ae' }).setOrigin(0, 0.5))
+      c.add(this.add.text(rowLeft + 42, y + 8, bonusStr, { fontSize: '10px', color: '#90a4ae' }).setOrigin(0, 0.5))
 
-      // coût de la prochaine réforge
-      if (!atMax) {
-        const cost = reforgeCost(level)
-        let cx = rowLeft + 330
-        for (const [matId, qty] of Object.entries(cost.materials)) {
+      if (!auMax) {
+        const cout = coutLisible(niveau, pureteDe(id))
+        let cx = rowLeft + 320
+        for (const [matId, qty] of Object.entries(cout.materials)) {
           const have = p.materials[matId] ?? 0
-          const t = this.add.text(cx, y, `${this.shortMat(matId)} ${have}/${qty}`, {
+          const t = this.add.text(cx, y - 9, `${this.shortMat(matId)} ${have}/${qty}`, {
             fontSize: '11px', color: have >= qty ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
           }).setOrigin(0, 0.5)
           c.add(t)
           cx += t.width + 14
         }
-        const g = this.add.text(cx, y, `${cost.gold} or`, {
-          fontSize: '11px', color: p.gold >= cost.gold ? '#ffd54f' : '#ff5252', fontStyle: 'bold',
-        }).setOrigin(0, 0.5)
-        c.add(g)
+        c.add(this.add.text(rowLeft + 320, y + 10, `${cout.gold} or`, {
+          fontSize: '11px', color: p.gold >= cout.gold ? '#ffd54f' : '#ff5252', fontStyle: 'bold',
+        }).setOrigin(0, 0.5))
+        // le risque, à côté du prix : les deux moitiés de la décision se lisent d'un seul regard
+        c.add(this.add.text(CX + w / 2 - 128, y, risque > 0 ? `${Math.round(risque * 100)} % de casse` : 'sans risque', {
+          fontSize: '11px', color: risque > 0 ? '#ff5252' : '#66bb6a', fontStyle: 'bold',
+        }).setOrigin(1, 0.5))
       } else {
-        c.add(this.add.text(rowLeft + 330, y, 'Niveau max', { fontSize: '11px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0, 0.5))
+        c.add(this.add.text(rowLeft + 320, y, 'Niveau max', { fontSize: '11px', color: '#ffd54f', fontStyle: 'bold' }).setOrigin(0, 0.5))
       }
 
-      // bouton Réforger
-      const btn = this.add.text(CX + w / 2 - 24, y, atMax ? 'Max' : 'Réforger', {
-        fontSize: '13px', color: canDo ? '#ffffff' : '#9e9e9e',
-        backgroundColor: canDo ? '#2e7d32' : '#3a2b28', padding: { x: 12, y: 6 },
+      // le bouton PORTE la couleur du risque : vert tant que c'est sûr, rouge dès que ça peut casser
+      const fond = !possible ? '#3a2b28' : risque > 0 ? '#b71c1c' : '#2e7d32'
+      const btn = this.add.text(CX + w / 2 - 24, y, auMax ? 'Max' : risque > 0 ? 'Tenter' : 'Améliorer', {
+        fontSize: '13px', color: possible ? '#ffffff' : '#9e9e9e',
+        backgroundColor: fond, padding: { x: 12, y: 6 },
       }).setOrigin(1, 0.5)
       c.add(btn)
       btn.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-        if (doReforge(p, id)) {
-          audio.playSfx('coins')
-          save(p)
-          render(`${item.name} réforgé au +${(p.upgrades[id] ?? 0)} !`, true)
-        } else render(atMax ? 'Niveau max atteint' : 'Ressources insuffisantes', false)
+        const r = tenterAmelioration(p, id)
+        if (!r) { render(blocage ?? 'Impossible', false); return }
+        save(p)
+        this.ameliorationFx(r.issue, id)
+        if (r.issue === 'monte') render(`${item.name} amélioré au +${r.niveau} !`, true)
+        else render(`${item.name} a été DÉTRUIT (${Math.round(r.risque * 100)} % de casse).`, false)
       })
     })
 
     if (msg) c.add(this.add.text(CX, top + h - 74, msg, {
-      fontSize: '14px', color: ok ? '#66bb6a' : '#ff5252', fontStyle: 'bold',
+      fontSize: '14px', color: ok ? '#66bb6a' : '#ff5252', fontStyle: 'bold', align: 'center',
+      wordWrap: { width: w - 60 },
     }).setOrigin(0.5))
 
-    this.drawPager(c, CX, top + h - 46, page, pageCount, (pg) => this.renderReforge(c, pg))
+    this.drawPager(c, CX, top + h - 46, page, pageCount, (pg) => this.renderAmeliorer(c, pg))
     c.add(this.add.text(CX, top + h - 18, '← Fermer', {
       fontSize: '16px', color: '#ffffff', backgroundColor: '#5d4037', padding: { x: 12, y: 6 },
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', () => this.closePanel()))
     this.drawCloseCross(c, w, h)
+  }
+
+  /**
+   * LE PLAN LARGE DE LA FORGE — même mise en scène que l'ouverture d'un coffre, demandée telle quelle :
+   * « je veux une petite animation stylée en cas de succès ou échec (même style que quand on ouvre un
+   * coffre) ».
+   *
+   * ⚠️ ELLE PASSE PAR-DESSUS LE PANNEAU, PAS DEDANS. Le panneau se reconstruit entièrement après chaque
+   * tentative (`render()` fait un `removeAll(true)`) : une animation ajoutée à son conteneur serait
+   * détruite dans la frame suivante, et on ne verrait rien. Elle vit donc dans la scène, au-dessus.
+   */
+  private ameliorationFx(issue: 'monte' | 'casse', itemId: string) {
+    const reussi = issue === 'monte'
+    const couleur = reussi ? 0xffd54f : 0xff1744
+    const cx = CX, cy = 250
+    const objs: Phaser.GameObjects.GameObject[] = []
+    const suivre = <T extends Phaser.GameObjects.GameObject>(o: T): T => { objs.push(o); return o }
+
+    const halo = suivre(this.add.circle(cx, cy, reussi ? 96 : 80, couleur, 0.3))
+      .setDepth(80).setBlendMode(Phaser.BlendModes.ADD).setScale(0.2)
+    this.tweens.add({ targets: halo, scale: 1, duration: 300, ease: 'Cubic.out' })
+
+    const key = this.textures.exists(`item-${itemId}`) ? `item-${itemId}` : 'item-drop'
+    const icone = suivre(this.add.image(cx, cy, key)).setDepth(82)
+    icone.setScale(0)
+    const echelle = 120 / Math.max(1, icone.height)
+    this.tweens.add({ targets: icone, scale: echelle, duration: 320, ease: 'Back.out' })
+
+    if (reussi) {
+      // les éclats PARTENT vers l'extérieur : le mouvement dit « ça monte » avant qu'on lise le texte
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2
+        const e = this.add.rectangle(cx, cy, 5, 5, i % 3 === 0 ? 0xffffff : couleur)
+          .setDepth(83).setBlendMode(Phaser.BlendModes.ADD).setRotation(a)
+        this.tweens.add({
+          targets: e, x: cx + Math.cos(a) * 130, y: cy + Math.sin(a) * 130,
+          alpha: { from: 1, to: 0 }, scale: 0.3, duration: 520, ease: 'Cubic.out', onComplete: () => e.destroy(),
+        })
+      }
+      this.tweens.add({ targets: icone, y: cy - 16, duration: 260, yoyo: true, ease: 'Sine.inOut', delay: 320 })
+    } else {
+      // l'échec fait l'inverse de tout ce que fait la réussite : l'objet TOMBE en tournant et les
+      // éclats retombent. Aucun mot n'est nécessaire pour comprendre qu'on vient de perdre.
+      this.cameras.main.shake(220, 0.006)
+      this.tweens.add({ targets: icone, angle: 100, y: cy + 90, alpha: 0, scale: echelle * 0.6, duration: 620, delay: 260, ease: 'Cubic.in' })
+      for (let i = 0; i < 14; i++) {
+        const a = -Math.PI + (i / 14) * Math.PI
+        const e = this.add.rectangle(cx, cy, 6, 6, couleur).setDepth(83).setRotation(a)
+        this.tweens.add({
+          targets: e, x: cx + Math.cos(a) * 110, y: cy + 120, alpha: { from: 1, to: 0 },
+          duration: 700, ease: 'Cubic.in', onComplete: () => e.destroy(),
+        })
+      }
+    }
+
+    const txt = suivre(this.add.text(cx, cy + 96, reussi ? 'AMÉLIORÉ !' : 'DÉTRUIT', {
+      fontSize: reussi ? '30px' : '34px', fontStyle: 'bold',
+      color: reussi ? '#ffd54f' : '#ff1744', stroke: '#000000', strokeThickness: 6,
+    })).setOrigin(0.5).setDepth(84).setAlpha(0)
+    this.tweens.add({ targets: txt, alpha: 1, y: txt.y - 8, duration: 260, delay: 180, ease: 'Cubic.out' })
+
+    audio.playSfx(reussi ? 'level-up' : 'player-death')
+    this.time.delayedCall(reussi ? 1200 : 1400, () => { for (const o of objs) o.destroy() })
   }
 
   // Vendre : revend un objet de l'inventaire contre de l'or (selon sa rareté). Une ligne par
