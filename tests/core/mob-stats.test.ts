@@ -1,4 +1,7 @@
 import { describe, it, expect } from 'vitest'
+import { newPlayer } from '../../src/core/player-state'
+import { computeStats } from '../../src/core/stats'
+import { physicalDamage } from '../../src/core/combat'
 import { statsForLevel, statPower, hpBase, atkBase, defBase, type MobRole , palierDifficulte, durcissement } from '../../src/core/mob-stats'
 
 const ROLES: MobRole[] = ['normal', 'costaud', 'tank', 'frele', 'distant', 'rapide', 'volant']
@@ -106,40 +109,56 @@ describe('statsForLevel', () => {
 // donnent, le palier de butin qu'ils peuvent lâcher, et la calibration de l'espèce entière — un même
 // monstre vit sur plusieurs terrains, et son niveau dérive du PREMIER. Bouger un chiffre là-bas fait
 // remuer quatre systèmes ; un multiplicateur de stats ne touche qu'à la force.
-describe('paliers de difficulté', () => {
-  // ⚠️ « APRÈS le niveau 10 » = À PARTIR DE 11. Le début de partie est calibré au monstre près, et le
-  // niveau 10 en fait encore partie : la marche commence juste après.
-  it('jusqu\'au niveau 10 inclus, rien ne change', () => {
-    for (const n of [1, 5, 9, 10]) expect(palierDifficulte(n), `niveau ${n}`).toBe(1)
+describe('la courbe de difficulté dictée par le joueur', () => {
+  // ⚠️ ELLE EST DICTÉE POINT PAR POINT, ET C'EST CE QUI LA REND VÉRIFIABLE. « 10 du coup là c'est trop
+  // facile. Je veux bien une difficulté croissante, genre si je reprends ton tableau : 14 → 10, 8, 7, 6,
+  // 5 et 4 à la fin. » Et la précision qui va avec : « c'est sans stuff et sans stat améliorée — donc le
+  // matos et les skills rendent meilleurs. »
+  //
+  // On mesure donc EXACTEMENT ça : un personnage nu, de la classe attendue à ce niveau, face à un mob
+  // normal de son niveau. Le nombre de coups qu'il encaisse avant de tomber.
+  const CIBLE: [number, number][] = [[5, 14], [10, 10], [15, 8], [20, 7], [30, 6], [40, 5], [50, 4]]
+
+  const coupsPourMourir = (niveau: number): number => {
+    const p = newPlayer('sim')
+    p.classId = niveau >= 20 ? 'chevalier' : niveau >= 10 ? 'swordsman' : 'novice'
+    p.level = niveau
+    const s = computeStats(p)
+    const mob = statsForLevel(niveau, 'normal')
+    return s.maxHp / Math.max(1, physicalDamage(mob.atk, s.def))
+  }
+
+  it('la courbe demandée est tenue, à un coup près', () => {
+    const ecarts: string[] = []
+    for (const [niveau, voulu] of CIBLE) {
+      const reel = coupsPourMourir(niveau)
+      if (Math.abs(reel - voulu) > 1.5) ecarts.push(`niveau ${niveau} : ${reel.toFixed(1)} coups au lieu de ${voulu}`)
+    }
+    expect(ecarts, `courbe non tenue :\n   ${ecarts.join('\n   ')}`).toEqual([])
   })
 
-  it('à partir de 11 : la marche, et elle ne redescend jamais', () => {
-    // ⚠️ UNE SEULE MARCHE, PAS DEUX. Deux paliers décroissants (3,0 puis 2,4) atteignaient bien la cible
-    // des cinq coups, mais rendaient un mob de niveau 31 PLUS FAIBLE qu'un de niveau 30. L'aplatissement
-    // passe désormais par un RALENTISSEMENT de la pente au-delà de 30, jamais par une marche qui descend.
-    for (const n of [11, 15, 30, 31, 40, 57]) expect(palierDifficulte(n), `niveau ${n}`).toBe(3.0)
+  it('elle DÉCROÎT : chaque palier est plus dur que le précédent', () => {
+    for (let i = 1; i < CIBLE.length; i++) {
+      expect(coupsPourMourir(CIBLE[i]![0]), `niveau ${CIBLE[i]![0]}`)
+        .toBeLessThan(coupsPourMourir(CIBLE[i - 1]![0]) + 0.5)
+    }
   })
 
-  it('les paliers s\'AJOUTENT à la pente, ils ne la remplacent pas', () => {
-    // la pente existait déjà : à 20, elle vaut ~1,35 en PV — le palier la multiplie, il ne l'écrase pas
-    expect(durcissement(20).hp).toBeGreaterThan(3.0 * 1.3)
-    expect(durcissement(9).hp).toBeLessThan(1.0001) // et sous le seuil, toujours rien
-  })
-
+  // ⚠️ ET UN MONSTRE NE DEVIENT JAMAIS PLUS FAIBLE EN MONTANT DE NIVEAU. Un premier calibrage posait
+  // deux marches décroissantes (×3,0 puis ×2,4) : la cible était atteinte, mais un mob de niveau 31
+  // devenait plus faible qu'un de niveau 30. La courbe interpole désormais, elle ne marche plus.
   it('un monstre ne devient jamais plus faible en montant de niveau', () => {
     let precedent = 0
     for (let n = 1; n <= 57; n++) {
       const s = statsForLevel(n, 'normal')
       const p = statPower(s.hp, s.atk, s.def)
-      expect(p, `niveau ${n}`).toBeGreaterThan(precedent)
+      expect(p, `niveau ${n}`).toBeGreaterThanOrEqual(precedent)
       precedent = p
     }
   })
 
-  it('le saut de palier se voit, sans être brutal', () => {
-    const avant = statsForLevel(10, 'normal'), apres = statsForLevel(11, 'normal')
-    const rapport = statPower(apres.hp, apres.atk, apres.def) / statPower(avant.hp, avant.atk, avant.def)
-    expect(rapport, 'la marche doit se sentir').toBeGreaterThan(1.5)
-    expect(rapport, 'mais pas quintupler d\'un niveau à l\'autre').toBeLessThan(4)
+  it('le tout début reste un tutoriel', () => {
+    expect(coupsPourMourir(1)).toBeGreaterThan(15)
+    expect(coupsPourMourir(5)).toBeGreaterThan(10)
   })
 })

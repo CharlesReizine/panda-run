@@ -137,37 +137,67 @@ const PENTE_ATK = 0.03
 // baissant la marche haute : la cible des cinq coups était atteinte, la monotonie « plus haut niveau =
 // plus dangereux » était perdue. On garde donc une seule marche et on RALENTIT la pente au-delà de 30 :
 // la courbe s'aplatit vers la cible sans jamais redescendre.
-const PALIER_UNIQUE = 3.0
-const SEUIL_PALIER = 11
-/** Au-delà de ce niveau, la pente est divisée : le joueur bondit aux changements de classe, pas les mobs. */
-const NIVEAU_ADOUCI = 30
-const ADOUCISSEMENT = 0.35
+// ⚠️ LA COURBE EST DICTÉE PAR LE JOUEUR, POINT PAR POINT, et c'est elle qui commande — pas un
+// multiplicateur qu'on ajusterait à l'oreille. Après un premier calibrage à « cinq coups partout », il
+// a corrigé : « 10 du coup là c'est trop facile. Je veux bien une difficulté croissante, genre si je
+// reprends ton tableau : 14 → 10, 8, 7, 6, 5 et 4 à la fin. » Autrement dit : on meurt en quatorze
+// coups au niveau 5, en quatre au niveau 50, et la pente est CONTINUE entre les deux.
+//
+// ⚠️ C'EST L'ATK QUI EST CALIBRÉE, PAS LES PV. « Combien de coups pour mourir » ne dépend que des
+// dégâts reçus (atk du mob − déf du joueur) et des PV du joueur : les PV du MOB n'y entrent pas, ils
+// décident de la durée du combat. Confondre les deux, c'est régler la mauvaise molette — et c'est ce
+// qui faisait saturer la mesure précédente.
+//
+// Les facteurs ci-dessous ont été RÉSOLUS, pas devinés : pour chaque niveau, on a cherché le
+// multiplicateur d'ATK qui donne exactement le nombre de coups demandé, contre un personnage NU
+// (aucun équipement, aucun point réparti) de la classe attendue à ce niveau. Avec de l'équipement on
+// tient plus longtemps — c'est le sens même de la demande.
+const COUPS_CIBLES: { niveau: number; atk: number }[] = [
+  { niveau: 1, atk: 1 },
+  { niveau: 5, atk: 1.05 },   // 14 coups
+  { niveau: 10, atk: 2.0 },   // 10
+  { niveau: 15, atk: 2.2 },   // 8
+  { niveau: 20, atk: 3.75 },  // 7
+  { niveau: 30, atk: 4.05 },  // 6
+  { niveau: 40, atk: 4.5 },   // 5
+  { niveau: 50, atk: 5.35 },  // 4
+]
 
-/** Palier de difficulté à ce niveau : 1 sous le seuil, la marche au-delà. */
-export function palierDifficulte(level: number): number {
-  return level >= SEUIL_PALIER ? PALIER_UNIQUE : 1
+/** Interpolation linéaire entre les points de la courbe ; plate au-delà du dernier. */
+function surLaCourbe(level: number): number {
+  const pts = COUPS_CIBLES
+  if (level <= pts[0]!.niveau) return pts[0]!.atk
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!, b = pts[i]!
+    if (level <= b.niveau) return a.atk + ((b.atk - a.atk) * (level - a.niveau)) / (b.niveau - a.niveau)
+  }
+  return pts[pts.length - 1]!.atk
 }
 
-/** Rangées de pente effectives : pleines jusqu'à 30, ralenties ensuite. */
-function penteEffective(level: number): number {
-  const au_dela = Math.max(0, level - SEUIL_DURCISSEMENT)
-  const pleines = Math.min(au_dela, NIVEAU_ADOUCI - SEUIL_DURCISSEMENT)
-  return pleines + Math.max(0, au_dela - pleines) * ADOUCISSEMENT
+/** Le palier de difficulté, conservé pour les PV et la DÉF : ils décident de la DURÉE du combat. */
+export function palierDifficulte(level: number): number {
+  return surLaCourbe(level)
 }
 
 /** Facteurs de durcissement à ce niveau : 1 avant le seuil, croissants ensuite, par paliers au-delà. */
 export function durcissement(level: number): { hp: number; atk: number; def: number } {
-  const au_dela = penteEffective(level)
-  const palier = palierDifficulte(level)
+  const au_dela = Math.max(0, level - SEUIL_DURCISSEMENT)
+  const courbe = surLaCourbe(level)
   return {
-    hp: (1 + PENTE_PV * au_dela) * palier,
-    atk: (1 + PENTE_ATK * au_dela) * palier,
+    // les PV gardent leur pente propre, tempérée par la courbe : un mob plus dangereux n'a pas besoin
+    // d'être aussi une éponge — long n'est pas difficile.
+    hp: (1 + PENTE_PV * au_dela) * Math.sqrt(courbe),
+    // ⚠️ L'ATK SUIT LA COURBE SEULE, sans la pente : c'est elle qui a été résolue pour donner
+    // exactement le nombre de coups demandé. Y ajouter la pente doublerait le réglage.
+    atk: courbe,
     // ⚠️ LA DÉF EST DURCIE À SON TOUR, SUR ARBITRAGE EXPLICITE DU JOUEUR : « tu augmentes comme un ouf
     // l'attaque, la vie ET la défense et ça ira mieux ». Le compromis reste celui écrit plus bas — les
     // dégâts sont SOUSTRACTIFS (atk − def), donc une DÉF plus haute allonge les combats plus qu'elle ne
     // les rend dangereux. On l'applique donc au PALIER seulement, pas à la pente : la marche se sent,
     // sans transformer chaque mob de fin de partie en éponge.
-    def: palier,
+    // la DÉF suit la RACINE de la courbe, pour la même raison que les PV : elle allonge le combat plus
+    // qu'elle ne le rend dangereux, et le joueur a demandé qu'elle monte sans que ça devienne interminable.
+    def: Math.sqrt(courbe),
   }
 }
 
