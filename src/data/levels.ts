@@ -420,8 +420,21 @@ const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
   // mais chacun sort sur DEUX terrains — un motif qui n'apparaît qu'une fois est du contenu perdu.
   // ⚠️ Deux et pas trois : chaque motif imposé consomme un slot central, et à trois la couverture d'autres
   // familles s'effondrait (passerelles, motifs verticaux, lac→cascade→plateau). Le budget reste fini.
-  'plaine-3': ['trampoline-plat'],           // rang 2 — l'atelier : on découvre l'engin sans rien risquer           // le seul « atelier » conservé : on y apprend l'objet sans risque
-  'desert-2': ['trampoline-mur'],            // rang 16 — le mur : monter, sans trou dessous
+  // ⚠️ PLUS AUCUN TRAMPOLINE DÉCORATIF. Mesuré : 33 des 35 trampolines du jeu se contournaient — en
+  // retirant l'engin, rien ne devenait injoignable. La cause principale était `trampoline-corniche-inverse`,
+  // tiré dans le POOL GÉNÉRIQUE et posé sur dix-neuf terrains. « Je ne veux QUE des trampolines utiles et
+  // bloquants. » Les motifs contournables (atelier plat, corniche et son inverse) sont donc sortis du
+  // catalogue : il ne reste que ceux dont le rebond est la seule issue.
+  //
+  // LA RAMPE SUIT LA CONSIGNE : « au début tu es juste bloqué et tu meurs pas si tu te trompes, mais
+  // rapidement il faut de tout ». Mur de pierre d'abord (rater ne coûte rien, on retombe et on recommence),
+  // puis le trou mortel, puis les traversées au-dessus du vide, de l'eau, des flammes, de la lave.
+  // ⚠️ LE PREMIER MUR EST EN plaine-6, PAS EN plaine-3, ET C'EST LA GRAVURE QUI L'A IMPOSÉ. Posé au
+  // deuxième terrain, il n'a jamais trouvé de graine valide : les terrains de tout début sont COURTS et
+  // déjà contraints (plafond de tier, plancher de gros motifs), et un module de 22 à 30 tuiles n'y rentre
+  // pas sans tout casser. La recherche a tourné une heure entière sans converger. Rang 5 est le premier
+  // endroit où il tient — et ça reste « tôt », ce qui était la demande.
+  'plaine-6': ['trampoline-mur'],            // rang 5 — bloquant, jamais mortel : on apprend l'engin
   // ⚠️ 'trampoline-cascade' N'EST PAS POSÉ. Sur ses deux terrains d'essai (foret-6, desert-9), son rideau et
   // le plafond de roche voisin se combinent en un mur : le validateur d'atteignabilité stricte y trouve des
   // plateformes murées. Le motif est écrit et jouable en isolation ; il attend une reprise de son chaînage.
@@ -438,9 +451,7 @@ const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
   'carriere-1': ['echelle-descente-piegee'],
   'foret-6': ['trampoline-saut-vide'],       // rang 12 — le premier vrai obstacle, et le plus clément : on retombe au sol
   'montagne-1': ['trampoline-saut-flammes'], // rang 33 — ça brûle, mais le sol reste dessous
-  'plage-2': ['trampoline-saut-flammes'],    // rang 42
   'desert-5': ['trampoline-saut-eau'],       // rang 19 — l'eau amortit : on survit à l'erreur
-  'enfer-3': ['trampoline-fosse-ardente'],   // rang 52
   'jungle-1': ['colonnes-perilleuses'],      // mid : colonnes étroites au-dessus du vide, chute = mort
   'enfer-4': ['colonnes-perilleuses'],       // endgame : le même, plus long
   // ⚠️ 'trampoline-echelle' N'EST PAS PLACÉ. Son échelle SUSPENDUE au-dessus du vide reste injoignable pour
@@ -448,7 +459,6 @@ const SPECIAL_FORCED: Record<string, ModuleKind[]> = {
   // rebond comme on l'a fait pour les deux autres. Le motif est écrit et jouable, mais on ne le pose pas
   // tant que ces deux-là ne le reconnaissent pas — poser un motif qu'un validateur juge injouable, c'est
   // désarmer le validateur, et c'est lui qui a attrapé les pièges sans retour sur ce même lot.
-  'montagne-3': ['trampoline-corniche'],     // late : atteindre une corniche haute au rebond
   // NB : 'lacs-cascade-descente' (chute pure de lac en lac) NON placé — non validable (le validateur ne
   // modélise pas la chute → lacs du haut injoignables) ; l'escalier de lacs GRIMPABLE ci-dessus le remplace.
 }

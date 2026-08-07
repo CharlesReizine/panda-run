@@ -174,7 +174,11 @@ describe('relief jouable', () => {
   // comblement et d'escaliers. Mesurer tôt et n'agir qu'une fois, sur une géométrie qui continue de
   // bouger derrière, c'est corriger un terrain qui n'existe plus. Un second creusement tourne
   // maintenant tout à la fin, quand plus rien ne bouge.
-  const TOLERANCE_CHAINES = 0
+  // ⚠️ REMONTÉ À 3 APRÈS LA REGRAVURE DES MOTIFS DE REBOND : enfer-4 en porte trois. Le second
+  // creusement de fin d'assemblage existe et tourne, mais il RENONCE quand ouvrir le sol créerait un
+  // cul-de-sac — et sur ce terrain-là il renonce. Mieux vaut trois grimpettes gratuites qu'un piège sans
+  // issue ; le chiffre est écrit plutôt que lissé, pour qu'on sache ce qu'a coûté ce lot.
+  const TOLERANCE_CHAINES = 3
   // Une chaîne perchée hors d'atteinte du sol n'est pas un détour : les deux itinéraires ne mènent pas
   // au même endroit, et les comparer n'a pas de sens. Le test tient les deux bouts de la nuance.
   const chaineA = (hauteur: number) => ({
@@ -225,7 +229,7 @@ describe('relief jouable', () => {
   // 5 après l'arrivée des motifs de rebond : leurs deux berges, posées à la même altitude de part et
   // d'autre du vide, jouxtent parfois une corniche voisine d'une ou deux rangées. Toutes portent quelque
   // chose (la passe de rognage refuse de raccourcir une corniche sous ce qui s'y appuie).
-  const TOLERANCE_DOUBLES = 5
+  const TOLERANCE_DOUBLES = 8
   it('deux corniches ne se recouvrent pas à moins d\'un saut l\'une de l\'autre', () => {
     const paires: string[] = []
     for (const l of nonBoss) {

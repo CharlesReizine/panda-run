@@ -23,8 +23,11 @@ describe('les motifs posés sont réellement générés', () => {
   // Demande du joueur : « retire tous tes autres trampolines useless. » La mesure lui donnait raison —
   // les vingt-neuf trampolines du jeu se contournaient tous (on retire l'engin, rien ne devient
   // injoignable), y compris ces trois-là dont c'était pourtant l'unique raison d'être.
-  const poses: ModuleKind[] = ['cascade-plus-haute', 'boyau-tresor-retour', 'trampoline-plat',
-    'trampoline-mur', 'trampoline-corniche']
+  // ⚠️ L'ATELIER PLAT ET LA CORNICHE ONT ÉTÉ SUPPRIMÉS DU CATALOGUE. « Je ne veux QUE des trampolines
+  // utiles et bloquants » — et la mesure lui donnait raison : 33 des 35 trampolines du jeu se
+  // contournaient. Les motifs qui restent sont ceux dont le rebond est la SEULE issue.
+  const poses: ModuleKind[] = ['cascade-plus-haute', 'boyau-tresor-retour', 'trampoline-mur',
+    'trampoline-fosse-ardente']
 
   it.each(poses)('%s apparaît dans au moins un terrain', (k) => {
     expect(terrainsAvec(k).length, `${k} n'est généré nulle part`).toBeGreaterThan(0)

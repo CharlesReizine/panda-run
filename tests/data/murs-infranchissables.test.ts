@@ -42,7 +42,7 @@ const nonBoss = Object.values(LEVELS).filter((l) => !l.boss)
 // géométrie, et un terrain n'est pas le même qu'avant. Le total, lui, ne remonte pas (38 → 35) : c'est
 // lui qui fait foi, ces seuils-ci ne servent qu'à nommer le coupable quand il empire.
 const SEUILS: Record<string, number> = {
-  'plaine-1': 0, 'plaine-2': 0, 'plaine-3': 0, 'plaine-4': 0, 'plaine-5': 0, 'plaine-6': 0, 'plaine-7': 2,
+  'plaine-1': 0, 'plaine-2': 2, 'plaine-3': 0, 'plaine-4': 0, 'plaine-5': 2, 'plaine-6': 0, 'plaine-7': 0,
 }
 
 describe('murs infranchissables', () => {

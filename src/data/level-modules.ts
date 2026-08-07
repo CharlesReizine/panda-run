@@ -69,7 +69,7 @@ export type ModuleKind =
   | 'grotte-scellee' | 'sol-fragile' | 'grotte-u-brisable'
   // motifs INVERSÉS (miroir gauche-droite d'un motif montant) : ils font REDESCENDRE le terrain
   | 'echelle-tranquille-inverse' | 'echelle-zigzag-inverse' | 'echelles-decalees-inverse'
-  | 'escalier-saut-inverse' | 'trampoline-corniche-inverse'
+  | 'escalier-saut-inverse'
   | 'cage-echelles-inverse' | 'echelle-vs-sauts-inverse' | 'echelle-exposee-inverse'
   | 'escalier-pierre-inverse' | 'echelle-trou-echelle-inverse' | 'echelles-successives-inverse'
   | 'tour-creuse-inverse' | 'passerelles-plein-inverse' | 'echelles-lianes-inverse'
@@ -82,9 +82,7 @@ export type ModuleKind =
   // depuis la corniche, on nage, on ressort sur le rebord ; coffre au fond.
   | 'plongeoir'
   // ─── TRAMPOLINES (élément demandé par le user) ────────────────────────────────────────────────
-  // « ça fait genre faire un saut 3 fois plus haut et ça permet aussi d'aller plus sur le côté »
-  | 'trampoline-plat'        // 1) sur du plat : il ne sert à rien, on découvre l'objet sans risque
-  | 'trampoline-corniche'    // 2) permet d'atteindre une corniche haute
+  // « ça fait genre faire un saut 3 fois plus haut et ça permet aussi d'aller plus sur le côté »        // 1) sur du plat : il ne sert à rien, on découvre l'objet sans risque    // 2) permet d'atteindre une corniche haute
   // les seuls où le rebond est OBLIGATOIRE : aucune surface entre le départ et l'arrivée
   | 'trampoline-mur' | 'trampoline-mur-trou'
   | 'trampoline-saut-vide' | 'trampoline-saut-eau' | 'trampoline-saut-flammes' | 'trampoline-fosse-ardente'        // 3) plateforme haute, et EN DESSOUS c'est le vide     // 4) atteint une échelle en T suspendue, vide en dessous     // 5) dépasse un vide et atteint une cascade
@@ -552,7 +550,6 @@ const INVERSES: Partial<Record<ModuleKind, ModuleKind>> = {
   'echelle-zigzag-inverse': 'echelle-zigzag',
   'echelles-decalees-inverse': 'echelles-decalees',
   'escalier-saut-inverse': 'escalier-saut',
-  'trampoline-corniche-inverse': 'trampoline-corniche',
   'cage-echelles-inverse': 'cage-echelles',
   'echelle-vs-sauts-inverse': 'echelle-vs-sauts',
   'echelle-exposee-inverse': 'echelle-exposee',
@@ -811,82 +808,6 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
     // Un trampoline propulse le panda TROIS FOIS plus haut qu'un saut normal (≈ 12 rangées contre 4) et
     // lui donne un vrai contrôle latéral en l'air. Les altitudes ci-dessous en découlent : ce qu'on met
     // au-dessus d'un trampoline doit être HORS de portée d'un saut simple, sinon l'engin est décoratif.
-    case 'trampoline-plat': {
-      // 1) « Trampoline qui sert à rien et qui est sur du plat. » C'est un ATELIER : on découvre le
-      // rebond sans rien risquer. Découvrir un rebond ×3 au-dessus d'un vide serait une mort gratuite,
-      // et le joueur n'aurait pas compris à quoi sert l'engin.
-      const alt = entryAlt
-      p.platforms.push({ x: 0, alt, w })
-      p.trampolines.push({ x: Math.floor(w / 2), alt: alt + 1 })
-      placeBirds(alt + 4)
-      p.exitAlt = alt
-      break
-    }
-    case 'trampoline-corniche': {
-      // 2) « Trampoline qui permet d'atteindre une corniche haute. » La corniche est posée à +8 rangées :
-      // inatteignable au saut simple (4), confortable au rebond (12).
-      const alt = entryAlt
-      const haut = alt + 8
-      p.platforms.push({ x: 0, alt, w: Math.floor(w * 0.55) })
-      p.trampolines.push({ x: Math.floor(w * 0.3), alt: alt + 1 })
-      // corniche d'arrivée, large : on retombe dessus après un rebond, pas au pixel près
-      p.platforms.push({ x: Math.floor(w * 0.5), alt: haut, w: w - Math.floor(w * 0.5) })
-      // ─── PALIER DE SECOURS : À CÔTÉ DE LA CORNICHE, PAS DESSOUS ──────────────────────────────
-      //
-      // ⚠️ IL ÉTAIT POSÉ SOUS LA CORNICHE D'ARRIVÉE, DONC INATTEIGNABLE. À `0,62 w` il tombait dans la
-      // portée de la corniche (`0,5 w` → `w`), quatre rangées plus bas : par le haut on ne traverse pas
-      // une corniche de terre, par les côtés les socles de pierre ferment le passage. « Rater le rebond
-      // ne renvoie pas au début du module » était donc faux — le palier ne servait à rien.
-      //
-      // Pire, l'espace entre les deux formait une poche close que le comblement d'assemblage remplissait
-      // de roche : à l'écran, une bande d'herbe noyée dans la pierre (« y a de la terre qui se superpose
-      // à de la pierre, c'est nul »). On le pose donc AVANT la corniche, où l'on retombe vraiment quand
-      // le rebond est trop court.
-      // ⚠️ LE PALIER DE SECOURS RESTE, ET SA SUPPRESSION A ÉTÉ ESSAYÉE PUIS ANNULÉE. Il rend bien le
-      // trampoline contournable (+4 est à portée d'un saut, et de là la corniche à +8 en est à un
-      // second) — mais le retirer fait passer l'atteignabilité STRICTE de 0 à 207 plateformes murées :
-      // il porte le raccord avec les modules voisins, pas seulement ce motif-ci. Rendre le trampoline
-      // obligatoire ne se fera donc pas en retirant des surfaces à un motif existant ; il y faut un
-      // motif conçu pour ça, dont l'obstacle est fermé par construction.
-      p.platforms.push({ x: Math.max(0, Math.floor(w * 0.5) - 5), alt: alt + 4, w: 4 })
-      placeBirds(haut + 3)
-      p.exitAlt = haut
-      break
-    }
-    // ─── LES MOTIFS OÙ LE REBOND EST LA SEULE SOLUTION ───────────────────────────────────────
-    //
-    // Demande du joueur, après qu'on ait mesuré que les vingt-neuf trampolines du jeu étaient tous
-    // contournables : « mur très haut, saut très large avec vide en dessous, saut très large avec
-    // flotte en dessous, saut très large avec flammes en dessous, et saut très large avec flammes dans
-    // un trou dont on peut pas sortir. »
-    //
-    // ⚠️ LE MUR TRÈS HAUT MANQUE À L'APPEL, ET C'EST ASSUMÉ PLUTÔT QUE MASQUÉ. Écrit, il échouait au
-    // test « chaque motif se tient debout seul » à TOUTES les largeurs : une surface restait
-    // injoignable, et ni la hauteur du mur (12 → 9 → 8 → 6), ni la distance du tapis, ni le calage du
-    // dessus de roche ne l'ont réglé. Continuer à deviner aurait fini par produire un motif accordé au
-    // validateur plutôt qu'au jeu. Les quatre traversées, elles, passent — et elles couvrent quatre des
-    // cinq demandes.
-    //
-    // ⚠️ CE QUI REND UN OBSTACLE « SEULEMENT FRANCHISSABLE AU REBOND » N'EST PAS SA TAILLE, C'EST SA
-    // FERMETURE. Un mur se contourne dès qu'une corniche traîne à mi-hauteur — c'est exactement ce qui
-    // rendait `trampoline-corniche` facultatif, son palier de secours étant pile à portée de saut.
-    // Ces motifs-ci ne posent AUCUNE surface entre le départ et l'arrivée.
-    //
-    // ⚠️ ET LES COTES SONT MESURÉES, PAS DEVINÉES. Relevé sur `canReach` / `canReachByBounce` :
-    //   · à plat, un SAUT franchit 3 tuiles, un REBOND en franchit 8 → un vide de 5 à 7 tuiles n'est
-    //     passable qu'au rebond, et laisse de la marge à l'atterrissage ;
-    //   · en montée, le rebond atteint +9 rangées à 5 tuiles de distance, et pas au-delà.
-    // Un premier jet posait un mur de DOUZE rangées : son sommet était injoignable à toutes les
-    // largeurs — un motif impossible plutôt qu'exigeant. « Très haut » se mesure à la portée de
-    // l'engin, pas à l'intention.
-    // Les quatre traversées ne diffèrent que par CE QU'IL Y A DESSOUS. Le geste est le même — courir,
-    // rebondir, survoler — et c'est voulu : on apprend une fois, on reconnaît ensuite, et le décor dit
-    // seul ce qu'on risque. Un vide pardonne (on retombe au sol), une nappe d'eau ralentit, les flammes
-    // brûlent, et la fosse de lave ne rend pas ce qu'elle prend.
-    //
-    // ⚠️ COTES MESURÉES, PAS DEVINÉES : à plat, un SAUT franchit 3 tuiles, un REBOND en franchit 8. La
-    // traversée fait 6, et le tapis est à UNE tuile du bord — à trois, la berge d'en face était à neuf
-    // colonnes et le motif se signalait « piège sans retour », ce qu'il était vraiment.
     case 'trampoline-saut-vide':
     case 'trampoline-saut-eau':
     case 'trampoline-saut-flammes':
@@ -929,6 +850,12 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       break
     }
 
+    // ⚠️ CELUI-CI EXIGE TROIS REBONDS, ET C'EST DEMANDÉ MOT POUR MOT : « notamment des trucs où faut bien
+    // rebondir 3 fois pour y arriver ». Le trampoline gagne en hauteur À CHAQUE REBOND — le premier vaut
+    // un saut normal, le deuxième deux, le troisième deux et demi (cf. platforming). Un mur de DIX
+    // rangées passe donc au-dessus de ce que deux rebonds atteignent (8,7) et sous le plafond du
+    // troisième (10,9) : on ne monte qu'en insistant, et le motif enseigne de lui-même que l'engin se
+    // charge. C'est le seul obstacle du jeu qui demande de comprendre ça.
     case 'trampoline-mur':
     case 'trampoline-mur-trou': {
       // « Deux colonnes de pierre de hauteur différente avec un trampoline entre les deux. » Le cadrage
@@ -4577,7 +4504,6 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   'escalier-saut-inverse': { tier: 2, family: 'vertical', entry: 'haut', exit: 'bas', width: [20, 30], below: 'vide', above: 'air' },
   // (pas de `forcedOnly` : hérité de l'original, il ne serait JAMAIS tiré — donc absent du jeu,
   //  ce que `couverture-motifs` refuse. Un motif imposé doit être imposé QUELQUE PART.)
-  'trampoline-corniche-inverse': { tier: 2, family: 'vertical', entry: 'haut', exit: 'bas', width: [20, 28], below: 'sol', above: 'air' },
   'cage-echelles-inverse': { tier: 3, family: 'vertical', entry: 'haut', exit: 'bas', width: [22, 30], below: 'sol', above: 'air', ladder: true },
   'echelle-vs-sauts-inverse': { tier: 2, family: 'vertical', entry: 'haut', exit: 'bas', width: [20, 28], below: 'sol', above: 'air', ladder: true },
   'echelle-exposee-inverse': { tier: 4, family: 'tension', entry: 'haut', exit: 'bas', width: [18, 26], below: 'sol', above: 'air', ladder: true },
@@ -4639,8 +4565,6 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   // Cinq motifs demandés, du plus inoffensif au plus exigeant. Le premier existe pour APPRENDRE l'objet
   // sans rien risquer : découvrir un rebond ×3 au-dessus d'un vide serait une mort gratuite, et le
   // joueur n'aurait pas compris à quoi sert l'engin. Les quatre autres l'utilisent pour de bon.
-  'trampoline-plat': { forcedOnly: true, tier: 1, family: 'filler', entry: 'milieu', exit: 'milieu', width: [12, 18], below: 'sol', above: 'air' },
-  'trampoline-corniche': { forcedOnly: true, tier: 2, family: 'vertical', entry: 'bas', exit: 'haut', width: [14, 22], below: 'sol', above: 'air' },
 
   // ⚠️ LES DEUX SEULS OÙ LE REBOND EST OBLIGATOIRE, et c'est leur raison d'être. Les cinq ci-dessus ont
   // tous une issue de secours — mesuré : vingt-sept trampolines sur vingt-neuf se contournent. Ceux-ci
@@ -4652,7 +4576,12 @@ export const CATALOG: Record<ModuleKind, ModuleSpec> = {
   // point de départ, et déclarait le sommet injoignable quelles que soient la hauteur du mur et la
   // position du tapis. Le défaut n'était ni dans la difficulté ni dans la portée du rebond : il était
   // dans ce qu'on avait coulé SOUS le motif sans le vouloir.
-  'trampoline-mur': { forcedOnly: true, tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [20, 28], below: 'vide', above: 'air' },
+  // ⚠️ FOND DE SOL, PAS DE VIDE, ET C'EST LA RÈGLE DU PREMIER TRAMPOLINE QUI L'IMPOSE. Un test exige que
+  // le TOUT PREMIER trampoline rencontré ne borde pas un trou : on y découvre l'engin, et découvrir une
+  // mécanique au-dessus d'un vide mortel est une mort gratuite. C'est aussi la consigne du joueur — « au
+  // début tu es juste bloqué et tu meurs pas si tu te trompes ». Le mur bloque ; il ne tue pas. Sa
+  // variante `-trou`, elle, garde son vide.
+  'trampoline-mur': { forcedOnly: true, tier: 3, family: 'vertical', entry: 'bas', exit: 'haut', width: [20, 28], below: 'sol', above: 'air' },
   'trampoline-saut-vide': { forcedOnly: true, tier: 3, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [22, 30], below: 'sol', above: 'air' },
   'trampoline-saut-eau': { forcedOnly: true, tier: 3, family: 'traverse', entry: 'milieu', exit: 'milieu', width: [22, 30], below: 'sol', above: 'air', water: true },
   'trampoline-saut-flammes': { forcedOnly: true, tier: 4, family: 'tension', entry: 'milieu', exit: 'milieu', width: [22, 30], below: 'sol', above: 'air' },

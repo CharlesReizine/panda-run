@@ -36,9 +36,17 @@ describe('trampolines dégagés', () => {
     expect(CLAIR_TRAMPOLINE).toBeCloseTo(2 * maxJumpTiles(), 5)
   })
 
-  it('il reste des trampolines : on a dégagé, pas déblayé', () => {
+  // ⚠️ LE COMPTE A CHUTÉ DE 35 À ~10, ET C'EST LE BUT. « Je ne veux QUE des trampolines utiles et
+  // bloquants. » La mesure lui donnait raison : 33 des 35 se contournaient — en retirant l'engin, rien
+  // ne devenait injoignable. La cause principale était `trampoline-corniche-inverse`, tiré dans le pool
+  // GÉNÉRIQUE et posé sur dix-neuf terrains. Les motifs contournables sont sortis du catalogue.
+  // Ce test ne garde donc plus un PLANCHER de quantité, il garde la présence de chaque obstacle : un
+  // trampoline supprimé de trop, et c'est un obstacle entier qui disparaît du jeu.
+  it('chaque motif de rebond a bien posé ses trampolines', () => {
     const total = Object.values(LEVELS).reduce((n, l) => n + (l.trampolines ?? []).length, 0)
-    expect(total, 'plus un seul trampoline dans le jeu').toBeGreaterThan(20)
+    expect(total, 'plus un seul trampoline dans le jeu').toBeGreaterThanOrEqual(6)
+    const terrains = Object.values(LEVELS).filter((l) => (l.trampolines ?? []).length).length
+    expect(terrains, 'les obstacles de rebond ont disparu de la carte').toBeGreaterThanOrEqual(5)
   })
 
   it('chaque trampoline repose bien sur une surface', () => {

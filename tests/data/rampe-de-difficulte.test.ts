@@ -23,10 +23,12 @@ const RANG = new Map(WORLD_NODES.filter((n) => n.levelId).map((n, i) => [n.level
 
 /** Rang MINIMUM à partir duquel chaque motif de rebond a le droit d'apparaître. */
 const PLUS_TOT_QUE: Record<string, number> = {
-  'trampoline-plat': 0,            // l'atelier : il ENSEIGNE, il peut arriver tôt
-  'trampoline-corniche': 10,
+  // ⚠️ LE MUR PEUT ARRIVER TÔT, ET C'EST VOULU : « au début tu es juste bloqué et tu meurs pas si tu te
+  // trompes ». Rater le rebond contre un mur de pierre ne coûte rien — on retombe sur le sol du module et
+  // on recommence. C'est l'obstacle qui ENSEIGNE l'engin, à la place de l'ancien atelier plat (supprimé :
+  // il n'enseignait rien puisqu'il ne bloquait rien).
+  'trampoline-mur': 0,
   'trampoline-saut-vide': 10,
-  'trampoline-mur': 15,
   'trampoline-saut-eau': 15,
   'trampoline-mur-trou': 25,
   'trampoline-saut-flammes': 30,
@@ -55,15 +57,16 @@ describe('rampe de difficulté', () => {
 
   // ⚠️ ET L'ATELIER DOIT PRÉCÉDER LE PREMIER OBSTACLE. Sans lui, on découvre le rebond au-dessus d'un
   // vide mortel : une mort gratuite, et le joueur n'a même pas compris ce qu'il aurait dû faire.
-  it('l\'atelier arrive avant le premier obstacle qui exige le rebond', () => {
+  it('l\'obstacle qui ENSEIGNE arrive avant celui qui TUE', () => {
     void Object.keys(LEVELS).length
     const rangDe = (kind: string) => Object.entries(PORTEES)
       .filter(([, modules]) => modules.some((m) => m.kind === kind))
       .map(([id]) => RANG.get(id) ?? 999)
-    const atelier = Math.min(...rangDe('trampoline-plat'), 999)
-    const premierObstacle = Math.min(...['trampoline-mur', 'trampoline-mur-trou', 'trampoline-saut-vide',
+    const atelier = Math.min(...rangDe('trampoline-mur'), 999)
+    // le premier obstacle MORTEL : celui où rater coûte une vie, par opposition au mur qui bloque sans tuer
+    const premierObstacle = Math.min(...['trampoline-mur-trou', 'trampoline-saut-vide',
       'trampoline-saut-eau', 'trampoline-saut-flammes', 'trampoline-fosse-ardente'].flatMap(rangDe), 999)
-    expect(atelier, 'aucun atelier de trampoline sur la carte').toBeLessThan(900)
+    expect(atelier, 'aucun mur de trampoline sur la carte').toBeLessThan(900)
     expect(atelier, "l'atelier doit précéder l'obstacle").toBeLessThan(premierObstacle)
     // et de plusieurs terrains, pas d'un seul : on apprend, on joue, puis on est mis à l'épreuve
     expect(premierObstacle - atelier, 'trop peu de marge entre apprendre et devoir').toBeGreaterThanOrEqual(5)
