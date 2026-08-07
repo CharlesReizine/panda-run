@@ -30,6 +30,7 @@ import { zoneMorte, lerpVertical, LERP_X, LERP_Y_CALME } from '../core/camera-su
 import type { DropEntry, SkillDef } from '../core/types'
 import type { UIScene } from './UIScene'
 import { TILE, DEFAULT_HEIGHT_TILES, groundRowFor, GRAVITY, landsOnOneWayPlatform, releveApresEchelle, traverseCornichesEnGrimpant } from '../core/platforming'
+import { remonteeNecessaire } from '../core/tir-au-sol'
 import { segmentsEchelle } from '../core/vide'
 import { breathMaxMs, BREATH_BASE_MS } from '../core/breath'
 import { BIOMES } from '../data/biomes'
@@ -3002,6 +3003,11 @@ export class LevelScene extends Phaser.Scene {
     // Folie enragée : le panda entre en furie (aura ROUGE côté joueur) et TERRORISE tous les
     // monstres de son niveau ou moins — hors boss, jamais apeurés — qui fuient lentement et
     // encaissent +50% de dégâts (déf halvée, cf. Enemy.effectiveDef).
+    // ⚠️ DÉVOTION NE FAISAIT RIEN DU TOUT, ET CE DEPUIS TOUJOURS. Le champ `guard` était déclaré dans les
+    // données, la méthode `applyGuard` écrite dans Player… et jamais appelée : une seule occurrence dans
+    // tout le dépôt, sa définition. Douze points d'énergie et seize secondes de recharge pour un
+    // clignotement. Un test vérifiait la DONNÉE, pas son branchement — c'est exactement le trou.
+    if (skill.guard) this.player.applyGuard(skill.guard.dmgTakenMult, skill.guard.durationMs, color)
     if (skill.fear) {
       this.player.applyRageAura(skill.fear.durationMs)
       for (const obj of this.enemies.getChildren()) {
@@ -3480,6 +3486,14 @@ export class LevelScene extends Phaser.Scene {
     // lame → le lancer touche vraiment les ennemis qu'il chevauche le long de sa trajectoire.
     const body = proj.body as Phaser.Physics.Arcade.Body
     body.setSize(46, 46, true)
+    // ⚠️ ET ON REMONTE LE TIR, SINON LA LAME NAÎT DANS LE SOL. Arcade multiplie la taille du corps par
+    // l'échelle du sprite : 46 × 1,4 = 64,4 px de haut, recentrés sur un lâcher à `joueur.y + 16` → le
+    // bas tombe 8 px SOUS les pieds, et le collider sol détruit la lame dans la frame où elle naît.
+    // C'est la cause du « parfois ça écrit "lancer d'épée" mais il se passe rien » : debout sur une
+    // surface pleine ça ratait toujours, en l'air ça marchait. On remonte plutôt que de rogner — la
+    // hitbox généreuse avait été posée exprès (cf. juste au-dessus), la reprendre rouvrirait l'autre bug.
+    proj.y -= remonteeNecessaire(46, 1.4)
+    body.reset(proj.x, proj.y)
     // un peu MOINS vite qu'un tir standard (420 → 320 px/s)
     proj.setVelocity(this.player.facing * 320, 0)
     // effet de VITESSE : traînée d'étincelles acier en plus des échos de lame tournoyante de Projectile
@@ -3490,6 +3504,10 @@ export class LevelScene extends Phaser.Scene {
   // pulse le long de sa trajectoire (pulsations nettoyées à la mort du projectile).
   private sealProjectile(proj: Projectile, color: number) {
     proj.setTexture('ring').setTint(color).setScale(1.4).setBlendMode(Phaser.BlendModes.ADD).setAngularVelocity(240)
+    // même défaut que le lancer d'épée, en pire : 'ring' fait 64 px, donc 89,6 une fois mis à l'échelle
+    // — le sceau naissait 21 px sous le sol et mourait sur place à chaque lancer depuis une surface pleine.
+    proj.y -= remonteeNecessaire(64, 1.4)
+    ;(proj.body as Phaser.Physics.Arcade.Body).reset(proj.x, proj.y)
     const seal = this.time.addEvent({
       delay: 55, loop: true, callback: () => {
         if (!proj.active) { seal.remove(); return }
@@ -3905,7 +3923,13 @@ export class LevelScene extends Phaser.Scene {
   // brûle et bloque les ennemis tant qu'elle dure ; ici on gère l'embrasement d'invocation + FX.
   private executeFlameWall(skill: SkillDef, cx: number, mult: number) {
     const cfg = skill.wall!
-    const groundY = this.groundRow * TILE - 4
+    // ⚠️ LE MUR SE POSAIT AU FOND DE LA CARTE, ET C'EST EXACTEMENT LE BUG DÉJÀ CORRIGÉ POUR LE PIÈGE À
+    // MÂCHOIRES — le commentaire est encore juste au-dessus dans ce fichier : « il était posé à
+    // groundRow, c'est-à-dire tout au fond de la carte… le sort marchait ; il s'armait juste dans le
+    // vide ». Le piège a été réparé, le mur oublié. Sur tout terrain à relief — joueur ou ennemis sur une
+    // corniche — les flammes naissaient des dizaines de rangées plus bas, hors de vue et hors de portée.
+    // `impactCielY` connaît la surface sous un point donné (géométrie pure, testée) : on s'en sert.
+    const groundY = (this.impactCielY(cx) ?? this.groundRow * TILE) - 4
     const width = skill.range * 2
     const atk = this.player.stats.atk * this.player.outgoingMult()
     const dmgPerTick = Math.max(1, atk * mult * 0.3)
@@ -4226,6 +4250,11 @@ export class LevelScene extends Phaser.Scene {
     const proj = this.spawnPlayerProjectile(dmg, skill.range)
     const scale = (skill.blast ? 2.0 : 1.4) * (0.7 + 0.9 * frac)
     proj.setTexture('fx-fireball-orange').clearTint()
+    // ⚠️ PLUS ON CHARGEAIT, MOINS IL SE PASSAIT QUELQUE CHOSE. Même défaut que le lancer d'épée, mais
+    // proportionnel à la charge : au-delà de ~43 %, la boule naissait sous le sol et mourait aussitôt.
+    // Le pire retour de jeu possible — la compétence semblait marcher quand on la bâclait.
+    proj.y -= remonteeNecessaire(22, scale)
+    ;(proj.body as Phaser.Physics.Arcade.Body).reset(proj.x, proj.y)
     this.fireballShimmer(proj, scale)
     if (skill.blast) proj.blast = { radius: skill.blast * (0.8 + 0.9 * frac), color }
     if (frac > 0.8) { this.flashScreen(0xff7043, 0.14, 130); this.screenShake(0.006, 120); this.hitStop(50) }
