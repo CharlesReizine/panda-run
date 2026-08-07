@@ -268,6 +268,7 @@ La décision de reprise vit dans `src/core/reprise.ts`, pur et testé sur la mat
 
 | Build | Ce qui a changé |
 |---|---|
+| R374 | **plus une seule chaîne contournable** : la passe de creusement mesurait TÔT et n'agissait qu'une fois, sur une géométrie qui continue de bouger derrière — la chaîne qui subsistait était fabriquée après elle. Un second creusement tourne en fin d'assemblage, quand plus rien ne bouge |
 | R373 | **un « i » par quête, qui dit OÙ chercher** : terrains où vit le monstre visé (nommés comme sur la carte, pas par leur id), ou sources d'un matériau classées par TAUX de butin et non par proximité. L'information existait dans les données depuis toujours et n'était nulle part dans le jeu |
 | R372 | **le sol s'ouvre sous les passages d'échelle et les sauts de plateau** : douze motifs de la famille « vertical » demandaient un enchaînement de sauts en le posant sur du SOL PLEIN — rater ne coûtait rien, on retombait sur la terre ferme. Le motif promettait le vide, il ne le tenait pas. REGRAVURE + resynchro |
 | R371 | **de longs U en apnée au lieu de W** : les plafonds immergés étaient hachés en segments de 7 colonnes (prudence écrite en dur) ; ils sont continus, peu profonds, et bornés par le souffle RÉEL d'un débutant — 15 tunnels jusqu'à 11 colonnes d'un seul tenant · **99 pierres volantes supprimées** (la règle des socles nus ne voyait que les piliers, pas les masses en l'air) · plateformes enfermées dans la roche effacées · REGRAVURE + resynchro des niveaux de monstres |

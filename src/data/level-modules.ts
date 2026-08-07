@@ -4155,6 +4155,38 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     }
   }
 
+  // ─── ET ON REPASSE UN COUP DE CREUSEMENT, PARCE QUE LES CHAÎNES NAISSENT APRÈS ───────────────
+  //
+  // ⚠️ LA PREMIÈRE PASSE DE CREUSEMENT NE VOIT PAS LES CHAÎNES QU'ELLE NE PEUT PAS ENCORE VOIR, et
+  // c'est ce qui laissait vivre la dernière. Sur plage-2, elle a bien traité la chaîne du moment
+  // (x367, creusée) — mais celle qui subsiste à l'arrivée est ailleurs (x343), fabriquée PLUS TARD par
+  // les passes de rognage, de comblement et d'escaliers. Mesurer tôt et n'agir qu'une fois, sur une
+  // géométrie qui continue de bouger derrière, revient à corriger un terrain qui n'existe plus.
+  //
+  // On repasse donc à la fin, quand plus rien ne bouge. Même prudence qu'au premier tour : on mesure
+  // avant, on mesure après, et au moindre recul on rebouche ce qu'on vient d'ouvrir.
+  {
+    const sonde = () => ({ ...geo(), breakables })
+    const avant = { pieges: deadEndSurfaces(sonde()).length, orphelines: unreachablePlatforms(sonde()).length }
+    const ouverts: number[] = []
+    for (const chaine of chainesContournables(sonde())) {
+      const debut = chaine.x + MARGE_CHAINE
+      const fin = chaine.x + chaine.w - MARGE_CHAINE
+      for (let x = debut; x < fin; x++) {
+        if (intouchable.has(x)) continue
+        if (gaps.some((g) => x >= g.x && x < g.x + g.w)) continue
+        ouverts.push(gaps.length)
+        gaps.push({ x, w: 1 })
+      }
+    }
+    if (ouverts.length) {
+      const apres = { pieges: deadEndSurfaces(sonde()).length, orphelines: unreachablePlatforms(sonde()).length }
+      if (apres.pieges > avant.pieges || apres.orphelines > avant.orphelines) {
+        for (const i of ouverts.slice().reverse()) gaps.splice(i, 1)
+      }
+    }
+  }
+
   // ─── UNE TERRE POSÉE SUR DU PLEIN EST SOLIDE, PAS TRAVERSABLE ────────────────────────────────
   //
   // Retour du joueur : « quand j'ai de la pierre et direct au-dessus du sol, je peux être sur la pierre

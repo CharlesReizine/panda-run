@@ -163,10 +163,13 @@ describe('relief jouable', () => {
   // sol : on y arrive par le haut, jamais par le bas. Contournable veut dire « on aurait pu marcher en
   // bas au lieu de grimper » — encore faut-il que grimper soit une option. Le validateur exige
   // désormais que la marche la plus basse s'atteigne d'un saut depuis le sol.
-  // ⚠️ REMONTÉ DE 0 À 1 APRÈS REGRAVURE : plage-2 x343 porte cinq plateformes au-dessus d'un sol
-  // praticable. La passe de creusement ne l'a pas traitée — c'est le prix d'une regravure, et il est
-  // écrit ici plutôt que masqué. À reprendre au prochain lot de terrain.
-  const TOLERANCE_CHAINES = 1
+  // ⚠️ ET LA DERNIÈRE EST TOMBÉE EN CHANGEANT LE MOMENT, PAS LA MÉTHODE. plage-2 gardait une chaîne à
+  // x343 que la passe de creusement n'avait jamais vue : au moment où elle mesure, la chaîne du terrain
+  // est ailleurs (x367) — celle qui subsiste est FABRIQUÉE PLUS TARD, par les passes de rognage, de
+  // comblement et d'escaliers. Mesurer tôt et n'agir qu'une fois, sur une géométrie qui continue de
+  // bouger derrière, c'est corriger un terrain qui n'existe plus. Un second creusement tourne
+  // maintenant tout à la fin, quand plus rien ne bouge.
+  const TOLERANCE_CHAINES = 0
   // Une chaîne perchée hors d'atteinte du sol n'est pas un détour : les deux itinéraires ne mènent pas
   // au même endroit, et les comparer n'a pas de sens. Le test tient les deux bouts de la nuance.
   const chaineA = (hauteur: number) => ({
