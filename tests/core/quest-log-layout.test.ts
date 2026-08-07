@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  FONT, JOURNAL, lignesJournal, lignesParPage, largeurTexte, objectifDe, recompenseDe,
-  tientDans, tronquer, yLigne,
+  FONT, JOURNAL, infoCentre, lignesJournal, lignesParPage, largeurTexte, objectifDe, recompenseDe,
+  tientDans, titreLeft, tronquer, yLigne,
 } from '../../src/scenes/quest-log-layout'
 import { QUEST_CHAIN } from '../../src/data/shops'
 import { newPlayer } from '../../src/core/player-state'
@@ -107,5 +107,40 @@ describe('journal de quêtes', () => {
     const pages = Math.ceil(QUEST_CHAIN.length / lignesParPage())
     expect(pages * lignesParPage()).toBeGreaterThanOrEqual(QUEST_CHAIN.length)
     expect(lignesParPage()).toBeGreaterThan(0)
+  })
+
+  // ── LE « i » ET LA PLACE QU'IL PREND ────────────────────────────────────────────────────────
+  //
+  // Demande du joueur : « dans les quêtes tu peux mettre un petit "i" sur chaque quête, et on peut voir
+  // dans quelles maps on peut trouver les mobs ou autres indices ».
+  //
+  // ⚠️ IL MANGE DE LA LARGEUR DE TITRE, ET L'OUBLIER LE FERAIT DÉBORDER. Le titre commençait au bord de
+  // la ligne ; il commence maintenant après la pastille. Toute la géométrie de texte se mesure donc
+  // depuis `titreLeft()` — sans quoi le contrat de non-débordement de ce fichier deviendrait faux sans
+  // qu'aucun test ne change de couleur.
+  it('le « i » tient dans sa ligne, sans mordre sur le titre', () => {
+    for (let i = 0; i < lignesParPage(); i++) {
+      const c = infoCentre(i)
+      expect(c.x - JOURNAL.rayonInfo, `ligne ${i}`).toBeGreaterThanOrEqual(JOURNAL.left)
+      expect(c.x + JOURNAL.rayonInfo, `ligne ${i}`).toBeLessThanOrEqual(titreLeft())
+      // et il reste dans la bande verticale de SA ligne
+      expect(c.y - JOURNAL.rayonInfo, `ligne ${i}`).toBeGreaterThanOrEqual(yLigne(i))
+      expect(c.y + JOURNAL.rayonInfo, `ligne ${i}`).toBeLessThanOrEqual(yLigne(i) + JOURNAL.rowH)
+    }
+  })
+
+  it('la largeur de texte part du titre, pas du bord', () => {
+    expect(largeurTexte()).toBe(JOURNAL.right - titreLeft() - JOURNAL.gaugeW - 16)
+    expect(largeurTexte()).toBeGreaterThan(200) // il reste de quoi lire un objectif
+  })
+
+  it('rien ne déborde une fois la pastille posée, à tous les états', () => {
+    const p = joueur()
+    for (const def of QUEST_CHAIN) p.quests[def.id] = { startCount: 0, progress: def.targetCount, done: true, claimed: false }
+    const largeur = largeurTexte()
+    for (const l of lignesJournal(p, 'Prontera')) {
+      expect(titreLeft() + largeur, l.id).toBeLessThanOrEqual(JOURNAL.right)
+      expect(tientDans(tronquer(l.objectif, largeur, FONT.detail), largeur, FONT.detail), l.id).toBe(true)
+    }
   })
 })

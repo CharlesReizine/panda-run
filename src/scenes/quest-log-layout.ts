@@ -35,7 +35,21 @@ export const JOURNAL = {
   gap: 6,
   /** colonne où commence la jauge de progression, mesurée depuis la droite */
   gaugeW: 150,
+  /** rayon du « i » cliquable, à gauche du titre de chaque quête */
+  rayonInfo: 11,
+  /** décalage du « i » depuis le bord gauche de la ligne */
+  infoDx: 18,
 }
+
+// ⚠️ LE « i » MANGE DE LA LARGEUR DE TITRE, ET L'OUBLIER LE FERAIT DÉBORDER. Le titre commençait au
+// bord de la ligne ; il commence maintenant après la pastille. Toute la géométrie de texte du journal
+// se mesure donc depuis `titreLeft()`, jamais depuis `JOURNAL.left` — c'est la seule façon que le test
+// de non-débordement reste vrai après l'ajout.
+export const titreLeft = (): number => JOURNAL.left + JOURNAL.infoDx + JOURNAL.rayonInfo + 8
+
+/** Centre du « i » de la ligne i, dans l'espace de conception. */
+export const infoCentre = (i: number): { x: number; y: number } =>
+  ({ x: JOURNAL.left + JOURNAL.infoDx, y: yLigne(i) + JOURNAL.rowH / 2 })
 
 export const FONT = { titre: 16, detail: 12, jauge: 12 }
 
@@ -129,7 +143,8 @@ export function yLigne(i: number): number {
 
 /** Largeur disponible pour les textes d'une ligne (le reste est pris par la jauge). */
 export function largeurTexte(): number {
-  return JOURNAL.right - JOURNAL.left - JOURNAL.gaugeW - 16
+  // mesurée depuis `titreLeft()` : la pastille « i » occupe désormais le début de la ligne
+  return JOURNAL.right - titreLeft() - JOURNAL.gaugeW - 16
 }
 
 /** Découpe un texte pour qu'il tienne sur une ligne de la largeur donnée, en coupant proprement. */

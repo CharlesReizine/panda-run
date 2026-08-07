@@ -6,9 +6,10 @@ import { villeLaPlusProche } from '../data/worldmap'
 import { refreshQuestProgress } from '../core/quests'
 import { QUEST_CHAIN } from '../data/shops'
 import {
-  FONT, JOURNAL, lignesJournal, lignesParPage, largeurTexte, tronquer, yLigne,
+  FONT, JOURNAL, infoCentre, lignesJournal, lignesParPage, largeurTexte, titreLeft, tronquer, yLigne,
   type EtatQuete, type LigneQuete,
 } from './quest-log-layout'
+import { indiceDe } from '../core/indices-quete'
 
 // JOURNAL DE QUÊTES — la liste complète de la chaîne du garde : ce qui est fait, ce qui est en cours,
 // ce qui reste, et où aller rendre ce qui est terminé.
@@ -86,6 +87,48 @@ export class QuestLogScene extends Phaser.Scene {
     }).setOrigin(0.5).setInteractive({ useHandCursor: true }).on('pointerdown', onTap)
   }
 
+  /**
+   * L'ENCART D'INDICE — quoi chercher, et où.
+   *
+   * ⚠️ IL SE FERME EN TOUCHANT N'IMPORTE OÙ, et ce n'est pas un détail de confort. Un panneau qui ne se
+   * ferme que par sa croix piège au doigt sur téléphone : on tape à côté, il ne se passe rien, et on
+   * croit l'écran figé. Le fond est donc lui-même la zone de fermeture, la croix n'étant qu'un repère.
+   */
+  private montrerIndice(l: LigneQuete) {
+    const def = QUEST_CHAIN.find((q) => q.id === l.id)
+    if (!def) return
+    const ind = indiceDe(def)
+    const cont = this.add.container(0, 0).setDepth(50)
+
+    const voile = this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x000000, 0.55)
+      .setInteractive({ useHandCursor: true }).on('pointerdown', () => cont.destroy())
+    cont.add(voile)
+
+    const lignes = [
+      { t: 'À TROUVER', c: '#80cbc4', s: 12 },
+      { t: ind.quoi, c: '#ffffff', s: 17 },
+      ...(ind.ou.length ? [{ t: 'OÙ', c: '#80cbc4', s: 12 }] : []),
+      ...ind.ou.map((o) => ({ t: `· ${o}`, c: '#ffd54f', s: 15 })),
+      ...(ind.astuce ? [{ t: ind.astuce, c: '#b0bec5', s: 12 }] : []),
+    ]
+    const h = 64 + lignes.reduce((n, li) => n + li.s + 10, 0)
+    cont.add(this.add.rectangle(480, 270, 520, h, 0x0d1b2a, 0.98).setStrokeStyle(2, 0x80cbc4, 0.9))
+    cont.add(this.add.text(480, 270 - h / 2 + 20, tronquer(l.nom, 470, 16), {
+      fontSize: '16px', color: '#ffd54f', fontStyle: 'bold',
+    }).setOrigin(0.5))
+
+    let y = 270 - h / 2 + 46
+    for (const li of lignes) {
+      cont.add(this.add.text(480, y, tronquer(li.t, 480, li.s), {
+        fontSize: `${li.s}px`, color: li.c, fontStyle: li.s >= 15 ? 'bold' : 'normal',
+      }).setOrigin(0.5, 0))
+      y += li.s + 10
+    }
+    cont.add(this.add.text(480, 270 + h / 2 - 16, 'toucher pour fermer', {
+      fontSize: '11px', color: '#546e7a',
+    }).setOrigin(0.5))
+  }
+
   private render() {
     for (const child of [...this.children.list]) child.destroy()
     this.add.rectangle(480, 270, VIEW_W, VIEW_H, 0x0d1b2a, 0.97)
@@ -109,11 +152,24 @@ export class QuestLogScene extends Phaser.Scene {
       this.add.rectangle(JOURNAL.left, y, JOURNAL.right - JOURNAL.left, JOURNAL.rowH, style.fond, 0.9)
         .setOrigin(0, 0).setStrokeStyle(1, 0x37474f, 0.8)
 
-      this.add.text(JOURNAL.left + 10, y + 6, `${style.puce} ${l.ordre}. ${tronquer(l.nom, largeur - 40, FONT.titre)}`, {
+      // ── LE « i » : OÙ TROUVER CE QU'ON DEMANDE ────────────────────────────────────────────
+      //
+      // Demande du joueur : « dans les quêtes tu peux mettre un petit "i" sur chaque quête, et on peut
+      // voir dans quelles maps on peut trouver les mobs ou autres indices ». L'information existait
+      // déjà dans les données — elle n'était nulle part dans le jeu, et on cherchait ses quinze Gloopy
+      // en reparcourant des terrains au hasard.
+      const c = infoCentre(i)
+      const pastille = this.add.circle(c.x, c.y, JOURNAL.rayonInfo, 0x263238).setStrokeStyle(2, 0x80cbc4)
+      this.add.text(c.x, c.y, 'i', { fontSize: '13px', color: '#80cbc4', fontStyle: 'bold' }).setOrigin(0.5)
+      // zone de clic ÉLARGIE au-delà du cercle dessiné : au pouce, onze pixels de rayon ne se touchent pas
+      pastille.setInteractive(new Phaser.Geom.Circle(JOURNAL.rayonInfo, JOURNAL.rayonInfo, JOURNAL.rayonInfo + 10), Phaser.Geom.Circle.Contains)
+      pastille.on('pointerdown', () => this.montrerIndice(l))
+
+      this.add.text(titreLeft(), y + 6, `${style.puce} ${l.ordre}. ${tronquer(l.nom, largeur - 40, FONT.titre)}`, {
         fontSize: `${FONT.titre}px`, color: style.couleur, fontStyle: 'bold',
       })
       // l'objectif d'abord, la récompense ensuite : on cherche « quoi faire » plus souvent que « ça rapporte quoi »
-      this.add.text(JOURNAL.left + 10, y + 26, tronquer(l.objectif, largeur, FONT.detail), {
+      this.add.text(titreLeft(), y + 26, tronquer(l.objectif, largeur, FONT.detail), {
         fontSize: `${FONT.detail}px`, color: '#cfd8dc',
       })
       const droite = tronquer(l.ou ?? l.recompense, JOURNAL.gaugeW + 140, FONT.detail)
