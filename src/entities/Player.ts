@@ -7,7 +7,7 @@ import { SKILLS } from '../data/skills'
 import { ITEMS, rarityColor } from '../data/items'
 import { displayedWeaponType, isBigWeapon, weaponTextureKeys } from '../core/equip'
 import { PANDA_BODY, PANDA_HEAD_ANCHORS } from './player-body'
-import { JUMP_SPEED, RUN_SPEED, GRAVITY, SWIM_SPEED, BOUNCE_SPEED, BOUNCE_SPEED_MAX, bounceSpeedFrom } from '../core/platforming'
+import { JUMP_SPEED, RUN_SPEED, GRAVITY, SWIM_SPEED, SWIM_RUN_MULT, BOUNCE_SPEED, BOUNCE_SPEED_MAX, bounceSpeedFrom } from '../core/platforming'
 import { MAX_SKILL_RANK } from '../core/player-state'
 import { drawAura, makeJag } from '../art/jagged-ring'
 
@@ -24,7 +24,6 @@ const CLIMB_TILT = 6 // légère inclinaison alternée (degrés) pour vendre l'e
 // SWIM_SPEED vient de core/platforming : le générateur s'en sert pour borner la profondeur des
 // cuves (level-validator.maxDiveRows). Le redéclarer ici laisserait les deux dériver en silence.
 const SWIM_DRIFT = 40 // léger enfoncement quand on ne nage pas activement
-const SWIM_RUN_MULT = 0.7 // déplacement horizontal ralenti dans l'eau
 const SWIM_STRIDE = 18 // px parcourus (nage réelle) entre deux poses du cycle de brasse (fige à l'arrêt)
 // Le nageur garde sa TAILLE PLEINE (échelle 1) : on ne le rétrécit plus pour tenir dans une colonne
 // étroite (retour joueur : rétrécissement visuellement bizarre). Les puits/colonnes sont désormais

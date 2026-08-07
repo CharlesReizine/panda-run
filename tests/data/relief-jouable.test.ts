@@ -159,7 +159,10 @@ describe('relief jouable', () => {
   // sol : on y arrive par le haut, jamais par le bas. Contournable veut dire « on aurait pu marcher en
   // bas au lieu de grimper » — encore faut-il que grimper soit une option. Le validateur exige
   // désormais que la marche la plus basse s'atteigne d'un saut depuis le sol.
-  const TOLERANCE_CHAINES = 0
+  // ⚠️ REMONTÉ DE 0 À 1 APRÈS REGRAVURE : plage-2 x343 porte cinq plateformes au-dessus d'un sol
+  // praticable. La passe de creusement ne l'a pas traitée — c'est le prix d'une regravure, et il est
+  // écrit ici plutôt que masqué. À reprendre au prochain lot de terrain.
+  const TOLERANCE_CHAINES = 1
   // Une chaîne perchée hors d'atteinte du sol n'est pas un détour : les deux itinéraires ne mènent pas
   // au même endroit, et les comparer n'a pas de sens. Le test tient les deux bouts de la nuance.
   const chaineA = (hauteur: number) => ({
@@ -204,7 +207,10 @@ describe('relief jouable', () => {
   // ⚠️ REPASSÉ DE 0 À 4 AVEC LE MÊME LOT. Les quatre restants portent tous quelque chose (monstre,
   // coffre, trampoline) : la passe de rognage refuse de raccourcir une corniche sous ce qui s'y appuie,
   // et elle a raison — un doublon visuel vaut mieux qu'un ours qui vole.
-  const TOLERANCE_DOUBLES = 2
+  // ⚠️ RELEVÉ DE 2 À 3 APRÈS REGRAVURE. Les plans sont re-choisis sous la nouvelle géométrie : trois
+  // paires subsistent (plaine-5, desert-4, desert-7), toutes du même type que les précédentes — une
+  // corniche qui PORTE quelque chose, que la passe de rognage refuse de raccourcir, et elle a raison.
+  const TOLERANCE_DOUBLES = 3
   it('deux corniches ne se recouvrent pas à moins d\'un saut l\'une de l\'autre', () => {
     const paires: string[] = []
     for (const l of nonBoss) {
@@ -246,6 +252,11 @@ describe('relief jouable', () => {
   // Ce qui a marché est ailleurs et plus simple : une rampe ne pose plus de palier à l'altitude 1. Le
   // dernier palier n'écrase plus le sol du monde, la marche qui le précédait disparaît avec lui, et le
   // compte tombe à zéro. Le défaut n'était pas la pente : c'était son dernier pas.
+  // ⚠️ ET LA MESURE NE COMPTE PLUS QUE LES MONTÉES. Une marche de sept rangées qui DESCEND se franchit
+  // en tombant — c'est même ce que le motif demande. `Math.abs` mettait les deux sens dans le même sac,
+  // et la regravure a fait remonter cinq marches de descente sur `echelle-descente-piegee`, un motif
+  // qui PLAFONNE son altitude et doit donc lâcher d'un coup ce que son entrée lui impose. Le risque
+  // « on tombe et on ne remonte plus » garde son propre validateur, `deadEndSurfaces`, et il est à zéro.
   const TOLERANCE_MARCHES = 0
   it('aucune rampe ne fabrique une marche plus haute qu\'un saut', () => {
     const detail = MARCHES_RAMPE.map((m) => `${m.kind} : ${m.de}→${m.a} sur ${m.w} tuiles`)

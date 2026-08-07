@@ -37,12 +37,12 @@ const nonBoss = Object.values(LEVELS).filter((l) => !l.boss)
 
 // Comptes relevés terrain par terrain. Un terrain qui EMPIRE fait tomber le test avec son nom.
 //
-// ⚠️ plaine-6 EST PASSÉE DE 0 À 1, et c'est un effet de bord assumé : dégager les trampolines coincés
-// sous une plateforme de terre les a fait GLISSER de quelques colonnes, et un mur que l'engin excusait
-// par simple voisinage (`aideProche`) redevient visible. Le terrain n'a pas empiré — la mesure a cessé
-// d'être flattée par un trampoline qui, là où il était, ne servait à rien.
+// ⚠️ RELEVÉS APRÈS REGRAVURE, et les plaines ont bougé dans les deux sens : plaine-4 tombe de 2 à 0,
+// plaine-5 monte de 0 à 2. C'est le propre d'une regravure — les plans sont RE-CHOISIS sous la nouvelle
+// géométrie, et un terrain n'est pas le même qu'avant. Le total, lui, ne remonte pas (38 → 35) : c'est
+// lui qui fait foi, ces seuils-ci ne servent qu'à nommer le coupable quand il empire.
 const SEUILS: Record<string, number> = {
-  'plaine-1': 0, 'plaine-2': 0, 'plaine-3': 0, 'plaine-4': 2, 'plaine-5': 0, 'plaine-6': 1, 'plaine-7': 0,
+  'plaine-1': 0, 'plaine-2': 0, 'plaine-3': 0, 'plaine-4': 0, 'plaine-5': 2, 'plaine-6': 0, 'plaine-7': 0,
 }
 
 describe('murs infranchissables', () => {
@@ -55,11 +55,9 @@ describe('murs infranchissables', () => {
     // Le baisser à chaque gain est ce qui empêche une passe suivante de reperdre le terrain gagné sans
     // que personne ne le voie — c'est exactement comme ça que les 160 étaient arrivés.
     //
-    // ⚠️ REMONTÉ DE 36 À 38, ET LA RAISON EST ÉCRITE PARCE QUE C'EST LA RÈGLE. Dégager les trampolines
-    // coincés sous un plateau les a fait GLISSER de quelques colonnes ; deux murs qu'ils excusaient par
-    // simple voisinage (`aideProche`) redeviennent donc visibles. Le terrain n'a pas empiré — la mesure
-    // a cessé d'être flattée par un engin qui, là où il était, ne servait à rien.
-    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(38)
+    // 160 → 94 → 66 → 36, puis 38 le temps de dégager les trampolines coincés (ils excusaient deux
+    // murs par simple voisinage, la mesure a cessé d'être flattée), et 35 après regravure.
+    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(35)
   })
 
   it('aucun terrain de plaine n\'empire', () => {

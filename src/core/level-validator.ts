@@ -8,7 +8,7 @@
 // sommet d'une échelle est donc atteignable dès que son pied l'est, ce que le simple
 // `unreachablePlatforms` de platforming.ts (sauts uniquement) ne sait pas modéliser.
 
-import { groundRowFor, canReach, canReachByBounce, maxJumpGapPx, maxJumpTiles, MAX_LADDER_TILES, SWIM_SPEED, TILE, type Plat } from './platforming'
+import { groundRowFor, canReach, canReachByBounce, maxJumpGapPx, maxJumpTiles, MAX_LADDER_TILES, RUN_SPEED, SWIM_RUN_MULT, SWIM_SPEED, TILE, type Plat } from './platforming'
 import type { LevelDef } from '../data/levels'
 import { estCoffre } from '../data/props'
 
@@ -1011,6 +1011,77 @@ export function maxDiveRows(breathMs: number, marge = MARGE_APNEE): number {
   return Math.floor((breathMs * marge * SWIM_SPEED) / (2 * 1000 * TILE))
 }
 
+/**
+ * Longueur maximale d'un TUNNEL IMMERGÉ, en colonnes, pour un souffle donné.
+ *
+ * Demande du joueur : « les passages dans des grottes sous-marines, je suis chaud d'avoir des passages
+ * longs en apnée, et c'est vraiment un looong U. Là je vois des W mais très peu de looong U. »
+ *
+ * ⚠️ UN LONG U SE MESURE, IL NE SE DÉCRÈTE PAS. `maxDiveRows` ne borne que la VERTICALE : elle n'a
+ * jamais rien su de la distance parcourue SOUS le plafond, parce que jusqu'ici les plafonds immergés
+ * étaient hachés en segments de sept colonnes avec deux tuiles d'air entre chaque — c'est ce qui
+ * dessinait des W, et c'est aussi ce qui rendait la question sans objet : on refaisait surface tous
+ * les sept pas. En rendant le plafond continu, la longueur devient le facteur limitant, et un tunnel
+ * trop long noie sans que rien ne prévienne.
+ *
+ * Le budget est un aller SIMPLE — on ressort de l'autre côté, on ne revient pas — mais il faut payer
+ * la descente ET la remontée en plus de la traversée. On soustrait donc le coût vertical, et la
+ * distance horizontale se parcourt à la vitesse de nage LATÉRALE, qui n'est pas celle de la montée.
+ */
+export function maxSwimTiles(breathMs: number, profondeur: number, marge = MARGE_APNEE): number {
+  const budgetPx = (breathMs * marge * SWIM_SPEED) / 1000 // en « px de nage verticale »
+  const vertical = 2 * profondeur * TILE
+  const reste = budgetPx - vertical
+  if (reste <= 0) return 0
+  // la nage LATÉRALE est plus rapide que la verticale : on convertit le reste du budget en temps,
+  // puis ce temps en colonnes à la vitesse horizontale réelle.
+  const secondes = reste / SWIM_SPEED
+  return Math.floor((secondes * RUN_SPEED * SWIM_RUN_MULT) / TILE)
+}
+
+export interface TunnelTropLong { x: number; w: number; profondeur: number; max: number }
+
+/**
+ * Tunnels immergés plus longs que ce qu'un souffle permet de traverser.
+ *
+ * Un plafond immergé est un tunnel : tant qu'il court, on ne peut pas refaire surface. On mesure donc
+ * les segments de plafond CONTIGUS (deux dalles qui se touchent ne font qu'un tunnel), et on les
+ * confronte au budget d'apnée à la profondeur où il faut nager.
+ */
+export function tunnelsTropLongs(level: LevelDef, breathMs: number): TunnelTropLong[] {
+  const out: TunnelTropLong[] = []
+  for (const eau of (level.hazards ?? []).filter((h) => h.kind === 'water' && h.water !== 'cascade' && h.water !== 'lave')) {
+    // ⚠️ UN TERRAIN ENTIÈREMENT NOYÉ N'EST PAS UN TUNNEL. Sur `epave-1`, l'eau couvre les soixante
+    // colonnes du niveau : il n'y a nulle part où « refaire surface », et la règle du souffle y relève
+    // du dessin du terrain, pas d'un passage à franchir. Mesurer sa longueur reviendrait à déclarer
+    // le niveau lui-même trop long.
+    if (eau.w > level.widthTiles * 0.8) continue
+    const surface = eau.top ?? 0
+    const fond = surface + (eau.h ?? 0)
+    // colonnes du plan d'eau coiffées par de la roche SOUS la surface : ce sont elles qui font tunnel
+    const couverte = (x: number) => (level.rockBands ?? []).some((r) =>
+      x >= r.x && x < r.x + r.w && r.y + r.h > surface && r.y < fond)
+    let debut: number | null = null
+    for (let x = eau.x; x <= eau.x + eau.w; x++) {
+      const dedans = x < eau.x + eau.w && couverte(x)
+      if (dedans && debut === null) debut = x
+      if (!dedans && debut !== null) {
+        const largeur = x - debut
+        // profondeur à laquelle il faut nager : sous le plafond le plus bas du segment
+        let plafond = surface
+        for (const r of level.rockBands ?? []) {
+          if (r.x < x && r.x + r.w > debut && r.y + r.h > surface && r.y < fond) plafond = Math.max(plafond, r.y + r.h)
+        }
+        const profondeur = Math.max(1, plafond - surface)
+        const max = maxSwimTiles(breathMs, profondeur)
+        if (largeur > max) out.push({ x: debut, w: largeur, profondeur, max })
+        debut = null
+      }
+    }
+  }
+  return out
+}
+
 export interface DeepBasinProblem { x: number; w: number; top: number; depth: number; max: number }
 /**
  * Cuves NOYANTES plus profondes que `max` rangées. Les cascades remontables sont exclues (on n'y perd
@@ -1260,6 +1331,43 @@ function silhouetteAt(level: LevelDef, x: number, groundRow: number): number | n
   const eau = (level.hazards ?? []).some((h) => h.kind === 'water' && x >= h.x && x < h.x + h.w)
   if (!trou && !eau) garde(groundRow)
   return best
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// UNE PIERRE QUI NE TOUCHE RIEN NE TIENT À RIEN
+//
+// Troisième signalement du joueur : « on a encore un problème graphique avec des pierres qui volent ».
+//
+// ⚠️ LA RÈGLE DES SOCLES NUS NE POUVAIT PAS LES VOIR. Elle traque la pierre qui MONTE DU SOL sans rien
+// porter — un pilier. Ici c'est l'inverse : une masse EN L'AIR, sans appui dessous, sans coiffe dessus,
+// sans rien sur les côtés. Elle naît d'ailleurs souvent de cette règle-là : on supprime un mur de
+// grotte devenu inutile, et le plafond qu'il tenait latéralement reste suspendu.
+//
+// Le critère est le CONTACT sur les quatre côtés, et il est volontairement PERMISSIF : une dalle collée
+// à quoi que ce soit se lit comme une avancée, un surplomb, un plafond de couloir — elle a l'air de
+// tenir, et c'est tout ce qu'on demande à un décor.
+export function pierresFlottantes(level: LevelDef): { x: number; y: number; w: number; h: number }[] {
+  const groundRow = groundRowFor(level.heightTiles)
+  const plein = (x: number, y: number): boolean =>
+    y <= 0 // le TOIT du monde est plein, comme son sol : une dalle qui y pend est un plafond, pas une pierre en l'air
+    || y >= groundRow
+    || (level.rockBands ?? []).some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h)
+    || (level.breakables ?? []).some((b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h)
+    || level.platforms.some((p) => x >= p.x && x < p.x + p.w && p.y === y)
+  // ⚠️ UN PLAFOND IMMERGÉ NE FLOTTE PAS, IL EST SOUS L'EAU — et c'est toute la mécanique du « long U ».
+  // Il pend au milieu d'une cuve, sans rien au-dessus ni en dessous que de l'eau : au critère du contact
+  // il est parfaitement isolé. L'oublier ici ne produisait pas un faux positif de mesure, ça SUPPRIMAIT
+  // les tunnels de plongée à l'assemblage — les trois motifs de grotte noyée vidés de leur raison d'être,
+  // sans qu'aucun autre test ne s'en aperçoive.
+  const dansLEau = (r: { x: number; y: number; w: number; h: number }) =>
+    (level.hazards ?? []).some((h) => h.kind === 'water' && r.x < h.x + h.w && r.x + r.w > h.x
+      && r.y + r.h > (h.top ?? 0) && r.y < (h.top ?? 0) + (h.h ?? 0))
+  return (level.rockBands ?? []).filter((r) => {
+    if (dansLEau(r)) return false
+    for (let x = r.x; x < r.x + r.w; x++) if (plein(x, r.y + r.h) || plein(x, r.y - 1)) return false
+    for (let y = r.y; y < r.y + r.h; y++) if (plein(r.x - 1, y) || plein(r.x + r.w, y)) return false
+    return true
+  }).map((r) => ({ x: r.x, y: r.y, w: r.w, h: r.h }))
 }
 
 export interface TrampolinePlafond { x: number; y: number; plafond: number; libre: number }

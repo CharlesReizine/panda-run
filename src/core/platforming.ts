@@ -22,6 +22,11 @@ export const RUN_SPEED = 275
 // générateur en dépend (cf. level-validator.maxDiveRows) ; deux copies dériveraient, et la cuve
 // deviendrait infranchissable sans qu'aucun test ne le voie.
 export const SWIM_SPEED = 150
+// Ralentissement HORIZONTAL dans l'eau. Déclaré ici pour la même raison que SWIM_SPEED : ce n'est pas
+// qu'un réglage de ressenti, c'est lui qui décide de la LONGUEUR qu'un tunnel immergé peut avoir sans
+// noyer (cf. level-validator.maxSwimTiles). Player l'importe au lieu d'en garder une copie — deux
+// valeurs qui dérivent, et le tunnel devient infranchissable sans qu'aucun test ne le voie.
+export const SWIM_RUN_MULT = 0.7
 // Le sol est TOUJOURS au bas du monde : deux rangées pleines (sol + sous-sol) → groundRow = h - 2.
 export function groundRowFor(heightTiles = DEFAULT_HEIGHT_TILES): number {
   return heightTiles - 2

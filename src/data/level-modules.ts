@@ -15,7 +15,8 @@
 // - silhouette COLLINES : on monte puis on redescend ; ≤ 3 paliers empilés partout ; hauteur du
 //   monde = enveloppe des modules (souvent ~22-34 tuiles, pas de tour géante).
 
-import { chainesContournables, CLAIR_TRAMPOLINE, deadEndSurfaces, marchesInfranchissables, overStackedColumns, sealedVoids, unreachablePlatforms } from '../core/level-validator'
+import { chainesContournables, CLAIR_TRAMPOLINE, deadEndSurfaces, marchesInfranchissables, maxSwimTiles, overStackedColumns, sealedVoids, unreachablePlatforms } from '../core/level-validator'
+import { breathMaxMs } from '../core/breath'
 import type { LevelDef } from './levels'
 import { MIN_LADDER_TILES, MAX_LADDER_TILES, maxJumpTiles, maxJumpGapPx, TILE } from '../core/platforming'
 import { comblements } from '../core/roche'
@@ -445,7 +446,13 @@ function ramp(x0: number, w: number, fromAlt: number, toAlt: number, keepGround 
     x += segw
   }
   for (let i = 1; i < out.length; i++) {
-    const d = Math.abs(out[i]!.alt - out[i - 1]!.alt)
+    // ⚠️ ON NE COMPTE QUE LES MONTÉES. Une marche de sept rangées qui DESCEND se franchit en tombant :
+    // c'est même ce que le motif demande. `Math.abs` mettait les deux sens dans le même sac, et faisait
+    // passer pour un défaut les rampes de descente des motifs qui plafonnent leur altitude — cinq d'un
+    // coup sur `echelle-descente-piegee` après regravure, alors qu'aucune ne bloque quoi que ce soit.
+    // Le risque « on tombe et on ne remonte plus » n'est pas ignoré pour autant : il a son propre
+    // validateur, `deadEndSurfaces`, et il est à zéro.
+    const d = out[i]!.alt - out[i - 1]!.alt
     if (d > MARCHE_MAX) MARCHES_RAMPE.push({ de: out[i - 1]!.alt, a: out[i]!.alt, w, kind: motifCourant })
   }
   return out
@@ -619,6 +626,42 @@ function fusionner(dst: Piece, src: Piece): void {
   dst.arches.push(...src.arches); dst.waters.push(...src.waters); dst.trampolines.push(...src.trampolines)
   dst.ladders.push(...src.ladders); dst.spawns.push(...src.spawns); dst.props.push(...src.props)
   dst.signs.push(...src.signs)
+}
+
+/**
+ * LE LONG U : longueur d'un plafond immergé, et taille des poches d'air entre deux.
+ *
+ * Demande du joueur : « les passages dans des grottes sous-marines, je suis chaud d'avoir des passages
+ * longs en apnée, et c'est vraiment un looong U. Là je vois des W mais très peu de looong U. »
+ *
+ * ⚠️ LE « W » ÉTAIT ÉCRIT EN DUR, ET IL SORTAIT D'UNE PRUDENCE MAL PLACÉE. Les plafonds immergés
+ * étaient hachés en segments de SEPT colonnes séparés par deux tuiles d'air : on refaisait donc surface
+ * tous les sept pas, et la silhouette dessinait exactement le W qu'il décrit. Sept était une valeur de
+ * sécurité choisie à la main, sans rapport avec le souffle réel — et comme personne ne mesurait la
+ * longueur, il n'y avait aucune raison de la relever.
+ *
+ * Maintenant que `tunnelsTropLongs` la mesure, la borne peut être la VRAIE : ce qu'un panda de niveau 1
+ * traverse d'un souffle, à cette profondeur, avec la marge d'apnée habituelle. Environ le double, et
+ * surtout d'un seul tenant — c'est ce qui fait un U au lieu d'un W.
+ *
+ * ⚠️ ON PREND LE SOUFFLE DU NIVEAU 1, PAS CELUI DU BIOME. Un tunnel calibré sur le souffle d'un joueur
+ * de niveau 30 serait mortel pour qui arrive en avance, et ces grottes se traversent aussi en revenant
+ * sur ses pas. La borne basse est la seule qui vaille pour un passage obligé.
+ */
+/** Rangées d'eau entre la berge et le dessous du plafond immergé : peu profond, donc long. */
+const PROFONDEUR_TUNNEL = 3
+
+function tunnelImmerge(profondeur: number): { maxRock: number; airGap: number } {
+  return {
+    // ⚠️ ON BORNE SUR UNE RANGÉE DE PLUS QUE L'ÉCART D'ALTITUDE. La dalle occupe la rangée de son
+    // altitude basse : la profondeur RÉELLEMENT nagée vaut donc un de plus que `bankAlt - ceilBotAlt`.
+    // Sans cette marge d'une rangée, quatre tunnels dépassaient le souffle de une à trois colonnes —
+    // assez pour noyer, trop peu pour se voir à l'œil.
+    maxRock: Math.max(4, maxSwimTiles(breathMaxMs(1), Math.max(1, profondeur) + 1)),
+    // la poche d'air garde deux colonnes : de quoi refaire surface, pas de quoi transformer la traversée
+    // en série de petits bonds. C'est le plafond qui s'allonge, pas le répit.
+    airGap: 2,
+  }
 }
 
 function buildModule(m: Module, rng: () => number, w: number, entryAlt: number): Piece {
@@ -1419,11 +1462,16 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // le tunnel se retrouvait donc tout au fond, et plonger l'atteindre coûtait `bankAlt` rangées —
       // trente sur un module d'entrée haute, soit bien plus qu'une apnée. On l'accroche à la berge :
       // TUNNEL_NAGE rangées d'eau libre dessous, le tout dans la profondeur qu'un débutant peut plonger.
-      const ceilBotAlt = Math.max(2, Math.min(bankAlt - 2, bankAlt - PROFONDEUR_MOTIF + 1 + TUNNEL_NAGE))
+      // ⚠️ LE PLAFOND PEND PRÈS DE LA SURFACE, ET C'EST CE QUI FAIT LE « LONG U ». Demande du joueur :
+      // « je suis chaud d'avoir des passages longs en apnée, et c'est vraiment un looong U. Là je vois
+      // des W mais très peu de looong U. » La longueur qu'un souffle permet DÉPEND de la profondeur —
+      // il faut payer la descente et la remontée avant de payer la traversée. À sept rangées sous la
+      // berge, le budget ne laissait que quatre colonnes de nage ; à trois, il en laisse quatorze.
+      // Un tunnel PROFOND est donc forcément COURT : pour un long U, il faut le vouloir peu profond.
+      const ceilBotAlt = Math.max(2, Math.min(bankAlt - 2, bankAlt - PROFONDEUR_TUNNEL))
       const midX = wx + colW
       const midW = ww - 2 * colW
-      const maxRock = 7 // longueur de roche max entre deux poches d'air (borne la nage en apnée)
-      const airGap = 2
+      const { maxRock, airGap } = tunnelImmerge(bankAlt - ceilBotAlt)
       let rx = midX
       while (rx < midX + midW) {
         const seg = Math.min(maxRock, midX + midW - rx)
@@ -1726,11 +1774,16 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // le tunnel se retrouvait donc tout au fond, et plonger l'atteindre coûtait `bankAlt` rangées —
       // trente sur un module d'entrée haute, soit bien plus qu'une apnée. On l'accroche à la berge :
       // TUNNEL_NAGE rangées d'eau libre dessous, le tout dans la profondeur qu'un débutant peut plonger.
-      const ceilBotAlt = Math.max(2, Math.min(bankAlt - 2, bankAlt - PROFONDEUR_MOTIF + 1 + TUNNEL_NAGE))
+      // ⚠️ LE PLAFOND PEND PRÈS DE LA SURFACE, ET C'EST CE QUI FAIT LE « LONG U ». Demande du joueur :
+      // « je suis chaud d'avoir des passages longs en apnée, et c'est vraiment un looong U. Là je vois
+      // des W mais très peu de looong U. » La longueur qu'un souffle permet DÉPEND de la profondeur —
+      // il faut payer la descente et la remontée avant de payer la traversée. À sept rangées sous la
+      // berge, le budget ne laissait que quatre colonnes de nage ; à trois, il en laisse quatorze.
+      // Un tunnel PROFOND est donc forcément COURT : pour un long U, il faut le vouloir peu profond.
+      const ceilBotAlt = Math.max(2, Math.min(bankAlt - 2, bankAlt - PROFONDEUR_TUNNEL))
       const midX = wx + colW
       const midW = ww - 2 * colW
-      const maxRock = 7
-      const airGap = 2
+      const { maxRock, airGap } = tunnelImmerge(bankAlt - ceilBotAlt)
       let rx = midX
       while (rx < midX + midW) {
         const seg = Math.min(maxRock, midX + midW - rx)
@@ -1960,7 +2013,13 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       // le tunnel se retrouvait donc tout au fond, et plonger l'atteindre coûtait `bankAlt` rangées —
       // trente sur un module d'entrée haute, soit bien plus qu'une apnée. On l'accroche à la berge :
       // TUNNEL_NAGE rangées d'eau libre dessous, le tout dans la profondeur qu'un débutant peut plonger.
-      const ceilBotAlt = Math.max(2, Math.min(bankAlt - 2, bankAlt - PROFONDEUR_MOTIF + 1 + TUNNEL_NAGE))
+      // ⚠️ LE PLAFOND PEND PRÈS DE LA SURFACE, ET C'EST CE QUI FAIT LE « LONG U ». Demande du joueur :
+      // « je suis chaud d'avoir des passages longs en apnée, et c'est vraiment un looong U. Là je vois
+      // des W mais très peu de looong U. » La longueur qu'un souffle permet DÉPEND de la profondeur —
+      // il faut payer la descente et la remontée avant de payer la traversée. À sept rangées sous la
+      // berge, le budget ne laissait que quatre colonnes de nage ; à trois, il en laisse quatorze.
+      // Un tunnel PROFOND est donc forcément COURT : pour un long U, il faut le vouloir peu profond.
+      const ceilBotAlt = Math.max(2, Math.min(bankAlt - 2, bankAlt - PROFONDEUR_TUNNEL))
       const midX = wx + colW
       const midW = ww - 2 * colW
       const maxRock = 7
@@ -3965,6 +4024,11 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
           // et jamais un QUATRIÈME palier : la règle des trois étages vaut aussi pour nous
           if (occupe(x + dx, y) || occupe(x + dx, y - 1) || paliers(x + dx) >= 3) libre = false
         }
+        // ⚠️ ET LA MARCHE NE DOIT PAS COIFFER UNE FENTE. Posée pile entre deux colonnes de roche, elle
+        // referme le vide qui court dessous : une POCHE CLOSE, ce que le jeu s'interdit depuis qu'on en
+        // a compté cent quarante-deux. Le comblement des poches tourne AVANT cette passe et ne peut donc
+        // rien rattraper. Relevé sur enfer-3 après regravure — deux colonnes, trois rangées, invisibles.
+        if (occupe(x - 1, y + 1) && occupe(x + 2, y + 1)) libre = false
         if (libre) candidates.push({ x, y, w: 2, solid: true })
       }
       if (!libre || !candidates.length) continue
@@ -3977,6 +4041,70 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
         || apres.empiles > avant.empiles || apres.chaines > avant.chaines) {
         for (const m of posees) platforms.splice(platforms.indexOf(m), 1)
       }
+    }
+  }
+
+  // ─── UNE PLATEFORME ENFERMÉE DANS LA ROCHE N'EXISTE PAS ──────────────────────────────────────
+  //
+  // `LevelScene` refuse déjà de la DESSINER (« une plateforme entièrement noyée dans une dalle de roche
+  // est invisible et son corps est redondant »). Mais elle restait dans les données, et les validateurs
+  // la voyaient : `strictReach` la comptait comme « plateforme murée » — un défaut bien réel dans ses
+  // termes, sur une surface qui n'existe ni à l'écran ni sous les pieds.
+  //
+  // Le déclencheur a été l'allongement des tunnels immergés : une dalle de plafond qui passe de sept à
+  // seize colonnes finit par recouvrir une corniche voisine. On pourrait rogner la dalle — mais c'est
+  // la plateforme qui est de trop : personne ne peut s'y tenir, personne ne la voit. On l'efface, et le
+  // rendu comme la mesure disent enfin la même chose.
+  for (let i = platforms.length - 1; i >= 0; i--) {
+    const p = platforms[i]!
+    const noyee = rockBands.some((r) => r.x <= p.x && r.x + r.w >= p.x + p.w && r.y <= p.y && r.y + r.h > p.y)
+    if (noyee) platforms.splice(i, 1)
+  }
+
+  // ─── UNE PIERRE QUI NE TOUCHE RIEN NE TIENT À RIEN ───────────────────────────────────────────
+  //
+  // Retour du joueur, le troisième sur ce thème : « on a encore un problème graphique avec des pierres
+  // qui volent (exemple le motif où y a une échelle qui descend et des pierres à cassser à droite pour
+  // aller prendre un coffre, ça clairement ça vole) ».
+  //
+  // ⚠️ LA PASSE DES SOCLES NUS NE POUVAIT PAS LES VOIR, et c'est ce qui rendait le défaut increvable.
+  // Elle traque la pierre qui MONTE DU SOL sans rien porter — un pilier. Ici c'est l'inverse : une
+  // masse en L'AIR, sans appui dessous, sans coiffe dessus, et sans rien sur les côtés. Elle naît
+  // souvent de cette passe-là : on supprime un mur de grotte devenu inutile, et le plafond qu'il tenait
+  // latéralement reste suspendu. Corriger un défaut en fabriquait un autre, deux passes plus loin.
+  //
+  // Le critère est donc le CONTACT, sur les quatre côtés : une dalle collée à quoi que ce soit se lit
+  // comme une avancée, un surplomb, un plafond de couloir. Une dalle qui ne touche rien ne se lit pas,
+  // elle flotte. Quatre-vingt-dix-neuf relevées.
+  //
+  // ⚠️ ON BOUCLE JUSQU'À STABILITÉ : retirer une masse peut en isoler une autre qui s'appuyait dessus.
+  // Une seule passe laisserait la deuxième couche, et le joueur reviendrait dire « ça continue ».
+  {
+    const pleinEn = (x: number, y: number): boolean =>
+      y <= 0 // le TOIT du monde est plein, comme son sol : une dalle qui y pend est un plafond, pas une pierre en l'air
+      || y >= groundRow
+      || rockBands.some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h)
+      || breakables.some((b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h)
+      || platforms.some((p) => x >= p.x && x < p.x + p.w && p.y === y)
+    // ⚠️ UN PLAFOND IMMERGÉ NE FLOTTE PAS, IL EST SOUS L'EAU — et c'est toute la mécanique du « long U ».
+    // Il pend au milieu d'une cuve, sans rien au-dessus ni en dessous que de l'eau : au critère du
+    // contact il est parfaitement isolé. L'oublier ici SUPPRIMAIT les tunnels de plongée des trois
+    // motifs de grotte noyée, sans qu'aucun autre test ne s'en aperçoive.
+    const sousLEau = (r: { x: number; y: number; w: number; h: number }) =>
+      hazards.some((h) => h.kind === 'water' && r.x < h.x + h.w && r.x + r.w > h.x
+        && r.y + r.h > (h.top ?? 0) && r.y < (h.top ?? 0) + (h.h ?? 0))
+    const toucheQuelqueChose = (r: { x: number; y: number; w: number; h: number }): boolean => {
+      if (sousLEau(r)) return true
+      for (let x = r.x; x < r.x + r.w; x++) if (pleinEn(x, r.y + r.h) || pleinEn(x, r.y - 1)) return true
+      for (let y = r.y; y < r.y + r.h; y++) if (pleinEn(r.x - 1, y) || pleinEn(r.x + r.w, y)) return true
+      return false
+    }
+    for (let tour = 0; tour < 4; tour++) {
+      const avant = rockBands.length
+      for (let i = rockBands.length - 1; i >= 0; i--) {
+        if (!toucheQuelqueChose(rockBands[i]!)) rockBands.splice(i, 1)
+      }
+      if (rockBands.length === avant) break
     }
   }
 

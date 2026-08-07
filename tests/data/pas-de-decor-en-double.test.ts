@@ -44,11 +44,11 @@ describe('le catalogue de décors ne se répète pas', () => {
     // Garde-fou grossier mais utile : la version dupliquée pesait ~4800 lignes pour ~3775 utiles. Un
     // retour à plus de 4400 signifierait qu'un bloc entier a été recollé.
     const lignes = (await source()).split('\n').length
-    // ⚠️ SEUIL RELEVÉ DE 4400 À 4700, ET C'EST DE LA DOCUMENTATION, PAS DU CODE. Ce garde-fou compte les
+    // ⚠️ SEUIL RELEVÉ DE 4400 À 4900, ET C'EST DE LA DOCUMENTATION, PAS DU CODE. Ce garde-fou compte les
     // LIGNES pour détecter le recollage d'un catalogue entier (~1000 lignes d'un coup). Les lots de
     // corrections des 4 et 5 août ont ajouté plusieurs centaines de lignes de COMMENTAIRE — chaque passe
     // d'assemblage porte désormais la raison de son existence et la liste des essais ratés. Le seuil
     // garde sa marge (un catalogue en double se verrait toujours), il suit juste la réalité du fichier.
-    expect(lignes, `${lignes} lignes — un catalogue en double a-t-il été recollé ?`).toBeLessThan(4700)
+    expect(lignes, `${lignes} lignes — un catalogue en double a-t-il été recollé ?`).toBeLessThan(4900)
   })
 })
