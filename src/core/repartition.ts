@@ -148,16 +148,21 @@ export interface PointToile { x: number; y: number }
 /**
  * Sommets du polygone de pondération, dans l'ordre de `STATS`, sur un cercle de rayon `rayon`.
  *
- * ⚠️ L'ÉCHELLE EST RELATIVE À LA PLUS GROSSE PART, PAS À 100 %. Sur un personnage réparti 40/30/20/10,
- * une toile calée sur 100 % serait un petit point au centre : illisible, et faussement modeste. En
- * calant la plus grosse part sur le bord, la FORME se lit — c'est elle qui dit « bretteur » ou
- * « arcaniste », pas la taille.
+ * ⚠️ LE DÉNOMINATEUR EST LE TOTAL DES POINTS AFFECTÉS, PAS LA PLUS GROSSE PART. La première version
+ * calait la plus grosse branche sur le bord, pour que la forme remplisse la toile ; le joueur a tranché
+ * l'inverse : « la toile d'araignée, le dénominateur du pourcentage, c'est le nombre total de points
+ * assignés, et pas la dimension où il y a le max ».
+ *
+ * Il a raison, et c'est plus qu'une question d'échelle : normaliser sur le maximum rend la toile
+ * MENTEUSE. Un perso 40/30/20/10 et un perso 100/75/50/25 dessinent alors EXACTEMENT la même figure, et
+ * surtout la plus grosse branche touche toujours le bord — quelle que soit sa part. On lisait donc
+ * « cette stat est au plafond » alors qu'elle pouvait valoir 26 %. Rapportée au total, la figure dit ce
+ * que le chiffre affiché à côté d'elle dit déjà : la part réelle, sur cent.
  */
 export function pointsToile(pct: Record<StatId, number>, cx: number, cy: number, rayon: number): PointToile[] {
-  const max = Math.max(1, ...STATS.map((s) => pct[s.id] ?? 0))
   return STATS.map((s, i) => {
     const angle = -Math.PI / 2 + (i * 2 * Math.PI) / STATS.length
-    const r = (rayon * (pct[s.id] ?? 0)) / max
+    const r = (rayon * (pct[s.id] ?? 0)) / 100
     return { x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r }
   })
 }

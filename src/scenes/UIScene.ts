@@ -143,10 +143,17 @@ export class UIScene extends Phaser.Scene {
     // compétences vit en haut à droite, là où l'on gère les compétences ; celui-ci se tient contre les
     // barres, là où l'on regarde ses PV — c'est en voyant sa vie qu'on pense à la renforcer.
     // Toucher la pastille ouvre la page STAT sans quitter le terrain (il DORT, cf. openStats).
-    this.statBadge = this.add.container(L(BAR_W + 34), 34).setDepth(61)
-    const statBg = this.add.circle(0, 0, 16, 0x4dd0e1, 0.97).setStrokeStyle(2, 0x00464a)
-    this.statBadgeText = this.add.text(0, 0, '', { fontSize: '14px', color: '#00272b', fontStyle: 'bold' }).setOrigin(0.5)
-    const statFleche = this.add.text(-18, 0, '◀', { fontSize: '16px', color: '#4dd0e1', fontStyle: 'bold', stroke: '#00272b', strokeThickness: 3 }).setOrigin(1, 0.5)
+    // ⚠️ UNE PASTILLE AVEC UN CHIFFRE DEDANS NE DIT PAS CE QU'ELLE EST. Retour du joueur : « la notif
+    // pour les stats est pas claire. Mets la même couleur que la notif pour les compétences et tu écris
+    // "Points Stats à attribuer" ». Il a raison sur les deux points, et ils tiennent ensemble : un rond
+    // cyan portant « 3 » demande au joueur de DEVINER, là où le bouton Compétences, lui, s'écrit en
+    // toutes lettres. Deux notifications qui veulent dire la même chose — « tu as des points, viens les
+    // dépenser » — ne doivent pas se présenter de deux façons différentes, sinon la seconde passe pour
+    // autre chose. Même jaune, même noir, et la phrase en clair.
+    this.statBadge = this.add.container(L(HUD_LEFT.statBadge.x), HUD_LEFT.statBadge.y + HUD_LEFT.statBadge.h / 2).setDepth(61)
+    this.statBadgeText = this.add.text(12, 0, '', { fontSize: '13px', color: '#3a2600', fontStyle: 'bold' }).setOrigin(0, 0.5)
+    const statBg = this.add.rectangle(0, 0, HUD_LEFT.statBadge.w, HUD_LEFT.statBadge.h, 0xffca28, 0.97).setOrigin(0, 0.5).setStrokeStyle(2, 0x7a4f00)
+    const statFleche = this.add.text(-4, 0, '★', { fontSize: '16px', color: '#ffca28', fontStyle: 'bold', stroke: '#3a2600', strokeThickness: 3 }).setOrigin(1, 0.5)
     this.statBadge.add([statFleche, statBg, this.statBadgeText])
     statBg.setInteractive({ useHandCursor: true }).on('pointerdown', () => { if (this.statBadge.visible) this.openStats() })
     this.statBadge.setVisible(false)
@@ -391,7 +398,7 @@ export class UIScene extends Phaser.Scene {
     // donner leur propre pastille et leur propre écran.
     if (this.statBadge) {
       this.statBadge.setVisible(p.statPoints > 0)
-      if (p.statPoints > 0) this.statBadgeText.setText(`${p.statPoints}`)
+      if (p.statPoints > 0) this.statBadgeText.setText(`${p.statPoints} Points Stats à attribuer`)
     }
     this.spBadge.setVisible(false) // plus de pastille jaune SÉPARÉE (retour user)
     // À la place : le BOUTON « Compétences » devient JAUNE + CLIGNOTANT tant qu'il reste des points.

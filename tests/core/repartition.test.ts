@@ -106,14 +106,28 @@ describe('répartition des stats', () => {
 
   // ── LA TOILE ───────────────────────────────────────────────────────────────────────────────
   //
-  // ⚠️ L'ÉCHELLE EST RELATIVE À LA PLUS GROSSE PART, PAS À 100 %. Sur un perso réparti 40/30/20/10, une
-  // toile calée sur 100 % serait un petit point au centre : illisible, et faussement modeste. C'est la
-  // FORME qui dit « bretteur » ou « arcaniste », pas la taille.
-  it('la plus grosse part touche le bord, les autres sont dedans', () => {
+  // ⚠️ LE DÉNOMINATEUR EST LE TOTAL DES POINTS, PAS LA PLUS GROSSE PART. Le joueur a tranché :
+  // « la toile d'araignée, le dénominateur du pourcentage, c'est le nombre total de points assignés, et
+  // pas la dimension où il y a le max ». Normaliser sur le maximum rendait la toile MENTEUSE — la plus
+  // grosse branche touchait le bord quelle que soit sa part, et 40/30/20/10 dessinait exactement la
+  // même figure que 100/75/50/25.
+  it('chaque branche vaut sa part sur cent, pas sa part sur la plus grosse', () => {
     const pts = pointsToile(pourcentages(r(4, 3, 2, 1)), 0, 0, 100)
     const rayons = pts.map((p) => Math.hypot(p.x, p.y))
-    expect(Math.max(...rayons)).toBeCloseTo(100, 5)
+    // 4/10 → 40 %, donc 40 unités de rayon sur 100. La plus grosse branche NE touche PAS le bord.
+    expect(rayons[0]).toBeCloseTo(40, 5)
+    expect(Math.max(...rayons), 'une branche touche encore le bord').toBeLessThan(100)
     for (const rr of rayons) expect(rr).toBeLessThanOrEqual(100.001)
+  })
+
+  // ⚠️ ET DEUX PERSOS DE MÊME FORME MAIS D'AMPLEUR DIFFÉRENTE DOIVENT SE DISTINGUER... non : c'est
+  // l'inverse qu'on veut. La toile montre une PONDÉRATION, en pourcentage — 4/3/2/1 et 40/30/20/10 sont
+  // le même perso réparti, et ils dessinent donc la même figure. Ce qui change désormais, c'est qu'une
+  // part de 40 % se lit comme 40 % et non comme « le maximum ».
+  it('la figure ne dépend que des proportions', () => {
+    const a = pointsToile(pourcentages(r(4, 3, 2, 1)), 0, 0, 100)
+    const b = pointsToile(pourcentages(r(40, 30, 20, 10)), 0, 0, 100)
+    a.forEach((p, i) => { expect(p.x).toBeCloseTo(b[i]!.x, 5); expect(p.y).toBeCloseTo(b[i]!.y, 5) })
   })
 
   it('aucun sommet ne sort du cadre, même avec une répartition extrême', () => {

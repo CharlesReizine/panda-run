@@ -35,6 +35,16 @@ export const HUD_LEFT = {
   buffPill: { x: 12, y: 120, w: 104, h: 24 } as HudRect,
   // badge « points de compétence à dépenser » — n'apparaît que s'il en reste
   spBadge: { x: 40, y: 152, w: 152, h: 32 } as HudRect,
+  // PASTILLE « POINTS DE STAT » — n'apparaît que s'il en reste.
+  //
+  // ⚠️ ELLE EST ÉCRITE EN TOUTES LETTRES, DONC ELLE EST LARGE, DONC ELLE A UNE ZONE. Retour du joueur :
+  // « la notif pour les stats est pas claire, mets la même couleur que celle des compétences et écris
+  // "Points Stats à attribuer" ». Le rond de seize pixels tenait contre la barre de vie ; la phrase, non
+  // — posée là, elle passait sous le BANDEAU DE QUÊTE (x 320→640). Elle descend donc dans la colonne
+  // gauche, sous le bouton « Compétences » : même colonne, même jaune, l'une sous l'autre. Les deux
+  // notifications disent la même chose — « tu as des points, viens les dépenser » — et se ressemblent
+  // enfin assez pour qu'on les lise comme une paire.
+  statBadge: { x: 12, y: 192, w: 204, h: 28 } as HudRect,
   // BANDEAU DE QUÊTE EN COURS, en haut au CENTRE. Retour joueur : « pense aussi à un visuel en jeu pour
   // voir les quêtes en cours (ptet en haut de la fenêtre) [...] là le jeu incite pas trop à les faire ».
   // Le centre est le SEUL espace libre de la rangée haute : la colonne gauche porte la vie et l'XP, la

@@ -43,6 +43,7 @@ import { CastBar } from '../entities/cast-bar'
 import { skillSfx } from '../audio/skill-sfx'
 import { flammeGain, flammeIntervalle, flammeAudible, FLAMME_PORTEE } from '../core/flame-ambience'
 import { PORTEE_MENACE, lisser, tensionDe } from '../core/tension'
+import { coupsPortes, tuilesEntamees, COUPS_PAR_TUILE, type SourceDeCoup } from '../core/casse-pierre'
 
 // TRAMPOLINE : largeur à l'écran. 136 px ≈ 4,3 tuiles — d'abord porté à 108 (« est pas assez large,
 // fait ×3 »), puis élargi encore sur retour (« tu peux le faire un peu plus grand »). Seule la LARGEUR
@@ -98,7 +99,7 @@ const BIOME_TRACKS: Record<string, MusicTrack> = {
 // PIERRE FRAGILE : nombre d'impacts pour faire tomber UNE tuile. Trois, c'est le réglage qui dit
 // « fragilisée » sans dire « décorative » : on sent la résistance, on comprend au 1er coup (la tuile se
 // fissure à vue d'œil) et on n'y passe pas la journée. Surchargeable par motif via LevelDef.breakables[].coups.
-const PIERRE_FRAGILE_COUPS = 3
+const PIERRE_FRAGILE_COUPS = COUPS_PAR_TUILE
 
 // largeur de la barre de vie du boss (centrée sous son nom)
 const BOSS_BAR_W = 440
@@ -780,7 +781,7 @@ export class LevelScene extends Phaser.Scene {
       // fissure) ; à distance, c'est le déplacement jusqu'au mur qui fait le prix.
       const pierre = bObj as Phaser.Physics.Arcade.Sprite
       const proj = projObj as Projectile
-      this.frapperPierre(pierre, PIERRE_FRAGILE_COUPS)
+      this.frapperPierre(pierre, coupsPortes('projectile'))
       // une lame qui TRAVERSE (lancer d'épée) ne s'arrête pas au premier bloc : elle ouvre un couloir
       if (!proj.pierce) this.stopNetPierre(projObj, bObj)
     })
@@ -2859,7 +2860,7 @@ export class LevelScene extends Phaser.Scene {
       } else {
         // gros coup (rang inclus) : double croissant + tremblement de caméra
         this.slashFx(this.player.x + (this.player.facing * skill.range) / 2, this.player.y, skill.range, color, mult >= 2)
-        this.meleeHit(skill.range, mult)
+        this.meleeHit(skill.range, mult, 'competence-melee')
         // Câlin brutal : une volée de cœurs s'envole autour du point d'impact
         if (skill.id === 'calin-brutal') this.heartsFx(this.player.x + this.player.facing * 30, this.player.y)
       }
@@ -2886,6 +2887,10 @@ export class LevelScene extends Phaser.Scene {
           prop.takeDamage(1)
         }
       }
+      // ⚠️ ET LA PIERRE, QUE LA ZONE NE TOUCHAIT TOUT SIMPLEMENT PAS. Elle blessait les monstres, brisait
+      // les tonneaux, et traversait un mur de briques sans l'entamer : le décor annonçait au joueur que
+      // sa compétence n'avait servi à rien. Elle pulvérise désormais ce qu'elle couvre.
+      this.pulveriserPierres(this.player.x, this.player.y, skill.range, 'competence-zone')
       this.aoeRing(this.player.x, this.player.y, skill.range, color, true)
     } else if (skill.kind === 'projectile' && skill.homing) {
       // Flèche AUTOGUIDÉE : chaîne homing à travers murs/terrain (nombre de cibles = rang).
@@ -3096,6 +3101,10 @@ export class LevelScene extends Phaser.Scene {
     const reach = 520, band = 130
     this.spawnUltBolt(px - reach, py - reach, px + reach, py + reach, band, dmg, hit, 40) // « \ »
     this.spawnUltBolt(px + reach, py - reach, px - reach, py + reach, band, dmg, hit, 200) // « / » (décalé → croisement)
+    // ⚠️ ET LA PIERRE AUSSI. Une ultime de sabreur qui zèbre l'écran de deux éclairs et laisse un mur de
+    // briques intact dit au joueur que sa plus grosse compétence est un feu d'artifice. Les éclairs sont
+    // diagonaux et se croisent : le disque qui les englobe est la seule forme honnête ici.
+    this.pulveriserPierres(px, py, band * 2, 'competence-melee')
   }
 
   // Un grand éclair bleu diagonal qui se TRACE lentement (polyligne jaggée dessinée progressivement),
@@ -3175,7 +3184,7 @@ export class LevelScene extends Phaser.Scene {
       this.flashScreen(color, 0.22, 120)
       this.screenShake(0.012, 220)
       this.hitStop(110)
-      this.meleeHit(skill.range * 1.3, mult)
+      this.meleeHit(skill.range * 1.3, mult, 'competence-melee')
       // la charge est finie : on rend la gravité → le panda retombe depuis sa hauteur de frappe
       if (airborne) this.player.endChargeLock()
     })
@@ -4289,6 +4298,10 @@ export class LevelScene extends Phaser.Scene {
       const prop = obj as Prop
       if (prop.active && Math.abs(prop.y - cy) <= thick && Math.abs(prop.x - cx) <= hReach) prop.takeDamage(1)
     }
+    // la pierre cède sur les DEUX bras — même forme que pour les monstres, pas un disque commode
+    this.casserPierresSi((bx, by) =>
+      (Math.abs(by - cy) <= thick && Math.abs(bx - cx) <= hReach)
+      || (Math.abs(bx - cx) <= thick && Math.abs(by - cy) <= vReach), 'competence-melee')
     // ── CROIX DIVINE : bras de lumière ÉNORMES (dimensionnés sur la portée) + cœur blanc éclatant,
     //    god-rays radiaux, halo additif et gros flash. Doit crier « sacré ».
     const hBar = this.add.rectangle(cx, cy, hReach * 2, thick, 0xfff3c0).setDepth(8).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0)
@@ -4398,6 +4411,8 @@ export class LevelScene extends Phaser.Scene {
           hit = true
         }
       }
+      // l'aura ronge aussi la pierre qu'elle enveloppe : elle bat en continu, elle finit par percer
+      this.pulveriserPierres(this.player.x, this.player.y, cfg.radius, 'competence-zone')
       // éclats d'épines radiaux
       for (let i = 0; i < 3; i++) {
         const a = Phaser.Math.FloatBetween(0, Math.PI * 2)
@@ -4691,6 +4706,27 @@ export class LevelScene extends Phaser.Scene {
   }
 
   /** Tuiles de pierre fragile à portée de la frappe en cours (mêmes règles d'allonge que les monstres). */
+  /**
+   * Casse la pierre fragile là où la compétence PORTE VRAIMENT.
+   *
+   * ⚠️ CHAQUE COMPÉTENCE DÉCRIT SA PROPRE FORME, ET C'EST INDISPENSABLE. Un disque commode aurait fait
+   * éclater, sous la Grand-croix, des briques situées au-dessus et en dessous des bras de la croix — là
+   * où le joueur voit très bien qu'il n'y a rien. On réutilise donc le test qui décide déjà quels
+   * MONSTRES sont touchés : la pierre cède exactement là où le coup passe, ni plus ni moins.
+   */
+  private casserPierresSi(touche: (x: number, y: number) => boolean, source: SourceDeCoup) {
+    const coups = coupsPortes(source)
+    for (const obj of [...this.pierresFragiles.getChildren()]) {
+      const b = obj as Phaser.Physics.Arcade.Sprite
+      if (b.active && touche(b.x, b.y)) this.frapperPierre(b, coups)
+    }
+  }
+
+  /** Casse toute la pierre fragile dans un DISQUE — le geste des compétences de zone. */
+  private pulveriserPierres(x: number, y: number, rayon: number, source: SourceDeCoup) {
+    this.casserPierresSi((bx, by) => Phaser.Math.Distance.Between(x, y, bx, by) <= rayon, source)
+  }
+
   private pierresAPortee(reach: number): Phaser.Physics.Arcade.Sprite[] {
     const px = this.player.x, py = this.player.y, f = this.player.facing
     const out: Phaser.Physics.Arcade.Sprite[] = []
@@ -4701,7 +4737,7 @@ export class LevelScene extends Phaser.Scene {
     return out
   }
 
-  meleeHit(reach: number, multiplier: number) {
+  meleeHit(reach: number, multiplier: number, source: SourceDeCoup = 'attaque') {
     const px = this.player.x, py = this.player.y, f = this.player.facing
     const atk = this.player.stats.atk * this.player.outgoingMult()
     const flaming = this.player.isFlaming() // Épée enflammée : les coups appliquent une brûlure
@@ -4723,10 +4759,16 @@ export class LevelScene extends Phaser.Scene {
     // TOUTE frappe au corps à corps entame la pierre, quelle que soit la compétence qui l'a portée.
     // Une seule tuile par frappe — celle du haut, la plus proche du visage du panda — sinon un coup
     // d'estoc large ouvrirait tout le mur d'un seul geste.
+    // ⚠️ UNE ATTAQUE ÉBRÈCHE, UNE COMPÉTENCE DÉTRUIT (cf. core/casse-pierre). Retour du joueur : « je
+    // veux que les skills cassent bien les briques globalement ». Le premier correctif n'avait traité
+    // que les tirs ; porté par une compétence, le corps à corps continuait d'ébrécher UNE tuile d'un
+    // TIERS — on dépensait une ultime pour fissurer une brique.
     const pierres = this.pierresAPortee(reach)
     if (pierres.length) {
       pierres.sort((a, b) => Math.abs(a.y - py) - Math.abs(b.y - py))
-      this.frapperPierre(pierres[0]!, 1)
+      const coups = coupsPortes(source)
+      if (tuilesEntamees(source) === 'toutes') for (const pierre of pierres) this.frapperPierre(pierre, coups)
+      else this.frapperPierre(pierres[0]!, coups)
     }
   }
 

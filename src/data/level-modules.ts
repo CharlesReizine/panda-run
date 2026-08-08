@@ -4501,6 +4501,133 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     }
   }
 
+  // ─── LE PIED DU T : UNE ÉCHELLE S'APPUIE SUR DE LA PIERRE, ELLE NE PEND PAS DANS LE VIDE ──────
+  //
+  // Demande du joueur : « sur mes motifs sauts d'échelle en échelle, j'ai des échelles qui volent et ça
+  // c'est mort. Je veux de la pierre partout pour faire un peu comme un T. »
+  //
+  // ⚠️ COIFFER LE SOMMET NE SUFFISAIT PAS, ET C'EST L'AUTRE MOITIÉ DU MÊME DÉFAUT. La passe précédente
+  // répond à « l'échelle ne débouche sur rien » ; celle-ci répond à « rien ne la PORTE ». Un palier
+  // d'échelle est une barre horizontale suspendue en l'air, avec un montant filiforme dessous : l'œil
+  // cherche ce qui tient l'ensemble et ne trouve rien. Le joueur décrit exactement la forme qui manque —
+  // la barre du T existe déjà, c'est le PIED qui n'a jamais été posé.
+  //
+  // ⚠️ LE PILIER VA À CÔTÉ DU MONTANT, PAS DEDANS. Une pierre pleine DANS la colonne de l'échelle
+  // boucherait l'échelle elle-même : on ne grimperait plus. On le pose donc dans la colonne voisine, du
+  // CÔTÉ où le palier s'étend — c'est-à-dire sous le palier, jamais du côté par où l'on arrive. Vu de
+  // face, ça donne la seule chose que l'œil accepte : une échelle plaquée contre un mur de pierre.
+  //
+  // ⚠️ ET LA PASSE SE TIENT TOUT À LA FIN, APRÈS QUE PLUS RIEN NE BOUGE. Posée au milieu du montage,
+  // elle a produit sur enfer-4 une poche close de DEUX MILLE SEPT CENTS cases que son propre garde-fou
+  // n'a pas vue — parce que la passe « terre ancrée », qui tourne APRÈS, transforme des corniches
+  // traversables en vrais murs : le passage que le pilier laissait ouvert se refermait derrière lui. La
+  // leçon est déjà écrite un peu plus haut pour les culs-de-sac, et c'est la même : mesurer en cours de
+  // route, c'est juger un terrain qui va encore changer.
+  //
+  // ⚠️ ET SOUS FILET, PARCE QU'UN PILIER EST UN MUR. Il barre la rangée du pied entre l'échelle et le
+  // reste du palier. Dans les motifs d'escalade c'est sans effet — on arrive par l'autre côté et on
+  // monte, c'est tout le propos — mais rien ne garantit qu'aucun terrain ne passait par là. On mesure
+  // donc avant, on mesure après, et au moindre recul on retire TOUS les piliers du terrain.
+  {
+    const sondePilier = () => ({ ...geo(), breakables, spawns: safeSpawns })
+    const clef = (v: { x: number; y: number }) => `${v.x},${v.y}`
+    // ⚠️ MESURÉE AVANT LA POSE, SINON ELLE NE MESURE RIEN. Prise après, la liste des poches « d'avant »
+    // contenait déjà celles que les piliers venaient de créer : le retrait chirurgical ne trouvait donc
+    // jamais de coupable, et le terrain reculait en entier comme s'il n'existait pas.
+    const avantPoches = new Set(sealedVoids(sondePilier()).map(clef))
+    const avant = {
+      poches: sealedVoids(sondePilier()).length,
+      murés: monstersInRock(sondePilier()).length,
+      pieges: deadEndSurfaces(sondePilier()).length,
+    }
+    const piliers: { x: number; y: number; w: number; h: number; solid: true }[] = []
+    const plein = (x: number, y: number) =>
+      rockBands.some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h)
+      || platforms.some((p) => x >= p.x && x < p.x + p.w && p.y === y)
+    for (const l of ladders) {
+      // le palier de sortie : la corniche posée une ou deux rangées sous le sommet, qui couvre le montant
+      const pal = platforms.find((p) => p.y - l.y >= 1 && p.y - l.y <= 2 && l.x >= p.x && l.x < p.x + p.w)
+      if (!pal) continue
+      // de quel côté le palier s'étend-il ? le pilier va là, donc SOUS le palier et jamais sur l'accès.
+      const versLaDroite = pal.x + pal.w - 1 - l.x
+      const versLaGauche = l.x - pal.x
+      if (versLaDroite < 1 && versLaGauche < 1) continue
+      const px = versLaDroite >= versLaGauche ? l.x + 1 : l.x - 1
+      if (px < 0 || px >= totalWidth) continue
+      const hautPilier = pal.y + 1 // juste sous le palier
+      const solPied = l.y + l.h // la rangée où repose le pied de l'échelle
+      if (solPied - hautPilier < 1) continue
+      // ⚠️ ON NE BOUCHE NI L'EAU NI UN TROU. Une colonne de pierre plantée dans une cuve la vide de son
+      // sens, et un pilier suspendu au-dessus d'un vide serait la pierre volante qu'on vient de chasser.
+      if (!plein(px, solPied)) continue
+      if (hazards.some((hz) => px >= hz.x && px < hz.x + hz.w)) continue
+      if ((trampolines ?? []).some((t) => Math.abs(t.x - px) <= 1)) continue
+      const cases: { x: number; y: number; w: number; h: number; solid: true }[] = []
+      for (let y = hautPilier; y < solPied; y++) if (!plein(px, y)) cases.push({ x: px, y, w: 1, h: 1, solid: true })
+      if (!cases.length) continue
+      piliers.push(...cases)
+    }
+    if (piliers.length) {
+      rockBands.push(...piliers)
+      // ⚠️ UN PILIER SCELLE LE CREUX QU'IL BORDE, ET C'EST LE VRAI OBSTACLE. Premier jet : QUARANTE-SEPT
+      // terrains sur cinquante-huit reculaient, tous pour la même raison — l'espace sous le palier
+      // n'avait qu'une ouverture, du côté de l'échelle, et le pilier la referme. Renoncer là-dessus
+      // revenait à ne rien poser du tout : vingt-neuf échelles épaulées sur cinq cent quatre-vingt-treize.
+      //
+      // La réponse n'est pas de reculer mais de FINIR LE GESTE. Une poche que plus personne ne peut
+      // atteindre n'a aucune raison de rester creuse : on la remplit de pierre. Le joueur demandait « de
+      // la pierre partout » — c'est exactement ça, et le décor y gagne (un massif plein sous le palier
+      // plutôt qu'une alcôve invisible). On borne quand même : au-delà de quarante cases, ce n'est plus
+      // une alcôve mais une salle, et on préfère alors retirer les piliers du terrain.
+      const combles: { x: number; y: number; w: number; h: number; solid: true }[] = []
+      for (const v of sealedVoids(sondePilier())) {
+        if (avantPoches.has(clef(v))) continue
+        if (v.cells > 40) continue
+        // ⚠️ ET JAMAIS SUR UN MONSTRE. Combler une poche habitée l'emmure vivant — vingt-trois cas au
+        // premier essai. Une poche close qui contient un spawn n'est pas une alcôve oubliée, c'est une
+        // salle dont le monstre prouve à lui seul qu'elle comptait pour quelqu'un.
+        // ⚠️ ON ÉCARTE LA COLONNE ENTIÈRE, PAS LA CASE. Un spawn ne porte pas de rangée dans la donnée
+        // (`spawnFeetRow` la calcule au vol depuis le relief) : comparer les y ne comparait rien, et les
+        // vingt-trois monstres emmurés sont passés comme si le garde-fou n'existait pas. On refuse donc
+        // toute poche qui touche une colonne habitée — grossier, et c'est le bon grain ici.
+        if (v.runs.some((run) => safeSpawns.some((sp) => sp.x >= run.x - 1 && sp.x <= run.x + run.w))) continue
+        for (const run of v.runs) for (let x = run.x; x < run.x + run.w; x++) {
+          combles.push({ x, y: run.y, w: 1, h: 1, solid: true })
+        }
+      }
+      if (combles.length) { rockBands.push(...combles); piliers.push(...combles) }
+      // ⚠️ ET SI UNE POCHE RÉSISTE, ON RETIRE LE PILIER FAUTIF, PAS TOUS LES AUTRES. Une poche habitée
+      // ne se comble pas (on emmurerait son monstre) : elle reste close, et le recul par terrain entier
+      // jetait alors les quarante piliers du terrain pour une seule alcôve — trente-neuf terrains
+      // sacrifiés pour trente-neuf poches. On enlève donc la pierre qui borde la poche, et elle seule ;
+      // le reste du terrain garde ses appuis. Deux tours suffisent : retirer un pilier peut en révéler
+      // un autre, mais la chaîne ne va pas plus loin.
+      for (let tour = 0; tour < 2; tour++) {
+        const restantes = sealedVoids(sondePilier()).filter((v) => !avantPoches.has(clef(v)))
+        if (!restantes.length) break
+        const coupables = piliers.filter((c) => restantes.some((v) =>
+          c.x >= v.x - 1 && c.x <= v.x + v.w && c.y >= v.y - 1 && c.y <= v.y + v.h))
+        if (!coupables.length) break
+        for (const c of coupables) {
+          const i = rockBands.indexOf(c); if (i >= 0) rockBands.splice(i, 1)
+          const j = piliers.indexOf(c); if (j >= 0) piliers.splice(j, 1)
+        }
+      }
+      const apres = {
+        poches: sealedVoids(sondePilier()).length,
+        murés: monstersInRock(sondePilier()).length,
+        pieges: deadEndSurfaces(sondePilier()).length,
+      }
+      if (apres.poches > avant.poches || apres.murés > avant.murés || apres.pieges > avant.pieges) {
+        for (const c of piliers) {
+          const i = rockBands.indexOf(c)
+          if (i >= 0) rockBands.splice(i, 1)
+        }
+      }
+    }
+  }
+
+
   return {
     id: opts.id, name: opts.name, biome: opts.biome,
     widthTiles: totalWidth, heightTiles,
