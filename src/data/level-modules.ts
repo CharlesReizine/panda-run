@@ -838,6 +838,17 @@ function buildModule(m: Module, rng: () => number, w: number, entryAlt: number):
       }
 
       const bergeD = Math.max(3, w - xFin)
+      // ⚠️ LES DEUX BERGES SONT À NIVEAU, ET C'EST UNE CONTRAINTE, PAS UN CHOIX. La variante EAU est
+      // mesurément contournable : la nappe affleure les berges, donc on saute dedans, on traverse à la
+      // brasse et on ressort en face. J'ai essayé de surélever la berge d'arrivée — à +2 on remonte
+      // encore (sortir de l'eau vaut un saut, soit quatre rangées), et à +5 l'obstacle devient bien
+      // obligatoire mais DEUX invariants tombent : le rebond ne l'atteint plus, et le jeu exige des
+      // « rebords de plan d'eau À NIVEAU ». Un plan d'eau dont les berges ne sont pas à la même hauteur
+      // n'est pas un plan d'eau, c'est une erreur de rendu.
+      //
+      // La traversée à la nage est donc INHÉRENTE à la variante eau, et c'est consigné plutôt que
+      // maquillé (cf. tests/data/trampolines-utiles). Le tapis y reste la route évidente et rapide ;
+      // il n'y est pas la seule.
       p.platforms.push({ x: xFin, alt, w: bergeD })
       // ⚠️ UN TAPIS SUR CHAQUE BERGE. Sans celui du retour, la berge d'arrivée est un PIÈGE SANS RETOUR :
       // on traverse, et plus rien ne ramène. C'est aussi la bonne lecture de jeu — un obstacle se

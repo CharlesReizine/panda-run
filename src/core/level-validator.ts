@@ -245,6 +245,18 @@ export function strictReach(level: LevelDef): StrictReach {
       for (let x = Math.max(0, r.x); x < Math.min(W, r.x + r.w); x++) blocked[x] = true
     }
   }
+  // ⚠️ ET UN TROU MORTEL COUPE LE SOL, AU MÊME TITRE QU'UN MUR. Le modèle « strict » ne découpait la
+  // bande de sol qu'aux murs de roche : il TRAVERSAIT À PIED tous les vides du terrain. C'est un angle
+  // mort de premier ordre — c'est ce modèle qui répond à « ce trampoline est-il la seule solution » et
+  // qui garde la sélection des graines, et il tenait pour marchable ce qui tue.
+  //
+  // Il s'est vu à l'usage : les quatre motifs de TRAVERSÉE, bâtis autour de six tuiles de vide,
+  // ressortaient « contournables » — le modèle contournait en marchant dans le trou. En isolation, avec
+  // les deux berges seules, il répondait juste : c'est bien le sol du monde, tenu pour continu, qui
+  // fabriquait le détour.
+  for (const g of level.gaps ?? []) {
+    for (let x = Math.max(0, g.x); x < Math.min(W, g.x + g.w); x++) blocked[x] = true
+  }
   const groundSegs: Plat[] = []
   for (let x = 0, s = -1; x <= W; x++) {
     if (x < W && !blocked[x]) { if (s < 0) s = x }
@@ -1606,6 +1618,34 @@ export function marchesInfranchissables(level: LevelDef): MurProblem[] {
       else if (plusHaut === null && pleinSous(x + d, devant)) plusHaut = devant
     }
     if (!passe && plusHaut !== null) out.push({ x: x + 1, de: ici, a: plusHaut, hauteur: ici - plusHaut })
+  }
+  return out
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// UN OBSTACLE À TRAMPOLINE DOIT ÊTRE INFRANCHISSABLE SANS SES TAPIS — TOUS SES TAPIS
+//
+// ⚠️ `trampolinesFacultatifs` RETIRE LES ENGINS UN PAR UN, ET C'EST SON ANGLE MORT. Les motifs de
+// TRAVERSÉE en posent DEUX, un par berge : retirer l'un laisse l'autre, on franchit quand même, et
+// chacun passe donc pour facultatif — huit tapis signalés sur cinq terrains alors que les huit sont
+// dans des motifs conçus autour d'eux. La question « ce tapis sert-il ? » n'a pas de réponse tapis par
+// tapis ; la vraie question est « cet OBSTACLE se contourne-t-il ? », et elle se pose sur le groupe.
+//
+// On retire donc tous les tapis d'une même portée et on regarde ce qui devient injoignable. C'est la
+// même expérience, à la bonne maille.
+export function obstaclesContournables(
+  level: LevelDef,
+  portees: { kind: string; x0: number; w: number }[],
+): { kind: string; x0: number; tapis: number }[] {
+  const tous = level.trampolines ?? []
+  if (!tous.length) return []
+  const base = strictReach({ ...level, trampolines: tous }).badPlats.length
+  const out: { kind: string; x0: number; tapis: number }[] = []
+  for (const m of portees) {
+    const dedans = tous.filter((t) => t.x >= m.x0 && t.x < m.x0 + m.w)
+    if (!dedans.length) continue
+    const sans = strictReach({ ...level, trampolines: tous.filter((t) => !dedans.includes(t)) }).badPlats.length
+    if (sans <= base) out.push({ kind: m.kind, x0: m.x0, tapis: dedans.length })
   }
   return out
 }
