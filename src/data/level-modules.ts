@@ -16,7 +16,7 @@
 //   monde = enveloppe des modules (souvent ~22-34 tuiles, pas de tour géante).
 
 import { canReach, canReachByBounce, ECART_MUR_TRAMPOLINE } from '../core/platforming'
-import { chainesContournables, CLAIR_TRAMPOLINE, deadEndSurfaces, marchesInfranchissables, maxSwimTiles, overStackedColumns, sealedVoids, unreachablePlatforms } from '../core/level-validator'
+import { chainesContournables, CLAIR_TRAMPOLINE, deadEndSurfaces, marchesInfranchissables, maxSwimTiles, monstersInRock, overStackedColumns, sealedVoids, unreachablePlatforms } from '../core/level-validator'
 import { breathMaxMs } from '../core/breath'
 import type { LevelDef } from './levels'
 import { MIN_LADDER_TILES, MAX_LADDER_TILES, maxJumpTiles, maxJumpGapPx, TILE } from '../core/platforming'
@@ -4342,6 +4342,84 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
       const apres = { pieges: deadEndSurfaces(sonde()).length, orphelines: unreachablePlatforms(sonde()).length }
       if (apres.pieges > avant.pieges || apres.orphelines > avant.orphelines) {
         for (const i of ouverts.slice().reverse()) gaps.splice(i, 1)
+      }
+    }
+  }
+
+  // ─── UN RECOIN OÙ L'ON NE TIENT PAS DEBOUT DEVIENT DE LA PIERRE ──────────────────────────────
+  //
+  // Demande du joueur : « regarde juste graphiquement s'il y a des terrains qui ont moins d'un saut
+  // d'écart. Et là c'est du terre → pierre. »
+  //
+  // ⚠️ « MOINS D'UN SAUT » EST TROP LARGE, ET LA MESURE LE DIT. Prise au pied de la lettre, la règle
+  // toucherait DEUX MILLE TROIS CENT TRENTE colonnes — le jeu virerait à la pierre. C'est exactement le
+  // piège déjà rencontré avec `solid`, qui aurait repeint deux mille cinq cents corniches de terre et
+  // qui a valu l'invention d'`ancree`.
+  //
+  // Le vrai défaut est plus étroit et se mesure : le panda fait DEUX rangées. Une corniche coiffée à UNE
+  // rangée n'est pas « un peu basse », elle est INUTILISABLE — on ne peut pas s'y tenir, elle ne sert
+  // qu'à cacher le sol et à donner l'impression d'un décor à moitié fondu. Deux cent une colonnes sur
+  // vingt-sept terrains. Deux rangées, elles, se traversent accroupi comme debout : on n'y touche pas.
+  //
+  // On comble donc en PIERRE plutôt que de retirer la corniche : retirer laisserait un trou dans une
+  // surface que le motif a voulue continue, alors que combler transforme le recoin en corps plein — ce
+  // que l'œil lit sans effort, et ce que le joueur a demandé mot pour mot.
+  // ⚠️ ET SOUS FILET DE SÉCURITÉ, PARCE QUE COMBLER PEUT MURER. Premier jet sans garde : deux poches
+  // closes de MILLE QUATRE CENT QUATRE-VINGT-DOUZE et SEPT CENT HUIT cases, et deux monstres enfermés
+  // dans la roche. La raison est évidente après coup — un recoin d'une rangée est parfois l'ENTRÉE d'une
+  // région, et le boucher scelle tout ce qu'il y a derrière. On mesure donc avant, on mesure après, et
+  // au moindre recul on retire tout ce qu'on vient de poser.
+  // ⚠️ AVEC LES VRAIS SPAWNS : `geo()` passe une liste VIDE (elle sert surtout aux mesures de relief),
+  // donc `monstersInRock` y répondait toujours zéro et le filet ne pouvait rien attraper. Deux monstres
+  // murés vivants sont passés à travers avant qu'on le voie.
+  const sondeRecoin = () => ({ ...geo(), breakables, spawns })
+  const avantRecoin = {
+    poches: sealedVoids(sondeRecoin()).length,
+    murés: monstersInRock(sondeRecoin()).length,
+    pieges: deadEndSurfaces(sondeRecoin()).length,
+  }
+  const posesRecoin: { x: number; y: number; w: number; h: number; solid: true }[] = []
+  // ⚠️ ON BOUCLE : combler un recoin en crée parfois un autre juste au-dessus (le nouveau plafond
+  // devient la dalle qu'on vient de poser). Une seule passe en laissait cent dix-sept sur deux cent un.
+  for (let tour = 0; tour < 3; tour++) {
+    const HAUTEUR_PANDA = 2
+    const combles: { x: number; y: number; w: number; h: number; solid: true }[] = []
+    for (const bas of platforms) {
+      for (let x = bas.x; x < bas.x + bas.w; x++) {
+        let plafond = -1
+        for (const p of platforms) {
+          if (p !== bas && x >= p.x && x < p.x + p.w && p.y < bas.y && p.y > plafond) plafond = p.y
+        }
+        for (const r of rockBands) {
+          if (x >= r.x && x < r.x + r.w && r.y + r.h - 1 < bas.y && r.y + r.h - 1 > plafond) plafond = r.y + r.h - 1
+        }
+        if (plafond < 0) continue
+        const libre = bas.y - plafond - 1
+        if (libre < 0 || libre >= HAUTEUR_PANDA) continue
+        // ⚠️ JAMAIS DANS UNE COLONNE D'ÉCHELLE : on y passe à la verticale, et la boucher enfermerait
+        // le grimpeur — le défaut que ce projet refuse depuis toujours.
+        if ((ladders ?? []).some((l) => l.x === x && bas.y >= l.y && bas.y <= l.y + l.h)) continue
+        for (let y = plafond + 1; y < bas.y; y++) {
+          if (!rockBands.some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h)) {
+            combles.push({ x, y, w: 1, h: 1, solid: true })
+          }
+        }
+      }
+    }
+    if (!combles.length) break
+    rockBands.push(...combles)
+    posesRecoin.push(...combles)
+  }
+  if (posesRecoin.length) {
+    const apres = {
+      poches: sealedVoids(sondeRecoin()).length,
+      murés: monstersInRock(sondeRecoin()).length,
+      pieges: deadEndSurfaces(sondeRecoin()).length,
+    }
+    if (apres.poches > avantRecoin.poches || apres.murés > avantRecoin.murés || apres.pieges > avantRecoin.pieges) {
+      for (const c of posesRecoin) {
+        const i = rockBands.indexOf(c)
+        if (i >= 0) rockBands.splice(i, 1)
       }
     }
   }
