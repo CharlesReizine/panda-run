@@ -51,7 +51,15 @@ const ROLE: Record<MobRole, { hp: number; atk: number; def: number }> = {
 // Une DÉF doublée ajoute donc de la durabilité PAR-DESSUS les PV, et l'élite dépasserait largement le
 // 3-4× demandé sans que ça se voie dans le chiffre de PV. On la garde à un cran modeste pour que la
 // durabilité réelle corresponde à l'intention. Verrouillé par tests/core/mob-stats.test.ts.
-const ELITE = { hp: 3.5, atk: 1.1, def: 1.3 }
+// ⚠️ L'ATK DE L'ÉLITE EST PASSÉE DE 1,1 À 1,6, ET LA RÈGLE A CHANGÉ AVEC. La consigne d'origine était
+// « un élite ne tape PAS monstrueusement plus fort — il a 3 à 4 fois plus de vie » ; le joueur l'a
+// révisée en chiffrant tout : « un mob normal, jamais sous 10 coups. Un élite c'est 6. » Un élite doit
+// donc frapper franchement plus fort, pas seulement encaisser — sinon il ne se distingue que par la
+// durée, et un combat long n'est pas un combat mémorable.
+// 1,6 est la valeur mesurée : à ×1,6 l'ATK d'un mob normal du même niveau, on tombe en six coups quand
+// on en tenait dix. Les PV restent à 3,5× — c'est ce qui en fait toujours un mini-boss et pas un mob
+// qui cogne.
+const ELITE = { hp: 3.5, atk: 1.6, def: 1.3 }
 
 // ─── DURCISSEMENT APRÈS LE NIVEAU 10 ────────────────────────────────────────────────────────────
 //
@@ -137,11 +145,15 @@ const PENTE_ATK = 0.03
 // baissant la marche haute : la cible des cinq coups était atteinte, la monotonie « plus haut niveau =
 // plus dangereux » était perdue. On garde donc une seule marche et on RALENTIT la pente au-delà de 30 :
 // la courbe s'aplatit vers la cible sans jamais redescendre.
-// ⚠️ LA COURBE EST DICTÉE PAR LE JOUEUR, POINT PAR POINT, et c'est elle qui commande — pas un
-// multiplicateur qu'on ajusterait à l'oreille. Après un premier calibrage à « cinq coups partout », il
-// a corrigé : « 10 du coup là c'est trop facile. Je veux bien une difficulté croissante, genre si je
-// reprends ton tableau : 14 → 10, 8, 7, 6, 5 et 4 à la fin. » Autrement dit : on meurt en quatorze
-// coups au niveau 5, en quatre au niveau 50, et la pente est CONTINUE entre les deux.
+// ⚠️ LA COURBE EST DICTÉE PAR LE JOUEUR, POINT PAR POINT, et elle a été REVUE DEUX FOIS — c'est
+// l'aller-retour qui l'a mise au point, pas un calcul. Premier jet : cinq coups partout. Il corrige :
+// « 14 → 10, 8, 7, 6, 5 et 4 à la fin ». On livre, il essaie, il corrige encore : « là le jeu est
+// peut-être un peu dur. Monte un peu moins vite la difficulté et ne descends JAMAIS sous 10 pour un mob
+// normal. Au début c'est 20 et ça descend gentiment jusqu'à 10. »
+//
+// C'est cette dernière version qui est encodée : vingt coups au début, dix à la fin, et un PLANCHER
+// qu'on ne franchit pas. Le plancher est la partie importante — sans lui, chaque tour de vis rendait la
+// fin de partie un peu plus mortelle sans que personne ne s'en aperçoive avant d'y jouer.
 //
 // ⚠️ C'EST L'ATK QUI EST CALIBRÉE, PAS LES PV. « Combien de coups pour mourir » ne dépend que des
 // dégâts reçus (atk du mob − déf du joueur) et des PV du joueur : les PV du MOB n'y entrent pas, ils
@@ -153,14 +165,22 @@ const PENTE_ATK = 0.03
 // (aucun équipement, aucun point réparti) de la classe attendue à ce niveau. Avec de l'équipement on
 // tient plus longtemps — c'est le sens même de la demande.
 const COUPS_CIBLES: { niveau: number; atk: number }[] = [
-  { niveau: 1, atk: 1 },
-  { niveau: 5, atk: 1.05 },   // 14 coups
-  { niveau: 10, atk: 2.0 },   // 10
-  { niveau: 15, atk: 2.2 },   // 8
-  { niveau: 20, atk: 3.75 },  // 7
-  { niveau: 30, atk: 4.05 },  // 6
-  { niveau: 40, atk: 4.5 },   // 5
-  { niveau: 50, atk: 5.35 },  // 4
+  // ⚠️ CES DEUX-LÀ SONT SOUS 1, ET C'EST VOULU : au tout début le mob frappe MOINS fort que sa courbe de
+  // base. C'est ce qu'il faut pour tenir vingt coups quand on n'a ni équipement ni points répartis.
+  { niveau: 1, atk: 0.92 },   // 20 coups
+  { niveau: 5, atk: 0.80 },   // 19
+  // ⚠️ UN POINT À 9, PARCE QUE LE CHANGEMENT DE CLASSE TOMBE À 10. Le novice de niveau 9 n'a pas encore
+  // reçu le bond de PV du sabreur : interpoler droit de 5 à 10 le faisait mourir en huit coups, sous le
+  // plancher promis. La courbe suit le joueur, y compris ses marches.
+  { niveau: 9, atk: 0.82 },   // 17 (dernier niveau novice)
+  { niveau: 10, atk: 1.4 },   // 17
+  { niveau: 15, atk: 1.45 },  // 15
+  // même raison qu'au niveau 9 : le sabreur de niveau 19 attend encore le bond du chevalier
+  { niveau: 19, atk: 1.20 },  // 14 (dernier niveau sabreur)
+  { niveau: 20, atk: 2.32 },  // 14
+  { niveau: 30, atk: 2.42 },  // 12
+  { niveau: 40, atk: 2.52 },  // 11
+  { niveau: 50, atk: 2.62 },  // 10 — le plancher demandé : « jamais sous 10 pour un mob normal »
 ]
 
 /** Interpolation linéaire entre les points de la courbe ; plate au-delà du dernier. */

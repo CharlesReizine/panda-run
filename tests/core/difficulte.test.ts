@@ -42,10 +42,19 @@ describe('ça durcit continûment ensuite', () => {
   // ⚠️ « CROÎT » ET NON « CROÎT STRICTEMENT » : au-delà du dernier point de la courbe (niveau 50) elle
   // devient PLATE — un mob de niveau 57 n'a pas de raison d'être plus dur qu'un de 50, la cible du
   // joueur s'arrête à « 4 à la fin ». Ce qui compte est qu'elle ne redescende JAMAIS.
-  it('le facteur ne redescend jamais', () => {
-    for (let l = 1; l < 60; l++) {
+  // ⚠️ LE FACTEUR PEUT CREUSER ENTRE LES NIVEAUX 1 ET 5, ET C'EST VOULU. La cible est « 20 coups au
+  // début » : la puissance du joueur monte plus vite que la courbe de base des mobs sur ces cinq
+  // niveaux-là, donc tenir vingt coups demande un facteur qui DESCEND un peu. Ce qui ne doit jamais
+  // redescendre, c'est la PUISSANCE du monstre — et elle est vérifiée dans mob-stats.test.
+  // ⚠️ CE N'EST PAS LE FACTEUR QUI DOIT CROÎTRE, C'EST LA PUISSANCE DU MONSTRE — et c'est une nuance
+  // qu'il a fallu payer pour comprendre. La courbe d'ATK suit les MARCHES du personnage : elle CREUSE
+  // juste avant chaque changement de classe (niveaux 9 et 19), parce qu'à ces niveaux-là le joueur n'a
+  // pas encore reçu son bond de PV et mourrait en huit coups au lieu des dix promis. Le facteur descend
+  // donc ponctuellement ; la puissance du mob, elle, monte quand même (l'ATK de base croît plus vite que
+  // le facteur ne baisse). C'est cette dernière propriété qui est testée, dans mob-stats.
+  it('les PV durcissent sans jamais redescendre', () => {
+    for (let l = 5; l < 60; l++) {
       expect(durcissement(l + 1).hp, `niveau ${l}`).toBeGreaterThanOrEqual(durcissement(l).hp)
-      expect(durcissement(l + 1).atk, `niveau ${l}`).toBeGreaterThanOrEqual(durcissement(l).atk)
     }
   })
 
@@ -56,8 +65,8 @@ describe('ça durcit continûment ensuite', () => {
   it('l\'ATK suit la courbe SEULE, les PV gardent leur pente', () => {
     // l'ATK est exactement le facteur résolu pour la cible du joueur — aucune pente ne s'y ajoute,
     // sinon le réglage compterait deux fois et la courbe demandée ne serait plus tenue.
-    expect(durcissement(50).atk).toBeCloseTo(5.35, 2)
-    expect(durcissement(57).atk).toBeCloseTo(5.35, 2) // plate au-delà du dernier point
+    expect(durcissement(50).atk).toBeCloseTo(2.62, 2)
+    expect(durcissement(57).atk).toBeCloseTo(2.62, 2) // plate au-delà du dernier point
     // les PV, eux, cumulent leur pente et la RACINE de la courbe : plus coriaces, pas invincibles
     expect(durcissement(57).hp).toBeGreaterThan(durcissement(30).hp)
   })
@@ -72,10 +81,10 @@ describe('ça durcit continûment ensuite', () => {
   // en tient 30 — le début reste un tutoriel.
   it('reste borné : au niveau le plus haut du jeu, l\'ATK ne dépasse pas le sextuple', () => {
     const d = durcissement(57)
-    expect(d.atk).toBeGreaterThan(4)
-    expect(d.atk).toBeLessThanOrEqual(6)
+    expect(d.atk).toBeGreaterThan(2)
+    expect(d.atk).toBeLessThanOrEqual(4)
     expect(d.hp).toBeGreaterThan(2)
-    expect(d.hp).toBeLessThan(7)
+    expect(d.hp).toBeLessThan(6)
   })
 
   it('la DÉF n\'est PAS durcie : les dégâts sont soustractifs', () => {

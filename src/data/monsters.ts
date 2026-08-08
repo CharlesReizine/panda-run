@@ -131,7 +131,7 @@ const list: MonsterDef[] = [
   },
   // Boss
   {
-    id: 'roi-gloopy', name: 'Roi Gloopy', lore: 'Le plus gros des slimes, couronné et fier, il écrase ses sujets sous sa masse rose.', color: 0xff5fa8, hp: 1150, atk: 52, def: 10, xp: 3200, level: 1, speed: 60, behavior: 'charge', boss: true, bossClass: 'novice', bossSummon: 'gloopy',
+    id: 'roi-gloopy', name: 'Roi Gloopy', lore: 'Le plus gros des slimes, couronné et fier, il écrase ses sujets sous sa masse rose.', color: 0xff5fa8, hp: 1150, atk: 31, def: 10, xp: 3200, level: 1, speed: 60, behavior: 'charge', boss: true, bossClass: 'novice', bossSummon: 'gloopy',
     drops: [
       { kind: 'gold', chance: 1, min: 60, max: 100 },
       { kind: 'item', itemId: 'epee-bambou', chance: 1, min: 1, max: 1 },
@@ -141,7 +141,7 @@ const list: MonsterDef[] = [
     ],
   },
   {
-    id: 'pharaon-scarabee', name: 'Pharaon Scarabée', lore: 'Souverain des sables réveillé de son sarcophage, il fend l\'air de sa lame d\'or et fond sur l\'intrus d\'un bond fulgurant.', color: 0x3fb7b0, hp: 3200, atk: 100, def: 26, xp: 6000, level: 27, speed: 120, behavior: 'charge', boss: true, bossClass: 'swordsman', bossSummon: 'scarabee-cornu',
+    id: 'pharaon-scarabee', name: 'Pharaon Scarabée', lore: 'Souverain des sables réveillé de son sarcophage, il fend l\'air de sa lame d\'or et fond sur l\'intrus d\'un bond fulgurant.', color: 0x3fb7b0, hp: 5800, atk: 419, def: 26, xp: 6000, level: 27, speed: 120, behavior: 'charge', boss: true, bossClass: 'swordsman', bossSummon: 'scarabee-cornu',
     drops: [
       { kind: 'gold', chance: 1, min: 150, max: 250 },
       { kind: 'item', itemId: 'carapace-scarabee', chance: 1, min: 1, max: 1 },
@@ -213,7 +213,7 @@ const list: MonsterDef[] = [
   { id: 'gardien-flamme', name: 'Gardien Flamme', lore: 'Colosse ardent scellé aux portes de l\'enfer, brasier vivant qui calcine quiconque prétend passer.', color: 0xbf360c, hp: 5000, atk: 130, def: 65, xp: 6000, level: 50, speed: 0, behavior: 'contact', drops: [goldMid, potion, mat('pierre-brute', 0.5), { kind: 'material', materialId: 'gemme-brute', chance: 0.25, min: 1, max: 2 }] },
   // Boss — zone 3 (jungle)
   {
-    id: 'seigneur-liane', name: 'Seigneur Liane', lore: 'Souverain de la jungle aux mille lianes, archimage sylvestre : il embrase l\'air de sphères ardentes et fait pleuvoir le feu du ciel.', color: 0x1b5e20, hp: 5200, atk: 122, def: 34, xp: 9000, level: 39, speed: 60, behavior: 'projectile', boss: true, bossClass: 'mage', bossSummon: 'flora-vorace',
+    id: 'seigneur-liane', name: 'Seigneur Liane', lore: 'Souverain de la jungle aux mille lianes, archimage sylvestre : il embrase l\'air de sphères ardentes et fait pleuvoir le feu du ciel.', color: 0x1b5e20, hp: 10576, atk: 571, def: 34, xp: 9000, level: 39, speed: 60, behavior: 'projectile', boss: true, bossClass: 'mage', bossSummon: 'flora-vorace',
     drops: [
       { kind: 'gold', chance: 1, min: 200, max: 320 },
       { kind: 'item', itemId: 'baton-feuillu', chance: 1, min: 1, max: 1 },
@@ -223,7 +223,7 @@ const list: MonsterDef[] = [
   },
   // Boss — zone 4 (montagne)
   {
-    id: 'golem-ancien', name: 'Golem Ancien', lore: 'Titan de pierre gravé de runes oubliées : ses runes crachent des salves d\'éclats perçants et un déluge de pierres du ciel.', color: 0x78909c, hp: 7600, atk: 142, def: 50, xp: 13000, level: 39, speed: 55, behavior: 'projectile', boss: true, bossClass: 'archer', bossSummon: 'gobelin-mineur', size: 'grand',
+    id: 'golem-ancien', name: 'Golem Ancien', lore: 'Titan de pierre gravé de runes oubliées : ses runes crachent des salves d\'éclats perçants et un déluge de pierres du ciel.', color: 0x78909c, hp: 10576, atk: 571, def: 50, xp: 13000, level: 39, speed: 55, behavior: 'projectile', boss: true, bossClass: 'archer', bossSummon: 'gobelin-mineur', size: 'grand',
     drops: [
       // BUTIN SIGNATURE LÉGENDAIRE : seul accès en jeu à cet objet (hors forge) — 1,5 %
       { kind: 'item', itemId: 'baton-cosmique', chance: 0.015, min: 1, max: 1 },
@@ -235,7 +235,7 @@ const list: MonsterDef[] = [
   },
   // Boss — zone 5 (cimetière)
   {
-    id: 'roi-liche', name: 'Roi Liche', lore: 'Seigneur mort-vivant au sceptre glacé, sorcier suprême : il déchaîne des novae nécrotiques et des salves d\'os hurlantes depuis son trône.', color: 0x4527a0, hp: 10500, atk: 176, def: 46, xp: 18000, level: 36, speed: 50, behavior: 'projectile', boss: true, bossClass: 'sorcier', bossSummon: 'squelette',
+    id: 'roi-liche', name: 'Roi Liche', lore: 'Seigneur mort-vivant au sceptre glacé, sorcier suprême : il déchaîne des novae nécrotiques et des salves d\'os hurlantes depuis son trône.', color: 0x4527a0, hp: 10500, atk: 532, def: 46, xp: 18000, level: 36, speed: 50, behavior: 'projectile', boss: true, bossClass: 'sorcier', bossSummon: 'squelette',
     drops: [
       // BUTIN SIGNATURE LÉGENDAIRE : seul accès en jeu à cet objet (hors forge) — 1,5 %
       { kind: 'item', itemId: 'faux-sombre', chance: 0.015, min: 1, max: 1 },
@@ -247,7 +247,7 @@ const list: MonsterDef[] = [
   },
   // Boss final — zone 6 (enfer)
   {
-    id: 'seigneur-dechu', name: 'Seigneur Déchu', lore: 'Maître ultime des enfers, ange tombé rongé de haine : il manie les meilleures armes de chaque classe — lame, feu, flèches et néant.', color: 0x8a1414, hp: 16500, atk: 205, def: 60, xp: 30000, level: 57, speed: 90, behavior: 'charge', boss: true, bossClass: 'chevalier', bossSummon: 'diablotin',
+    id: 'seigneur-dechu', name: 'Seigneur Déchu', lore: 'Maître ultime des enfers, ange tombé rongé de haine : il manie les meilleures armes de chaque classe — lame, feu, flèches et néant.', color: 0x8a1414, hp: 20344, atk: 799, def: 60, xp: 30000, level: 57, speed: 90, behavior: 'charge', boss: true, bossClass: 'chevalier', bossSummon: 'diablotin',
     drops: [
       // BUTIN SIGNATURE LÉGENDAIRE : seul accès en jeu à cet objet (hors forge) — 1,5 %
       { kind: 'item', itemId: 'katana-eclair', chance: 0.015, min: 1, max: 1 },
@@ -262,7 +262,7 @@ const list: MonsterDef[] = [
   },
   // ─── Boss du monde carte A (placeholders d'art réutilisés) ───
   {
-    id: 'boss-sylve', name: 'Gardien de la Sylve', lore: 'Colosse de bois millénaire éveillé par la profanation de sa forêt : il abat ses branches comme des massues et invoque les ronces pour étouffer l\'intrus.', color: 0x3e5e2a, hp: 1900, atk: 60, def: 16, xp: 3600, level: 23, speed: 62, behavior: 'charge', boss: true, bossClass: 'novice', bossSummon: 'ronce-cracheuse',
+    id: 'boss-sylve', name: 'Gardien de la Sylve', lore: 'Colosse de bois millénaire éveillé par la profanation de sa forêt : il abat ses branches comme des massues et invoque les ronces pour étouffer l\'intrus.', color: 0x3e5e2a, hp: 4536, atk: 367, def: 16, xp: 3600, level: 23, speed: 62, behavior: 'charge', boss: true, bossClass: 'novice', bossSummon: 'ronce-cracheuse',
     drops: [
       { kind: 'gold', chance: 1, min: 70, max: 120 },
       { kind: 'item', itemId: 'baton-feuillu', chance: 1, min: 1, max: 1 },
@@ -271,7 +271,7 @@ const list: MonsterDef[] = [
     ],
   },
   {
-    id: 'boss-golem-cave', name: 'Golem des Cavernes', lore: 'Titan de roche brute scellé au cœur des cavernes : il pilonne l\'écho de ses poings de granit et fait pleuvoir des éclats du plafond.', color: 0x7c7168, hp: 5200, atk: 132, def: 46, xp: 9200, level: 32, speed: 48, behavior: 'projectile', boss: true, bossClass: 'archer', bossSummon: 'gobelin-mineur', size: 'grand',
+    id: 'boss-golem-cave', name: 'Golem des Cavernes', lore: 'Titan de roche brute scellé au cœur des cavernes : il pilonne l\'écho de ses poings de granit et fait pleuvoir des éclats du plafond.', color: 0x7c7168, hp: 7608, atk: 482, def: 46, xp: 9200, level: 32, speed: 48, behavior: 'projectile', boss: true, bossClass: 'archer', bossSummon: 'gobelin-mineur', size: 'grand',
     drops: [
       { kind: 'gold', chance: 1, min: 200, max: 320 },
       { kind: 'item', itemId: 'carapace-scarabee', chance: 1, min: 1, max: 1 },
@@ -280,7 +280,7 @@ const list: MonsterDef[] = [
     ],
   },
   {
-    id: 'boss-yeti', name: 'Yéti Géant', lore: 'Seigneur des cimes gelées, montagne de fourrure et de fureur : il fond sur sa proie d\'un bond qui fait trembler la neige et abat ses griffes comme des lames.', color: 0xdfe9ef, hp: 6600, atk: 152, def: 42, xp: 11500, level: 39, speed: 118, behavior: 'charge', boss: true, bossClass: 'swordsman', bossSummon: 'louveteau', size: 'grand',
+    id: 'boss-yeti', name: 'Yéti Géant', lore: 'Seigneur des cimes gelées, montagne de fourrure et de fureur : il fond sur sa proie d\'un bond qui fait trembler la neige et abat ses griffes comme des lames.', color: 0xdfe9ef, hp: 10576, atk: 571, def: 42, xp: 11500, level: 39, speed: 118, behavior: 'charge', boss: true, bossClass: 'swordsman', bossSummon: 'louveteau', size: 'grand',
     drops: [
       // BUTIN SIGNATURE LÉGENDAIRE : seul accès en jeu à cet objet (hors forge) — 1,5 %
       { kind: 'item', itemId: 'couronne-glace', chance: 0.015, min: 1, max: 1 },
@@ -291,7 +291,7 @@ const list: MonsterDef[] = [
     ],
   },
   {
-    id: 'boss-crabe', name: 'Roi des Crabes', lore: 'Monarque cuirassé des récifs, blindage insolent et pinces tranchantes : il claque ses tenailles comme des cisailles et bondit de côté pour broyer l\'imprudent.', color: 0xd8431a, hp: 5600, atk: 142, def: 58, xp: 10200, level: 46, speed: 96, behavior: 'charge', boss: true, bossClass: 'swordsman', bossSummon: 'crabe-geant', size: 'grand',
+    id: 'boss-crabe', name: 'Roi des Crabes', lore: 'Monarque cuirassé des récifs, blindage insolent et pinces tranchantes : il claque ses tenailles comme des cisailles et bondit de côté pour broyer l\'imprudent.', color: 0xd8431a, hp: 14056, atk: 660, def: 58, xp: 10200, level: 46, speed: 96, behavior: 'charge', boss: true, bossClass: 'swordsman', bossSummon: 'crabe-geant', size: 'grand',
     drops: [
       // BUTIN SIGNATURE LÉGENDAIRE : seul accès en jeu à cet objet (hors forge) — 1,5 %
       { kind: 'item', itemId: 'arc-tempete', chance: 0.015, min: 1, max: 1 },

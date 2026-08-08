@@ -769,8 +769,20 @@ export class LevelScene extends Phaser.Scene {
     // s'approcher. Les tirs ENNEMIS, eux, s'y écrasent sans l'entamer : un mur qu'un mob démolit par
     // accident, c'est une brèche que le joueur n'a pas gagnée.
     this.physics.add.collider(this.playerProjectiles, this.pierresFragiles, (projObj, bObj) => {
-      this.frapperPierre(bObj as Phaser.Physics.Arcade.Sprite, 1)
-      this.stopNetPierre(projObj, bObj)
+      // ⚠️ UN TIR EMPORTE LA TUILE D'UN COUP, ET C'EST UN RETOUR DE JEU, PAS UN CONFORT. « Les briques
+      // à casser, quand je fais des skills dessus, ça me prend des plombes à détruire. Genre
+      // mitraillette, ça détruit pas en une seconde et c'est dommage, c'est pas jouissif du tout. »
+      // Il avait raison, et la cause était arithmétique : chaque tuile demande trois impacts, un mur en
+      // compte souvent six ou huit, et chaque projectile s'écrase sur la PREMIÈRE tuile touchée. Vider
+      // un pan coûtait donc une vingtaine de tirs — une éternité pour une arme qui crache dix balles par
+      // seconde, et l'inverse de ce qu'elle promet.
+      // Les trois impacts gardent tout leur sens au corps à corps (on sent la résistance, la tuile se
+      // fissure) ; à distance, c'est le déplacement jusqu'au mur qui fait le prix.
+      const pierre = bObj as Phaser.Physics.Arcade.Sprite
+      const proj = projObj as Projectile
+      this.frapperPierre(pierre, PIERRE_FRAGILE_COUPS)
+      // une lame qui TRAVERSE (lancer d'épée) ne s'arrête pas au premier bloc : elle ouvre un couloir
+      if (!proj.pierce) this.stopNetPierre(projObj, bObj)
     })
     this.physics.add.collider(this.enemyProjectiles, this.pierresFragiles, this.stopNetPierre)
 
