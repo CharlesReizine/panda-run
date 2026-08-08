@@ -1377,11 +1377,16 @@ export function pierresFlottantes(level: LevelDef): { x: number; y: number; w: n
   // il est parfaitement isolé. L'oublier ici ne produisait pas un faux positif de mesure, ça SUPPRIMAIT
   // les tunnels de plongée à l'assemblage — les trois motifs de grotte noyée vidés de leur raison d'être,
   // sans qu'aucun autre test ne s'en aperçoive.
+  // ⚠️ UNE COIFFE D'ÉCHELLE NE FLOTTE PAS NON PLUS : c'est elle qui tient l'échelle, et l'échelle qui
+  // la justifie. Sans cette exemption, la règle « une pierre qui ne touche rien » efface le seul bloc
+  // qui empêche l'échelle de déboucher sur le vide — deux correctifs justes qui s'annulent.
+  const coiffeUneEchelle = (r: { x: number; y: number; w: number; h: number }) =>
+    (level.ladders ?? []).some((l) => l.x >= r.x && l.x < r.x + r.w && Math.abs(r.y + r.h - l.y) <= 1)
   const dansLEau = (r: { x: number; y: number; w: number; h: number }) =>
     (level.hazards ?? []).some((h) => h.kind === 'water' && r.x < h.x + h.w && r.x + r.w > h.x
       && r.y + r.h > (h.top ?? 0) && r.y < (h.top ?? 0) + (h.h ?? 0))
   return (level.rockBands ?? []).filter((r) => {
-    if (dansLEau(r)) return false
+    if (dansLEau(r) || coiffeUneEchelle(r)) return false
     for (let x = r.x; x < r.x + r.w; x++) if (plein(x, r.y + r.h) || plein(x, r.y - 1)) return false
     for (let y = r.y; y < r.y + r.h; y++) if (plein(r.x - 1, y) || plein(r.x + r.w, y)) return false
     return true
@@ -1432,6 +1437,36 @@ export function trampolinesFacultatifs(level: LevelDef): { x: number; y: number 
     strictReach({ ...level, trampolines: tous.filter(garde) }).badPlats.length
   const base = sansEngin(() => true)
   return tous.filter((t) => sansEngin((u) => u !== t) <= base).map((t) => ({ x: t.x, y: t.y }))
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// UNE ÉCHELLE NE DÉBOUCHE JAMAIS SUR RIEN
+//
+// Règle énoncée par le joueur : « les échelles ça déconne souvent, tu me rajoutes un test. Il faut soit
+// de la terre (pas loin du haut, sur le côté, pour pouvoir grimper dessus), soit de la pierre au-dessus,
+// mais jamais RIEN. »
+//
+// ⚠️ LE VALIDATEUR EXISTANT NE POUVAIT PAS LE VOIR, ET C'EST UNE EXEMPTION QUI L'AVEUGLAIT.
+// `laddersToNowhere` saute les échelles SUSPENDUES (`hung`) avec ce commentaire : « ni socle ni palier
+// de sommet (coiffée d'une pierre) ». C'est une SUPPOSITION, pas une vérification — rien ne s'assurait
+// que la pierre était bien là. Les échelles « qui volent » que le joueur voit depuis des semaines sont
+// exactement celles-là : suspendues, non coiffées, et exemptées du seul test qui aurait pu les attraper.
+//
+// La règle ci-dessous ne fait aucune exception : toute échelle, suspendue ou non, doit déboucher sur
+// quelque chose. Une corniche à portée de sortie, ou de la roche au-dessus qui explique d'où elle pend.
+export function echellesSansAppui(level: LevelDef): LadderProblem[] {
+  const out: LadderProblem[] = []
+  for (const l of (level.ladders ?? []) as Ladder[]) {
+    // 1) de la TERRE : une corniche à hauteur de sortie, sur laquelle on enjambe
+    if (level.platforms.some((p) => isLadderTop(p, l))) continue
+    // 2) de la PIERRE au-dessus : l'échelle y est accrochée, on comprend ce qui la tient
+    const coiffee = (level.rockBands ?? []).some((r) =>
+      l.x >= r.x && l.x < r.x + r.w && r.y + r.h > l.y - 1 && r.y <= l.y)
+    if (coiffee) continue
+    // 3) rien : c'est le défaut
+    out.push({ x: l.x, y: l.y, h: l.h, reason: 'sommet-sans-plateforme' })
+  }
+  return out
 }
 
 export interface TrampolineColle { x: number; y: number; gauche: number; droite: number }

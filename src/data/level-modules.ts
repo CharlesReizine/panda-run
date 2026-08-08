@@ -4141,8 +4141,11 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
     const sousLEau = (r: { x: number; y: number; w: number; h: number }) =>
       hazards.some((h) => h.kind === 'water' && r.x < h.x + h.w && r.x + r.w > h.x
         && r.y + r.h > (h.top ?? 0) && r.y < (h.top ?? 0) + (h.h ?? 0))
+    // une coiffe d'échelle ne flotte pas : c'est elle qui tient l'échelle (cf. la passe juste au-dessus)
+    const coiffeEchelle = (r: { x: number; y: number; w: number; h: number }) =>
+      ladders.some((l) => l.x >= r.x && l.x < r.x + r.w && Math.abs(r.y + r.h - l.y) <= 1)
     const toucheQuelqueChose = (r: { x: number; y: number; w: number; h: number }): boolean => {
-      if (sousLEau(r)) return true
+      if (sousLEau(r) || coiffeEchelle(r)) return true
       for (let x = r.x; x < r.x + r.w; x++) if (pleinEn(x, r.y + r.h) || pleinEn(x, r.y - 1)) return true
       for (let y = r.y; y < r.y + r.h; y++) if (pleinEn(r.x - 1, y) || pleinEn(r.x + r.w, y)) return true
       return false
@@ -4153,6 +4156,39 @@ export function buildLevelFromModules(modules: Module[], opts: AssembleOpts): Le
         if (!toucheQuelqueChose(rockBands[i]!)) rockBands.splice(i, 1)
       }
       if (rockBands.length === avant) break
+    }
+  }
+
+  // ─── UNE ÉCHELLE NE DÉBOUCHE JAMAIS SUR RIEN : ON LA COIFFE ──────────────────────────────────
+  //
+  // Règle du joueur : « les échelles ça déconne souvent. Il faut soit de la terre (pas loin du haut, sur
+  // le côté, pour pouvoir grimper dessus), soit de la pierre au-dessus, mais jamais RIEN. »
+  //
+  // ⚠️ CETTE PASSE VIENT APRÈS LA SUPPRESSION DES PIERRES VOLANTES, ET L'ORDRE EST TOUT. Posée avant,
+  // la coiffe — un bloc d'une tuile qui ne touche rien d'autre que l'échelle — était immédiatement
+  // effacée par la règle « une pierre qui ne touche rien ne tient à rien ». Deux correctifs justes qui
+  // s'annulent l'un l'autre : le compte restait obstinément à quarante-neuf sans que rien ne l'explique.
+  //
+  // ⚠️ QUARANTE-NEUF ÉCHELLES SUR CINQ CENT QUATRE-VINGT-TREIZE ÉTAIENT DANS CE CAS, et aucun validateur
+  // ne pouvait les voir : `laddersToNowhere` EXEMPTE les échelles suspendues avec ce commentaire, « ni
+  // socle ni palier de sommet (coiffée d'une pierre) ». C'était une supposition, jamais une
+  // vérification. Les « échelles qui volent » signalées depuis des semaines sont exactement celles-là.
+  //
+  // On coiffe donc d'un bloc de roche celles qui n'ont ni corniche de sortie ni pierre au-dessus. Une
+  // tuile suffit : elle explique d'où l'échelle pend, et c'est tout ce que l'œil demande.
+  for (const l of ladders) {
+    const sortie = platforms.some((p) => {
+      const drop = p.y - l.y
+      return drop >= 1 && drop <= 2 && l.x >= p.x - 1 && l.x <= p.x + p.w + 1
+    })
+    if (sortie) continue
+    const coiffee = rockBands.some((r) => l.x >= r.x && l.x < r.x + r.w && r.y + r.h > l.y - 1 && r.y <= l.y)
+    if (coiffee) continue
+    // la coiffe se pose UNE rangée au-dessus du sommet : à la hauteur du sommet, elle boucherait la
+    // sortie de l'échelle elle-même — on grimpe jusqu'en haut, pas jusqu'à une rangée en dessous.
+    const y = Math.max(0, l.y - 1)
+    if (!rockBands.some((r) => l.x >= r.x && l.x < r.x + r.w && y >= r.y && y < r.y + r.h)) {
+      rockBands.push({ x: l.x, y, w: 1, h: 1, solid: true })
     }
   }
 
