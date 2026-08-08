@@ -3,6 +3,7 @@ import {
   indiceDe, terrainsDuMonstre, terrainsDuMateriau, nomDeTerrain, MAX_TERRAINS_CITES,
 } from '../../src/core/indices-quete'
 import { QUEST_CHAIN } from '../../src/data/shops'
+import { MONSTERS } from '../../src/data/monsters'
 import { LEVELS } from '../../src/data/levels'
 import { WORLD_NODES } from '../../src/data/worldmap'
 
@@ -100,6 +101,26 @@ describe('indices de quête', () => {
         : def.targetId ? terrainsDuMonstre(def.targetId).length : 0
       if (total > MAX_TERRAINS_CITES) {
         expect(i.astuce, `${def.id} tronque sans le dire`).toMatch(/autres/)
+      }
+    }
+  })
+
+  // ── LA TÊTE DU MONSTRE ─────────────────────────────────────────────────────────────────────
+  //
+  // Demande du joueur : « dans les quêtes où faut défoncer du mob, tu peux mettre la photo du mob à
+  // défoncer en plus d'où on peut le trouver ». Un nom se LIT, une bestiole se RECONNAÎT : savoir où
+  // aller ne sert à rien si, une fois sur place, on ne sait pas laquelle des cinq espèces présentes on
+  // est censé chasser.
+  it('une quête qui vise un monstre donne son id, pour qu\'on puisse montrer sa tête', () => {
+    for (const def of QUEST_CHAIN) {
+      const i = indiceDe(def)
+      if (def.type === 'kill-type' || def.type === 'kill-boss') {
+        expect(i.monstreId, `${def.id} ne dit pas quel monstre montrer`).toBe(def.targetId)
+        expect(MONSTERS[i.monstreId!], `${def.id} cite un monstre inconnu`).toBeDefined()
+      } else {
+        // ⚠️ ET LES AUTRES N'EN DONNENT PAS. Une quête « tue 10 monstres quels qu'ils soient » ou une
+        // collecte de matériau n'a pas de tête à montrer : en inventer une désignerait une cible fausse.
+        expect(i.monstreId, `${def.id} ne devrait montrer aucun monstre`).toBeUndefined()
       }
     }
   })

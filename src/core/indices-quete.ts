@@ -65,6 +65,15 @@ export function terrainsDuMateriau(materialId: string): { levelId: string; chanc
 export interface IndiceQuete {
   /** Une phrase qui dit QUOI chercher. */
   quoi: string
+  /**
+   * L'id du monstre visé, quand la quête en cible un — pour que l'écran puisse montrer sa TÊTE.
+   *
+   * Demande du joueur : « dans les quêtes où faut défoncer du mob, tu peux mettre la photo du mob à
+   * défoncer en plus d'où on peut le trouver ». Un nom se lit ; une bestiole se RECONNAÎT sur le
+   * terrain. C'est la moitié qui manquait à l'indice : savoir où aller ne sert à rien si, une fois
+   * arrivé, on ne sait pas laquelle des cinq espèces présentes on est censé chasser.
+   */
+  monstreId?: string
   /** Les terrains à visiter, déjà nommés comme sur la carte. Vide = on ne sait pas dire. */
   ou: string[]
   /** Une ligne de conseil, ou undefined quand il n'y a rien d'utile à ajouter. */
@@ -108,6 +117,7 @@ export function indiceDe(def: QuestDef): IndiceQuete {
   const mob = def.targetId ? MONSTERS[def.targetId] : undefined
   const terrains = def.targetId ? terrainsDuMonstre(def.targetId) : []
   return {
+    ...(mob ? { monstreId: def.targetId } : {}),
     quoi: mob ? `${def.targetCount} × ${mob.name} (niveau ${mob.level})` : `${def.targetCount} cibles`,
     ou: terrains.slice(0, MAX_TERRAINS_CITES).map(nomDeTerrain),
     astuce: terrains.length === 0

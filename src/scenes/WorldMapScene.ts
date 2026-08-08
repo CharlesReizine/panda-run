@@ -163,8 +163,27 @@ export class WorldMapScene extends Phaser.Scene {
     this.travelMarker = marker
     this.tweens.add({ targets: marker, y: marker.y - 5, yoyo: true, repeat: -1, duration: 500, ease: 'Sine.inOut' })
 
-    this.add.text(30, 495, 'Menu', { fontSize: '20px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 14, y: 6 } }).setDepth(20)
-      .setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('Menu'))
+    const btnMenu = this.add.text(30, 495, 'Menu', { fontSize: '20px', color: '#ffffff', backgroundColor: '#33691e', padding: { x: 14, y: 6 } }).setDepth(20)
+    btnMenu.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('Menu'))
+    // ── PASTILLE « DES POINTS T'ATTENDENT » ────────────────────────────────────────────────────
+    //
+    // Retour du joueur : « les stats, je découvre qu'on peut les augmenter. Est-ce que quelqu'un a déjà
+    // fait ça ? » — non, probablement personne, et c'est le défaut. On gagne deux points par niveau, et
+    // RIEN nulle part ne le disait : ni ici, ni dans le HUD, ni à la montée de niveau. Seul le menu les
+    // montrait, à condition de l'ouvrir au bon moment et de regarder au bon endroit.
+    //
+    // Même remède que pour le journal de quêtes : une pastille sur le chemin du joueur. Elle n'explique
+    // rien — elle donne juste une raison d'ouvrir, et c'est tout ce qui manquait.
+    try {
+      const points = getPlayer().statPoints
+      if (points > 0) {
+        const px = btnMenu.x + btnMenu.width + 6, py = btnMenu.y - 2
+        const pastille = this.add.circle(px, py, 13, 0xffd54f).setDepth(21).setStrokeStyle(2, 0x8d6e00)
+        this.add.text(px, py, `${points}`, { fontSize: '13px', color: '#3e2723', fontStyle: 'bold' })
+          .setOrigin(0.5).setDepth(22)
+        this.tweens.add({ targets: pastille, scale: 1.18, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
+      }
+    } catch { /* pas de partie chargée : rien à signaler */ }
 
     // accès à l'inventaire dédié (icône « tenue ») — à droite du bouton Menu
     this.add.circle(148, 505, 24, 0x263238, 0.9).setStrokeStyle(2, 0xffca28, 0.8).setDepth(20)

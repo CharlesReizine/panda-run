@@ -10,6 +10,8 @@ import {
   type EtatQuete, type LigneQuete,
 } from './quest-log-layout'
 import { indiceDe } from '../core/indices-quete'
+import { MONSTERS } from '../data/monsters'
+import { textureMonstre } from './monster-card'
 
 // JOURNAL DE QUÊTES — la liste complète de la chaîne du garde : ce qui est fait, ce qui est en cours,
 // ce qui reste, et où aller rendre ce qui est terminé.
@@ -104,6 +106,16 @@ export class QuestLogScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true }).on('pointerdown', () => cont.destroy())
     cont.add(voile)
 
+    // ── LA TÊTE DU MONSTRE, PAS SEULEMENT SON NOM ───────────────────────────────────────────
+    //
+    // Demande du joueur : « dans les quêtes où faut défoncer du mob, tu peux mettre la photo du mob à
+    // défoncer en plus d'où on peut le trouver ». Un nom se LIT, une bestiole se RECONNAÎT : savoir où
+    // aller ne sert à rien si, une fois sur place, on ne sait pas laquelle des cinq espèces présentes
+    // on est censé chasser. C'est la moitié qui manquait à l'indice.
+    const mob = ind.monstreId ? MONSTERS[ind.monstreId] : undefined
+    const tex = mob ? textureMonstre(this, mob) : null
+    const aPortrait = !!tex && this.textures.exists(tex)
+
     const lignes = [
       { t: 'À TROUVER', c: '#80cbc4', s: 12 },
       { t: ind.quoi, c: '#ffffff', s: 17 },
@@ -111,13 +123,22 @@ export class QuestLogScene extends Phaser.Scene {
       ...ind.ou.map((o) => ({ t: `· ${o}`, c: '#ffd54f', s: 15 })),
       ...(ind.astuce ? [{ t: ind.astuce, c: '#b0bec5', s: 12 }] : []),
     ]
-    const h = 64 + lignes.reduce((n, li) => n + li.s + 10, 0)
+    const h = 64 + lignes.reduce((n, li) => n + li.s + 10, 0) + (aPortrait ? 88 : 0)
     cont.add(this.add.rectangle(480, 270, 520, h, 0x0d1b2a, 0.98).setStrokeStyle(2, 0x80cbc4, 0.9))
     cont.add(this.add.text(480, 270 - h / 2 + 20, tronquer(l.nom, 470, 16), {
       fontSize: '16px', color: '#ffd54f', fontStyle: 'bold',
     }).setOrigin(0.5))
 
     let y = 270 - h / 2 + 46
+    if (aPortrait) {
+      // cadre + portrait, à l'échelle de sa propre image (les monstres n'ont pas tous le même gabarit)
+      cont.add(this.add.rectangle(480, y + 38, 84, 84, 0x1c2431, 1).setStrokeStyle(2, 0x80cbc4, 0.8))
+      const img = this.add.image(480, y + 38, tex!)
+      const src = this.textures.get(tex!).getSourceImage()
+      img.setScale(Math.min(72 / src.width, 72 / src.height))
+      cont.add(img)
+      y += 88
+    }
     for (const li of lignes) {
       cont.add(this.add.text(480, y, tronquer(li.t, 480, li.s), {
         fontSize: `${li.s}px`, color: li.c, fontStyle: li.s >= 15 ? 'bold' : 'normal',
