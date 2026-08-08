@@ -120,7 +120,9 @@ describe('trampolines dégagés', () => {
     // des traversées sont posés EXPRÈS à une tuile de leur obstacle (leur portée l'exige), et marqués
     // `fixe` pour que la passe d'esthétique ne les déplace pas. Ils sont donc « collés » par construction
     // — la règle générale et ces motifs-là se contredisent, et c'est le motif qui gagne.
-    expect(colles.length, `trampolines collés :\n   ${colles.join('\n   ')}`).toBeLessThanOrEqual(8)
+    // ⚠️ RESSERRÉ DE 8 À 1, LA VALEUR MESURÉE. Les passes suivantes ont réglé sept des huit cas ; garder
+    // le plafond d'origine revenait à autoriser leur retour en silence.
+    expect(colles.length, `trampolines collés :\n   ${colles.join('\n   ')}`).toBeLessThanOrEqual(1)
   })
 
   it('la cible « deux largeurs » progresse et ne recule pas', () => {
@@ -130,6 +132,8 @@ describe('trampolines dégagés', () => {
     // surface porteuse — puis 15, parce qu'interdire les colonnes SURPLOMBANT UN TROU (un tapis posé
     // sur une corniche au-dessus du vide se lit comme suspendu) reprend une des colonnes gagnées.
     // Un engin qui ne ment pas sur son appui vaut mieux qu'un engin mieux centré.
-    expect(colles, `${colles}/${total} trampolines sous la cible de deux largeurs`).toBeLessThanOrEqual(18)
+    // ⚠️ RESSERRÉ DE 18 À 2. C'était le cliquet le plus bloqué du projet — SEIZE crans d'avance sur le
+    // réel. Il annonçait une cible « deux largeurs » manquée par 18 tapis alors qu'elle ne l'est que par 2.
+    expect(colles, `${colles}/${total} trampolines sous la cible de deux largeurs`).toBeLessThanOrEqual(2)
   })
 })

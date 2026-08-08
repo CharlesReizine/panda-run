@@ -1,4 +1,8 @@
 import type { ClassId } from './types'
+import {
+  STR_ATK_PER_POINT, AGI_ATTACK_SPEED_PER_POINT, AGI_DEF_PER_POINT,
+  VIT_MAX_HP_PER_POINT, INT_ENERGY_REGEN_PER_POINT,
+} from './stats'
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 // LES QUATRE STATS, CE QU'ELLES FONT, ET COMMENT ON LES RÉPARTIT
@@ -33,11 +37,16 @@ export interface StatDef {
   couleur: number
 }
 
+// ⚠️ LES LIBELLÉS SONT CALCULÉS DEPUIS LES COEFFICIENTS, JAMAIS RECOPIÉS. « +2 attaque par point »
+// était écrit à la main, à côté d'un `STR_ATK_PER_POINT = 2` que rien ne reliait à lui : le premier
+// rééquilibrage aurait fait mentir la page sans qu'aucun test ne bronche. C'est EXACTEMENT le défaut
+// qui avait fait donner des points de vie à l'intelligence — un libellé qui promet autre chose que ce
+// que le point fait. On ne le teste pas, on le rend impossible.
 export const STATS: StatDef[] = [
-  { id: 'str', nom: 'FOR', effet: '+2 attaque par point', couleur: 0xef5350 },
-  { id: 'agi', nom: 'AGI', effet: '+vitesse d\'attaque et défense', couleur: 0x66bb6a },
-  { id: 'vit', nom: 'VIT', effet: '+4 points de vie par point', couleur: 0xffa726 },
-  { id: 'int', nom: 'INT', effet: '+régénération d\'énergie (compétences)', couleur: 0x42a5f5 },
+  { id: 'str', nom: 'FOR', effet: `+${STR_ATK_PER_POINT} attaque par point`, couleur: 0xef5350 },
+  { id: 'agi', nom: 'AGI', effet: `+${AGI_DEF_PER_POINT} défense et +${Math.round(AGI_ATTACK_SPEED_PER_POINT * 100)} % de cadence`, couleur: 0x66bb6a },
+  { id: 'vit', nom: 'VIT', effet: `+${VIT_MAX_HP_PER_POINT} points de vie par point`, couleur: 0xffa726 },
+  { id: 'int', nom: 'INT', effet: `+${INT_ENERGY_REGEN_PER_POINT} énergie/s (compétences)`, couleur: 0x42a5f5 },
 ]
 
 export type Repartition = Record<StatId, number>

@@ -29,6 +29,29 @@ describe('save', () => {
     expect(deserialize(serialize(p))).toEqual(p)
   })
 
+  // ⚠️ LA V2 ÉTAIT LA SEULE VERSION QUE RIEN NE CHARGEAIT. Les migrations sont testées une par une —
+  // v1, v3, v4, v5, v6, v7, v8 — et la v2 était passée à travers. Une chaîne de migration testée « à
+  // peu près » ne protège rien : c'est justement le maillon qu'on oublie qui casse, et il casse chez un
+  // joueur dont la partie date d'avant, donc chez celui qui a le plus à perdre.
+  //
+  // On ne teste donc plus les versions une par une : on les teste TOUTES, par construction. Ajouter un
+  // palier sans y penser devient impossible — la boucle le prend.
+  it('CHAQUE version depuis la v1 se charge encore, sans exception', () => {
+    const VERSION_COURANTE = JSON.parse(serialize(newPlayer('Panda'), 0)).version as number
+    expect(VERSION_COURANTE).toBeGreaterThanOrEqual(9)
+    for (let v = 1; v <= VERSION_COURANTE; v++) {
+      const p = newPlayer('Panda')
+      const charge = deserialize(JSON.stringify({ version: v, player: p }))
+      // les champs que le jeu lit à chaque frame doivent exister quelle que soit la version d'origine
+      expect(charge.materials, `v${v} : materials`).toBeDefined()
+      expect(charge.skillLevels, `v${v} : skillLevels`).toBeDefined()
+      expect(charge.allocated, `v${v} : allocated`).toBeDefined()
+      expect(typeof charge.allocated.vit, `v${v} : allocated.vit`).toBe('number')
+      expect(typeof charge.allocated.int, `v${v} : allocated.int`).toBe('number')
+      expect(charge.quests, `v${v} : quests`).toBeDefined()
+    }
+  })
+
   it('rejette une version inconnue', () => {
     expect(() => deserialize('{"version":99,"player":{}}')).toThrow(/version/i)
   })

@@ -68,7 +68,9 @@ describe('murs infranchissables', () => {
     // cherche, et il a raison de la voir. La différence est qu'un trampoline est posé au pied, à portée
     // de rebond — ce que la mesure ne sait pas distinguer d'un mur subi. Le chiffre monte donc parce que
     // le jeu contient enfin des obstacles voulus, pas parce qu'il s'est dégradé.
-    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(45)
+    // ⚠️ RESSERRÉ DE 45 À 35, LA VALEUR MESURÉE. Le plafond avait dix crans d'avance : dix murs
+    // pouvaient réapparaître sans que ce test bronche, alors qu'il existe précisément pour ça.
+    expect(total, 'des murs sont apparus depuis la dernière mesure').toBeLessThanOrEqual(35)
   })
 
   it('aucun terrain de plaine n\'empire', () => {

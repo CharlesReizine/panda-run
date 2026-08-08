@@ -138,7 +138,10 @@ describe('relief jouable', () => {
   // sol du monde qu'on vient par ailleurs d'ouvrir sous les motifs de saut. Une corniche « collée » est
   // un défaut de lisibilité, pas de jouabilité — et le chiffre est écrit ici plutôt que lissé, pour
   // qu'on sache ce qu'a coûté l'arrivée de ces obstacles.
-  const TOLERANCE_COLLEES = 106
+  // ⚠️ RESSERRÉ DE 106 À 61, LA VALEUR MESURÉE. Un cliquet réglé quarante-cinq crans au-dessus du réel
+  // n'est plus un cliquet : quarante-cinq corniches collées pouvaient revenir sans qu'il bronche, et on
+  // le lisait quand même comme « c'est sous contrôle ». Un plafond ne protège que ce qu'il touche.
+  const TOLERANCE_COLLEES = 61
   it('peu de corniches restent collées au sol du monde', () => {
     const collees: string[] = []
     for (const l of nonBoss) {

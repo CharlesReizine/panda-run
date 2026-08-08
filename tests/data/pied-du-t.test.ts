@@ -35,7 +35,7 @@ describe('le pied du T', () => {
     // à épauler), 12 ont le pied dans le vide, 8 n'ont de palier d'aucun côté, une plonge dans l'eau, et
     // le reste tombe sous le filet de sécurité. 434 échelles sur 593 sont désormais épaulées. Le pilier est un MUR : là où il enfermerait un monstre ou
     // scellerait une salle habitée, on le retire. Un décor imparfait vaut mieux qu'un chemin coupé.
-    expect(nues / total, `${nues}/${total} échelles pendent encore dans le vide`).toBeLessThan(0.30)
+    expect(nues / total, `${nues}/${total} échelles pendent encore dans le vide`).toBeLessThan(0.28) // mesuré 0,268 — le plafond reste collé au réel, sinon il ne protège rien
   })
 
   // ⚠️ LE PILIER NE VA JAMAIS DANS LA COLONNE DU MONTANT. Une pierre pleine dans l'échelle elle-même la
