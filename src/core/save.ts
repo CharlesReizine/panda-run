@@ -2,7 +2,7 @@ import type { PlayerState } from './player-state'
 import { START_NODE } from '../data/worldmap'
 
 export const SAVE_KEY = 'panda-run-save'
-const VERSION = 8
+const VERSION = 9
 
 // `savedAt` (epoch ms) décrit le FICHIER, pas le joueur → il vit dans l'enveloppe, pas dans
 // PlayerState. Il sert à comparer la sauvegarde locale à la sauvegarde cloud (cf. core/sync.ts) :
@@ -65,6 +65,28 @@ export function deserialize(json: string): PlayerState {
   if (file.version <= 7) {
     // v7 → v8 : suivi des kills par type de monstre (découverte au Bestiaire)
     pl = { ...pl, killsByMonster: raw.killsByMonster ?? {} }
+  }
+  if (file.version <= 8) {
+    // ─── v8 → v9 : INT DEVIENT VIT, ET UNE VRAIE INTELLIGENCE APPARAÎT ────────────────────────
+    //
+    // ⚠️ CETTE MIGRATION EST OBLIGATOIRE, PAS COSMÉTIQUE. Jusqu'ici « INT » donnait des POINTS DE VIE —
+    // un libellé qui mentait sur son effet, et probablement une des raisons pour lesquelles personne n'y
+    // touchait. On renomme donc en VIT (vitalité), et INT devient la vraie intelligence : régénération
+    // d'énergie, la ressource des compétences.
+    //
+    // Sans cette étape, les points déjà placés dans `int` changeraient d'effet du jour au lendemain :
+    // le joueur perdrait des PV qu'il avait payés, sans rien avoir fait. On DÉPLACE donc l'ancien `int`
+    // vers `vit`, et la nouvelle intelligence repart de zéro — personne ne perd ce qu'il a investi.
+    const ancien = raw.allocated as unknown as { str?: number; agi?: number; int?: number; vit?: number } | undefined
+    pl = {
+      ...pl,
+      allocated: {
+        str: ancien?.str ?? 0,
+        agi: ancien?.agi ?? 0,
+        vit: ancien?.vit ?? ancien?.int ?? 0,
+        int: ancien?.vit === undefined ? 0 : (ancien.int ?? 0),
+      },
+    }
   }
   return pl
 }

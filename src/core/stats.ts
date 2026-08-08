@@ -10,7 +10,11 @@ import { upgradedBonus } from './reforge'
 export const STR_ATK_PER_POINT = 2
 export const AGI_ATTACK_SPEED_PER_POINT = 0.02
 export const AGI_DEF_PER_POINT = 0.3
-export const INT_MAX_HP_PER_POINT = 4
+// ⚠️ RENOMMÉ : c'est la VITALITÉ qui donne les PV, plus l'intelligence. Le libellé mentait sur son
+// effet, et personne n'attend d'un point d'INT qu'il rende plus résistant.
+export const VIT_MAX_HP_PER_POINT = 4
+/** Régénération d'énergie par point d'INT, en points par seconde. L'énergie est la ressource des sorts. */
+export const INT_ENERGY_REGEN_PER_POINT = 0.6
 
 export function computeStats(p: PlayerState): StatBlock {
   const c = CLASSES[p.classId]
@@ -31,13 +35,14 @@ export function computeStats(p: PlayerState): StatBlock {
     s.maxHp += bonus.maxHp ?? 0
   }
   // Stats réparties (STR/AGI/INT), appliquées après base + croissance + équipement.
-  // Mapping par point : STR → +2 atk ; AGI → +0.02 attackSpeed et +0.3 def ; INT → +4 maxHp.
+  // Mapping par point : STR → +2 atk ; AGI → +0.02 attackSpeed et +0.3 def ; VIT → +4 maxHp ;
+  // INT → régénération d'énergie (lue par Player, pas par ce bloc de stats).
   // À 0 partout, computeStats est inchangé.
   const a = p.allocated
   s.atk += STR_ATK_PER_POINT * a.str
   s.attackSpeed += AGI_ATTACK_SPEED_PER_POINT * a.agi
   s.def += AGI_DEF_PER_POINT * a.agi
-  s.maxHp += INT_MAX_HP_PER_POINT * a.int
+  s.maxHp += VIT_MAX_HP_PER_POINT * a.vit
   // Passifs de compétence (mage/sorcier) : chaque passif APPRIS (rang > 0) ajoute son bonus de
   // stat × son rang, en permanence — sans occuper de slot équipé. Sans passif appris, aucun effet.
   for (const [id, rank] of Object.entries(p.skillLevels)) {

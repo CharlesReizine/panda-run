@@ -28,7 +28,7 @@ describe('stats & combat', () => {
 
   it('stats réparties : STR/AGI/INT modifient les stats dérivées', () => {
     const p = newPlayer('P')
-    p.allocated = { str: 3, agi: 5, int: 2 }
+    p.allocated = { str: 3, agi: 5, vit: 2, int: 0 }
     const base = CLASSES.novice.baseStats
     const s = computeStats(p)
     expect(s.atk).toBe(base.atk + 2 * 3) // STR → +2 atk/pt

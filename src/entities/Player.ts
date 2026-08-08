@@ -1,7 +1,7 @@
 import Phaser from 'phaser'
 import type { StatBlock } from '../core/types'
 import type { ControlsState } from '../core/controls'
-import { computeStats } from '../core/stats'
+import { computeStats, INT_ENERGY_REGEN_PER_POINT } from '../core/stats'
 import { getPlayer } from '../state'
 import { SKILLS } from '../data/skills'
 import { ITEMS, rarityColor } from '../data/items'
@@ -916,7 +916,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // Régénération d'énergie par seconde : base + bonus des passifs « régén mana » (mage). Utilisée par
   // regenEnergy ET par la compensation de drain du vol (le vol reste indexé sur le rang, cf. updateFlight).
   private energyRegenPerSec(): number {
-    return ENERGY_REGEN_PER_SEC + this.passiveSum((p) => p.energyRegenPerSec)
+    // ⚠️ ET LES POINTS D'INT, DEPUIS QU'ILS VEULENT DIRE QUELQUE CHOSE. « INT » donnait des points de
+    // VIE — un libellé qui mentait sur son effet, et probablement une des raisons pour lesquelles
+    // personne ne répartissait ses points. C'est désormais VIT qui porte les PV, et l'intelligence fait
+    // ce qu'on attend d'elle : elle rend les compétences plus souvent disponibles.
+    let intel = 0
+    try { intel = getPlayer().allocated.int } catch { /* hors partie (arène de test) : rien à ajouter */ }
+    return ENERGY_REGEN_PER_SEC + this.passiveSum((p) => p.energyRegenPerSec) + INT_ENERGY_REGEN_PER_POINT * intel
   }
 
   // souffle du 2e saut : anneau bleuté aplati sous le panda + fines traînées vers le bas

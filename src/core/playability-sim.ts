@@ -159,7 +159,7 @@ export function representativePlayer(level: number): RepresentativePlayer {
   if (ITEMS[weapon]) p.equipment = { weapon }
   // répartition réaliste des points de stat (2/niveau) : 50% STR, 40% INT, 10% AGI
   const pts = Math.max(0, (level - 1)) * 2
-  p.allocated = { str: Math.round(pts * 0.5), int: Math.round(pts * 0.4), agi: Math.round(pts * 0.1) }
+  p.allocated = { str: Math.round(pts * 0.5), vit: Math.round(pts * 0.4), agi: Math.round(pts * 0.1), int: 0 }
   const s = computeStats(p)
   return { level, classId, atk: s.atk, def: s.def, maxHp: s.maxHp, attackSpeed: s.attackSpeed }
 }

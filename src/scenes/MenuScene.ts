@@ -4,6 +4,7 @@ import { save } from '../core/save'
 import { MATERIALS } from '../data/materials'
 import { computeStats } from '../core/stats'
 import { STAT_POINTS_PER_LEVEL } from '../core/progression'
+import { STATS, pourcentages, type StatId } from '../core/repartition'
 import { VIEW_H, VIEW_W, centerCamera } from '../core/viewport'
 import { installUiClickSound } from '../ui/click-sound'
 import { MENU, statsBox, materialsBox, materialRowsPerCol, splitMaterials, materialsBottom } from './menu-layout'
@@ -40,46 +41,35 @@ export class MenuScene extends Phaser.Scene {
     // posée à `y = 110 + i * 50` sans aucune borne : avec les 15 sorts de l'archer la dernière ligne
     // tombait à y = 810 sur un écran haut de 540 — « le menu cata cata ». Elle faisait de surcroît
     // DOUBLON avec l'écran d'arbre de compétences, qui la présente bien mieux. Un bouton y mène.
-    // ── LES STATS DEVAIENT SE DÉCOUVRIR TOUTES SEULES, ET PERSONNE NE POUVAIT ────────────────────
+    // ── COLONNE GAUCHE : un RENVOI vers la page Stat, plus la répartition elle-même ────────────
     //
-    // Retour du joueur : « les stats, je découvre qu'on peut les augmenter. Est-ce que quelqu'un a déjà
-    // fait ça ? Je pense faut peut-être rendre ça plus visible. »
-    //
-    // ⚠️ IL AVAIT RAISON, ET C'ÉTAIT PIRE QUE « PEU VISIBLE ». Les boutons « + » n'existaient QUE si des
-    // points restaient à dépenser : à zéro, l'écran ne montrait rien qui laisse deviner qu'on peut
-    // répartir quoi que ce soit. Et RIEN nulle part — ni HUD, ni carte, ni montée de niveau — ne
-    // signalait que des points attendaient. Un joueur qui n'ouvrait pas ce menu au bon moment ne
-    // pouvait pas savoir que le système existait.
-    //
-    // Trois gestes : le « + » est TOUJOURS là (grisé à zéro, pour que la mécanique se voie sans points),
-    // on dit D'OÙ viennent les points, et on met une pastille quand il y en a.
+    // ⚠️ LA RÉPARTITION A DÉMÉNAGÉ, ET C'EST LE CORRECTIF. Elle vivait ici, dans un coin d'un écran
+    // qu'on n'ouvre qu'entre deux terrains — alors qu'on gagne des points EN JOUANT. « Là le menu est
+    // inaccessible. » Elle a maintenant sa page, atteignable depuis la carte ET depuis le jeu (pastille
+    // contre la barre de vie). Ce bloc n'en garde qu'un résumé et la porte d'entrée : deux endroits pour
+    // faire la même chose, c'est deux endroits à tenir à jour et un joueur qui hésite.
     const sb = statsBox()
     this.add.text(sb.x, sb.y - 24, 'STATS', { fontSize: '17px', color: '#80cbc4', fontStyle: 'bold' })
     const aDesPoints = p.statPoints > 0
     this.add.text(sb.x + sb.w, sb.y - 24,
       aDesPoints ? `● ${p.statPoints} point${p.statPoints > 1 ? 's' : ''} à répartir` : `+${STAT_POINTS_PER_LEVEL} par niveau`,
       { fontSize: '13px', color: aDesPoints ? '#ffd700' : '#607d8b', fontStyle: 'bold' }).setOrigin(1, 0)
-    const STAT_ROWS: { key: 'str' | 'agi' | 'int'; label: string; effet: string }[] = [
-      { key: 'str', label: 'STR', effet: '+2 ATK par point' },
-      { key: 'agi', label: 'AGI', effet: '+vitesse d\'attaque et DÉF' },
-      { key: 'int', label: 'INT', effet: '+4 PV max par point' },
-    ]
-    STAT_ROWS.forEach((row, i) => {
-      const y = sb.y + 6 + i * 46
-      this.add.rectangle(sb.x, y, sb.w, 40, 0x000000, 0.25).setOrigin(0, 0)
-      this.add.text(sb.x + 10, y + 5, `${row.label} ${p.allocated[row.key]}`, { fontSize: '16px', color: '#ffffff', fontStyle: 'bold' })
-      this.add.text(sb.x + 10, y + 23, row.effet, { fontSize: '11px', color: '#78909c' })
-      // ⚠️ LE « + » EST TOUJOURS AFFICHÉ, MÊME SANS POINT. C'est la moitié du correctif : un bouton qui
-      // n'apparaît que lorsqu'on peut s'en servir n'apprend jamais qu'il existe.
-      if (aDesPoints) {
-        btn(sb.x + sb.w - 34, y + 10, '+', 0x8d6e00, () => {
-          p.statPoints--; p.allocated[row.key]++; save(p); this.render()
-        })
-      } else {
-        this.add.circle(sb.x + sb.w - 34, y + 10, 13, 0x2a2a2a).setStrokeStyle(1, 0x455a64)
-        this.add.text(sb.x + sb.w - 34, y + 10, '+', { fontSize: '16px', color: '#455a64', fontStyle: 'bold' }).setOrigin(0.5)
-      }
+
+    const pct = pourcentages(p.allocated as Record<StatId, number>)
+    STATS.forEach((st, i) => {
+      const y = sb.y + 6 + i * 34
+      this.add.rectangle(sb.x, y, sb.w, 30, 0x000000, 0.25).setOrigin(0, 0)
+      this.add.rectangle(sb.x, y, 4, 30, st.couleur, 1).setOrigin(0, 0)
+      this.add.text(sb.x + 14, y + 7, `${st.nom} ${(p.allocated as Record<StatId, number>)[st.id]}`,
+        { fontSize: '15px', color: '#ffffff', fontStyle: 'bold' })
+      this.add.text(sb.x + sb.w - 12, y + 8, `${pct[st.id]} %`, { fontSize: '13px', color: '#78909c' }).setOrigin(1, 0)
     })
+    const yBtn = sb.y + 6 + STATS.length * 34 + 14
+    const ouvrir = this.add.text(sb.x + sb.w / 2, yBtn, aDesPoints ? '★ Répartir mes points' : 'Voir la répartition', {
+      fontSize: '15px', color: '#ffffff', fontStyle: 'bold',
+      backgroundColor: aDesPoints ? '#8d6e00' : '#37474f', padding: { x: 14, y: 7 },
+    }).setOrigin(0.5, 0)
+    ouvrir.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.scene.start('Stats', { return: 'Menu' }))
 
     // ── COLONNE DROITE : matériaux, en grille BORNÉE ──
     const mb = materialsBox()

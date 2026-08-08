@@ -20,7 +20,14 @@ export interface PlayerState {
   xp: number // XP accumulée dans le niveau courant
   skillPoints: number
   statPoints: number // points de stat non dépensés
-  allocated: { str: number; agi: number; int: number } // points de stat répartis
+  /**
+   * Points de stat répartis.
+   *
+   * ⚠️ `int` A CHANGÉ DE SENS EN v9 : il donnait des PV, il donne maintenant de la régénération
+   * d'énergie, et c'est `vit` qui porte les PV. Les parties d'avant sont migrées (l'ancien `int` passe
+   * dans `vit`) — cf. core/save.ts. Un libellé qui ment sur son effet est pire qu'une stat absente.
+   */
+  allocated: { str: number; agi: number; vit: number; int: number }
 
   skillLevels: Record<string, number> // id → rang investi (1..MAX_SKILL_RANK) ; absent/0 = pas débloqué
   equippedSkills: (string | null)[] // toujours longueur 4
@@ -65,7 +72,7 @@ export function newPlayer(name: string): PlayerState {
     xp: 0,
     skillPoints: 0,
     statPoints: 0,
-    allocated: { str: 0, agi: 0, int: 0 },
+    allocated: { str: 0, agi: 0, vit: 0, int: 0 },
     // Aucune compétence au départ (onboarding) : le joueur en débloque une au 1er passage de niveau
     // (niveau 2 → +1 point de compétence + panneau explicatif, cf. UIScene.onLevelUp).
     skillLevels: {},

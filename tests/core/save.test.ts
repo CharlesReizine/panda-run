@@ -70,7 +70,7 @@ describe('save', () => {
     delete legacy.allocated
     const loaded = deserialize(JSON.stringify({ version: 5, player: legacy }))
     expect(loaded.statPoints).toBe(0)
-    expect(loaded.allocated).toEqual({ str: 0, agi: 0, int: 0 })
+    expect(loaded.allocated).toEqual({ str: 0, agi: 0, vit: 0, int: 0 })
   })
 
   it('migre une save v6 → v7 (upgrades par défaut)', () => {
@@ -100,7 +100,7 @@ describe('save', () => {
     // garde-fou anti-régression : si quelqu'un bumpe VERSION pour ce champ, une build encore en
     // cache sur le téléphone traiterait la save comme inconnue → « j'ai perdu ma partie »
     const written = JSON.parse(serialize(newPlayer('Panda'), 999)) as { version: number }
-    expect(written.version).toBe(8)
+    expect(written.version).toBe(9)
   })
 
   it('serialize horodate le fichier (horloge injectable)', () => {

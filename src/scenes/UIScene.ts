@@ -49,6 +49,8 @@ export class UIScene extends Phaser.Scene {
   // badge « points à dépenser » : pastille dorée pulsante collée au panneau de vie
   private spBadge!: Phaser.GameObjects.Container
   private spBadgeText!: Phaser.GameObjects.Text
+  private statBadge!: Phaser.GameObjects.Container
+  private statBadgeText!: Phaser.GameObjects.Text
   private skillsBtn!: Phaser.GameObjects.Rectangle
   private skillsBtnText!: Phaser.GameObjects.Text
   private skillsBtnBlink?: Phaser.Tweens.Tween
@@ -134,6 +136,21 @@ export class UIScene extends Phaser.Scene {
     this.add.rectangle(L(8), 2, BAR_W + 16, 78, 0xffffff, 0.001).setOrigin(0).setInteractive()
       .on('pointerdown', () => this.openSkillMenu())
     this.add.text(L(16), 68, 'compétences ▸', { fontSize: '10px', color: '#b0bec5' })
+
+    // ── PASTILLE « POINTS DE STAT » CONTRE LA BARRE DE VIE ────────────────────────────────────
+    //
+    // Demande du joueur : « il faut une notif au niveau de la vie quand j'ai des points ». Le badge de
+    // compétences vit en haut à droite, là où l'on gère les compétences ; celui-ci se tient contre les
+    // barres, là où l'on regarde ses PV — c'est en voyant sa vie qu'on pense à la renforcer.
+    // Toucher la pastille ouvre la page STAT sans quitter le terrain (il DORT, cf. openStats).
+    this.statBadge = this.add.container(L(BAR_W + 34), 34).setDepth(61)
+    const statBg = this.add.circle(0, 0, 16, 0x4dd0e1, 0.97).setStrokeStyle(2, 0x00464a)
+    this.statBadgeText = this.add.text(0, 0, '', { fontSize: '14px', color: '#00272b', fontStyle: 'bold' }).setOrigin(0.5)
+    const statFleche = this.add.text(-18, 0, '◀', { fontSize: '16px', color: '#4dd0e1', fontStyle: 'bold', stroke: '#00272b', strokeThickness: 3 }).setOrigin(1, 0.5)
+    this.statBadge.add([statFleche, statBg, this.statBadgeText])
+    statBg.setInteractive({ useHandCursor: true }).on('pointerdown', () => { if (this.statBadge.visible) this.openStats() })
+    this.statBadge.setVisible(false)
+    this.tweens.add({ targets: statBg, scale: 1.15, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.inOut' })
 
     // Badge « points à dépenser » : JUSTE à droite du panneau de vie, pastille dorée pulsante
     // avec une flèche qui pointe vers le panneau (où l'on ouvre le menu). Masqué s'il n'y a
@@ -322,6 +339,23 @@ export class UIScene extends Phaser.Scene {
   }
 
   // ouvre la gestion des compétences en jeu (partagé : clic sur le panneau de vie ET sur le badge)
+  /**
+   * Ouvre la page STAT depuis le jeu.
+   *
+   * ⚠️ « LÀ LE MENU EST INACCESSIBLE » — c'est le retour qui a motivé toute cette page. On gagne des
+   * points de stat EN JOUANT, et c'était précisément le seul moment où on ne pouvait pas les dépenser :
+   * la répartition vivait dans un écran qu'on n'ouvre qu'entre deux terrains. Une mécanique qu'on ne
+   * peut pas atteindre au moment où elle se déclenche n'existe qu'à moitié.
+   */
+  private openStats() {
+    audio.playSfx('ui-tap')
+    this.freezeLevelForOverlay()
+    this.scene.launch('Stats', { fromGame: true })
+    this.scene.bringToTop('Stats')
+    this.scene.pause(this.levelKey)
+    this.scene.pause('UI')
+  }
+
   private openSkillMenu() {
     audio.playSfx('ui-tap')
     this.freezeLevelForOverlay()
@@ -349,6 +383,16 @@ export class UIScene extends Phaser.Scene {
   private updateSkillPointBadge() {
     const p = getPlayer()
     const n = p.skillPoints
+    // ── et la pastille des points de STAT, contre la barre de vie ────────────────────────────
+    // Elle est SÉPARÉE de celle des compétences à dessein : ce ne sont pas les mêmes points, ils ne se
+    // dépensent pas au même endroit, et un total commun ferait promettre au bouton « Compétences » des
+    // points qu'on ne peut pas y mettre. C'est d'ailleurs la raison écrite juste au-dessus pour laquelle
+    // les points de stat n'étaient pas comptés ici — la réponse n'était pas de les compter, mais de leur
+    // donner leur propre pastille et leur propre écran.
+    if (this.statBadge) {
+      this.statBadge.setVisible(p.statPoints > 0)
+      if (p.statPoints > 0) this.statBadgeText.setText(`${p.statPoints}`)
+    }
     this.spBadge.setVisible(false) // plus de pastille jaune SÉPARÉE (retour user)
     // À la place : le BOUTON « Compétences » devient JAUNE + CLIGNOTANT tant qu'il reste des points.
     if (n > 0) {
